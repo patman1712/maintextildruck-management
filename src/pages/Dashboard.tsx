@@ -1,9 +1,18 @@
 import { useState } from "react";
-import { Link, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X } from "lucide-react";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User } from "lucide-react";
+import { useAppStore } from "@/store";
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const currentUser = useAppStore((state) => state.currentUser);
+  const logout = useAppStore((state) => state.logout);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans text-slate-900">
@@ -31,10 +40,19 @@ export default function DashboardLayout() {
           <NavItem icon={<Archive />} label="Fertige Aufträge" to="/dashboard/orders/finished" isOpen={sidebarOpen} />
           <NavItem icon={<ShoppingCart />} label="Warenbestellung" to="/dashboard/inventory" isOpen={sidebarOpen} />
           <NavItem icon={<Users />} label="Kundendateien" to="/dashboard/customers" isOpen={sidebarOpen} />
+          
+          {currentUser?.role === 'admin' && (
+             <NavItem icon={<Shield />} label="Mitarbeiter" to="/dashboard/employees" isOpen={sidebarOpen} />
+          )}
         </nav>
 
-        <div className="p-4 border-t border-gray-200">
-          <button className="flex items-center w-full space-x-2 text-slate-500 hover:text-red-600 transition-colors">
+        <div className="p-4 border-t border-gray-200 space-y-2">
+          <Link to="/dashboard/profile" className="flex items-center w-full space-x-2 text-slate-500 hover:text-red-600 transition-colors p-2 rounded hover:bg-red-50">
+             <User size={20} />
+             {sidebarOpen && <span>Mein Profil</span>}
+          </Link>
+
+          <button onClick={handleLogout} className="flex items-center w-full space-x-2 text-slate-500 hover:text-red-600 transition-colors p-2 rounded hover:bg-red-50">
             <LogOut size={20} />
             {sidebarOpen && <span>Abmelden</span>}
           </button>
@@ -51,11 +69,11 @@ export default function DashboardLayout() {
           
           <div className="flex items-center space-x-4">
              <div className="text-right hidden sm:block">
-                <p className="text-sm font-semibold text-gray-800">Admin User</p>
-                <p className="text-xs text-gray-500">Administrator</p>
+                <p className="text-sm font-semibold text-gray-800">{currentUser?.name || 'Benutzer'}</p>
+                <p className="text-xs text-gray-500">{currentUser?.role === 'admin' ? 'Administrator' : 'Mitarbeiter'}</p>
              </div>
-             <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold border-2 border-red-100">
-                A
+             <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 font-bold border-2 border-red-50">
+                {currentUser?.name?.charAt(0) || 'U'}
              </div>
           </div>
         </header>

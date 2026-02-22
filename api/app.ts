@@ -15,6 +15,7 @@ import authRoutes from './routes/auth.js'
 import orderRoutes from './routes/orders.js'
 import customerRoutes from './routes/customers.js'
 import uploadRoutes, { UPLOAD_DIR } from './routes/upload.js'
+import userRoutes from './routes/users.js'
 
 // for esm mode
 const __filename = fileURLToPath(import.meta.url)
@@ -36,6 +37,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/customers', customerRoutes)
 app.use('/api/upload', uploadRoutes)
+app.use('/api/users', userRoutes)
 
 // Serve uploads
 app.use('/uploads', express.static(UPLOAD_DIR))

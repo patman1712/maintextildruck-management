@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs-extra';
 import { fileURLToPath } from 'url';
+import bcrypt from 'bcryptjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -60,7 +61,31 @@ db.exec(`
     type TEXT NOT NULL,       -- print, vector, preview
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'employee', -- 'admin' or 'employee'
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
+
+// Seed initial admin user if no users exist
+const userCount = (db.prepare('SELECT COUNT(*) as count FROM users').get() as any).count;
+if (userCount === 0) {
+  console.log('Seeding initial admin user...');
+  const adminId = Math.random().toString(36).substr(2, 9);
+  const hashedPassword = bcrypt.hashSync('admin123', 10);
+  
+  db.prepare(`
+    INSERT INTO users (id, username, password, name, role)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(adminId, 'admin', hashedPassword, 'Administrator', 'admin');
+  
+  console.log('Admin user created. Username: admin, Password: admin123');
+}
 
 // Migration: Add customer_id if it doesn't exist (for existing databases)
 try {

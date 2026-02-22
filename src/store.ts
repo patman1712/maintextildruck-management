@@ -15,6 +15,15 @@ export interface Customer {
   address: string;
 }
 
+export interface User {
+  id: string;
+  username: string;
+  name: string;
+  role: 'admin' | 'employee';
+  password?: string; // Only for creating/updating, usually not returned
+  createdAt?: string;
+}
+
 export interface Order {
   id: string;
   title: string;
@@ -35,20 +44,35 @@ export interface Order {
 interface AppState {
   orders: Order[];
   customers: Customer[];
+  users: User[];
+  currentUser: User | null;
   loading: boolean;
+  
   fetchData: () => Promise<void>;
+  fetchUsers: () => Promise<void>;
+  
+  login: (user: User) => void;
+  logout: () => void;
+  
   addOrder: (order: Order) => Promise<void>;
   addCustomer: (customer: Customer) => Promise<void>;
+  addUser: (user: Partial<User>) => Promise<void>;
+  
   updateCustomer: (id: string, updatedCustomer: Partial<Customer>) => Promise<void>;
   updateOrder: (id: string, updatedOrder: Partial<Order>) => Promise<void>;
+  updateUser: (id: string, updatedUser: Partial<User>) => Promise<void>;
+  
   updateOrderStatus: (id: string, status: Order['status']) => Promise<void>;
   toggleOrderStep: (id: string, step: keyof OrderSteps) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   orders: [],
   customers: [],
+  users: [],
+  currentUser: JSON.parse(localStorage.getItem('currentUser') || 'null'),
   loading: false,
 
   fetchData: async () => {
@@ -93,6 +117,28 @@ export const useAppStore = create<AppState>((set, get) => ({
     } finally {
       set({ loading: false });
     }
+  },
+
+  fetchUsers: async () => {
+    try {
+      const usersRes = await fetch('/api/users');
+      const usersData = await usersRes.json();
+      if (usersData.success) {
+        set({ users: usersData.data });
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  },
+
+  login: (user) => {
+    set({ currentUser: user });
+    localStorage.setItem('currentUser', JSON.stringify(user));
+  },
+
+  logout: () => {
+    set({ currentUser: null });
+    localStorage.removeItem('currentUser');
   },
 
   addOrder: async (order) => {
@@ -244,6 +290,63 @@ export const useAppStore = create<AppState>((set, get) => ({
       
     } catch (error) {
       console.error('Error deleting order:', error);
+    }
+  },
+
+  addUser: async (user) => {
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(user)
+      });
+      const data = await res.json();
+      if (data.success && data.user) {
+        set((state) => ({ users: [...state.users, data.user] }));
+      } else {
+        throw new Error(data.error);
+      }
+    } catch (error) {
+      console.error('Error adding user:', error);
+      throw error;
+    }
+  },
+
+  updateUser: async (id, updatedUser) => {
+    try {
+      await fetch(`/api/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedUser)
+      });
+      
+      set((state) => ({
+        users: state.users.map((u) => (u.id === id ? { ...u, ...updatedUser } : u)),
+        // If updating current user, update session too
+        currentUser: state.currentUser?.id === id ? { ...state.currentUser, ...updatedUser } : state.currentUser
+      }));
+      
+      // If current user, update local storage
+      const state = get();
+      if (state.currentUser?.id === id) {
+        localStorage.setItem('currentUser', JSON.stringify(state.currentUser));
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
+  },
+
+  deleteUser: async (id) => {
+    try {
+      await fetch(`/api/users/${id}`, {
+        method: 'DELETE'
+      });
+      set((state) => ({
+        users: state.users.filter((u) => u.id !== id)
+      }));
+    } catch (error) {
+      console.error('Error deleting user:', error);
     }
   },
 
