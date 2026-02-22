@@ -101,10 +101,11 @@ export default function OrderDetails() {
             </span>
             <button 
               onClick={handleDelete} 
-              className="ml-4 p-2 text-gray-400 hover:text-red-600 transition-colors hover:bg-red-50 rounded-full"
+              className="ml-4 flex items-center px-3 py-1.5 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-md transition-colors text-sm font-medium shadow-sm"
               title="Auftrag löschen"
             >
-              <Trash2 size={20} />
+              <Trash2 size={16} className="mr-2" />
+              Löschen
             </button>
           </div>
         </div>
