@@ -48,6 +48,7 @@ export default function NewOrder() {
   };
 
   const [showFileSelector, setShowFileSelector] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const [availableFiles, setAvailableFiles] = useState<{name: string, url: string, type: 'print' | 'vector', date: string, orderTitle: string}[]>([]);
   const [selectedExistingFiles, setSelectedExistingFiles] = useState<string[]>([]); // URLs
 
@@ -77,6 +78,7 @@ export default function NewOrder() {
     });
     
     setAvailableFiles(allFiles);
+    setSearchTerm("");
     setShowFileSelector(true);
   };
 
@@ -552,19 +554,23 @@ export default function NewOrder() {
                     <div className="mb-4">
                         <input 
                             type="text" 
-                            placeholder="Dateien suchen..." 
-                            className="w-full border p-2 rounded text-sm"
-                            onChange={(e) => {
-                                // Simple local filter could be implemented here
-                            }}
+                            placeholder="Dateien suchen (Titel)..." 
+                            className="w-full border p-2 rounded text-sm focus:ring-red-500 focus:border-red-500"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            autoFocus
                         />
                     </div>
                     
-                    {availableFiles.length === 0 ? (
-                        <p className="text-center text-gray-500 py-8">Keine Druckdaten für diesen Kunden gefunden.</p>
+                    {availableFiles.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">
+                            {searchTerm ? "Keine passenden Dateien gefunden." : "Keine Druckdaten für diesen Kunden gefunden."}
+                        </p>
                     ) : (
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                            {availableFiles.map((file, idx) => (
+                            {availableFiles
+                                .filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .map((file, idx) => (
                                 <div 
                                     key={idx} 
                                     className={`border rounded p-3 cursor-pointer transition-all relative ${

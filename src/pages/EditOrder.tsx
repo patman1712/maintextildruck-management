@@ -25,6 +25,58 @@ export default function EditOrder() {
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [status, setStatus] = useState<Order['status']>('active');
 
+  const [showFileSelector, setShowFileSelector] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [availableFiles, setAvailableFiles] = useState<{name: string, url: string, type: 'print' | 'vector', date: string, orderTitle: string}[]>([]);
+  const [selectedExistingFiles, setSelectedExistingFiles] = useState<string[]>([]); // URLs
+
+  const loadCustomerFiles = () => {
+    // Find customer ID based on name if not available directly (EditOrder stores customerName)
+    // Ideally we should have customerId in Order but for now we might need to look it up or filter by name
+    const customer = customers.find(c => c.name === customerName);
+    const customerId = customer?.id;
+    
+    // Find all orders for this customer
+    const allOrders = useAppStore.getState().orders;
+    const customerOrders = allOrders.filter(o => (customerId && o.customerId === customerId) || o.customerName === customerName);
+    
+    const allFiles: {name: string, url: string, type: 'print' | 'vector', date: string, orderTitle: string}[] = [];
+    
+    customerOrders.forEach(order => {
+        if (order.files) {
+            order.files.forEach(f => {
+                if (f.type === 'print' && f.url) {
+                    allFiles.push({
+                        name: f.customName || f.name,
+                        url: f.url,
+                        type: 'print',
+                        date: order.createdAt,
+                        orderTitle: order.title
+                    });
+                }
+            });
+        }
+    });
+    
+    setAvailableFiles(allFiles);
+    setSearchTerm("");
+    setShowFileSelector(true);
+  };
+
+  const addSelectedFiles = () => {
+    const filesToAdd = availableFiles.filter(f => selectedExistingFiles.includes(f.url));
+    
+    const newFiles = filesToAdd.map(f => ({
+        name: f.name,
+        type: 'print' as const,
+        url: f.url
+    }));
+    
+    setFiles([...files, ...newFiles]);
+    setShowFileSelector(false);
+    setSelectedExistingFiles([]);
+  };
+
   useEffect(() => {
     if (loading) return;
     const order = orders.find(o => o.id === id);
@@ -348,6 +400,21 @@ export default function EditOrder() {
               <Upload className="mx-auto h-8 w-8 text-red-400 mb-2" />
               <p className="text-sm text-red-600 font-medium">DTF-Druckdaten hinzufügen</p>
             </div>
+
+            {/* Button to load existing files */}
+            {customerName && (
+                <div className="mt-2 text-right">
+                    <button 
+                        type="button"
+                        onClick={loadCustomerFiles}
+                        className="text-xs text-red-600 hover:text-red-800 underline font-medium flex items-center justify-end ml-auto"
+                    >
+                        <FileText size={14} className="mr-1" />
+                        Bereits hochgeladene Druckdaten verwenden
+                    </button>
+                </div>
+            )}
+
             {printFiles.length > 0 && (
               <ul className="mt-4 space-y-2">
                 {printFiles.map((file, idx) => (
@@ -390,6 +457,89 @@ export default function EditOrder() {
             Änderungen speichern
           </button>
         </div>
+
+      {/* File Selector Modal */}
+      {showFileSelector && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+                <div className="p-4 border-b flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-gray-800">Druckdaten aus Archiv wählen</h3>
+                    <button onClick={() => setShowFileSelector(false)} className="text-gray-500 hover:text-gray-700">
+                        <X size={20} />
+                    </button>
+                </div>
+                
+                <div className="p-4 overflow-y-auto flex-1">
+                    <div className="mb-4">
+                        <input 
+                            type="text" 
+                            placeholder="Dateien suchen (Titel)..." 
+                            className="w-full border p-2 rounded text-sm focus:ring-red-500 focus:border-red-500"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                    
+                    {availableFiles.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">
+                            {searchTerm ? "Keine passenden Dateien gefunden." : "Keine Druckdaten für diesen Kunden gefunden."}
+                        </p>
+                    ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            {availableFiles
+                                .filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .map((file, idx) => (
+                                <div 
+                                    key={idx} 
+                                    className={`border rounded p-3 cursor-pointer transition-all relative ${
+                                        selectedExistingFiles.includes(file.url) 
+                                        ? 'border-red-500 bg-red-50 ring-1 ring-red-500' 
+                                        : 'border-gray-200 hover:border-red-300'
+                                    }`}
+                                    onClick={() => {
+                                        if (selectedExistingFiles.includes(file.url)) {
+                                            setSelectedExistingFiles(selectedExistingFiles.filter(u => u !== file.url));
+                                        } else {
+                                            setSelectedExistingFiles([...selectedExistingFiles, file.url]);
+                                        }
+                                    }}
+                                >
+                                    <div className="h-24 bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden">
+                                        <img src={file.url} alt={file.name} className="w-full h-full object-contain" />
+                                    </div>
+                                    <p className="text-xs font-medium truncate" title={file.name}>{file.name}</p>
+                                    <p className="text-[10px] text-gray-500 truncate">{new Date(file.date).toLocaleDateString()} - {file.orderTitle}</p>
+                                    
+                                    {selectedExistingFiles.includes(file.url) && (
+                                        <div className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-0.5">
+                                            <div className="w-3 h-3 flex items-center justify-center text-[10px]">✓</div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                
+                <div className="p-4 border-t bg-gray-50 flex justify-end space-x-3">
+                    <button 
+                        onClick={() => setShowFileSelector(false)}
+                        className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                    >
+                        Abbrechen
+                    </button>
+                    <button 
+                        onClick={addSelectedFiles}
+                        disabled={selectedExistingFiles.length === 0}
+                        className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Ausgewählte hinzufügen ({selectedExistingFiles.length})
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
 
       </form>
     </div>
