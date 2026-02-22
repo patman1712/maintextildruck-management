@@ -10,7 +10,9 @@ const __dirname = path.dirname(__filename);
 // In production (Railway), this should be a mounted volume path if persistence is needed across deployments
 // e.g. /app/data
 // Default to 'data' directory in project root if not specified
-const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
+// CRITICAL: On Railway, we must use the absolute path /app/data if DATA_DIR is not set, 
+// because process.cwd() might be /app but we want to be explicit about the volume mount point.
+const DATA_DIR = process.env.DATA_DIR || (process.env.RAILWAY_ENVIRONMENT ? '/app/data' : path.join(process.cwd(), 'data'));
 fs.ensureDirSync(DATA_DIR);
 
 const dbPath = path.join(DATA_DIR, 'database.sqlite');
