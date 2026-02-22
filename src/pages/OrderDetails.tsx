@@ -23,11 +23,28 @@ export default function OrderDetails() {
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Auftragsdaten...</div>;
   if (!order) return null;
 
-  const downloadFile = (file: { name: string, url?: string }) => {
-    if (file.url) {
-      window.open(file.url, '_blank');
-    } else {
+  const downloadFile = async (file: { name: string, url?: string }) => {
+    if (!file.url) {
       alert(`Keine URL für ${file.name} vorhanden.`);
+      return;
+    }
+
+    try {
+      const response = await fetch(file.url);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = file.name; // Force download with original filename
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Download failed:', error);
+      // Fallback to opening in new tab
+      window.open(file.url, '_blank');
     }
   };
 
