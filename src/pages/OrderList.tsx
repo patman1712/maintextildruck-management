@@ -9,7 +9,7 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
   const loading = useAppStore((state) => state.loading);
   const toggleOrderStep = useAppStore((state) => state.toggleOrderStep);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">(filter || "all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">(filter || "active");
 
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Aufträge...</div>;
 
@@ -24,6 +24,10 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
     // Hide archived orders from normal lists unless specifically requested (though we don't have a UI for archived yet)
     // Archived orders are "hidden" storage orders for direct uploads
     if (order.status === 'archived') return false;
+    
+    // In "active" filter (which is default view), hide completed orders
+    // The "Aktuelle Aufträge" view should only show active orders
+    if (effectiveStatusFilter === 'active' && order.status === 'completed') return false;
     
     return matchesSearch && matchesStatus;
   });
