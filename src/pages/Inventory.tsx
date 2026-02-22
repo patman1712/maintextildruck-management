@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAppStore, Supplier, OrderItem } from '@/store';
-import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock } from 'lucide-react';
+import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, Send } from 'lucide-react';
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState<'orders' | 'suppliers'>('suppliers');
@@ -57,12 +57,14 @@ function SuppliersTab() {
   const [website, setWebsite] = useState('');
   const [customerNumber, setCustomerNumber] = useState('');
   const [notes, setNotes] = useState('');
+  const [email, setEmail] = useState('');
 
   const resetForm = () => {
     setName('');
     setWebsite('');
     setCustomerNumber('');
     setNotes('');
+    setEmail('');
     setEditingSupplier(null);
   };
 
@@ -72,6 +74,7 @@ function SuppliersTab() {
     setWebsite(supplier.website || '');
     setCustomerNumber(supplier.customerNumber || '');
     setNotes(supplier.notes || '');
+    setEmail(supplier.email || '');
     setShowModal(true);
   };
 
@@ -89,7 +92,8 @@ function SuppliersTab() {
         name,
         website,
         customerNumber,
-        notes
+        notes,
+        email
       });
     } else {
       await addSupplier({
@@ -97,7 +101,8 @@ function SuppliersTab() {
         name,
         website,
         customerNumber,
-        notes
+        notes,
+        email
       });
     }
     setShowModal(false);
@@ -145,6 +150,14 @@ function SuppliersTab() {
                 <div className="flex items-center">
                   <Hash size={14} className="mr-2 text-gray-400" />
                   <span>Kunden-Nr: {supplier.customerNumber}</span>
+                </div>
+              )}
+              {supplier.email && (
+                <div className="flex items-center">
+                  <Mail size={14} className="mr-2 text-gray-400" />
+                  <a href={`mailto:${supplier.email}`} className="text-blue-600 hover:underline truncate">
+                    {supplier.email}
+                  </a>
                 </div>
               )}
               {supplier.notes && (
@@ -207,6 +220,16 @@ function SuppliersTab() {
                     onChange={(e) => setCustomerNumber(e.target.value)}
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-red-500 focus:border-red-500"
                     placeholder="12345678"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">E-Mail (für Bestellungen)</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-red-500 focus:border-red-500"
+                    placeholder="bestellung@lieferant.de"
                   />
                 </div>
                 <div>
@@ -277,6 +300,7 @@ function OrdersTab() {
   }, [orders, suppliers]);
 
   const supplierIds = Object.keys(itemsBySupplier);
+  const [selectedOrders, setSelectedOrders] = useState<Record<string, string[]>>({}); // supplierId -> orderIds[]
 
   const updateStatus = async (orderId: string, itemId: string, status: 'pending' | 'ordered' | 'received') => {
     await updateOrderItem(orderId, itemId, { status });
@@ -292,14 +316,90 @@ function OrdersTab() {
     );
   }
 
+  const toggleOrderSelectionForSupplier = (supplierId: string, orderId: string) => {
+    setSelectedOrders(prev => {
+        const current = prev[supplierId] || [];
+        const isSelected = current.includes(orderId);
+        const updated = isSelected 
+            ? current.filter(id => id !== orderId)
+            : [...current, orderId];
+        return { ...prev, [supplierId]: updated };
+    });
+  };
+
+  const handleSendEmail = (supplierId: string) => {
+    const group = itemsBySupplier[supplierId];
+    if (!group || !group.supplier?.email) return;
+
+    const selectedIds = selectedOrders[supplierId] || [];
+    // Only process PENDING items for these orders
+    const itemsToSend = group.items.filter(i => selectedIds.includes(i.orderId) && i.status === 'pending');
+
+    if (itemsToSend.length === 0) {
+        alert("Bitte wählen Sie Aufträge mit offenen Positionen aus.");
+        return;
+    }
+
+    const today = new Date().toLocaleDateString('de-DE');
+    const subject = `Bestellung ${today}`;
+    
+    // Group items by Order for the email body
+    const itemsByOrder: Record<string, typeof itemsToSend> = {};
+    itemsToSend.forEach(item => {
+        if (!itemsByOrder[item.orderTitle]) itemsByOrder[item.orderTitle] = [];
+        itemsByOrder[item.orderTitle].push(item);
+    });
+
+    let body = `Hallo ${group.supplier.name}-Team,\n\nbitte folgende Artikel bestellen:\n\n`;
+
+    Object.keys(itemsByOrder).forEach(orderTitle => {
+        body += `Auftrag: ${orderTitle}\n`;
+        itemsByOrder[orderTitle].forEach(item => {
+            body += `- ${item.quantity}x ${item.itemName} (${item.itemNumber || '-'}) | ${item.size} ${item.color ? `| ${item.color}` : ''}\n`;
+        });
+        body += `\n`;
+    });
+
+    body += `Bitte um kurze Bestätigung.\n\nMit freundlichen Grüßen,\nMaintextildruck`;
+
+    window.location.href = `mailto:${group.supplier.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    // Confirm sent
+    setTimeout(async () => {
+        if (confirm("Wurde die E-Mail erfolgreich versendet? Wenn ja, werden die Artikel als 'Bestellt' markiert.")) {
+            for (const item of itemsToSend) {
+                await updateStatus(item.orderId, item.id, 'ordered');
+            }
+            // Clear selection
+            setSelectedOrders(prev => ({ ...prev, [supplierId]: [] }));
+        }
+    }, 1000);
+  };
+
   return (
     <div className="space-y-8">
         {supplierIds.map(supplierId => {
             const group = itemsBySupplier[supplierId];
             const supplier = group.supplier;
-            const pendingItems = group.items.filter(i => i.status === 'pending');
-            const orderedItems = group.items.filter(i => i.status === 'ordered');
             
+            // Group items by Order within this Supplier block
+            const ordersInGroup: Record<string, { orderId: string, title: string, deadline: string, items: typeof group.items }> = {};
+            group.items.forEach(item => {
+                if (!ordersInGroup[item.orderId]) {
+                    ordersInGroup[item.orderId] = {
+                        orderId: item.orderId,
+                        title: item.orderTitle,
+                        deadline: item.orderDeadline,
+                        items: []
+                    };
+                }
+                ordersInGroup[item.orderId].items.push(item);
+            });
+
+            const orderIds = Object.keys(ordersInGroup);
+            const selectedForThisSupplier = selectedOrders[supplierId] || [];
+            const hasSelection = selectedForThisSupplier.length > 0;
+
             if (!supplier && group.items.length === 0) return null;
 
             return (
@@ -308,91 +408,108 @@ function OrdersTab() {
                         <div className="flex items-center">
                             <Truck className="mr-2 text-slate-500" />
                             <h3 className="text-lg font-bold text-slate-800">{supplier?.name || 'Unbekannter Lieferant'}</h3>
-                            {pendingItems.length > 0 && (
-                                <span className="ml-3 bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full">
-                                    {pendingItems.length} Offen
-                                </span>
+                            <span className="ml-3 bg-gray-200 text-gray-700 text-xs font-bold px-2 py-1 rounded-full">
+                                {orderIds.length} Aufträge
+                            </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            {supplier?.website && (
+                                <a 
+                                    href={supplier.website.startsWith('http') ? supplier.website : `https://${supplier.website}`} 
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    className="flex items-center text-sm text-blue-600 hover:underline bg-white px-3 py-1 rounded border border-blue-200 hover:bg-blue-50"
+                                >
+                                    <ExternalLink size={14} className="mr-1" />
+                                    Shop
+                                </a>
+                            )}
+                            {supplier?.email && (
+                                <button
+                                    onClick={() => handleSendEmail(supplierId)}
+                                    disabled={!hasSelection}
+                                    className={`flex items-center text-sm px-3 py-1 rounded border transition-colors ${
+                                        hasSelection 
+                                            ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' 
+                                            : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                    }`}
+                                >
+                                    <Send size={14} className="mr-1" />
+                                    Bestellen ({selectedForThisSupplier.length})
+                                </button>
                             )}
                         </div>
-                        {supplier?.website && (
-                            <a 
-                                href={supplier.website.startsWith('http') ? supplier.website : `https://${supplier.website}`} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="flex items-center text-sm text-blue-600 hover:underline bg-white px-3 py-1 rounded border border-blue-200 hover:bg-blue-50"
-                            >
-                                <ExternalLink size={14} className="mr-1" />
-                                Zum Shop
-                            </a>
-                        )}
                     </div>
                     
                     <div className="divide-y divide-gray-100">
-                        {group.items.length === 0 ? (
-                            <div className="p-6 text-center text-gray-500">Keine Artikel.</div>
-                        ) : (
-                            group.items.map(item => (
-                                <div key={item.id} className={`p-4 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${item.status === 'received' ? 'opacity-60 bg-gray-50' : ''}`}>
-                                    <div className="flex-1">
-                                        <div className="flex items-start justify-between mb-1">
-                                            <h4 className="font-bold text-gray-900">{item.itemName}</h4>
-                                            <span className={`text-xs px-2 py-0.5 rounded ${
-                                                item.status === 'pending' ? 'bg-red-100 text-red-800' :
-                                                item.status === 'ordered' ? 'bg-yellow-100 text-yellow-800' :
-                                                'bg-green-100 text-green-800'
-                                            }`}>
-                                                {item.status === 'pending' ? 'Offen' : item.status === 'ordered' ? 'Bestellt' : 'Erhalten'}
-                                            </span>
-                                        </div>
-                                        <div className="text-sm text-gray-600 mb-1">
-                                            <span className="font-medium mr-2">{item.quantity}x {item.size}</span>
-                                            {item.color && <span className="text-gray-500 border-l pl-2 border-gray-300">Farbe: {item.color}</span>}
-                                        </div>
-                                        <div className="text-xs text-gray-500 flex items-center mt-2">
-                                            <FileText size={12} className="mr-1" />
-                                            Auftrag: <span className="font-medium mx-1">{item.orderTitle}</span>
-                                            <span className="mx-1 text-gray-300">|</span>
-                                            <Clock size={12} className="mr-1" />
-                                            Deadline: {new Date(item.orderDeadline).toLocaleDateString()}
-                                        </div>
-                                        {item.notes && (
-                                            <div className="text-xs text-gray-400 italic mt-1 bg-yellow-50 p-1 rounded inline-block">
-                                                Note: {item.notes}
+                        {orderIds.map(orderId => {
+                            const orderGroup = ordersInGroup[orderId];
+                            const isSelected = selectedForThisSupplier.includes(orderId);
+                            const hasPending = orderGroup.items.some(i => i.status === 'pending');
+
+                            return (
+                                <div key={orderId} className={`p-4 hover:bg-gray-50 transition-colors border-b last:border-0 ${isSelected ? 'bg-red-50' : ''}`}>
+                                    {/* Order Header with Checkbox */}
+                                    <div className="flex items-center mb-3">
+                                        <input 
+                                            type="checkbox"
+                                            className="form-checkbox h-5 w-5 text-red-600 rounded focus:ring-red-500 border-gray-300 mr-3"
+                                            checked={isSelected}
+                                            onChange={() => toggleOrderSelectionForSupplier(supplierId, orderId)}
+                                            disabled={!hasPending} // Only allow selection if there are pending items
+                                        />
+                                        <div>
+                                            <h4 className="font-bold text-gray-900 text-sm flex items-center">
+                                                {orderGroup.title}
+                                                {!hasPending && <span className="ml-2 text-xs font-normal text-green-600 bg-green-50 px-2 py-0.5 rounded">Erledigt</span>}
+                                            </h4>
+                                            <div className="text-xs text-gray-500 flex items-center mt-0.5">
+                                                <Clock size={12} className="mr-1" />
+                                                Deadline: {new Date(orderGroup.deadline).toLocaleDateString()}
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
-                                    
-                                    <div className="flex space-x-2 shrink-0">
-                                        {item.status === 'pending' && (
-                                            <button 
-                                                onClick={() => updateStatus(item.orderId, item.id, 'ordered')}
-                                                className="flex items-center px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-yellow-50 hover:text-yellow-700 hover:border-yellow-300 text-sm transition-colors"
-                                            >
-                                                <ShoppingCart size={14} className="mr-1" />
-                                                Als bestellt markieren
-                                            </button>
-                                        )}
-                                        {item.status === 'ordered' && (
-                                            <button 
-                                                onClick={() => updateStatus(item.orderId, item.id, 'received')}
-                                                className="flex items-center px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-green-50 hover:text-green-700 hover:border-green-300 text-sm transition-colors"
-                                            >
-                                                <CheckCircle size={14} className="mr-1" />
-                                                Ware erhalten
-                                            </button>
-                                        )}
-                                        {item.status === 'received' && (
-                                            <button 
-                                                onClick={() => updateStatus(item.orderId, item.id, 'pending')}
-                                                className="text-xs text-gray-400 hover:text-gray-600 underline px-2"
-                                            >
-                                                Zurücksetzen
-                                            </button>
-                                        )}
+
+                                    {/* Items List */}
+                                    <div className="pl-8 space-y-2">
+                                        {orderGroup.items.map(item => (
+                                            <div key={item.id} className="flex items-center justify-between text-sm bg-white p-2 rounded border border-gray-100">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center">
+                                                        <span className="font-bold mr-2">{item.quantity}x</span>
+                                                        <span className="font-medium mr-2">{item.itemName}</span>
+                                                        <span className="text-gray-500 text-xs">({item.size})</span>
+                                                    </div>
+                                                    {item.color && <div className="text-xs text-gray-500 mt-0.5">Farbe: {item.color}</div>}
+                                                    {item.notes && <div className="text-xs text-gray-400 italic mt-0.5">{item.notes}</div>}
+                                                </div>
+                                                
+                                                <div className="flex items-center">
+                                                    <span className={`text-xs px-2 py-0.5 rounded mr-2 ${
+                                                        item.status === 'pending' ? 'bg-red-100 text-red-800' :
+                                                        item.status === 'ordered' ? 'bg-yellow-100 text-yellow-800' :
+                                                        'bg-green-100 text-green-800'
+                                                    }`}>
+                                                        {item.status === 'pending' ? 'Offen' : item.status === 'ordered' ? 'Bestellt' : 'Erhalten'}
+                                                    </span>
+
+                                                    {/* Individual Actions */}
+                                                    {item.status === 'ordered' && (
+                                                        <button 
+                                                            onClick={() => updateStatus(item.orderId, item.id, 'received')}
+                                                            className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                                            title="Ware erhalten"
+                                                        >
+                                                            <CheckCircle size={16} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
-                            ))
-                        )}
+                            );
+                        })}
                     </div>
                 </div>
             );

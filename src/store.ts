@@ -62,6 +62,7 @@ export interface Supplier {
   website?: string;
   customerNumber?: string;
   notes?: string;
+  email?: string;
 }
 
 interface AppState {
@@ -164,7 +165,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         name: s.name,
         website: s.website,
         customerNumber: s.customer_number,
-        notes: s.notes
+        notes: s.notes,
+        email: s.email
       }));
 
       if (customersData.success && ordersData.success) {
@@ -261,7 +263,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           name: supplier.name,
           website: supplier.website,
           customerNumber: supplier.customerNumber,
-          notes: supplier.notes
+          notes: supplier.notes,
+          email: supplier.email
         })
       });
     } catch (error) {
@@ -282,7 +285,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             name: updatedSupplier.name,
             website: updatedSupplier.website,
             customerNumber: updatedSupplier.customerNumber,
-            notes: updatedSupplier.notes
+            notes: updatedSupplier.notes,
+            email: updatedSupplier.email
         })
       });
     } catch (error) {

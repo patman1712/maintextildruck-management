@@ -16,7 +16,7 @@ router.get('/', (req: Request, res: Response) => {
 
 // POST new supplier
 router.post('/', (req: Request, res: Response) => {
-  const { id, name, website, customerNumber, notes } = req.body;
+  const { id, name, website, customerNumber, notes, email } = req.body;
   
   if (!name) {
     res.status(400).json({ success: false, error: 'Name is required' });
@@ -27,11 +27,11 @@ router.post('/', (req: Request, res: Response) => {
     const supplierId = id || Math.random().toString(36).substr(2, 9);
     
     db.prepare(`
-      INSERT INTO suppliers (id, name, website, customer_number, notes)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(supplierId, name, website, customerNumber, notes);
+      INSERT INTO suppliers (id, name, website, customer_number, notes, email)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(supplierId, name, website, customerNumber, notes, email);
     
-    res.json({ success: true, message: 'Supplier added', supplier: { id: supplierId, name, website, customerNumber, notes } });
+    res.json({ success: true, message: 'Supplier added', supplier: { id: supplierId, name, website, customerNumber, notes, email } });
   } catch (error) {
     console.error('Error adding supplier:', error);
     res.status(500).json({ success: false, error: 'Failed to add supplier' });
@@ -41,7 +41,7 @@ router.post('/', (req: Request, res: Response) => {
 // PUT update supplier
 router.put('/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, website, customerNumber, notes } = req.body;
+  const { name, website, customerNumber, notes, email } = req.body;
   
   try {
     const updates = [];
@@ -51,6 +51,7 @@ router.put('/:id', (req: Request, res: Response) => {
     if (website !== undefined) { updates.push('website = ?'); values.push(website); }
     if (customerNumber !== undefined) { updates.push('customer_number = ?'); values.push(customerNumber); }
     if (notes !== undefined) { updates.push('notes = ?'); values.push(notes); }
+    if (email !== undefined) { updates.push('email = ?'); values.push(email); }
 
     if (updates.length === 0) return res.json({ success: true, message: 'No changes' });
 

@@ -77,6 +77,7 @@ db.exec(`
     website TEXT,
     customer_number TEXT,
     notes TEXT,
+    email TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
