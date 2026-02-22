@@ -79,6 +79,20 @@ db.exec(`
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS order_items (
+    id TEXT PRIMARY KEY,
+    order_id TEXT NOT NULL,
+    supplier_id TEXT NOT NULL,
+    item_name TEXT NOT NULL,
+    item_number TEXT,     -- Artikelnummer
+    color TEXT,
+    size TEXT,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    notes TEXT,
+    status TEXT DEFAULT 'pending', -- pending, ordered, received
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Seed initial admin user if no users exist

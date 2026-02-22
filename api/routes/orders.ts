@@ -179,4 +179,87 @@ router.delete('/:id', (req: Request, res: Response) => {
   }
 });
 
+// GET order items (all or specific order)
+router.get('/items/all', (req: Request, res: Response) => {
+  try {
+    const items = db.prepare(`
+      SELECT oi.*, s.name as supplier_name 
+      FROM order_items oi
+      LEFT JOIN suppliers s ON oi.supplier_id = s.id
+      ORDER BY oi.created_at DESC
+    `).all();
+    res.json({ success: true, data: items });
+  } catch (error) {
+    console.error('Error fetching order items:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch items' });
+  }
+});
+
+// POST order item
+router.post('/:orderId/items', (req: Request, res: Response) => {
+  const { orderId } = req.params;
+  const { supplier_id, item_name, item_number, color, size, quantity, notes } = req.body;
+  
+  if (!supplier_id || !item_name) {
+    res.status(400).json({ success: false, error: 'Missing required fields' });
+    return;
+  }
+
+  try {
+    const id = Math.random().toString(36).substr(2, 9);
+    
+    db.prepare(`
+      INSERT INTO order_items (id, order_id, supplier_id, item_name, item_number, color, size, quantity, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, orderId, supplier_id, item_name, item_number, color, size, quantity || 1, notes);
+    
+    res.json({ success: true, message: 'Item added', id });
+  } catch (error) {
+    console.error('Error adding order item:', error);
+    res.status(500).json({ success: false, error: 'Failed to add item' });
+  }
+});
+
+// PUT update order item
+router.put('/:orderId/items/:itemId', (req: Request, res: Response) => {
+  const { itemId } = req.params;
+  const updates = req.body;
+  
+  try {
+    const fields = [];
+    const values = [];
+    
+    if (updates.supplier_id !== undefined) { fields.push('supplier_id = ?'); values.push(updates.supplier_id); }
+    if (updates.item_name !== undefined) { fields.push('item_name = ?'); values.push(updates.item_name); }
+    if (updates.item_number !== undefined) { fields.push('item_number = ?'); values.push(updates.item_number); }
+    if (updates.color !== undefined) { fields.push('color = ?'); values.push(updates.color); }
+    if (updates.size !== undefined) { fields.push('size = ?'); values.push(updates.size); }
+    if (updates.quantity !== undefined) { fields.push('quantity = ?'); values.push(updates.quantity); }
+    if (updates.notes !== undefined) { fields.push('notes = ?'); values.push(updates.notes); }
+    if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
+    
+    if (fields.length === 0) return res.json({ success: true, message: 'No changes' });
+    
+    values.push(itemId);
+    db.prepare(`UPDATE order_items SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    
+    res.json({ success: true, message: 'Item updated' });
+  } catch (error) {
+    console.error('Error updating order item:', error);
+    res.status(500).json({ success: false, error: 'Failed to update item' });
+  }
+});
+
+// DELETE order item
+router.delete('/:orderId/items/:itemId', (req: Request, res: Response) => {
+  const { itemId } = req.params;
+  try {
+    db.prepare('DELETE FROM order_items WHERE id = ?').run(itemId);
+    res.json({ success: true, message: 'Item deleted' });
+  } catch (error) {
+    console.error('Error deleting order item:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete item' });
+  }
+});
+
 export default router;

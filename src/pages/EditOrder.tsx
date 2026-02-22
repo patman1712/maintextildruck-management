@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Upload, X, User, Calendar, FileText, ArrowLeft } from "lucide-react";
+import { Upload, X, User, Calendar, FileText, ArrowLeft, ShoppingCart, Trash2, Plus } from "lucide-react";
 import { useAppStore, Order } from "@/store";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -11,8 +11,39 @@ export default function EditOrder() {
   const updateOrder = useAppStore((state) => state.updateOrder);
   const customers = useAppStore((state) => state.customers);
   const users = useAppStore((state) => state.users);
+  const suppliers = useAppStore((state) => state.suppliers);
   const fetchUsers = useAppStore((state) => state.fetchUsers);
   
+  // Order Items logic
+  const addOrderItem = useAppStore((state) => state.addOrderItem);
+  const deleteOrderItem = useAppStore((state) => state.deleteOrderItem);
+  const orderItems = orders.find(o => o.id === id)?.orderItems || [];
+  
+  const [newItem, setNewItem] = useState({
+    supplierId: '',
+    itemName: '',
+    itemNumber: '',
+    color: '',
+    size: '',
+    quantity: 1,
+    notes: ''
+  });
+
+  const handleAddItem = async () => {
+    if (id && newItem.supplierId && newItem.itemName) {
+        await addOrderItem(id, newItem);
+        setNewItem({
+            supplierId: '',
+            itemName: '',
+            itemNumber: '',
+            color: '',
+            size: '',
+            quantity: 1,
+            notes: ''
+        });
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
@@ -449,6 +480,162 @@ export default function EditOrder() {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           ></textarea>
+        </div>
+
+        {/* Section 6: Order Items / Goods */}
+        <div>
+          <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex items-center">
+            <ShoppingCart className="mr-2 text-red-600" size={20} />
+            Benötigte Ware / Textilien
+          </h3>
+          
+          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
+                <div className="lg:col-span-2">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Lieferant / Shop</label>
+                    <select 
+                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                        value={newItem.supplierId}
+                        onChange={(e) => setNewItem({...newItem, supplierId: e.target.value})}
+                    >
+                        <option value="">Bitte wählen...</option>
+                        {suppliers.map(s => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="lg:col-span-2">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Artikelname</label>
+                    <input 
+                        type="text" 
+                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                        placeholder="z.B. Premium T-Shirt"
+                        value={newItem.itemName}
+                        onChange={(e) => setNewItem({...newItem, itemName: e.target.value})}
+                    />
+                </div>
+                <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Art.-Nr.</label>
+                    <input 
+                        type="text" 
+                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                        placeholder="Optional"
+                        value={newItem.itemNumber}
+                        onChange={(e) => setNewItem({...newItem, itemNumber: e.target.value})}
+                    />
+                </div>
+                <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Menge</label>
+                    <input 
+                        type="number" 
+                        min="1"
+                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                        value={newItem.quantity}
+                        onChange={(e) => setNewItem({...newItem, quantity: parseInt(e.target.value) || 1})}
+                    />
+                </div>
+                <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Farbe</label>
+                    <input 
+                        type="text" 
+                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                        placeholder="z.B. Navy"
+                        value={newItem.color}
+                        onChange={(e) => setNewItem({...newItem, color: e.target.value})}
+                    />
+                </div>
+                <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Größe</label>
+                    <input 
+                        type="text" 
+                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                        placeholder="z.B. XL"
+                        value={newItem.size}
+                        onChange={(e) => setNewItem({...newItem, size: e.target.value})}
+                    />
+                </div>
+                <div className="lg:col-span-3">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Notizen</label>
+                    <input 
+                        type="text" 
+                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                        placeholder="z.B. Ersatz für beschädigte Ware"
+                        value={newItem.notes}
+                        onChange={(e) => setNewItem({...newItem, notes: e.target.value})}
+                    />
+                </div>
+                <div className="flex items-end justify-end">
+                    <button 
+                        type="button"
+                        onClick={handleAddItem}
+                        disabled={!newItem.supplierId || !newItem.itemName}
+                        className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                    >
+                        <Plus size={16} className="mr-1" />
+                        Hinzufügen
+                    </button>
+                </div>
+            </div>
+          </div>
+
+          {orderItems.length > 0 ? (
+            <div className="overflow-x-auto border rounded-lg">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Menge</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Artikel</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lieferant</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {orderItems.map((item) => (
+                            <tr key={item.id}>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm font-bold text-gray-900">{item.quantity}x</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                                    <div className="font-medium">{item.itemName}</div>
+                                    {item.itemNumber && <div className="text-xs text-gray-500">Art: {item.itemNumber}</div>}
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                    {item.color && <span className="mr-2">Farbe: {item.color}</span>}
+                                    {item.size && <span>Größe: {item.size}</span>}
+                                    {item.notes && <div className="text-xs text-gray-400 italic mt-1">{item.notes}</div>}
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{item.supplierName || 'Unbekannt'}</td>
+                                <td className="px-4 py-2 whitespace-nowrap">
+                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                        item.status === 'ordered' ? 'bg-yellow-100 text-yellow-800' : 
+                                        item.status === 'received' ? 'bg-green-100 text-green-800' : 
+                                        'bg-gray-100 text-gray-800'
+                                    }`}>
+                                        {item.status === 'ordered' ? 'Bestellt' : 
+                                         item.status === 'received' ? 'Erhalten' : 'Offen'}
+                                    </span>
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
+                                    {id && (
+                                        <button 
+                                            type="button" 
+                                            onClick={() => deleteOrderItem(id, item.id)}
+                                            className="text-red-600 hover:text-red-900"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 text-center py-4 bg-gray-50 rounded border border-dashed">
+                Noch keine Artikel für die Bestellung erfasst.
+            </p>
+          )}
         </div>
 
         {/* Actions */}

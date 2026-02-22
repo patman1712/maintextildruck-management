@@ -24,6 +24,20 @@ export interface User {
   createdAt?: string;
 }
 
+export interface OrderItem {
+  id: string;
+  orderId: string;
+  supplierId: string;
+  supplierName?: string; // Helper for display
+  itemName: string;
+  itemNumber?: string;
+  color?: string;
+  size?: string;
+  quantity: number;
+  notes?: string;
+  status: 'pending' | 'ordered' | 'received';
+}
+
 export interface Order {
   id: string;
   title: string;
@@ -39,6 +53,7 @@ export interface Order {
   description?: string;
   employees: string[];
   files: { name: string; type: 'preview' | 'print' | 'vector'; url?: string; file?: File; customName?: string }[];
+  orderItems?: OrderItem[]; // New field
 }
 
 export interface Supplier {
@@ -73,6 +88,10 @@ interface AppState {
   updateUser: (id: string, updatedUser: Partial<User>) => Promise<void>;
   updateSupplier: (id: string, updatedSupplier: Partial<Supplier>) => Promise<void>;
   
+  addOrderItem: (orderId: string, item: Omit<OrderItem, 'id' | 'orderId' | 'status'>) => Promise<void>;
+  updateOrderItem: (orderId: string, itemId: string, updates: Partial<OrderItem>) => Promise<void>;
+  deleteOrderItem: (orderId: string, itemId: string) => Promise<void>;
+  
   updateOrderStatus: (id: string, status: Order['status']) => Promise<void>;
   toggleOrderStep: (id: string, step: keyof OrderSteps) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
@@ -97,6 +116,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       const ordersRes = await fetch('/api/orders');
       const ordersData = await ordersRes.json();
       
+      const orderItemsRes = await fetch('/api/orders/items/all');
+      const orderItemsData = await orderItemsRes.json();
+      
       const suppliersRes = await fetch('/api/suppliers');
       const suppliersData = await suppliersRes.json();
 
@@ -119,7 +141,22 @@ export const useAppStore = create<AppState>((set, get) => ({
         createdAt: o.created_at,
         description: o.description,
         employees: o.employees || [],
-        files: o.files || []
+        files: o.files || [],
+        orderItems: (orderItemsData.data || [])
+            .filter((i: any) => i.order_id === o.id)
+            .map((i: any) => ({
+                id: i.id,
+                orderId: i.order_id,
+                supplierId: i.supplier_id,
+                supplierName: i.supplier_name,
+                itemName: i.item_name,
+                itemNumber: i.item_number,
+                color: i.color,
+                size: i.size,
+                quantity: i.quantity,
+                notes: i.notes,
+                status: i.status
+            }))
       }));
       
       const mappedSuppliers: Supplier[] = (suppliersData.data || []).map((s: any) => ({
@@ -314,6 +351,105 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     } catch (error) {
       console.error('Error updating order:', error);
+    }
+  },
+
+  addOrderItem: async (orderId, item) => {
+    try {
+      const res = await fetch(`/api/orders/${orderId}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            supplier_id: item.supplierId,
+            item_name: item.itemName,
+            item_number: item.itemNumber,
+            color: item.color,
+            size: item.size,
+            quantity: item.quantity,
+            notes: item.notes
+        })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        set((state) => ({
+            orders: state.orders.map(o => {
+                if (o.id === orderId) {
+                    const newItem: OrderItem = {
+                        ...item,
+                        id: data.id,
+                        orderId,
+                        status: 'pending',
+                        supplierName: state.suppliers.find(s => s.id === item.supplierId)?.name
+                    };
+                    return { ...o, orderItems: [...(o.orderItems || []), newItem] };
+                }
+                return o;
+            })
+        }));
+      }
+    } catch (error) {
+      console.error('Error adding order item:', error);
+    }
+  },
+
+  updateOrderItem: async (orderId, itemId, updates) => {
+    try {
+      set((state) => ({
+        orders: state.orders.map(o => {
+            if (o.id === orderId && o.orderItems) {
+                return {
+                    ...o,
+                    orderItems: o.orderItems.map(i => i.id === itemId ? { 
+                        ...i, 
+                        ...updates,
+                        supplierName: updates.supplierId ? state.suppliers.find(s => s.id === updates.supplierId)?.name : i.supplierName
+                    } : i)
+                };
+            }
+            return o;
+        })
+      }));
+
+      const payload: any = {};
+      if (updates.supplierId !== undefined) payload.supplier_id = updates.supplierId;
+      if (updates.itemName !== undefined) payload.item_name = updates.itemName;
+      if (updates.itemNumber !== undefined) payload.item_number = updates.itemNumber;
+      if (updates.color !== undefined) payload.color = updates.color;
+      if (updates.size !== undefined) payload.size = updates.size;
+      if (updates.quantity !== undefined) payload.quantity = updates.quantity;
+      if (updates.notes !== undefined) payload.notes = updates.notes;
+      if (updates.status !== undefined) payload.status = updates.status;
+
+      await fetch(`/api/orders/${orderId}/items/${itemId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (error) {
+      console.error('Error updating order item:', error);
+    }
+  },
+
+  deleteOrderItem: async (orderId, itemId) => {
+    try {
+      set((state) => ({
+        orders: state.orders.map(o => {
+            if (o.id === orderId && o.orderItems) {
+                return {
+                    ...o,
+                    orderItems: o.orderItems.filter(i => i.id !== itemId)
+                };
+            }
+            return o;
+        })
+      }));
+
+      await fetch(`/api/orders/${orderId}/items/${itemId}`, {
+        method: 'DELETE'
+      });
+    } catch (error) {
+      console.error('Error deleting order item:', error);
     }
   },
 
