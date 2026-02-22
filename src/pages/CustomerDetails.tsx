@@ -78,7 +78,7 @@ export default function CustomerDetails() {
     await updateOrder(order.id, { files: updatedFiles });
   };
 
-  const handleDeleteFile = async (fileToDelete: { name: string, url?: string, orderTitle?: string }) => {
+  const handleDeleteFile = async (fileToDelete: { name: string, url?: string, orderTitle?: string, customName?: string }) => {
     if (!confirm(`Möchten Sie die Datei "${fileToDelete.customName || fileToDelete.name}" wirklich löschen? Sie wird auch aus dem Auftrag entfernt.`)) return;
 
     const order = customerOrders.find(o => o.files.some(f => f.url === fileToDelete.url));
