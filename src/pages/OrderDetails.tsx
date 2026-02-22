@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/store";
-import { ArrowLeft, Calendar, User, FileText, Download, Eye, Printer, PenTool, Trash2 } from "lucide-react";
+import { ArrowLeft, Calendar, User, FileText, Download, Eye, Printer, PenTool, Trash2, ShoppingCart, ExternalLink } from "lucide-react";
 
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
@@ -9,6 +9,7 @@ export default function OrderDetails() {
   const orders = useAppStore((state) => state.orders);
   const loading = useAppStore((state) => state.loading);
   const deleteOrder = useAppStore((state) => state.deleteOrder);
+  const suppliers = useAppStore((state) => state.suppliers);
   const [order, setOrder] = useState(orders.find(o => o.id === id));
 
   useEffect(() => {
@@ -27,6 +28,12 @@ export default function OrderDetails() {
       await deleteOrder(order.id);
       navigate("/dashboard/orders");
     }
+  };
+
+  const getSupplierUrl = (supplierId: string) => {
+    const supplier = suppliers.find(s => s.id === supplierId);
+    if (!supplier?.website) return null;
+    return supplier.website.startsWith('http') ? supplier.website : `https://${supplier.website}`;
   };
 
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Auftragsdaten...</div>;
@@ -152,6 +159,67 @@ export default function OrderDetails() {
               )}
             </div>
           </div>
+
+          {/* Order Items / Goods */}
+          {order.orderItems && order.orderItems.length > 0 && (
+            <div>
+              <h3 className="text-lg font-semibold text-slate-800 mb-4 border-b pb-2 flex items-center">
+                <ShoppingCart className="mr-2 text-red-600" size={20} />
+                Benötigte Ware
+              </h3>
+              
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Artikel</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Menge / Größe</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lieferant</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {order.orderItems.map((item) => {
+                            const supplierUrl = getSupplierUrl(item.supplierId);
+                            return (
+                                <tr key={item.id}>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="text-sm font-medium text-gray-900">{item.itemName}</div>
+                                        {item.itemNumber && <div className="text-xs text-gray-500">Art: {item.itemNumber}</div>}
+                                        {item.color && <div className="text-xs text-gray-500">Farbe: {item.color}</div>}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        <div className="font-bold">{item.quantity}x</div>
+                                        <div className="text-gray-500">{item.size}</div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <div className="flex items-center">
+                                            <span>{item.supplierName || 'Unbekannt'}</span>
+                                            {supplierUrl && (
+                                                <a href={supplierUrl} target="_blank" rel="noreferrer" className="ml-2 text-blue-600 hover:text-blue-800" title="Zum Shop">
+                                                    <ExternalLink size={14} />
+                                                </a>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                            item.status === 'ordered' ? 'bg-yellow-100 text-yellow-800' : 
+                                            item.status === 'received' ? 'bg-green-100 text-green-800' : 
+                                            'bg-gray-100 text-gray-800'
+                                        }`}>
+                                            {item.status === 'ordered' ? 'Bestellt' : 
+                                             item.status === 'received' ? 'Erhalten' : 'Offen'}
+                                        </span>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Files Section */}
           <div>

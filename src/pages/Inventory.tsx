@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useAppStore, Supplier } from '@/store';
-import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { useAppStore, Supplier, OrderItem } from '@/store';
+import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock } from 'lucide-react';
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState<'orders' | 'suppliers'>('suppliers');
@@ -43,6 +43,7 @@ export default function Inventory() {
 }
 
 function SuppliersTab() {
+  // ... existing SuppliersTab code ...
   const suppliers = useAppStore((state) => state.suppliers);
   const addSupplier = useAppStore((state) => state.addSupplier);
   const updateSupplier = useAppStore((state) => state.updateSupplier);
@@ -244,11 +245,158 @@ function SuppliersTab() {
 }
 
 function OrdersTab() {
+  const orders = useAppStore((state) => state.orders);
+  const suppliers = useAppStore((state) => state.suppliers);
+  const updateOrderItem = useAppStore((state) => state.updateOrderItem);
+
+  // Group items by Supplier -> then list items with order info
+  const itemsBySupplier = useMemo(() => {
+    const grouped: Record<string, { supplier: Supplier | undefined, items: (OrderItem & { orderTitle: string, orderDeadline: string })[] }> = {};
+    
+    orders.forEach(order => {
+        if (order.orderItems) {
+            order.orderItems.forEach(item => {
+                // Only show pending or ordered items, hide received ones? Or show all with filter?
+                // Let's show all for now
+                if (!grouped[item.supplierId]) {
+                    grouped[item.supplierId] = {
+                        supplier: suppliers.find(s => s.id === item.supplierId),
+                        items: []
+                    };
+                }
+                grouped[item.supplierId].items.push({
+                    ...item,
+                    orderTitle: order.title,
+                    orderDeadline: order.deadline
+                });
+            });
+        }
+    });
+    
+    return grouped;
+  }, [orders, suppliers]);
+
+  const supplierIds = Object.keys(itemsBySupplier);
+
+  const updateStatus = async (orderId: string, itemId: string, status: 'pending' | 'ordered' | 'received') => {
+    await updateOrderItem(orderId, itemId, { status });
+  };
+
+  if (supplierIds.length === 0) {
+    return (
+        <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
+          <ShoppingCart size={48} className="mx-auto mb-3 text-gray-300" />
+          <h3 className="text-lg font-medium text-gray-900">Keine offenen Bestellungen</h3>
+          <p className="text-gray-500 mt-1">Fügen Sie benötigte Ware in den Aufträgen hinzu.</p>
+        </div>
+    );
+  }
+
   return (
-    <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
-      <ShoppingCart size={48} className="mx-auto mb-3 text-gray-300" />
-      <h3 className="text-lg font-medium text-gray-900">Bestellübersicht</h3>
-      <p className="text-gray-500 mt-1">Hier können später Bestellungen bei den Lieferanten verwaltet werden.</p>
+    <div className="space-y-8">
+        {supplierIds.map(supplierId => {
+            const group = itemsBySupplier[supplierId];
+            const supplier = group.supplier;
+            const pendingItems = group.items.filter(i => i.status === 'pending');
+            const orderedItems = group.items.filter(i => i.status === 'ordered');
+            
+            if (!supplier && group.items.length === 0) return null;
+
+            return (
+                <div key={supplierId} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                        <div className="flex items-center">
+                            <Truck className="mr-2 text-slate-500" />
+                            <h3 className="text-lg font-bold text-slate-800">{supplier?.name || 'Unbekannter Lieferant'}</h3>
+                            {pendingItems.length > 0 && (
+                                <span className="ml-3 bg-red-100 text-red-800 text-xs font-bold px-2 py-1 rounded-full">
+                                    {pendingItems.length} Offen
+                                </span>
+                            )}
+                        </div>
+                        {supplier?.website && (
+                            <a 
+                                href={supplier.website.startsWith('http') ? supplier.website : `https://${supplier.website}`} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="flex items-center text-sm text-blue-600 hover:underline bg-white px-3 py-1 rounded border border-blue-200 hover:bg-blue-50"
+                            >
+                                <ExternalLink size={14} className="mr-1" />
+                                Zum Shop
+                            </a>
+                        )}
+                    </div>
+                    
+                    <div className="divide-y divide-gray-100">
+                        {group.items.length === 0 ? (
+                            <div className="p-6 text-center text-gray-500">Keine Artikel.</div>
+                        ) : (
+                            group.items.map(item => (
+                                <div key={item.id} className={`p-4 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${item.status === 'received' ? 'opacity-60 bg-gray-50' : ''}`}>
+                                    <div className="flex-1">
+                                        <div className="flex items-start justify-between mb-1">
+                                            <h4 className="font-bold text-gray-900">{item.itemName}</h4>
+                                            <span className={`text-xs px-2 py-0.5 rounded ${
+                                                item.status === 'pending' ? 'bg-red-100 text-red-800' :
+                                                item.status === 'ordered' ? 'bg-yellow-100 text-yellow-800' :
+                                                'bg-green-100 text-green-800'
+                                            }`}>
+                                                {item.status === 'pending' ? 'Offen' : item.status === 'ordered' ? 'Bestellt' : 'Erhalten'}
+                                            </span>
+                                        </div>
+                                        <div className="text-sm text-gray-600 mb-1">
+                                            <span className="font-medium mr-2">{item.quantity}x {item.size}</span>
+                                            {item.color && <span className="text-gray-500 border-l pl-2 border-gray-300">Farbe: {item.color}</span>}
+                                        </div>
+                                        <div className="text-xs text-gray-500 flex items-center mt-2">
+                                            <FileText size={12} className="mr-1" />
+                                            Auftrag: <span className="font-medium mx-1">{item.orderTitle}</span>
+                                            <span className="mx-1 text-gray-300">|</span>
+                                            <Clock size={12} className="mr-1" />
+                                            Deadline: {new Date(item.orderDeadline).toLocaleDateString()}
+                                        </div>
+                                        {item.notes && (
+                                            <div className="text-xs text-gray-400 italic mt-1 bg-yellow-50 p-1 rounded inline-block">
+                                                Note: {item.notes}
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="flex space-x-2 shrink-0">
+                                        {item.status === 'pending' && (
+                                            <button 
+                                                onClick={() => updateStatus(item.orderId, item.id, 'ordered')}
+                                                className="flex items-center px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-yellow-50 hover:text-yellow-700 hover:border-yellow-300 text-sm transition-colors"
+                                            >
+                                                <ShoppingCart size={14} className="mr-1" />
+                                                Als bestellt markieren
+                                            </button>
+                                        )}
+                                        {item.status === 'ordered' && (
+                                            <button 
+                                                onClick={() => updateStatus(item.orderId, item.id, 'received')}
+                                                className="flex items-center px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded hover:bg-green-50 hover:text-green-700 hover:border-green-300 text-sm transition-colors"
+                                            >
+                                                <CheckCircle size={14} className="mr-1" />
+                                                Ware erhalten
+                                            </button>
+                                        )}
+                                        {item.status === 'received' && (
+                                            <button 
+                                                onClick={() => updateStatus(item.orderId, item.id, 'pending')}
+                                                className="text-xs text-gray-400 hover:text-gray-600 underline px-2"
+                                            >
+                                                Zurücksetzen
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            );
+        })}
     </div>
   );
 }
