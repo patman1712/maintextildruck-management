@@ -3,7 +3,7 @@ import { useAppStore, Supplier, OrderItem } from '@/store';
 import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, Send, RotateCcw } from 'lucide-react';
 
 export default function Inventory() {
-  const [activeTab, setActiveTab] = useState<'orders' | 'suppliers'>('suppliers');
+  const [activeTab, setActiveTab] = useState<'orders' | 'completed' | 'suppliers'>('orders');
   
   return (
     <div className="max-w-7xl mx-auto">
@@ -15,6 +15,26 @@ export default function Inventory() {
       {/* Tabs */}
       <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg mb-6 w-fit">
         <button
+          onClick={() => setActiveTab('orders')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'orders' 
+              ? 'bg-white text-red-600 shadow-sm' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Aktuelle Warenbestellungen
+        </button>
+        <button
+          onClick={() => setActiveTab('completed')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'completed' 
+              ? 'bg-white text-red-600 shadow-sm' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Erledigte Warenbestellungen
+        </button>
+        <button
           onClick={() => setActiveTab('suppliers')}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
             activeTab === 'suppliers' 
@@ -24,20 +44,11 @@ export default function Inventory() {
         >
           Lieferanten / Shops
         </button>
-        <button
-          onClick={() => setActiveTab('orders')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'orders' 
-              ? 'bg-white text-red-600 shadow-sm' 
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          Bestellungen
-        </button>
       </div>
 
+      {activeTab === 'orders' && <OrdersTab showCompleted={false} />}
+      {activeTab === 'completed' && <OrdersTab showCompleted={true} />}
       {activeTab === 'suppliers' && <SuppliersTab />}
-      {activeTab === 'orders' && <OrdersTab />}
     </div>
   );
 }
@@ -267,7 +278,7 @@ function SuppliersTab() {
   );
 }
 
-function OrdersTab() {
+function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const orders = useAppStore((state) => state.orders);
   const suppliers = useAppStore((state) => state.suppliers);
   const updateOrderItem = useAppStore((state) => state.updateOrderItem);
@@ -280,8 +291,10 @@ function OrdersTab() {
     orders.forEach(order => {
         if (order.orderItems) {
             order.orderItems.forEach(item => {
-                // Only show pending or ordered items, hide received ones? Or show all with filter?
-                // Let's show all for now
+                // Filter based on completion status
+                const isCompleted = item.status === 'received';
+                if (showCompleted !== isCompleted) return;
+
                 if (!grouped[item.supplierId]) {
                     grouped[item.supplierId] = {
                         supplier: suppliers.find(s => s.id === item.supplierId),
@@ -298,7 +311,7 @@ function OrdersTab() {
     });
     
     return grouped;
-  }, [orders, suppliers]);
+  }, [orders, suppliers, showCompleted]);
 
   const supplierIds = Object.keys(itemsBySupplier);
   const [selectedOrders, setSelectedOrders] = useState<Record<string, string[]>>({}); // supplierId -> orderIds[]
@@ -312,8 +325,14 @@ function OrdersTab() {
     return (
         <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
           <ShoppingCart size={48} className="mx-auto mb-3 text-gray-300" />
-          <h3 className="text-lg font-medium text-gray-900">Keine offenen Bestellungen</h3>
-          <p className="text-gray-500 mt-1">Fügen Sie benötigte Ware in den Aufträgen hinzu.</p>
+          <h3 className="text-lg font-medium text-gray-900">
+            {showCompleted ? 'Keine erledigten Bestellungen' : 'Keine offenen Bestellungen'}
+          </h3>
+          <p className="text-gray-500 mt-1">
+            {showCompleted 
+                ? 'Erledigte Bestellungen erscheinen hier.' 
+                : 'Fügen Sie benötigte Ware in den Aufträgen hinzu.'}
+          </p>
         </div>
     );
   }
@@ -434,18 +453,20 @@ function OrdersTab() {
                                     Shop
                                 </a>
                             )}
-                            <button
-                                onClick={() => handleSendEmail(supplierId)}
-                                disabled={!hasSelection}
-                                className={`flex items-center text-sm px-3 py-1 rounded border transition-colors ${
-                                    hasSelection 
-                                        ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' 
-                                        : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                                }`}
-                            >
-                                <Mail size={14} className="mr-1" />
-                                E-Mail erstellen ({selectedForThisSupplier.length})
-                            </button>
+                            {supplier?.email && !showCompleted && (
+                                <button
+                                    onClick={() => handleSendEmail(supplierId)}
+                                    disabled={!hasSelection}
+                                    className={`flex items-center text-sm px-3 py-1 rounded border transition-colors ${
+                                        hasSelection 
+                                            ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' 
+                                            : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                    }`}
+                                >
+                                    <Mail size={14} className="mr-1" />
+                                    E-Mail erstellen ({selectedForThisSupplier.length})
+                                </button>
+                            )}
                         </div>
                     </div>
                     
@@ -459,13 +480,15 @@ function OrdersTab() {
                                 <div key={orderId} className={`p-4 hover:bg-gray-50 transition-colors border-b last:border-0 ${isSelected ? 'bg-red-50' : ''}`}>
                                     {/* Order Header with Checkbox */}
                                     <div className="flex items-center mb-3">
-                                        <input 
-                                            type="checkbox"
-                                            className="form-checkbox h-5 w-5 text-red-600 rounded focus:ring-red-500 border-gray-300 mr-3"
-                                            checked={isSelected}
-                                            onChange={() => toggleOrderSelectionForSupplier(supplierId, orderId)}
-                                            disabled={!hasPending} // Only allow selection if there are pending items
-                                        />
+                                        {!showCompleted && (
+                                            <input 
+                                                type="checkbox"
+                                                className="form-checkbox h-5 w-5 text-red-600 rounded focus:ring-red-500 border-gray-300 mr-3"
+                                                checked={isSelected}
+                                                onChange={() => toggleOrderSelectionForSupplier(supplierId, orderId)}
+                                                disabled={!hasPending} // Only allow selection if there are pending items
+                                            />
+                                        )}
                                         <div>
                                             <h4 className="font-bold text-gray-900 text-sm flex items-center">
                                                 {orderGroup.title}
@@ -502,37 +525,50 @@ function OrdersTab() {
                                                     </span>
 
                                                     {/* Individual Actions */}
-                                                    <div className="flex space-x-2 shrink-0">
-                                                        {item.status === 'pending' && (
+                                                    {!showCompleted && (
+                                                        <div className="flex space-x-2 shrink-0">
+                                                            {item.status === 'pending' && (
+                                                                <button 
+                                                                    onClick={() => updateStatus(item.orderId, item.id, 'ordered')}
+                                                                    className="p-1 text-yellow-600 hover:bg-yellow-50 rounded border border-transparent hover:border-yellow-200"
+                                                                    title="Manuell als 'Bestellt' markieren"
+                                                                >
+                                                                    <ShoppingCart size={16} />
+                                                                </button>
+                                                            )}
+                                                            {item.status === 'ordered' && (
+                                                                <div className="flex space-x-1">
+                                                                    <button 
+                                                                        onClick={() => updateStatus(item.orderId, item.id, 'received')}
+                                                                        className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                                                        title="Ware erhalten"
+                                                                    >
+                                                                        <CheckCircle size={16} />
+                                                                    </button>
+                                                                    {currentUser?.role === 'admin' && (
+                                                                        <button 
+                                                                            onClick={() => updateStatus(item.orderId, item.id, 'pending')}
+                                                                            className="p-1 text-gray-400 hover:bg-gray-100 rounded hover:text-gray-600"
+                                                                            title="Zurück auf 'Offen' (Nur Admin)"
+                                                                        >
+                                                                            <RotateCcw size={16} />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {showCompleted && currentUser?.role === 'admin' && (
+                                                        <div className="flex space-x-1">
                                                             <button 
                                                                 onClick={() => updateStatus(item.orderId, item.id, 'ordered')}
-                                                                className="p-1 text-yellow-600 hover:bg-yellow-50 rounded border border-transparent hover:border-yellow-200"
-                                                                title="Manuell als 'Bestellt' markieren"
+                                                                className="p-1 text-gray-400 hover:bg-gray-100 rounded hover:text-gray-600"
+                                                                title="Zurück auf 'Bestellt' (Nur Admin)"
                                                             >
-                                                                <ShoppingCart size={16} />
+                                                                <RotateCcw size={16} />
                                                             </button>
-                                                        )}
-                                                        {item.status === 'ordered' && (
-                                                            <div className="flex space-x-1">
-                                                                <button 
-                                                                    onClick={() => updateStatus(item.orderId, item.id, 'received')}
-                                                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                                                    title="Ware erhalten"
-                                                                >
-                                                                    <CheckCircle size={16} />
-                                                                </button>
-                                                                {currentUser?.role === 'admin' && (
-                                                                    <button 
-                                                                        onClick={() => updateStatus(item.orderId, item.id, 'pending')}
-                                                                        className="p-1 text-gray-400 hover:bg-gray-100 rounded hover:text-gray-600"
-                                                                        title="Zurück auf 'Offen' (Nur Admin)"
-                                                                    >
-                                                                        <RotateCcw size={16} />
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
