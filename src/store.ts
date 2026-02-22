@@ -74,10 +74,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       set((state) => ({ orders: [order, ...state.orders] }));
       
+      const orderPayload = {
+        id: order.id,
+        title: order.title,
+        customer_name: order.customerName,
+        customer_email: order.customerEmail,
+        customer_phone: order.customerPhone,
+        customer_address: order.customerAddress,
+        deadline: order.deadline,
+        status: order.status,
+        processing: order.steps.processing,
+        produced: order.steps.produced,
+        invoiced: order.steps.invoiced,
+        description: order.description,
+        employees: order.employees,
+        files: order.files
+      };
+
       await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(order)
+        body: JSON.stringify(orderPayload)
       });
     } catch (error) {
       console.error('Error adding order:', error);
@@ -104,10 +121,27 @@ export const useAppStore = create<AppState>((set, get) => ({
         orders: state.orders.map((o) => (o.id === id ? { ...o, ...updatedOrder } : o))
       }));
 
+      const updatePayload: any = {};
+      if (updatedOrder.title !== undefined) updatePayload.title = updatedOrder.title;
+      if (updatedOrder.customerName !== undefined) updatePayload.customer_name = updatedOrder.customerName;
+      if (updatedOrder.customerEmail !== undefined) updatePayload.customer_email = updatedOrder.customerEmail;
+      if (updatedOrder.customerPhone !== undefined) updatePayload.customer_phone = updatedOrder.customerPhone;
+      if (updatedOrder.customerAddress !== undefined) updatePayload.customer_address = updatedOrder.customerAddress;
+      if (updatedOrder.deadline !== undefined) updatePayload.deadline = updatedOrder.deadline;
+      if (updatedOrder.status !== undefined) updatePayload.status = updatedOrder.status;
+      if (updatedOrder.description !== undefined) updatePayload.description = updatedOrder.description;
+      if (updatedOrder.employees !== undefined) updatePayload.employees = updatedOrder.employees;
+      if (updatedOrder.files !== undefined) updatePayload.files = updatedOrder.files;
+      if (updatedOrder.steps) {
+        if (updatedOrder.steps.processing !== undefined) updatePayload.processing = updatedOrder.steps.processing;
+        if (updatedOrder.steps.produced !== undefined) updatePayload.produced = updatedOrder.steps.produced;
+        if (updatedOrder.steps.invoiced !== undefined) updatePayload.invoiced = updatedOrder.steps.invoiced;
+      }
+
       await fetch(`/api/orders/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedOrder)
+        body: JSON.stringify(updatePayload)
       });
     } catch (error) {
       console.error('Error updating order:', error);
