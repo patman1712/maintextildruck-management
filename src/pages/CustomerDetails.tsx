@@ -44,7 +44,7 @@ export default function CustomerDetails() {
     }
   }, [id, customers, orders, navigate, loading]);
 
-  const handleSave = async () => {
+  const handleSaveCustomer = async () => {
     if (!editedCustomer || !customer) return;
     
     await updateCustomer(customer.id, editedCustomer);
@@ -52,20 +52,34 @@ export default function CustomerDetails() {
     setIsEditing(false);
   };
 
-  const handleRenameFile = async (fileUrl: string, newName: string) => {
-    // This is a bit tricky because files are stored inside orders.
-    // We need to find the order that contains this file and update it.
-    // For now, we'll simulate it in the UI or implement a backend endpoint for file renaming if needed.
-    // But wait, the user wants to rename files in the "Customer Area".
-    // Since files belong to orders, renaming them here should ideally rename them in the order too.
-    
-    // For MVP, we might need to skip this or implement a complex update.
-    // Let's implement deletion first as requested.
-    alert("Umbenennen ist in dieser Version noch nicht verfügbar.");
+  const [editingFile, setEditingFile] = useState<{url: string, name: string} | null>(null);
+
+  const startRename = (file: {name: string, url?: string, customName?: string}) => {
+    if (!file.url) return;
+    setEditingFile({ url: file.url, name: file.customName || file.name });
+  };
+
+  const saveRename = async () => {
+    if (!editingFile) return;
+    await handleRenameFile({ name: "", url: editingFile.url }, editingFile.name);
+    setEditingFile(null);
+  };
+
+  const handleRenameFile = async (fileToRename: { name: string, url?: string }, newName: string) => {
+    const order = customerOrders.find(o => o.files.some(f => f.url === fileToRename.url));
+    if (!order) return;
+
+    const updatedFiles = order.files.map(f => 
+      f.url === fileToRename.url ? { ...f, customName: newName } : f
+    );
+
+    const updatedOrder = { ...order, files: updatedFiles };
+    setCustomerOrders(prev => prev.map(o => o.id === order.id ? updatedOrder : o));
+    await updateOrder(order.id, { files: updatedFiles });
   };
 
   const handleDeleteFile = async (fileToDelete: { name: string, url?: string, orderTitle?: string }) => {
-    if (!confirm(`Möchten Sie die Datei "${fileToDelete.name}" wirklich löschen? Sie wird auch aus dem Auftrag entfernt.`)) return;
+    if (!confirm(`Möchten Sie die Datei "${fileToDelete.customName || fileToDelete.name}" wirklich löschen? Sie wird auch aus dem Auftrag entfernt.`)) return;
 
     const order = customerOrders.find(o => o.files.some(f => f.url === fileToDelete.url));
     if (!order) return;
@@ -76,11 +90,21 @@ export default function CustomerDetails() {
     const updatedOrder = { ...order, files: updatedFiles };
     setCustomerOrders(prev => prev.map(o => o.id === order.id ? updatedOrder : o));
 
-    // Update in backend
+    // Update in backend (this updates the DB record)
     await updateOrder(order.id, { files: updatedFiles });
     
-    // Note: Actual file deletion from server disk is not yet implemented in backend,
-    // but the file is removed from the database record.
+    // Attempt to delete file from server
+    if (fileToDelete.url) {
+        try {
+            await fetch('/api/upload/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filePath: fileToDelete.url })
+            });
+        } catch (err) {
+            console.error("Failed to delete file from server", err);
+        }
+    }
   };
 
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Kundendaten...</div>;
@@ -154,7 +178,7 @@ export default function CustomerDetails() {
                   <X size={20} />
                 </button>
                 <button 
-                  onClick={handleSave}
+                  onClick={handleSaveCustomer}
                   className="p-2 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-full transition-colors"
                   title="Speichern"
                 >
@@ -293,17 +317,39 @@ export default function CustomerDetails() {
                     </div>
                   </div>
                   
-                  <div className="h-32 bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden border border-gray-100">
+                  <div className="h-32 bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden border border-gray-100 relative group-hover:bg-gray-50 transition-colors">
                     {file.url ? (
                       <img src={file.url} alt={file.name} className="w-full h-full object-contain" />
                     ) : (
                       <Printer size={32} className="text-gray-300" />
                     )}
+                    
+                    {/* Rename Overlay */}
+                    {editingFile && editingFile.url === file.url && (
+                        <div className="absolute inset-0 bg-white/90 flex flex-col items-center justify-center p-2 z-10">
+                            <input 
+                                type="text" 
+                                value={editingFile.name}
+                                onChange={(e) => setEditingFile({...editingFile, name: e.target.value})}
+                                className="w-full text-xs border border-gray-300 rounded p-1 mb-2"
+                                autoFocus
+                            />
+                            <div className="flex space-x-2">
+                                <button onClick={saveRename} className="bg-green-500 text-white p-1 rounded hover:bg-green-600"><Save size={14}/></button>
+                                <button onClick={() => setEditingFile(null)} className="bg-gray-400 text-white p-1 rounded hover:bg-gray-500"><X size={14}/></button>
+                            </div>
+                        </div>
+                    )}
                   </div>
 
-                  <h4 className="font-medium text-gray-800 truncate mb-1" title={file.name}>
-                    {file.name}
-                  </h4>
+                  <div className="flex justify-between items-center mb-1">
+                    <h4 className="font-medium text-gray-800 truncate flex-1 mr-2" title={file.customName || file.name}>
+                        {file.customName || file.name}
+                    </h4>
+                    <button onClick={() => startRename(file)} className="text-gray-400 hover:text-blue-600 p-1" title="Umbenennen">
+                        <Pencil size={14} />
+                    </button>
+                  </div>
                   <p className="text-xs text-gray-500 flex items-center">
                     <FileText size={12} className="mr-1" />
                     Aus: {file.orderTitle}

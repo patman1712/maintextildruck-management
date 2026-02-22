@@ -29,7 +29,7 @@ export interface Order {
   createdAt: string;
   description?: string;
   employees: string[];
-  files: { name: string; type: 'preview' | 'print' | 'vector'; url?: string }[];
+  files: { name: string; type: 'preview' | 'print' | 'vector'; url?: string; file?: File; customName?: string }[];
 }
 
 interface AppState {
