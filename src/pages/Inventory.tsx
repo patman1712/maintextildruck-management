@@ -502,26 +502,37 @@ function OrdersTab() {
                                                     </span>
 
                                                     {/* Individual Actions */}
-                                                    {item.status === 'ordered' && (
-                                                        <div className="flex space-x-1">
+                                                    <div className="flex space-x-2 shrink-0">
+                                                        {item.status === 'pending' && (
                                                             <button 
-                                                                onClick={() => updateStatus(item.orderId, item.id, 'received')}
-                                                                className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                                                title="Ware erhalten"
+                                                                onClick={() => updateStatus(item.orderId, item.id, 'ordered')}
+                                                                className="p-1 text-yellow-600 hover:bg-yellow-50 rounded border border-transparent hover:border-yellow-200"
+                                                                title="Manuell als 'Bestellt' markieren"
                                                             >
-                                                                <CheckCircle size={16} />
+                                                                <ShoppingCart size={16} />
                                                             </button>
-                                                            {currentUser?.role === 'admin' && (
+                                                        )}
+                                                        {item.status === 'ordered' && (
+                                                            <div className="flex space-x-1">
                                                                 <button 
-                                                                    onClick={() => updateStatus(item.orderId, item.id, 'pending')}
-                                                                    className="p-1 text-gray-400 hover:bg-gray-100 rounded hover:text-gray-600"
-                                                                    title="Zurück auf 'Offen' (Nur Admin)"
+                                                                    onClick={() => updateStatus(item.orderId, item.id, 'received')}
+                                                                    className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                                                    title="Ware erhalten"
                                                                 >
-                                                                    <RotateCcw size={16} />
+                                                                    <CheckCircle size={16} />
                                                                 </button>
-                                                            )}
-                                                        </div>
-                                                    )}
+                                                                {currentUser?.role === 'admin' && (
+                                                                    <button 
+                                                                        onClick={() => updateStatus(item.orderId, item.id, 'pending')}
+                                                                        className="p-1 text-gray-400 hover:bg-gray-100 rounded hover:text-gray-600"
+                                                                        title="Zurück auf 'Offen' (Nur Admin)"
+                                                                    >
+                                                                        <RotateCcw size={16} />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
