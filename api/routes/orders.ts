@@ -139,7 +139,7 @@ router.put('/:id', (req: Request, res: Response) => {
           const fileId = Math.random().toString(36).substr(2, 9);
           // Need to get customer_id from existing order if not in updates
           // But here we can just use updates.customer_id if present or existing.customer_id
-          const customerId = updates.customer_id || existing.customer_id;
+          const customerId = updates.customer_id || (existing as any).customer_id;
           
           insertFile.run(
             fileId, 
