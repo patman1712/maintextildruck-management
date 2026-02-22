@@ -38,6 +38,7 @@ interface AppState {
   fetchData: () => Promise<void>;
   addOrder: (order: Order) => Promise<void>;
   addCustomer: (customer: Customer) => Promise<void>;
+  updateCustomer: (id: string, updatedCustomer: Partial<Customer>) => Promise<void>;
   updateOrder: (id: string, updatedOrder: Partial<Order>) => Promise<void>;
   updateOrderStatus: (id: string, status: Order['status']) => Promise<void>;
   toggleOrderStep: (id: string, step: keyof OrderSteps) => Promise<void>;
@@ -112,6 +113,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     } catch (error) {
       console.error('Error adding customer:', error);
+    }
+  },
+
+  updateCustomer: async (id, updatedCustomer) => {
+    try {
+      set((state) => ({
+        customers: state.customers.map((c) => (c.id === id ? { ...c, ...updatedCustomer } : c))
+      }));
+
+      await fetch(`/api/customers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedCustomer)
+      });
+    } catch (error) {
+      console.error('Error updating customer:', error);
     }
   },
 
