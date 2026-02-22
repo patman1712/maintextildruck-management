@@ -209,13 +209,39 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   deleteOrder: async (id) => {
     try {
+      // Instead of deleting from DB, we just set status to 'archived' if we want to keep files
+      // BUT user asked to "delete" order but keep "DTF print files".
+      // If we hard delete the order row, we lose the file references unless we move them to a separate table.
+      // Currently files are JSON in the order row.
+      
+      // OPTION 1: Soft delete (set status to 'deleted' or similar) -> This keeps everything.
+      // OPTION 2: Extract files to a new "File Archive" system -> Complex refactoring.
+      // OPTION 3: Keep using "archived" status for deleted orders?
+      
+      // Let's use a soft delete approach for now, or just don't delete the physical files (which is already the case).
+      // The issue is: if the order row is gone, the UI can't find the files anymore because they are inside the order JSON.
+      
+      // So, if we want to keep files accessible in the "Customer Area" (which looks up orders),
+      // we MUST NOT delete the order row from the database.
+      
+      // Instead of DELETE, we will set status to 'archived' (or a new 'deleted' status that is hidden everywhere except deep archives).
+      // Let's use 'archived' since we already have it and it hides orders from the main list.
+      // Wait, 'archived' is used for Direct Uploads.
+      // If we use 'archived' for deleted orders, they will appear in the "Customer Files" list (which is good!)
+      // but they will be hidden from the main Order List (also good!).
+      
+      // So, "Deleting" an order effectively becomes "Archiving" it.
+      
       set((state) => ({
-        orders: state.orders.filter((o) => o.id !== id)
+        orders: state.orders.map((o) => (o.id === id ? { ...o, status: 'archived' } : o))
       }));
       
       await fetch(`/api/orders/${id}`, {
-        method: 'DELETE',
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'archived' })
       });
+      
     } catch (error) {
       console.error('Error deleting order:', error);
     }

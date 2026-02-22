@@ -23,7 +23,7 @@ export default function OrderDetails() {
 
   const handleDelete = async () => {
     if (!order) return;
-    if (confirm(`Sind Sie sicher, dass Sie den Auftrag "${order.title}" unwiderruflich löschen möchten?`)) {
+    if (confirm(`Möchten Sie den Auftrag "${order.title}" wirklich löschen? Er wird archiviert, damit die Druckdaten erhalten bleiben.`)) {
       await deleteOrder(order.id);
       navigate("/dashboard/orders");
     }
