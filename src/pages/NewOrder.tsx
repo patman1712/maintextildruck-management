@@ -126,7 +126,7 @@ export default function NewOrder() {
     };
 
     if (customerMode === "new" && saveAsNewCustomer && customerName) {
-        addCustomer({
+        await addCustomer({
             id: Math.random().toString(36).substr(2, 9),
             name: customerName,
             email: customerEmail,
@@ -135,7 +135,7 @@ export default function NewOrder() {
         });
     }
 
-    addOrder(newOrder);
+    await addOrder(newOrder);
     navigate("/dashboard/orders");
   };
 

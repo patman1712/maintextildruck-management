@@ -36,21 +36,29 @@ router.post('/', (req: Request, res: Response) => {
     deadline, status, processing, produced, invoiced, description, employees, files 
   } = req.body;
 
-  const stmt = db.prepare(`
-    INSERT INTO orders (
-      id, title, customer_name, customer_email, customer_phone, customer_address,
-      deadline, status, processing, produced, invoiced, description, employees, files
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  stmt.run(
-    id, title, customer_name, customer_email, customer_phone, customer_address,
-    deadline, status, processing ? 1 : 0, produced ? 1 : 0, invoiced ? 1 : 0, 
-    description, JSON.stringify(employees || []), JSON.stringify(files || [])
-  );
+  console.log('Received order payload:', req.body);
   
-  res.json({ success: true, message: 'Order added' });
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO orders (
+        id, title, customer_name, customer_email, customer_phone, customer_address,
+        deadline, status, processing, produced, invoiced, description, employees, files
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      id, title, customer_name, customer_email, customer_phone, customer_address,
+      deadline, status, processing ? 1 : 0, produced ? 1 : 0, invoiced ? 1 : 0, 
+      description, JSON.stringify(employees || []), JSON.stringify(files || [])
+    );
+    
+    console.log('Order added successfully:', id);
+    res.json({ success: true, message: 'Order added' });
+  } catch (error) {
+    console.error('Error adding order to database:', error);
+    res.status(500).json({ success: false, error: 'Failed to add order', details: error.message });
+  }
 });
 
 // PUT update order
