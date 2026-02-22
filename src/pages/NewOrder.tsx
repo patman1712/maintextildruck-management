@@ -72,8 +72,42 @@ export default function NewOrder() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 1. Upload files first
+    const formData = new FormData();
+    files.forEach(f => formData.append('preview', f));
+    printFiles.forEach(f => formData.append('print', f));
+    vectorFiles.forEach(f => formData.append('vector', f));
+
+    let uploadedFiles: { name: string; type: 'preview' | 'print' | 'vector'; url?: string }[] = [];
+
+    try {
+      // Only fetch if there are files
+      if (files.length > 0 || printFiles.length > 0 || vectorFiles.length > 0) {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        
+        if (data.success && data.files) {
+          if (data.files.preview) {
+            uploadedFiles = [...uploadedFiles, ...data.files.preview.map((f: any) => ({ name: f.originalName, type: 'preview' as const, url: f.path }))];
+          }
+          if (data.files.print) {
+            uploadedFiles = [...uploadedFiles, ...data.files.print.map((f: any) => ({ name: f.originalName, type: 'print' as const, url: f.path }))];
+          }
+          if (data.files.vector) {
+            uploadedFiles = [...uploadedFiles, ...data.files.vector.map((f: any) => ({ name: f.originalName, type: 'vector' as const, url: f.path }))];
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Upload failed", err);
+      // Proceed without files or show error? For now proceed but maybe alert user
+    }
     
     const newOrder: Order = {
       id: Math.random().toString(36).substr(2, 9),
@@ -88,11 +122,7 @@ export default function NewOrder() {
       createdAt: new Date().toISOString().split('T')[0],
       description: description,
       employees: selectedEmployees,
-      files: [
-        ...files.map(f => ({ name: f.name, type: "preview" as const })),
-        ...printFiles.map(f => ({ name: f.name, type: "print" as const })),
-        ...vectorFiles.map(f => ({ name: f.name, type: "vector" as const }))
-      ]
+      files: uploadedFiles
     };
 
     if (customerMode === "new" && saveAsNewCustomer && customerName) {

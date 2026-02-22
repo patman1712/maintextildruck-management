@@ -12,7 +12,7 @@ export default function EditOrder() {
   const customers = useAppStore((state) => state.customers);
   
   const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
-  const [files, setFiles] = useState<{ name: string; type: 'preview' | 'print' | 'vector' }[]>([]);
+  const [files, setFiles] = useState<{ name: string; type: 'preview' | 'print' | 'vector'; url?: string; file?: File }[]>([]);
   
   // Form States
   const [title, setTitle] = useState("");
@@ -60,7 +60,7 @@ export default function EditOrder() {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "preview" | "print" | "vector") => {
     if (e.target.files && e.target.files.length > 0) {
-      const newFiles = Array.from(e.target.files).map(f => ({ name: f.name, type }));
+      const newFiles = Array.from(e.target.files).map(f => ({ name: f.name, type, file: f }));
       setFiles([...files, ...newFiles]);
     }
   };
@@ -77,10 +77,42 @@ export default function EditOrder() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (id) {
+        let finalFiles = files.filter(f => !f.file); // Keep existing files (without new file object)
+        const newFilesToUpload = files.filter(f => f.file);
+
+        if (newFilesToUpload.length > 0) {
+            const formData = new FormData();
+            newFilesToUpload.forEach(f => {
+                if (f.file) formData.append(f.type, f.file);
+            });
+
+            try {
+                const res = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+
+                if (data.success && data.files) {
+                    if (data.files.preview) {
+                        finalFiles = [...finalFiles, ...data.files.preview.map((f: any) => ({ name: f.originalName, type: 'preview', url: f.path }))];
+                    }
+                    if (data.files.print) {
+                        finalFiles = [...finalFiles, ...data.files.print.map((f: any) => ({ name: f.originalName, type: 'print', url: f.path }))];
+                    }
+                    if (data.files.vector) {
+                        finalFiles = [...finalFiles, ...data.files.vector.map((f: any) => ({ name: f.originalName, type: 'vector', url: f.path }))];
+                    }
+                }
+            } catch (err) {
+                console.error("Upload failed", err);
+            }
+        }
+
         updateOrder(id, {
             title,
             customerName,
@@ -90,7 +122,7 @@ export default function EditOrder() {
             deadline,
             description,
             employees: selectedEmployees,
-            files,
+            files: finalFiles,
             status
         });
         navigate("/dashboard/orders");
