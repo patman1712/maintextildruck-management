@@ -271,6 +271,7 @@ function OrdersTab() {
   const orders = useAppStore((state) => state.orders);
   const suppliers = useAppStore((state) => state.suppliers);
   const updateOrderItem = useAppStore((state) => state.updateOrderItem);
+  const currentUser = useAppStore((state) => state.currentUser);
 
   // Group items by Supplier -> then list items with order info
   const itemsBySupplier = useMemo(() => {
@@ -510,13 +511,15 @@ function OrdersTab() {
                                                             >
                                                                 <CheckCircle size={16} />
                                                             </button>
-                                                            <button 
-                                                                onClick={() => updateStatus(item.orderId, item.id, 'pending')}
-                                                                className="p-1 text-gray-400 hover:bg-gray-100 rounded hover:text-gray-600"
-                                                                title="Zurück auf 'Offen'"
-                                                            >
-                                                                <RotateCcw size={16} />
-                                                            </button>
+                                                            {currentUser?.role === 'admin' && (
+                                                                <button 
+                                                                    onClick={() => updateStatus(item.orderId, item.id, 'pending')}
+                                                                    className="p-1 text-gray-400 hover:bg-gray-100 rounded hover:text-gray-600"
+                                                                    title="Zurück auf 'Offen' (Nur Admin)"
+                                                                >
+                                                                    <RotateCcw size={16} />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </div>
