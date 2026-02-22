@@ -100,4 +100,22 @@ router.put('/:id', (req: Request, res: Response) => {
   res.json({ success: true, message: 'Order updated' });
 });
 
+// DELETE order
+router.delete('/:id', (req: Request, res: Response) => {
+  const { id } = req.params;
+  
+  try {
+    const result = db.prepare('DELETE FROM orders WHERE id = ?').run(id);
+    
+    if (result.changes > 0) {
+      res.json({ success: true, message: 'Order deleted' });
+    } else {
+      res.status(404).json({ success: false, error: 'Order not found' });
+    }
+  } catch (error) {
+    console.error('Error deleting order:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete order' });
+  }
+});
+
 export default router;
