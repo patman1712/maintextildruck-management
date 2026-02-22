@@ -355,7 +355,8 @@ function OrdersTab() {
     Object.keys(itemsByOrder).forEach(orderTitle => {
         body += `Auftrag: ${orderTitle}\n`;
         itemsByOrder[orderTitle].forEach(item => {
-            body += `- ${item.quantity}x ${item.itemName} (${item.itemNumber || '-'}) | ${item.size} ${item.color ? `| ${item.color}` : ''}\n`;
+            const quantityPrefix = item.quantity > 1 ? `${item.quantity}x ` : '';
+            body += `- ${quantityPrefix}${item.itemName} (${item.itemNumber || '-'}) | ${item.size} ${item.color ? `| ${item.color}` : ''}\n`;
         });
         body += `\n`;
     });
@@ -424,20 +425,29 @@ function OrdersTab() {
                                     Shop
                                 </a>
                             )}
-                            {supplier?.email && (
-                                <button
-                                    onClick={() => handleSendEmail(supplierId)}
-                                    disabled={!hasSelection}
-                                    className={`flex items-center text-sm px-3 py-1 rounded border transition-colors ${
-                                        hasSelection 
-                                            ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' 
+                            {/* Show button even if no email is set, but make it prompt or direct to settings */}
+                            <button
+                                onClick={() => {
+                                    if (!supplier?.email) {
+                                        alert("Bitte hinterlegen Sie erst eine E-Mail-Adresse für diesen Lieferanten.");
+                                        // Ideally, open edit modal, but that's complex here. Just alert for now.
+                                        return;
+                                    }
+                                    handleSendEmail(supplierId);
+                                }}
+                                disabled={!hasSelection && !!supplier?.email}
+                                className={`flex items-center text-sm px-3 py-1 rounded border transition-colors ${
+                                    (hasSelection && !!supplier?.email)
+                                        ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' 
+                                        : !supplier?.email 
+                                            ? 'bg-yellow-50 text-yellow-600 border-yellow-200 hover:bg-yellow-100' // Warning style for missing email
                                             : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                                    }`}
-                                >
-                                    <Send size={14} className="mr-1" />
-                                    Bestellen ({selectedForThisSupplier.length})
-                                </button>
-                            )}
+                                }`}
+                                title={!supplier?.email ? "Keine E-Mail hinterlegt" : ""}
+                            >
+                                <Mail size={14} className="mr-1" />
+                                {!supplier?.email ? "E-Mail fehlt" : `E-Mail erstellen (${selectedForThisSupplier.length})`}
+                            </button>
                         </div>
                     </div>
                     
@@ -476,7 +486,7 @@ function OrdersTab() {
                                             <div key={item.id} className="flex items-center justify-between text-sm bg-white p-2 rounded border border-gray-100">
                                                 <div className="flex-1">
                                                     <div className="flex items-center">
-                                                        <span className="font-bold mr-2">{item.quantity}x</span>
+                                                        <span className="font-bold mr-2">{item.quantity > 1 ? `${item.quantity}x` : ''}</span>
                                                         <span className="font-medium mr-2">{item.itemName}</span>
                                                         <span className="text-gray-500 text-xs">({item.size})</span>
                                                     </div>
