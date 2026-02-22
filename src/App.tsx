@@ -6,6 +6,8 @@ import NewOrder from "@/pages/NewOrder";
 import OrderList from "@/pages/OrderList";
 import EditOrder from "@/pages/EditOrder";
 import OrderDetails from "@/pages/OrderDetails";
+import CustomerList from "@/pages/CustomerList";
+import CustomerDetails from "@/pages/CustomerDetails";
 import { useAppStore } from "@/store";
 import { useEffect } from "react";
 
@@ -27,6 +29,8 @@ export default function App() {
           <Route path="orders/finished" element={<OrderList filter="completed" />} />
           <Route path="orders/:id" element={<OrderDetails />} />
           <Route path="orders/:id/edit" element={<EditOrder />} />
+          <Route path="customers" element={<CustomerList />} />
+          <Route path="customers/:id" element={<CustomerDetails />} />
           <Route path="*" element={<div className="p-8 text-center text-gray-500">Diese Seite ist noch in Arbeit...</div>} />
         </Route>
       </Routes>
