@@ -173,11 +173,24 @@ export default function CustomerDetails() {
 
   // Extract all print files (DTF) from customer's orders
   // Check if files exist and are arrays before filtering
-  const printFiles = customerOrders.flatMap(order => 
+  const allPrintFiles = customerOrders.flatMap(order => 
     (order.files || [])
       .filter(f => f.type === 'print')
       .map(f => ({ ...f, orderTitle: order.title, orderDate: order.createdAt }))
   );
+
+  // Sort by date desc (newest first)
+  allPrintFiles.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+
+  // Deduplicate by URL (keep the newest one)
+  const uniqueFilesMap = new Map();
+  allPrintFiles.forEach(file => {
+    if (file.url && !uniqueFilesMap.has(file.url)) {
+        uniqueFilesMap.set(file.url, file);
+    }
+  });
+  
+  const printFiles = Array.from(uniqueFilesMap.values());
 
   const downloadFile = async (file: { name: string, url?: string }) => {
     if (!file.url) {
