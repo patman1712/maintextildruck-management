@@ -54,6 +54,33 @@ router.post('/', (req: Request, res: Response) => {
       description, JSON.stringify(employees || []), JSON.stringify(files || [])
     );
     
+    // Also save files to the dedicated 'files' table for independent persistence
+    if (files && Array.isArray(files)) {
+      const checkFile = db.prepare('SELECT id FROM files WHERE path = ?');
+      const insertFile = db.prepare(`
+        INSERT INTO files (id, customer_id, order_id, name, original_name, path, type)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      files.forEach((file: any) => {
+        if (file.url) {
+          const existing = checkFile.get(file.url);
+          if (!existing) {
+            const fileId = Math.random().toString(36).substr(2, 9);
+            insertFile.run(
+              fileId, 
+              customer_id, 
+              id, 
+              file.customName || file.name, 
+              file.name, 
+              file.url, 
+              file.type
+            );
+          }
+        }
+      });
+    }
+
     console.log('Order added successfully:', id);
     res.json({ success: true, message: 'Order added' });
   } catch (error) {
@@ -97,6 +124,37 @@ router.put('/:id', (req: Request, res: Response) => {
   const stmt = db.prepare(`UPDATE orders SET ${fields.join(', ')} WHERE id = ?`);
   stmt.run(...values);
 
+  // Also update files table if files are in the update payload
+  if (updates.files && Array.isArray(updates.files)) {
+    const checkFile = db.prepare('SELECT id FROM files WHERE path = ?');
+    const insertFile = db.prepare(`
+      INSERT INTO files (id, customer_id, order_id, name, original_name, path, type)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    updates.files.forEach((file: any) => {
+      if (file.url) {
+        const existing = checkFile.get(file.url);
+        if (!existing) {
+          const fileId = Math.random().toString(36).substr(2, 9);
+          // Need to get customer_id from existing order if not in updates
+          // But here we can just use updates.customer_id if present or existing.customer_id
+          const customerId = updates.customer_id || existing.customer_id;
+          
+          insertFile.run(
+            fileId, 
+            customerId, 
+            id, 
+            file.customName || file.name, 
+            file.name, 
+            file.url, 
+            file.type
+          );
+        }
+      }
+    });
+  }
+
   res.json({ success: true, message: 'Order updated' });
 });
 
@@ -105,6 +163,9 @@ router.delete('/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   
   try {
+    // Unlink files first (keep them, but remove order reference)
+    db.prepare('UPDATE files SET order_id = NULL WHERE order_id = ?').run(id);
+
     const result = db.prepare('DELETE FROM orders WHERE id = ?').run(id);
     
     if (result.changes > 0) {

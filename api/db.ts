@@ -49,6 +49,17 @@ db.exec(`
     files TEXT,     -- stored as JSON string
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS files (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT,
+    order_id TEXT,
+    name TEXT NOT NULL,       -- Display name / Custom name
+    original_name TEXT,       -- Original filename
+    path TEXT NOT NULL,       -- URL/Path
+    type TEXT NOT NULL,       -- print, vector, preview
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Migration: Add customer_id if it doesn't exist (for existing databases)
