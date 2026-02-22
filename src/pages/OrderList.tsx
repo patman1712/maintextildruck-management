@@ -1,5 +1,5 @@
 import { useAppStore, Order, OrderSteps } from "@/store";
-import { Folder, Search, Filter, Calendar, User, Eye, Printer, MoreHorizontal, Settings, CheckCircle, FileText, Edit, PenTool } from "lucide-react";
+import { Folder, Search, Filter, Calendar, User, Eye, Printer, MoreHorizontal, Settings, CheckCircle, FileText, Edit, PenTool, Archive } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
