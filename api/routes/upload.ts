@@ -15,9 +15,7 @@ const storage = multer.diskStorage({
   filename: function (req, file, cb) {
     // Decode original name to avoid encoding issues
     const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-    // Keep original name but prepend timestamp to avoid collisions
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + originalName);
+    cb(null, originalName);
   }
 });
 
