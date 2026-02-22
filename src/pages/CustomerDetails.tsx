@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useAppStore } from "@/store";
+import { useAppStore, Order } from "@/store";
 import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload } from "lucide-react";
 
 export default function CustomerDetails() {
@@ -131,7 +131,7 @@ export default function CustomerDetails() {
             const fileUrl = uploadedFile.path;
             
             // Create a "storage" order for this file
-            const newOrder = {
+            const newOrder: Order = {
                 id: Math.random().toString(36).substr(2, 9),
                 title: "Direkter Dateiupload",
                 customerId: customer.id,
