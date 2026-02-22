@@ -10,7 +10,13 @@ export default function EditOrder() {
   const loading = useAppStore((state) => state.loading);
   const updateOrder = useAppStore((state) => state.updateOrder);
   const customers = useAppStore((state) => state.customers);
+  const users = useAppStore((state) => state.users);
+  const fetchUsers = useAppStore((state) => state.fetchUsers);
   
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
   const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
   const [files, setFiles] = useState<{ name: string; type: 'preview' | 'print' | 'vector'; url?: string; file?: File }[]>([]);
   
@@ -304,17 +310,21 @@ export default function EditOrder() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Mitarbeiter zuweisen</label>
             <div className="flex flex-wrap gap-2">
-              {["Alex", "Sarah", "Michael", "Lisa"].map((name) => (
-                <label key={name} className={`inline-flex items-center border rounded-full px-3 py-1 cursor-pointer transition-colors ${selectedEmployees.includes(name) ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
-                  <input 
-                    type="checkbox" 
-                    className="form-checkbox h-4 w-4 text-red-600 rounded focus:ring-red-500 border-gray-300" 
-                    checked={selectedEmployees.includes(name)}
-                    onChange={() => toggleEmployee(name)}
-                  />
-                  <span className="ml-2 text-sm text-gray-700">{name}</span>
-                </label>
-              ))}
+              {users.length > 0 ? (
+                users.map((user) => (
+                  <label key={user.id} className={`inline-flex items-center border rounded-full px-3 py-1 cursor-pointer transition-colors ${selectedEmployees.includes(user.username) ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
+                    <input 
+                      type="checkbox" 
+                      className="form-checkbox h-4 w-4 text-red-600 rounded focus:ring-red-500 border-gray-300" 
+                      checked={selectedEmployees.includes(user.username)}
+                      onChange={() => toggleEmployee(user.username)}
+                    />
+                    <span className="ml-2 text-sm text-gray-700">{user.username}</span>
+                  </label>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500 italic">Keine Mitarbeiter gefunden.</p>
+              )}
             </div>
           </div>
         </div>
