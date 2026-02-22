@@ -60,13 +60,6 @@ export default function CustomerDetails() {
       .map(f => ({ ...f, orderTitle: order.title, orderDate: order.createdAt }))
   );
 
-  // Extract all vector files from customer's orders
-  const vectorFiles = customerOrders.flatMap(order => 
-    order.files
-      .filter(f => f.type === 'vector')
-      .map(f => ({ ...f, orderTitle: order.title, orderDate: order.createdAt }))
-  );
-
   const downloadFile = async (file: { name: string, url?: string }) => {
     if (!file.url) {
       alert(`Keine URL für ${file.name} vorhanden.`);
@@ -224,66 +217,6 @@ export default function CustomerDetails() {
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Vector Files Section */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-8">
-        <div className="px-8 py-6 border-b border-gray-200 bg-blue-50">
-          <h2 className="text-xl font-bold text-blue-800 flex items-center">
-            <FileText className="mr-2" />
-            Gespeicherte Rohdaten
-          </h2>
-          <p className="text-sm text-blue-600 mt-1">
-            Logos und Grafiken aus vergangenen Aufträgen
-          </p>
-        </div>
-
-        <div className="p-8">
-          {vectorFiles.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {vectorFiles.map((file, idx) => (
-                <div key={idx} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all group">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded uppercase tracking-wide">
-                      Rohdaten
-                    </div>
-                    <button 
-                      onClick={() => downloadFile(file)}
-                      className="text-gray-400 hover:text-blue-600 transition-colors p-1"
-                      title="Herunterladen"
-                    >
-                      <Download size={20} />
-                    </button>
-                  </div>
-                  
-                  <div className="h-32 bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden border border-gray-100">
-                    {file.url ? (
-                      <img src={file.url} alt={file.name} className="w-full h-full object-contain" />
-                    ) : (
-                      <FileText size={32} className="text-gray-300" />
-                    )}
-                  </div>
-
-                  <h4 className="font-medium text-gray-800 truncate mb-1" title={file.name}>
-                    {file.name}
-                  </h4>
-                  <p className="text-xs text-gray-500 flex items-center">
-                    <FileText size={12} className="mr-1" />
-                    Aus: {file.orderTitle}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {new Date(file.orderDate).toLocaleDateString('de-DE')}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
-              <FileText size={48} className="mx-auto text-gray-300 mb-4" />
-              <p>Keine Rohdaten für diesen Kunden gefunden.</p>
-            </div>
-          )}
         </div>
       </div>
 
