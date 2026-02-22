@@ -329,7 +329,7 @@ function OrdersTab() {
 
   const handleSendEmail = (supplierId: string) => {
     const group = itemsBySupplier[supplierId];
-    if (!group || !group.supplier?.email) return;
+    if (!group) return;
 
     const selectedIds = selectedOrders[supplierId] || [];
     // Only process PENDING items for these orders
@@ -350,7 +350,7 @@ function OrdersTab() {
         itemsByOrder[item.orderTitle].push(item);
     });
 
-    let body = `Hallo ${group.supplier.name}-Team,\n\nbitte folgende Artikel bestellen:\n\n`;
+    let body = `Hallo ${group.supplier?.name || 'Partner'}-Team,\n\nbitte folgende Artikel bestellen:\n\n`;
 
     Object.keys(itemsByOrder).forEach(orderTitle => {
         body += `Auftrag: ${orderTitle}\n`;
@@ -363,7 +363,8 @@ function OrdersTab() {
 
     body += `Bitte um kurze Bestätigung.\n\nMit freundlichen Grüßen,\nMaintextildruck`;
 
-    window.location.href = `mailto:${group.supplier.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const emailTo = group.supplier?.email || '';
+    window.location.href = `mailto:${emailTo}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
     // Confirm sent
     setTimeout(async () => {
@@ -425,28 +426,17 @@ function OrdersTab() {
                                     Shop
                                 </a>
                             )}
-                            {/* Show button even if no email is set, but make it prompt or direct to settings */}
                             <button
-                                onClick={() => {
-                                    if (!supplier?.email) {
-                                        alert("Bitte hinterlegen Sie erst eine E-Mail-Adresse für diesen Lieferanten.");
-                                        // Ideally, open edit modal, but that's complex here. Just alert for now.
-                                        return;
-                                    }
-                                    handleSendEmail(supplierId);
-                                }}
-                                disabled={!hasSelection && !!supplier?.email}
+                                onClick={() => handleSendEmail(supplierId)}
+                                disabled={!hasSelection}
                                 className={`flex items-center text-sm px-3 py-1 rounded border transition-colors ${
-                                    (hasSelection && !!supplier?.email)
+                                    hasSelection 
                                         ? 'bg-red-600 text-white border-red-600 hover:bg-red-700' 
-                                        : !supplier?.email 
-                                            ? 'bg-yellow-50 text-yellow-600 border-yellow-200 hover:bg-yellow-100' // Warning style for missing email
-                                            : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                        : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                                 }`}
-                                title={!supplier?.email ? "Keine E-Mail hinterlegt" : ""}
                             >
                                 <Mail size={14} className="mr-1" />
-                                {!supplier?.email ? "E-Mail fehlt" : `E-Mail erstellen (${selectedForThisSupplier.length})`}
+                                E-Mail erstellen ({selectedForThisSupplier.length})
                             </button>
                         </div>
                     </div>
