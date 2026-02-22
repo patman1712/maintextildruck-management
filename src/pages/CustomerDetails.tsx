@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/store";
-import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil } from "lucide-react";
+import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload } from "lucide-react";
 
 export default function CustomerDetails() {
   const { id } = useParams<{ id: string }>();
@@ -12,10 +12,16 @@ export default function CustomerDetails() {
   const fetchData = useAppStore((state) => state.fetchData);
   const updateCustomer = useAppStore((state) => state.updateCustomer);
   const updateOrder = useAppStore((state) => state.updateOrder);
-  
+  const addOrder = useAppStore((state) => state.addOrder); // We need this to create a "dummy" order for direct uploads
+
   // Local state for editing
   const [isEditing, setIsEditing] = useState(false);
   const [editedCustomer, setEditedCustomer] = useState<{name: string, email: string, phone: string, address: string} | null>(null);
+  
+  // State for direct upload
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFileName, setUploadFileName] = useState("");
   
   const [customer, setCustomer] = useState(customers.find(c => c.id === id));
   const [customerOrders, setCustomerOrders] = useState(
@@ -104,6 +110,61 @@ export default function CustomerDetails() {
         } catch (err) {
             console.error("Failed to delete file from server", err);
         }
+    }
+  };
+  
+  const handleDirectUpload = async () => {
+    if (!uploadFile || !customer) return;
+
+    try {
+        const formData = new FormData();
+        formData.append('print', uploadFile);
+
+        const res = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+
+        if (data.success && data.files && data.files.print && data.files.print.length > 0) {
+            const uploadedFile = data.files.print[0];
+            const fileUrl = uploadedFile.path;
+            
+            // Create a "storage" order for this file
+            const newOrder = {
+                id: Math.random().toString(36).substr(2, 9),
+                title: "Direkter Dateiupload",
+                customerId: customer.id,
+                customerName: customer.name,
+                customerEmail: customer.email,
+                customerPhone: customer.phone,
+                customerAddress: customer.address,
+                deadline: new Date().toISOString().split('T')[0],
+                status: "completed",
+                steps: { processing: true, produced: true, invoiced: true },
+                createdAt: new Date().toISOString(),
+                description: "Direkt im Kundenbereich hochgeladen",
+                employees: [],
+                files: [{
+                    name: uploadedFile.originalName,
+                    type: 'print' as const,
+                    url: fileUrl,
+                    customName: uploadFileName || uploadedFile.originalName
+                }]
+            };
+
+            await addOrder(newOrder);
+            
+            // Refresh orders
+            fetchData();
+            
+            setIsUploading(false);
+            setUploadFile(null);
+            setUploadFileName("");
+        }
+    } catch (error) {
+        console.error("Upload failed:", error);
+        alert("Upload fehlgeschlagen.");
     }
   };
 
@@ -288,7 +349,60 @@ export default function CustomerDetails() {
           <p className="text-sm text-red-600 mt-1">
             Alle fertigen Druckdaten aus vergangenen Aufträgen dieses Kunden (auch aus aktuellen Aufträgen)
           </p>
+          
+          <button 
+            onClick={() => setIsUploading(true)}
+            className="mt-3 bg-white text-red-600 border border-red-200 hover:bg-red-50 px-3 py-1.5 rounded-md text-sm font-medium flex items-center shadow-sm"
+          >
+            <Upload size={16} className="mr-2" />
+            Datei direkt hochladen
+          </button>
         </div>
+
+        {isUploading && (
+            <div className="bg-red-50 px-8 py-4 border-b border-red-100 animate-in fade-in slide-in-from-top-4">
+                <div className="max-w-md bg-white p-4 rounded-lg shadow-sm border border-red-100">
+                    <h4 className="font-bold text-gray-800 mb-3 text-sm">Neue Druckdatei hochladen</h4>
+                    
+                    <input 
+                        type="file" 
+                        accept=".png"
+                        onChange={(e) => setUploadFile(e.target.files ? e.target.files[0] : null)}
+                        className="block w-full text-sm text-gray-500 mb-3 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
+                    />
+                    
+                    {uploadFile && (
+                        <input 
+                            type="text" 
+                            placeholder="Titel vergeben (optional)"
+                            value={uploadFileName}
+                            onChange={(e) => setUploadFileName(e.target.value)}
+                            className="w-full border border-gray-300 rounded p-2 text-sm mb-3 focus:ring-red-500 focus:border-red-500"
+                        />
+                    )}
+                    
+                    <div className="flex justify-end space-x-2">
+                        <button 
+                            onClick={() => {
+                                setIsUploading(false);
+                                setUploadFile(null);
+                                setUploadFileName("");
+                            }}
+                            className="px-3 py-1.5 text-gray-600 text-sm hover:text-gray-800"
+                        >
+                            Abbrechen
+                        </button>
+                        <button 
+                            onClick={handleDirectUpload}
+                            disabled={!uploadFile}
+                            className="px-3 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
+                        >
+                            Hochladen
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
 
         <div className="p-8">
           {printFiles.length > 0 ? (
