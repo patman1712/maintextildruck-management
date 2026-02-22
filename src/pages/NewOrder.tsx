@@ -11,7 +11,7 @@ export default function NewOrder() {
 
   const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
   const [files, setFiles] = useState<File[]>([]);
-  const [printFiles, setPrintFiles] = useState<File[]>([]);
+  const [printFiles, setPrintFiles] = useState<{file: File, customName?: string}[]>([]);
   const [vectorFiles, setVectorFiles] = useState<File[]>([]);
   
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
@@ -112,7 +112,7 @@ export default function NewOrder() {
       if (type === "preview") {
         setFiles([...files, ...newFiles]);
       } else if (type === "print") {
-        setPrintFiles([...printFiles, ...newFiles]);
+        setPrintFiles([...printFiles, ...newFiles.map(f => ({ file: f, customName: "" }))]);
       } else {
         setVectorFiles([...vectorFiles, ...newFiles]);
       }
@@ -147,10 +147,10 @@ export default function NewOrder() {
     // 1. Upload files first
     const formData = new FormData();
     files.forEach(f => formData.append('preview', f));
-    printFiles.forEach(f => formData.append('print', f));
+    printFiles.forEach(f => formData.append('print', f.file));
     vectorFiles.forEach(f => formData.append('vector', f));
 
-    let uploadedFiles: { name: string; type: 'preview' | 'print' | 'vector'; url?: string }[] = [];
+    let uploadedFiles: { name: string; type: 'preview' | 'print' | 'vector'; url?: string; customName?: string }[] = [];
     
     // Add existing attached files first
     uploadedFiles = [...uploadedFiles, ...existingFilesToAttach];
@@ -169,7 +169,14 @@ export default function NewOrder() {
             uploadedFiles = [...uploadedFiles, ...data.files.preview.map((f: any) => ({ name: f.originalName, type: 'preview' as const, url: f.path }))];
           }
           if (data.files.print) {
-            uploadedFiles = [...uploadedFiles, ...data.files.print.map((f: any) => ({ name: f.originalName, type: 'print' as const, url: f.path }))];
+            // Match uploaded files back to our state to get custom names
+            // The order should be preserved
+            uploadedFiles = [...uploadedFiles, ...data.files.print.map((f: any, i: number) => ({ 
+                name: f.originalName, 
+                type: 'print' as const, 
+                url: f.path,
+                customName: printFiles[i]?.customName || ""
+            }))];
           }
           if (data.files.vector) {
             uploadedFiles = [...uploadedFiles, ...data.files.vector.map((f: any) => ({ name: f.originalName, type: 'vector' as const, url: f.path }))];
@@ -501,15 +508,28 @@ export default function NewOrder() {
 
             {printFiles.length > 0 && (
               <ul className="mt-2 space-y-2">
-                {printFiles.map((file, idx) => (
-                  <li key={idx} className="flex justify-between items-center text-sm bg-red-50 p-2 rounded border border-red-100 text-red-800">
-                    <div className="flex items-center">
-                        <span className="bg-green-200 text-green-800 text-[10px] px-1 rounded mr-2">NEU</span>
-                        <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                {printFiles.map((item, idx) => (
+                  <li key={idx} className="flex flex-col text-sm bg-red-50 p-2 rounded border border-red-100 text-red-800">
+                    <div className="flex justify-between items-center mb-1">
+                        <div className="flex items-center">
+                            <span className="bg-green-200 text-green-800 text-[10px] px-1 rounded mr-2">NEU</span>
+                            <span className="truncate max-w-[200px] font-medium">{item.file.name}</span>
+                        </div>
+                        <button type="button" onClick={() => removeFile(idx, "print")} className="text-red-400 hover:text-red-700">
+                        <X size={16} />
+                        </button>
                     </div>
-                    <button type="button" onClick={() => removeFile(idx, "print")} className="text-red-400 hover:text-red-700">
-                      <X size={16} />
-                    </button>
+                    <input 
+                        type="text" 
+                        placeholder="Titel vergeben (optional)" 
+                        className="w-full text-xs border border-red-200 rounded p-1 focus:ring-red-500 focus:border-red-500"
+                        value={item.customName || ""}
+                        onChange={(e) => {
+                            const newFiles = [...printFiles];
+                            newFiles[idx].customName = e.target.value;
+                            setPrintFiles(newFiles);
+                        }}
+                    />
                   </li>
                 ))}
               </ul>
