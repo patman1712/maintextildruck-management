@@ -13,36 +13,36 @@ export default function Inventory() {
       </h1>
 
       {/* Tabs */}
-      <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg mb-6 w-fit">
+      <div className="flex flex-wrap gap-2 bg-gray-100 p-1 rounded-lg mb-6 w-full sm:w-fit">
         <button
           onClick={() => setActiveTab('orders')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
             activeTab === 'orders' 
               ? 'bg-white text-red-600 shadow-sm' 
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          Aktuelle Warenbestellungen
+          Aktuelle
         </button>
         <button
           onClick={() => setActiveTab('completed')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
             activeTab === 'completed' 
               ? 'bg-white text-red-600 shadow-sm' 
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          Erledigte Warenbestellungen
+          Erledigte
         </button>
         <button
           onClick={() => setActiveTab('suppliers')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
             activeTab === 'suppliers' 
               ? 'bg-white text-red-600 shadow-sm' 
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          Lieferanten / Shops
+          Lieferanten
         </button>
       </div>
 
@@ -502,15 +502,15 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
             return (
                 <div key={supplierId} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                    <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                    <div className="bg-gray-50 px-4 sm:px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                         <div className="flex items-center">
-                            <Truck className="mr-2 text-slate-500" />
-                            <h3 className="text-lg font-bold text-slate-800">{supplier?.name || 'Unbekannter Lieferant'}</h3>
-                            <span className="ml-3 bg-gray-200 text-gray-700 text-xs font-bold px-2 py-1 rounded-full">
+                            <Truck className="mr-2 text-slate-500 shrink-0" />
+                            <h3 className="text-lg font-bold text-slate-800 truncate">{supplier?.name || 'Unbekannter Lieferant'}</h3>
+                            <span className="ml-3 bg-gray-200 text-gray-700 text-xs font-bold px-2 py-1 rounded-full shrink-0">
                                 {orderIds.length} Aufträge
                             </span>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2 self-end sm:self-auto">
                             {supplier?.website && (
                                 <a 
                                     href={supplier.website.startsWith('http') ? supplier.website : `https://${supplier.website}`} 
@@ -519,7 +519,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                     className="flex items-center text-sm text-blue-600 hover:underline bg-white px-3 py-1 rounded border border-blue-200 hover:bg-blue-50"
                                 >
                                     <ExternalLink size={14} className="mr-1" />
-                                    Shop
+                                    <span className="hidden sm:inline">Shop</span>
+                                    <span className="sm:hidden">Web</span>
                                 </a>
                             )}
                             {supplier?.email && !showCompleted && (
@@ -533,7 +534,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                     }`}
                                 >
                                     <Mail size={14} className="mr-1" />
-                                    E-Mail erstellen ({selectedForThisSupplier.length})
+                                    <span>E-Mail ({selectedForThisSupplier.length})</span>
                                 </button>
                             )}
                         </div>
@@ -548,20 +549,20 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                             return (
                                 <div key={orderId} className={`p-4 hover:bg-gray-50 transition-colors border-b last:border-0 ${isSelected ? 'bg-red-50' : ''}`}>
                                     {/* Order Header with Checkbox */}
-                                    <div className="flex items-center mb-3">
+                                    <div className="flex items-start mb-3">
                                         {!showCompleted && (
                                             <input 
                                                 type="checkbox"
-                                                className="form-checkbox h-5 w-5 text-red-600 rounded focus:ring-red-500 border-gray-300 mr-3"
+                                                className="form-checkbox h-5 w-5 text-red-600 rounded focus:ring-red-500 border-gray-300 mr-3 mt-0.5"
                                                 checked={isSelected}
                                                 onChange={() => toggleOrderSelectionForSupplier(supplierId, orderId)}
                                                 disabled={!hasPending} // Only allow selection if there are pending items
                                             />
                                         )}
-                                        <div>
-                                            <h4 className="font-bold text-gray-900 text-sm flex items-center">
-                                                {orderGroup.orderId === 'inventory-manual' ? 'Lagerbestellung' : orderGroup.title}
-                                                {!hasPending && <span className="ml-2 text-xs font-normal text-green-600 bg-green-50 px-2 py-0.5 rounded">Erledigt</span>}
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="font-bold text-gray-900 text-sm flex flex-wrap items-center gap-2">
+                                                <span className="truncate">{orderGroup.orderId === 'inventory-manual' ? 'Lagerbestellung' : orderGroup.title}</span>
+                                                {!hasPending && <span className="text-xs font-normal text-green-600 bg-green-50 px-2 py-0.5 rounded shrink-0">Erledigt</span>}
                                             </h4>
                                             {orderGroup.orderId !== 'inventory-manual' && (
                                                 <div className="text-xs text-gray-500 flex items-center mt-0.5">
@@ -573,21 +574,21 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                     </div>
 
                                     {/* Items List */}
-                                    <div className="pl-8 space-y-2">
+                                    <div className={`space-y-2 ${!showCompleted ? 'pl-8' : ''}`}>
                                         {orderGroup.items.map(item => (
-                                            <div key={item.id} className="flex items-center justify-between text-sm bg-white p-2 rounded border border-gray-100">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center">
-                                                        <span className="font-bold mr-2">{item.quantity > 1 ? `${item.quantity}x` : ''}</span>
-                                                        <span className="font-medium mr-2">{item.itemName}</span>
-                                                        <span className="text-gray-500 text-xs">({item.size})</span>
+                                            <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between text-sm bg-white p-2 rounded border border-gray-100 gap-2">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center flex-wrap">
+                                                        <span className="font-bold mr-2 whitespace-nowrap">{item.quantity > 1 ? `${item.quantity}x` : ''}</span>
+                                                        <span className="font-medium mr-2 break-words">{item.itemName}</span>
+                                                        <span className="text-gray-500 text-xs whitespace-nowrap">({item.size})</span>
                                                     </div>
                                                     {item.color && <div className="text-xs text-gray-500 mt-0.5">Farbe: {item.color}</div>}
-                                                    {item.notes && <div className="text-xs text-gray-400 italic mt-0.5">{item.notes}</div>}
+                                                    {item.notes && <div className="text-xs text-gray-400 italic mt-0.5 break-words">{item.notes}</div>}
                                                 </div>
                                                 
-                                                <div className="flex items-center">
-                                                    <span className={`text-xs px-2 py-0.5 rounded mr-2 ${
+                                                <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-50">
+                                                    <span className={`text-xs px-2 py-0.5 rounded ${
                                                         item.status === 'pending' ? 'bg-red-100 text-red-800' :
                                                         item.status === 'ordered' ? 'bg-yellow-100 text-yellow-800' :
                                                         'bg-green-100 text-green-800'
@@ -596,57 +597,49 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                     </span>
 
                                                     {/* Individual Actions */}
-                                                    {!showCompleted && (
-                                                        <div className="flex space-x-2 shrink-0">
-                                                            {item.status === 'pending' && (
-                                                                <button 
-                                                                    onClick={() => updateStatus(item.orderId, item.id, 'ordered')}
-                                                                    className="p-1 text-yellow-600 hover:bg-yellow-50 rounded border border-transparent hover:border-yellow-200"
-                                                                    title="Manuell als 'Bestellt' markieren"
-                                                                >
-                                                                    <ShoppingCart size={16} />
-                                                                </button>
-                                                            )}
-                                                            {item.status === 'ordered' && (
-                                                                <div className="flex space-x-1">
-                                                                    <button 
-                                                                        onClick={() => updateStatus(item.orderId, item.id, 'received')}
-                                                                        className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                                                        title="Ware erhalten"
-                                                                    >
-                                                                        <CheckCircle size={16} />
-                                                                    </button>
-                                                                    {currentUser?.role === 'admin' && (
-                                                                        <button 
-                                                                            onClick={() => updateStatus(item.orderId, item.id, 'pending')}
-                                                                            className="p-1 text-gray-400 hover:bg-gray-100 rounded hover:text-gray-600"
-                                                                            title="Zurück auf 'Offen' (Nur Admin)"
-                                                                        >
-                                                                            <RotateCcw size={16} />
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                    {showCompleted && currentUser?.role === 'admin' && (
-                                                        <div className="flex space-x-1">
+                                                    <div className="flex space-x-2">
+                                                        {!showCompleted && item.status === 'pending' && (
                                                             <button 
                                                                 onClick={() => updateStatus(item.orderId, item.id, 'ordered')}
-                                                                className="p-1 text-gray-400 hover:bg-gray-100 rounded hover:text-gray-600"
-                                                                title="Zurück auf 'Bestellt' (Nur Admin)"
+                                                                className="p-1.5 text-yellow-600 hover:bg-yellow-50 rounded border border-transparent hover:border-yellow-200"
+                                                                title="Manuell als 'Bestellt' markieren"
                                                             >
-                                                                <RotateCcw size={16} />
+                                                                <ShoppingCart size={18} />
                                                             </button>
-                                                            <button 
-                                                                onClick={() => handleDelete(item.orderId, item.id)}
-                                                                className="p-1 text-gray-400 hover:bg-red-50 rounded hover:text-red-600"
-                                                                title="Löschen (Nur Admin)"
-                                                            >
-                                                                <Trash2 size={16} />
-                                                            </button>
-                                                        </div>
-                                                    )}
+                                                        )}
+                                                        
+                                                        {((!showCompleted && item.status === 'ordered') || (showCompleted && currentUser?.role === 'admin')) && (
+                                                            <div className="flex space-x-1">
+                                                                {!showCompleted && (
+                                                                    <button 
+                                                                        onClick={() => updateStatus(item.orderId, item.id, 'received')}
+                                                                        className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                                                                        title="Ware erhalten"
+                                                                    >
+                                                                        <CheckCircle size={18} />
+                                                                    </button>
+                                                                )}
+                                                                {currentUser?.role === 'admin' && (
+                                                                    <button 
+                                                                        onClick={() => updateStatus(item.orderId, item.id, item.status === 'ordered' ? 'pending' : 'ordered')}
+                                                                        className="p-1.5 text-gray-400 hover:bg-gray-100 rounded hover:text-gray-600"
+                                                                        title="Status zurücksetzen (Nur Admin)"
+                                                                    >
+                                                                        <RotateCcw size={18} />
+                                                                    </button>
+                                                                )}
+                                                                {showCompleted && currentUser?.role === 'admin' && (
+                                                                    <button 
+                                                                        onClick={() => handleDelete(item.orderId, item.id)}
+                                                                        className="p-1.5 text-gray-400 hover:bg-red-50 rounded hover:text-red-600"
+                                                                        title="Löschen (Nur Admin)"
+                                                                    >
+                                                                        <Trash2 size={18} />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
