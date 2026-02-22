@@ -43,6 +43,7 @@ interface AppState {
   updateOrder: (id: string, updatedOrder: Partial<Order>) => Promise<void>;
   updateOrderStatus: (id: string, status: Order['status']) => Promise<void>;
   toggleOrderStep: (id: string, step: keyof OrderSteps) => Promise<void>;
+  deleteOrder: (id: string) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -203,6 +204,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     } catch (error) {
       console.error('Error updating order status:', error);
+    }
+  },
+
+  deleteOrder: async (id) => {
+    try {
+      set((state) => ({
+        orders: state.orders.filter((o) => o.id !== id)
+      }));
+      
+      await fetch(`/api/orders/${id}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      console.error('Error deleting order:', error);
     }
   },
 

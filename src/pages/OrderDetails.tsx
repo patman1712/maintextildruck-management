@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/store";
-import { ArrowLeft, Calendar, User, FileText, Download, Eye, Printer, PenTool } from "lucide-react";
+import { ArrowLeft, Calendar, User, FileText, Download, Eye, Printer, PenTool, Trash2 } from "lucide-react";
 
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const orders = useAppStore((state) => state.orders);
   const loading = useAppStore((state) => state.loading);
+  const deleteOrder = useAppStore((state) => state.deleteOrder);
   const [order, setOrder] = useState(orders.find(o => o.id === id));
 
   useEffect(() => {
@@ -19,6 +20,14 @@ export default function OrderDetails() {
       navigate("/dashboard/orders");
     }
   }, [id, orders, navigate, loading]);
+
+  const handleDelete = async () => {
+    if (!order) return;
+    if (confirm(`Sind Sie sicher, dass Sie den Auftrag "${order.title}" unwiderruflich löschen möchten?`)) {
+      await deleteOrder(order.id);
+      navigate("/dashboard/orders");
+    }
+  };
 
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Auftragsdaten...</div>;
   if (!order) return null;
@@ -84,11 +93,20 @@ export default function OrderDetails() {
               <span className="flex items-center">Eingang: {new Date(order.createdAt).toLocaleDateString('de-DE')}</span>
             </div>
           </div>
-          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-            order.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-          }`}>
-            {order.status === 'active' ? 'In Bearbeitung' : 'Abgeschlossen'}
-          </span>
+          <div className="flex items-center">
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+              order.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+            }`}>
+              {order.status === 'active' ? 'In Bearbeitung' : 'Abgeschlossen'}
+            </span>
+            <button 
+              onClick={handleDelete} 
+              className="ml-4 p-2 text-gray-400 hover:text-red-600 transition-colors hover:bg-red-50 rounded-full"
+              title="Auftrag löschen"
+            >
+              <Trash2 size={20} />
+            </button>
+          </div>
         </div>
 
         <div className="p-8 space-y-8">
