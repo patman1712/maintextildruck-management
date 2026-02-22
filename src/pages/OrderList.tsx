@@ -21,6 +21,10 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
     const effectiveStatusFilter = filter || statusFilter;
     const matchesStatus = effectiveStatusFilter === "all" || order.status === effectiveStatusFilter;
     
+    // Hide archived orders from normal lists unless specifically requested (though we don't have a UI for archived yet)
+    // Archived orders are "hidden" storage orders for direct uploads
+    if (order.status === 'archived') return false;
+    
     return matchesSearch && matchesStatus;
   });
 

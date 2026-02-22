@@ -24,7 +24,7 @@ export interface Order {
   customerPhone?: string;
   customerAddress?: string;
   deadline: string;
-  status: 'active' | 'completed' | 'cancelled';
+  status: 'active' | 'completed' | 'cancelled' | 'archived';
   steps: OrderSteps;
   createdAt: string;
   description?: string;

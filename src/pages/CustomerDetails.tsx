@@ -140,7 +140,7 @@ export default function CustomerDetails() {
                 customerPhone: customer.phone,
                 customerAddress: customer.address,
                 deadline: new Date().toISOString().split('T')[0],
-                status: "completed",
+                status: "archived", // Special status for direct uploads
                 steps: { processing: true, produced: true, invoiced: true },
                 createdAt: new Date().toISOString(),
                 description: "Direkt im Kundenbereich hochgeladen",
