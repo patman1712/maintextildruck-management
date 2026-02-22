@@ -14,6 +14,8 @@ export default function NewOrder() {
   const [printFiles, setPrintFiles] = useState<File[]>([]);
   const [vectorFiles, setVectorFiles] = useState<File[]>([]);
   
+  const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  
   // Form States
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -27,6 +29,7 @@ export default function NewOrder() {
 
   const handleCustomerSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const customerId = e.target.value;
+    setSelectedCustomerId(customerId);
     const customer = customers.find(c => c.id === customerId);
     if (customer) {
       setCustomerName(customer.name);
@@ -109,9 +112,23 @@ export default function NewOrder() {
       // Proceed without files or show error? For now proceed but maybe alert user
     }
     
+    let newCustomerId = selectedCustomerId;
+
+    if (customerMode === "new" && saveAsNewCustomer && customerName) {
+        newCustomerId = Math.random().toString(36).substr(2, 9);
+        await addCustomer({
+            id: newCustomerId,
+            name: customerName,
+            email: customerEmail,
+            phone: customerPhone,
+            address: customerAddress
+        });
+    }
+
     const newOrder: Order = {
       id: Math.random().toString(36).substr(2, 9),
       title: title || "Neuer Auftrag",
+      customerId: newCustomerId || undefined,
       customerName: customerName || "Unbekannter Kunde",
       customerEmail,
       customerPhone,
@@ -124,16 +141,6 @@ export default function NewOrder() {
       employees: selectedEmployees,
       files: uploadedFiles
     };
-
-    if (customerMode === "new" && saveAsNewCustomer && customerName) {
-        await addCustomer({
-            id: Math.random().toString(36).substr(2, 9),
-            name: customerName,
-            email: customerEmail,
-            phone: customerPhone,
-            address: customerAddress
-        });
-    }
 
     await addOrder(newOrder);
     navigate("/dashboard/orders");

@@ -18,6 +18,7 @@ export interface Customer {
 export interface Order {
   id: string;
   title: string;
+  customerId?: string; // Optional for now to support legacy orders
   customerName: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -58,10 +59,32 @@ export const useAppStore = create<AppState>((set, get) => ({
       const ordersRes = await fetch('/api/orders');
       const ordersData = await ordersRes.json();
 
+      // Map Supabase data to frontend interface
+      const mappedOrders: Order[] = (ordersData.data || []).map((o: any) => ({
+        id: o.id,
+        title: o.title,
+        customerId: o.customerId,
+        customerName: o.customer_name,
+        customerEmail: o.customer_email,
+        customerPhone: o.customer_phone,
+        customerAddress: o.customer_address,
+        deadline: o.deadline,
+        status: o.status,
+        steps: {
+          processing: o.processing,
+          produced: o.produced,
+          invoiced: o.invoiced
+        },
+        createdAt: o.created_at,
+        description: o.description,
+        employees: o.employees || [],
+        files: o.files || []
+      }));
+
       if (customersData.success && ordersData.success) {
         set({ 
           customers: customersData.data, 
-          orders: ordersData.data 
+          orders: mappedOrders 
         });
       }
     } catch (error) {
@@ -78,6 +101,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const orderPayload = {
         id: order.id,
         title: order.title,
+        customer_id: order.customerId,
         customer_name: order.customerName,
         customer_email: order.customerEmail,
         customer_phone: order.customerPhone,
@@ -140,6 +164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const updatePayload: any = {};
       if (updatedOrder.title !== undefined) updatePayload.title = updatedOrder.title;
+      if (updatedOrder.customerId !== undefined) updatePayload.customer_id = updatedOrder.customerId;
       if (updatedOrder.customerName !== undefined) updatePayload.customer_name = updatedOrder.customerName;
       if (updatedOrder.customerEmail !== undefined) updatePayload.customer_email = updatedOrder.customerEmail;
       if (updatedOrder.customerPhone !== undefined) updatePayload.customer_phone = updatedOrder.customerPhone;

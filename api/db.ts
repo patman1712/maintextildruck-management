@@ -34,6 +34,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS orders (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
+    customer_id TEXT, -- Link to customers table
     customer_name TEXT NOT NULL,
     customer_email TEXT,
     customer_phone TEXT,
@@ -49,6 +50,18 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
+
+// Migration: Add customer_id if it doesn't exist (for existing databases)
+try {
+  const columns = db.prepare("PRAGMA table_info(orders)").all() as any[];
+  const hasCustomerId = columns.some(col => col.name === 'customer_id');
+  if (!hasCustomerId) {
+    console.log('Migrating database: Adding customer_id to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN customer_id TEXT');
+  }
+} catch (error) {
+  console.error('Migration error:', error);
+}
 
 export default db;
 export { DATA_DIR };

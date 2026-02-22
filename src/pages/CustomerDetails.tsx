@@ -17,7 +17,9 @@ export default function CustomerDetails() {
   const [editedCustomer, setEditedCustomer] = useState<{name: string, email: string, phone: string, address: string} | null>(null);
   
   const [customer, setCustomer] = useState(customers.find(c => c.id === id));
-  const [customerOrders, setCustomerOrders] = useState(orders.filter(o => o.customerName === customer?.name));
+  const [customerOrders, setCustomerOrders] = useState(
+    orders.filter(o => o.customerId === id || o.customerName === customer?.name)
+  );
 
   useEffect(() => {
     fetchData();
@@ -34,8 +36,8 @@ export default function CustomerDetails() {
         phone: foundCustomer.phone,
         address: foundCustomer.address
       });
-      // Filter orders by customer name (as we don't store customer ID in orders yet)
-      setCustomerOrders(orders.filter(o => o.customerName === foundCustomer.name));
+      // Filter orders by customer ID (preferred) or name (fallback)
+      setCustomerOrders(orders.filter(o => o.customerId === id || o.customerName === foundCustomer.name));
     } else {
       navigate("/dashboard/customers");
     }
