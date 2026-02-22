@@ -350,18 +350,17 @@ function OrdersTab() {
         itemsByOrder[item.orderTitle].push(item);
     });
 
-    let body = `Hallo ${group.supplier?.name || 'Partner'}-Team,\n\nbitte folgende Artikel bestellen:\n\n`;
+    let body = ``;
 
     Object.keys(itemsByOrder).forEach(orderTitle => {
-        body += `Auftrag: ${orderTitle}\n`;
+        body += `(${orderTitle})\n`;
         itemsByOrder[orderTitle].forEach(item => {
             const quantityPrefix = item.quantity > 1 ? `${item.quantity}x ` : '';
-            body += `- ${quantityPrefix}${item.itemName} (${item.itemNumber || '-'}) | ${item.size} ${item.color ? `| ${item.color}` : ''}\n`;
+            const itemNumberStr = item.itemNumber ? ` (${item.itemNumber})` : '';
+            body += `${quantityPrefix}${item.itemName}${itemNumberStr} | ${item.size} ${item.color ? `| ${item.color}` : ''}\n`;
         });
         body += `\n`;
     });
-
-    body += `Bitte um kurze Bestätigung.\n\nMit freundlichen Grüßen,\nMaintextildruck`;
 
     const emailTo = group.supplier?.email || '';
     window.location.href = `mailto:${emailTo}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
