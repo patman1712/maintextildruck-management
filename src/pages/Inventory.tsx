@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAppStore, Supplier, OrderItem } from '@/store';
-import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, Send } from 'lucide-react';
+import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, Send, RotateCcw } from 'lucide-react';
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState<'orders' | 'suppliers'>('suppliers');
@@ -303,6 +303,7 @@ function OrdersTab() {
   const [selectedOrders, setSelectedOrders] = useState<Record<string, string[]>>({}); // supplierId -> orderIds[]
 
   const updateStatus = async (orderId: string, itemId: string, status: 'pending' | 'ordered' | 'received') => {
+    // Optimistically update local state if needed, but for now we rely on store update
     await updateOrderItem(orderId, itemId, { status });
   };
 
@@ -363,18 +364,25 @@ function OrdersTab() {
     });
 
     const emailTo = group.supplier?.email || '';
+    
+    // Open email client
     window.location.href = `mailto:${emailTo}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
-    // Confirm sent
-    setTimeout(async () => {
-        if (confirm("Wurde die E-Mail erfolgreich versendet? Wenn ja, werden die Artikel als 'Bestellt' markiert.")) {
-            for (const item of itemsToSend) {
-                await updateStatus(item.orderId, item.id, 'ordered');
-            }
-            // Clear selection
-            setSelectedOrders(prev => ({ ...prev, [supplierId]: [] }));
+    // Use a slight delay to ensure the mail client has triggered before showing the modal
+    setTimeout(() => {
+        // We use window.confirm here. In a real app, a custom modal is better, 
+        // but confirm blocks execution which is what we want here to wait for user feedback.
+        if (window.confirm("Haben Sie die E-Mail erfolgreich versendet?\n\nKlicken Sie auf 'OK', um die Artikel als 'Bestellt' zu markieren.\nKlicken Sie auf 'Abbrechen', wenn Sie die Mail doch nicht gesendet haben.")) {
+            // Process updates sequentially to avoid race conditions
+            (async () => {
+                for (const item of itemsToSend) {
+                    await updateStatus(item.orderId, item.id, 'ordered');
+                }
+                // Clear selection
+                setSelectedOrders(prev => ({ ...prev, [supplierId]: [] }));
+            })();
         }
-    }, 1000);
+    }, 500);
   };
 
   return (
@@ -494,13 +502,22 @@ function OrdersTab() {
 
                                                     {/* Individual Actions */}
                                                     {item.status === 'ordered' && (
-                                                        <button 
-                                                            onClick={() => updateStatus(item.orderId, item.id, 'received')}
-                                                            className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                                            title="Ware erhalten"
-                                                        >
-                                                            <CheckCircle size={16} />
-                                                        </button>
+                                                        <div className="flex space-x-1">
+                                                            <button 
+                                                                onClick={() => updateStatus(item.orderId, item.id, 'received')}
+                                                                className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                                                title="Ware erhalten"
+                                                            >
+                                                                <CheckCircle size={16} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => updateStatus(item.orderId, item.id, 'pending')}
+                                                                className="p-1 text-gray-400 hover:bg-gray-100 rounded hover:text-gray-600"
+                                                                title="Zurück auf 'Offen'"
+                                                            >
+                                                                <RotateCcw size={16} />
+                                                            </button>
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
