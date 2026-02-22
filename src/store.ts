@@ -376,7 +376,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             steps: { processing: true, produced: true, invoiced: true },
             createdAt: new Date().toISOString(),
             employees: [],
-            files: []
+            files: [],
+            deadline: new Date().toISOString().split('T')[0] // Dummy deadline for type safety
         });
     }
     return manualOrderId;
