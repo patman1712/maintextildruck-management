@@ -11,6 +11,7 @@ import CustomerList from "@/pages/CustomerList";
 import CustomerDetails from "@/pages/CustomerDetails";
 import Employees from "@/pages/Employees";
 import Profile from "@/pages/Profile";
+import Inventory from "@/pages/Inventory";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
 import { useEffect } from "react";
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="orders/:id/edit" element={<EditOrder />} />
           <Route path="customers" element={<CustomerList />} />
           <Route path="customers/:id" element={<CustomerDetails />} />
+          <Route path="inventory" element={<Inventory />} />
           <Route path="employees" element={<Employees />} />
           <Route path="profile" element={<Profile />} />
           <Route path="*" element={<div className="p-8 text-center text-gray-500">Diese Seite ist noch in Arbeit...</div>} />

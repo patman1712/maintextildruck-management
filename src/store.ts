@@ -41,10 +41,19 @@ export interface Order {
   files: { name: string; type: 'preview' | 'print' | 'vector'; url?: string; file?: File; customName?: string }[];
 }
 
+export interface Supplier {
+  id: string;
+  name: string;
+  website?: string;
+  customerNumber?: string;
+  notes?: string;
+}
+
 interface AppState {
   orders: Order[];
   customers: Customer[];
   users: User[];
+  suppliers: Supplier[];
   currentUser: User | null;
   loading: boolean;
   
@@ -57,21 +66,25 @@ interface AppState {
   addOrder: (order: Order) => Promise<void>;
   addCustomer: (customer: Customer) => Promise<void>;
   addUser: (user: Partial<User>) => Promise<void>;
+  addSupplier: (supplier: Supplier) => Promise<void>;
   
   updateCustomer: (id: string, updatedCustomer: Partial<Customer>) => Promise<void>;
   updateOrder: (id: string, updatedOrder: Partial<Order>) => Promise<void>;
   updateUser: (id: string, updatedUser: Partial<User>) => Promise<void>;
+  updateSupplier: (id: string, updatedSupplier: Partial<Supplier>) => Promise<void>;
   
   updateOrderStatus: (id: string, status: Order['status']) => Promise<void>;
   toggleOrderStep: (id: string, step: keyof OrderSteps) => Promise<void>;
   deleteOrder: (id: string) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
+  deleteSupplier: (id: string) => Promise<void>;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   orders: [],
   customers: [],
   users: [],
+  suppliers: [],
   currentUser: JSON.parse(localStorage.getItem('currentUser') || 'null'),
   loading: false,
 
@@ -83,6 +96,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       
       const ordersRes = await fetch('/api/orders');
       const ordersData = await ordersRes.json();
+      
+      const suppliersRes = await fetch('/api/suppliers');
+      const suppliersData = await suppliersRes.json();
 
       // Map Supabase data to frontend interface
       const mappedOrders: Order[] = (ordersData.data || []).map((o: any) => ({
@@ -105,11 +121,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         employees: o.employees || [],
         files: o.files || []
       }));
+      
+      const mappedSuppliers: Supplier[] = (suppliersData.data || []).map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        website: s.website,
+        customerNumber: s.customer_number,
+        notes: s.notes
+      }));
 
       if (customersData.success && ordersData.success) {
         set({ 
           customers: customersData.data, 
-          orders: mappedOrders 
+          orders: mappedOrders,
+          suppliers: mappedSuppliers
         });
       }
     } catch (error) {
@@ -184,6 +209,61 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     } catch (error) {
       console.error('Error adding customer:', error);
+    }
+  },
+
+  addSupplier: async (supplier) => {
+    try {
+      set((state) => ({ suppliers: [...state.suppliers, supplier] }));
+      
+      await fetch('/api/suppliers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: supplier.id,
+          name: supplier.name,
+          website: supplier.website,
+          customerNumber: supplier.customerNumber,
+          notes: supplier.notes
+        })
+      });
+    } catch (error) {
+      console.error('Error adding supplier:', error);
+    }
+  },
+
+  updateSupplier: async (id, updatedSupplier) => {
+    try {
+      set((state) => ({
+        suppliers: state.suppliers.map((s) => (s.id === id ? { ...s, ...updatedSupplier } : s))
+      }));
+
+      await fetch(`/api/suppliers/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            name: updatedSupplier.name,
+            website: updatedSupplier.website,
+            customerNumber: updatedSupplier.customerNumber,
+            notes: updatedSupplier.notes
+        })
+      });
+    } catch (error) {
+      console.error('Error updating supplier:', error);
+    }
+  },
+
+  deleteSupplier: async (id) => {
+    try {
+      set((state) => ({
+        suppliers: state.suppliers.filter((s) => s.id !== id)
+      }));
+      
+      await fetch(`/api/suppliers/${id}`, {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      console.error('Error deleting supplier:', error);
     }
   },
 

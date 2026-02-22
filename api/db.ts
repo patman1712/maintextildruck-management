@@ -70,6 +70,15 @@ db.exec(`
     role TEXT NOT NULL DEFAULT 'employee', -- 'admin' or 'employee'
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS suppliers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    website TEXT,
+    customer_number TEXT,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Seed initial admin user if no users exist
