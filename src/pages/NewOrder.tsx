@@ -36,6 +36,9 @@ export default function NewOrder() {
       setCustomerEmail(customer.email);
       setCustomerPhone(customer.phone);
       setCustomerAddress(customer.address);
+      
+      // We could also offer to load previous print files here
+      // But maybe it's better to have a dedicated button for that
     } else {
       setCustomerName("");
       setCustomerEmail("");
@@ -43,6 +46,65 @@ export default function NewOrder() {
       setCustomerAddress("");
     }
   };
+
+  const [showFileSelector, setShowFileSelector] = useState(false);
+  const [availableFiles, setAvailableFiles] = useState<{name: string, url: string, type: 'print' | 'vector', date: string, orderTitle: string}[]>([]);
+  const [selectedExistingFiles, setSelectedExistingFiles] = useState<string[]>([]); // URLs
+
+  const loadCustomerFiles = () => {
+    if (!selectedCustomerId) return;
+    
+    // Find all orders for this customer
+    const orders = useAppStore.getState().orders;
+    const customerOrders = orders.filter(o => o.customerId === selectedCustomerId || o.customerName === customerName);
+    
+    const allFiles: {name: string, url: string, type: 'print' | 'vector', date: string, orderTitle: string}[] = [];
+    
+    customerOrders.forEach(order => {
+        if (order.files) {
+            order.files.forEach(f => {
+                if (f.type === 'print' && f.url) {
+                    allFiles.push({
+                        name: f.customName || f.name,
+                        url: f.url,
+                        type: 'print',
+                        date: order.createdAt,
+                        orderTitle: order.title
+                    });
+                }
+            });
+        }
+    });
+    
+    setAvailableFiles(allFiles);
+    setShowFileSelector(true);
+  };
+
+  const addSelectedFiles = () => {
+    const filesToAdd = availableFiles.filter(f => selectedExistingFiles.includes(f.url));
+    
+    // Convert to File objects is not possible directly, but we can use the URL
+    // We need to update our state to handle files that are just URLs reference
+    // Currently setPrintFiles expects File[]
+    // We need to adapt the state structure to support existing files (like in EditOrder)
+    
+    // Actually, NewOrder uses File[] state which is for NEW uploads.
+    // We should add a new state for "existing files to attach" or change the state structure.
+    // Let's add a new state for this:
+    // const [existingFilesToAttach, setExistingFilesToAttach] = useState<{name: string, url: string, type: 'print'}[]>([]);
+    
+    const newAttachments = filesToAdd.map(f => ({
+        name: f.name,
+        url: f.url,
+        type: 'print' as const
+    }));
+    
+    setExistingFilesToAttach([...existingFilesToAttach, ...newAttachments]);
+    setShowFileSelector(false);
+    setSelectedExistingFiles([]);
+  };
+
+  const [existingFilesToAttach, setExistingFilesToAttach] = useState<{name: string, url: string, type: 'print'}[]>([]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "preview" | "print" | "vector") => {
     if (e.target.files && e.target.files.length > 0) {
@@ -67,6 +129,10 @@ export default function NewOrder() {
     }
   };
 
+  const removeExistingFile = (index: number) => {
+    setExistingFilesToAttach(existingFilesToAttach.filter((_, i) => i !== index));
+  };
+
   const toggleEmployee = (name: string) => {
     if (selectedEmployees.includes(name)) {
       setSelectedEmployees(selectedEmployees.filter(e => e !== name));
@@ -85,6 +151,9 @@ export default function NewOrder() {
     vectorFiles.forEach(f => formData.append('vector', f));
 
     let uploadedFiles: { name: string; type: 'preview' | 'print' | 'vector'; url?: string }[] = [];
+    
+    // Add existing attached files first
+    uploadedFiles = [...uploadedFiles, ...existingFilesToAttach];
 
     try {
       // Only fetch if there are files
@@ -398,11 +467,46 @@ export default function NewOrder() {
               <p className="text-sm text-red-600 font-medium">DTF-Druckdaten hier hochladen</p>
               <p className="text-xs text-red-400 mt-1">Nur .png Dateien erlaubt</p>
             </div>
-            {printFiles.length > 0 && (
+            
+            {/* Button to load existing files */}
+            {selectedCustomerId && (
+                <div className="mt-2 text-right">
+                    <button 
+                        type="button"
+                        onClick={loadCustomerFiles}
+                        className="text-xs text-red-600 hover:text-red-800 underline font-medium flex items-center justify-end ml-auto"
+                    >
+                        <FileText size={14} className="mr-1" />
+                        Bereits hochgeladene Druckdaten verwenden
+                    </button>
+                </div>
+            )}
+
+            {/* Existing Files List */}
+            {existingFilesToAttach.length > 0 && (
               <ul className="mt-4 space-y-2">
+                {existingFilesToAttach.map((file, idx) => (
+                  <li key={`existing-${idx}`} className="flex justify-between items-center text-sm bg-red-50 p-2 rounded border border-red-100 text-red-800">
+                    <div className="flex items-center">
+                        <span className="bg-red-200 text-red-800 text-[10px] px-1 rounded mr-2">ARCHIV</span>
+                        <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                    </div>
+                    <button type="button" onClick={() => removeExistingFile(idx)} className="text-red-400 hover:text-red-700">
+                      <X size={16} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {printFiles.length > 0 && (
+              <ul className="mt-2 space-y-2">
                 {printFiles.map((file, idx) => (
                   <li key={idx} className="flex justify-between items-center text-sm bg-red-50 p-2 rounded border border-red-100 text-red-800">
-                    <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                    <div className="flex items-center">
+                        <span className="bg-green-200 text-green-800 text-[10px] px-1 rounded mr-2">NEU</span>
+                        <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                    </div>
                     <button type="button" onClick={() => removeFile(idx, "print")} className="text-red-400 hover:text-red-700">
                       <X size={16} />
                     </button>
@@ -412,6 +516,85 @@ export default function NewOrder() {
             )}
           </div>
         </div>
+
+      {/* File Selector Modal */}
+      {showFileSelector && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+                <div className="p-4 border-b flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-gray-800">Druckdaten aus Archiv wählen</h3>
+                    <button onClick={() => setShowFileSelector(false)} className="text-gray-500 hover:text-gray-700">
+                        <X size={20} />
+                    </button>
+                </div>
+                
+                <div className="p-4 overflow-y-auto flex-1">
+                    <div className="mb-4">
+                        <input 
+                            type="text" 
+                            placeholder="Dateien suchen..." 
+                            className="w-full border p-2 rounded text-sm"
+                            onChange={(e) => {
+                                // Simple local filter could be implemented here
+                            }}
+                        />
+                    </div>
+                    
+                    {availableFiles.length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">Keine Druckdaten für diesen Kunden gefunden.</p>
+                    ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            {availableFiles.map((file, idx) => (
+                                <div 
+                                    key={idx} 
+                                    className={`border rounded p-3 cursor-pointer transition-all relative ${
+                                        selectedExistingFiles.includes(file.url) 
+                                        ? 'border-red-500 bg-red-50 ring-1 ring-red-500' 
+                                        : 'border-gray-200 hover:border-red-300'
+                                    }`}
+                                    onClick={() => {
+                                        if (selectedExistingFiles.includes(file.url)) {
+                                            setSelectedExistingFiles(selectedExistingFiles.filter(u => u !== file.url));
+                                        } else {
+                                            setSelectedExistingFiles([...selectedExistingFiles, file.url]);
+                                        }
+                                    }}
+                                >
+                                    <div className="h-24 bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden">
+                                        <img src={file.url} alt={file.name} className="w-full h-full object-contain" />
+                                    </div>
+                                    <p className="text-xs font-medium truncate" title={file.name}>{file.name}</p>
+                                    <p className="text-[10px] text-gray-500 truncate">{new Date(file.date).toLocaleDateString()} - {file.orderTitle}</p>
+                                    
+                                    {selectedExistingFiles.includes(file.url) && (
+                                        <div className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-0.5">
+                                            <div className="w-3 h-3 flex items-center justify-center text-[10px]">✓</div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                
+                <div className="p-4 border-t bg-gray-50 flex justify-end space-x-3">
+                    <button 
+                        onClick={() => setShowFileSelector(false)}
+                        className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                    >
+                        Abbrechen
+                    </button>
+                    <button 
+                        onClick={addSelectedFiles}
+                        disabled={selectedExistingFiles.length === 0}
+                        className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Ausgewählte hinzufügen ({selectedExistingFiles.length})
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
 
         {/* Section 5: Description */}
         <div>
