@@ -228,7 +228,7 @@ export default function CustomerDetails() {
             Gespeicherte Druckdaten (DTF)
           </h2>
           <p className="text-sm text-red-600 mt-1">
-            Alle fertigen Druckdaten aus vergangenen Aufträgen dieses Kunden
+            Alle fertigen Druckdaten aus vergangenen Aufträgen dieses Kunden (auch aus aktuellen Aufträgen)
           </p>
         </div>
 
