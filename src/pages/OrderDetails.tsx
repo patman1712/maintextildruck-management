@@ -48,6 +48,25 @@ export default function OrderDetails() {
     }
   };
 
+  const renderFilePreview = (file: { name: string, url?: string }) => {
+    if (!file.url) return <span className="truncate max-w-[150px]">{file.name}</span>;
+    
+    // Check if image
+    const isImage = file.name.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+    
+    if (isImage) {
+      return (
+        <div className="flex items-center space-x-3">
+          <div className="h-10 w-10 bg-gray-100 rounded overflow-hidden flex-shrink-0 border border-gray-200">
+            <img src={file.url} alt={file.name} className="h-full w-full object-cover" />
+          </div>
+          <span className="truncate max-w-[120px]">{file.name}</span>
+        </div>
+      );
+    }
+    return <span className="truncate max-w-[150px]">{file.name}</span>;
+  };
+
   return (
     <div className="max-w-5xl mx-auto">
       <button onClick={() => navigate(-1)} className="flex items-center text-gray-500 hover:text-gray-800 mb-6 transition-colors">
@@ -129,7 +148,7 @@ export default function OrderDetails() {
                   <ul className="space-y-2">
                     {order.files.filter(f => f.type === 'preview').map((file, idx) => (
                       <li key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-gray-200">
-                        <span className="truncate max-w-[150px]">{file.name}</span>
+                        {renderFilePreview(file)}
                         <button onClick={() => downloadFile(file)} className="text-gray-400 hover:text-red-600" title="Herunterladen">
                           <Download size={16} />
                         </button>
@@ -150,7 +169,7 @@ export default function OrderDetails() {
                   <ul className="space-y-2">
                     {order.files.filter(f => f.type === 'vector').map((file, idx) => (
                       <li key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-blue-100">
-                        <span className="truncate max-w-[150px] text-blue-900">{file.name}</span>
+                        {renderFilePreview(file)}
                         <button onClick={() => downloadFile(file)} className="text-blue-400 hover:text-blue-700" title="Herunterladen">
                           <Download size={16} />
                         </button>
@@ -171,7 +190,7 @@ export default function OrderDetails() {
                   <ul className="space-y-2">
                     {order.files.filter(f => f.type === 'print').map((file, idx) => (
                       <li key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-red-100">
-                        <span className="truncate max-w-[150px] text-red-900">{file.name}</span>
+                        {renderFilePreview(file)}
                         <button onClick={() => downloadFile(file)} className="text-red-400 hover:text-red-700" title="Herunterladen">
                           <Download size={16} />
                         </button>
