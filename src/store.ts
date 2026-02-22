@@ -92,6 +92,7 @@ interface AppState {
   addOrderItem: (orderId: string, item: Omit<OrderItem, 'id' | 'orderId' | 'status'>) => Promise<void>;
   updateOrderItem: (orderId: string, itemId: string, updates: Partial<OrderItem>) => Promise<void>;
   deleteOrderItem: (orderId: string, itemId: string) => Promise<void>;
+  ensureManualOrder: () => Promise<string>;
   
   updateOrderStatus: (id: string, status: Order['status']) => Promise<void>;
   toggleOrderStep: (id: string, step: keyof OrderSteps) => Promise<void>;
@@ -356,6 +357,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('Error updating order:', error);
     }
+  },
+
+  // Order Items can now belong to a dummy "Inventory Order" if no real order exists
+  // We handle this by allowing orderId to be optional or point to a special ID?
+  // Actually, we can create a hidden system order for "Manual Inventory Items" or create a new order on the fly.
+  // Better: Create a hidden order with ID 'inventory-manual' if it doesn't exist.
+  // Helper to ensure manual inventory order exists
+  ensureManualOrder: async () => {
+    const manualOrderId = 'inventory-manual';
+    const state = get();
+    if (!state.orders.find(o => o.id === manualOrderId)) {
+        await state.addOrder({
+            id: manualOrderId,
+            title: 'Manuelle Lagerbestellung',
+            customerName: 'Intern / Lager',
+            status: 'active',
+            steps: { processing: true, produced: true, invoiced: true },
+            createdAt: new Date().toISOString(),
+            employees: [],
+            files: []
+        });
+    }
+    return manualOrderId;
   },
 
   addOrderItem: async (orderId, item) => {

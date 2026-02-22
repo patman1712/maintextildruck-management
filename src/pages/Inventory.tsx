@@ -283,6 +283,38 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const suppliers = useAppStore((state) => state.suppliers);
   const updateOrderItem = useAppStore((state) => state.updateOrderItem);
   const currentUser = useAppStore((state) => state.currentUser);
+  const addOrderItem = useAppStore((state) => state.addOrderItem);
+  const ensureManualOrder = useAppStore((state) => state.ensureManualOrder);
+
+  // Manual Add Item State
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [newItem, setNewItem] = useState({
+    supplierId: '',
+    itemName: '',
+    itemNumber: '',
+    color: '',
+    size: '',
+    quantity: 1,
+    notes: ''
+  });
+
+  const handleManualAddItem = async () => {
+    if (newItem.supplierId && newItem.itemName) {
+        const manualOrderId = await ensureManualOrder();
+        await addOrderItem(manualOrderId, newItem);
+        
+        setNewItem({
+            supplierId: '',
+            itemName: '',
+            itemNumber: '',
+            color: '',
+            size: '',
+            quantity: 1,
+            notes: ''
+        });
+        setShowAddItemModal(false);
+    }
+  };
 
   // Group items by Supplier -> then list items with order info
   const itemsBySupplier = useMemo(() => {
@@ -336,11 +368,100 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
           <h3 className="text-lg font-medium text-gray-900">
             {showCompleted ? 'Keine erledigten Bestellungen' : 'Keine offenen Bestellungen'}
           </h3>
-          <p className="text-gray-500 mt-1">
+          <p className="text-gray-500 mt-1 mb-4">
             {showCompleted 
                 ? 'Erledigte Bestellungen erscheinen hier.' 
                 : 'Fügen Sie benötigte Ware in den Aufträgen hinzu.'}
           </p>
+          
+          {!showCompleted && (
+            <button 
+                onClick={() => setShowAddItemModal(true)}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg inline-flex items-center hover:bg-red-700 transition-colors text-sm"
+            >
+                <Plus size={16} className="mr-2" />
+                Ware manuell hinzufügen
+            </button>
+          )}
+
+          {/* Modal for empty state */}
+          {showAddItemModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 text-left">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+                    <div className="flex justify-between items-center mb-4 border-b pb-2">
+                        <h2 className="text-xl font-bold text-gray-800">Manuelle Bestellung hinzufügen</h2>
+                        <button onClick={() => setShowAddItemModal(false)} className="text-gray-400 hover:text-gray-600">
+                            <Plus size={24} className="rotate-45" />
+                        </button>
+                    </div>
+                    
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Lieferant / Shop</label>
+                                <select 
+                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                    value={newItem.supplierId}
+                                    onChange={(e) => setNewItem({...newItem, supplierId: e.target.value})}
+                                >
+                                    <option value="">Bitte wählen...</option>
+                                    {suppliers.map(s => (
+                                        <option key={s.id} value={s.id}>{s.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikelname / Art.-Nr. / Farbe</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                    placeholder="z.B. Premium Hoodie - Navy"
+                                    value={newItem.itemName}
+                                    onChange={(e) => setNewItem({...newItem, itemName: e.target.value})}
+                                />
+                            </div>
+                            <div className="lg:col-span-1">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Anzahl</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                    placeholder="z.B. 5x XL, 3x L"
+                                    value={newItem.size}
+                                    onChange={(e) => setNewItem({...newItem, size: e.target.value})}
+                                />
+                            </div>
+                            <div className="lg:col-span-1">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Notizen (Optional)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                    placeholder="..."
+                                    value={newItem.notes}
+                                    onChange={(e) => setNewItem({...newItem, notes: e.target.value})}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end space-x-3 mt-4">
+                        <button
+                            onClick={() => setShowAddItemModal(false)}
+                            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                        >
+                            Abbrechen
+                        </button>
+                        <button
+                            onClick={handleManualAddItem}
+                            disabled={!newItem.supplierId || !newItem.itemName}
+                            className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        >
+                            <Plus size={16} className="mr-2" />
+                            Hinzufügen
+                        </button>
+                    </div>
+                </div>
+            </div>
+          )}
         </div>
     );
   }
@@ -375,8 +496,10 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     // Group items by Order for the email body
     const itemsByOrder: Record<string, typeof itemsToSend> = {};
     itemsToSend.forEach(item => {
-        if (!itemsByOrder[item.orderTitle]) itemsByOrder[item.orderTitle] = [];
-        itemsByOrder[item.orderTitle].push(item);
+        // Special display for Manual Order
+        const displayTitle = item.orderId === 'inventory-manual' ? 'Lagerbestellung' : item.orderTitle;
+        if (!itemsByOrder[displayTitle]) itemsByOrder[displayTitle] = [];
+        itemsByOrder[displayTitle].push(item);
     });
 
     let body = ``;
@@ -499,13 +622,15 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                         )}
                                         <div>
                                             <h4 className="font-bold text-gray-900 text-sm flex items-center">
-                                                {orderGroup.title}
+                                                {orderGroup.orderId === 'inventory-manual' ? 'Lagerbestellung' : orderGroup.title}
                                                 {!hasPending && <span className="ml-2 text-xs font-normal text-green-600 bg-green-50 px-2 py-0.5 rounded">Erledigt</span>}
                                             </h4>
-                                            <div className="text-xs text-gray-500 flex items-center mt-0.5">
-                                                <Clock size={12} className="mr-1" />
-                                                Deadline: {new Date(orderGroup.deadline).toLocaleDateString()}
-                                            </div>
+                                            {orderGroup.orderId !== 'inventory-manual' && (
+                                                <div className="text-xs text-gray-500 flex items-center mt-0.5">
+                                                    <Clock size={12} className="mr-1" />
+                                                    Deadline: {new Date(orderGroup.deadline).toLocaleDateString()}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
