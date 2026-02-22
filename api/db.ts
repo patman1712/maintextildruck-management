@@ -9,7 +9,8 @@ const __dirname = path.dirname(__filename);
 // Ensure data directory exists
 // In production (Railway), this should be a mounted volume path if persistence is needed across deployments
 // e.g. /app/data
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
+// Default to 'data' directory in project root if not specified
+const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 fs.ensureDirSync(DATA_DIR);
 
 const dbPath = path.join(DATA_DIR, 'database.sqlite');
