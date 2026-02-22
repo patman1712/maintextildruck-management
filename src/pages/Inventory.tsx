@@ -316,9 +316,17 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const supplierIds = Object.keys(itemsBySupplier);
   const [selectedOrders, setSelectedOrders] = useState<Record<string, string[]>>({}); // supplierId -> orderIds[]
 
+  const deleteOrderItem = useAppStore((state) => state.deleteOrderItem);
+
   const updateStatus = async (orderId: string, itemId: string, status: 'pending' | 'ordered' | 'received') => {
     // Optimistically update local state if needed, but for now we rely on store update
     await updateOrderItem(orderId, itemId, { status });
+  };
+
+  const handleDelete = async (orderId: string, itemId: string) => {
+    if (confirm('Posten wirklich löschen?')) {
+      await deleteOrderItem(orderId, itemId);
+    }
   };
 
   if (supplierIds.length === 0) {
@@ -566,6 +574,13 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                                 title="Zurück auf 'Bestellt' (Nur Admin)"
                                                             >
                                                                 <RotateCcw size={16} />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDelete(item.orderId, item.id)}
+                                                                className="p-1 text-gray-400 hover:bg-red-50 rounded hover:text-red-600"
+                                                                title="Löschen (Nur Admin)"
+                                                            >
+                                                                <Trash2 size={16} />
                                                             </button>
                                                         </div>
                                                     )}
