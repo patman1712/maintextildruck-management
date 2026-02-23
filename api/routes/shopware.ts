@@ -145,7 +145,7 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
         }
 
         // Sync with local DB (upsert)
-        const existingProducts = db.prepare('SELECT id, shopware_product_id FROM customer_products WHERE customer_id = ? AND source = "shopware"').all(customerId) as any[];
+        const existingProducts = db.prepare("SELECT id, shopware_product_id FROM customer_products WHERE customer_id = ? AND source = 'shopware'").all(customerId) as any[];
         
         const upsertTransaction = db.transaction((productsToSync: any[]) => {
             for (const p of productsToSync) {
@@ -156,7 +156,7 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                       .run(p.name, p.productNumber, existing.id);
                 } else {
                     const newId = Math.random().toString(36).substr(2, 9);
-                    db.prepare('INSERT INTO customer_products (id, customer_id, name, product_number, source, shopware_product_id) VALUES (?, ?, ?, ?, "shopware", ?)')
+                    db.prepare("INSERT INTO customer_products (id, customer_id, name, product_number, source, shopware_product_id) VALUES (?, ?, ?, ?, 'shopware', ?)")
                       .run(newId, customerId, p.name, p.productNumber, p.id);
                 }
             }
