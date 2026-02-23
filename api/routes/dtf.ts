@@ -56,26 +56,45 @@ class GuillotinePacker {
         // Or Best Long Side Fit (BLSF)
         
         // Config:
-        // PACKER_WIDTH (X) = Variable/Max. We want to minimize MAX X usage.
-        // PACKER_HEIGHT (Y) = Fixed. We want to fill this tightly.
+        // PACKER_HEIGHT (Y) = Fixed.
+        // PACKER_WIDTH (X) = Variable/Max.
+        // We want to minimize X usage.
         
-        // So we prefer rects with smallest X (Leftmost).
-        // If same X, smallest Y (Topmost).
+        // To minimize X, we should prioritize filling columns (Y) at small X.
+        // Sort free rects by X primary (Leftmost), Y secondary.
         
         this.freeRects.sort((a, b) => {
              if (Math.abs(a.x - b.x) > 1) return a.x - b.x; // Leftmost first
              return a.y - b.y; // Topmost first
         });
 
-        // Find the first rect where it fits (First Fit)
+        // Use Best Short Side Fit (BSSF) to choose among available rects?
+        // Actually, if we want to fill Leftmost tightly, First Fit on X-sorted list is good.
+        // But BSSF helps fitting small items into small holes.
+        
+        // Let's combine: Filter for Leftmost candidates, then pick BSSF?
+        // Or just iterate and pick the one with best BSSF score, but penalize large X?
+        
+        // Simple heuristic:
+        // Just find the Best Fit (BSSF) globally?
+        // If we do that, we might pick a hole far to the right just because it fits perfectly.
+        // That increases total width. Bad.
+        
+        // So we must prioritize X.
+        // Let's stick to First Fit on X-sorted list. It guarantees we fill left first.
+        // But maybe "Best Fit" among the "Leftmost" candidates?
+        
+        // Let's try "First Fit" (Greedy Left).
+        // It worked okay before for filling columns.
         
         let bestRectIndex = -1;
+        // let bestScore = Number.MAX_VALUE;
 
         for (let i = 0; i < this.freeRects.length; i++) {
             const rect = this.freeRects[i];
             if (w <= rect.w && h <= rect.h) {
                 bestRectIndex = i;
-                break;
+                break; // First Fit (Leftmost because sorted)
             }
         }
 
@@ -91,71 +110,87 @@ class GuillotinePacker {
     }
 
     splitFreeRect(freeRect: Rect, index: number, w: number, h: number) {
-        // We want to fill columns (Y axis) first.
-        // So when we place an item, we want to create a space BELOW it (same column) 
-        // and a space to the RIGHT of it (next column).
+        // We want to fill Y (Height) first (Column packing).
+        // So we want to preserve vertical space for next items in this column.
         
-        // If we split Horizontally:
-        //   New Rect Right: x+w, y, free.w-w, h  <-- Restricted height strip to right
-        //   New Rect Bottom: x, y+h, free.w, free.h-h <-- Full width strip at bottom
+        // Vertical Split:
+        // Rect Right: x+w, y, free.w-w, free.h (Tall strip to right)
+        // Rect Bottom: x, y+h, w, free.h-h (Rest of column below)
         
-        // If we split Vertically:
-        //   New Rect Right: x+w, y, free.w-w, free.h <-- Full height strip to right
-        //   New Rect Bottom: x, y+h, w, free.h-h <-- Restricted width strip below
+        // If we use Vertical Split, we create a specific slot below (width w).
+        // This forces next item below to be width <= w.
+        // If next item is wider, it must go to Rect Right.
         
-        // We want to fill Y first.
-        // So we want the space BELOW the item to be available for next items in this "column".
-        // The space BELOW is `Rect Bottom`.
-        // In Vertical Split, `Rect Bottom` has width `w` (restricted).
-        // This forces next item below to fit in width `w`.
-        // This is good for "Column" packing of same-width items.
+        // Horizontal Split:
+        // Rect Right: x+w, y, free.w-w, h (Short strip to right)
+        // Rect Bottom: x, y+h, free.w, free.h-h (Wide strip below)
         
-        // However, if next item is wider, it won't fit below.
-        // But we want to fill Y first.
+        // If we use Horizontal Split, Rect Bottom is wide.
+        // Next item can be wider than current item and still fit below.
+        // This is better for "Shelf" packing where we fill a shelf of height h.
         
-        // If we use Horizontal Split:
-        // Rect Bottom spans full remaining width.
-        // This is good for "Shelf" packing (Rows).
+        // But here height is fixed (56cm). We are filling "Columns".
+        // Actually, we are filling the "Sheet".
         
-        // Since we treat Y as the Fixed Dimension (Height), and X as Variable (Length).
-        // We are effectively packing into a Fixed-Height Strip.
-        // We want to minimize X.
+        // If we want to pack tight, we should use "Shorter Axis Split" (SAS) rule?
+        // Or "Maximize Area" rule?
         
-        // To minimize X, we should fill Y as much as possible at current X.
-        // So we want to prioritize placing items in the "strip" defined by current X.
-        // Vertical Split creates a "strip" below the item with width `w`.
-        // And a "remainder" to the right.
+        // Given the user wants "durcheinander" and "optimal":
+        // Let's use the standard Guillotine Split Rule:
+        // Split along the axis that minimizes the shorter side of the leftover rectangles?
+        // Or "Split Horizontally" if w < h?
         
-        // Let's stick with Vertical Split (Option 2).
-        // Rect Right is the "rest of the roll length".
-        // Rect Bottom is the "rest of the column height".
-        // We process Rect Bottom first?
-        // Our sort order (Min X) will pick Rect Bottom (x, y+h) before Rect Right (x+w, y)
-        // because x < x+w.
-        // So we will try to fill below the item first.
+        // Let's use a dynamic split:
+        // If free.w < free.h, split horizontally?
+        
+        // Let's try minimizing the "waste" aspect.
+        // Actually, for fixed height strip packing, keeping the "bottom" rect available as wide as possible is often good?
+        // No, we want to fill the "left" side.
+        
+        // Let's stick to Vertical Split (creates Rect Bottom restricted to w).
+        // This is standard for Column packing.
+        // BUT: User complained about gaps.
+        // Gaps appear if `w` is small, and we can't fit anything in `Rect Bottom`.
+        // Then `Rect Bottom` is wasted.
+        
+        // Maybe we should allow items to be placed in `Rect Right` even if `Rect Bottom` is empty?
+        // Yes, the packer does that.
+        
+        // What if we try `Horizontal Split`?
+        // Rect Bottom is full width.
+        // If we place Item 1 (top-left). Rect Bottom is (0, h, W, H-h).
+        // Next item can be placed at (0, h).
+        // This effectively fills Top-to-Bottom.
+        // This creates "Shelves" defined by item height? No, just fills Y.
+        
+        // Let's try Horizontal Split.
+        // It allows wider items to be placed below narrow items.
+        // This might reduce gaps!
         
         const usedRect = freeRect;
         this.freeRects.splice(index, 1); 
         
-        // Vertical Split
+        // Horizontal Split strategy
+        // Rect 1 (Bottom): x, y + h, free.w, free.h - h
+        // Rect 2 (Right): x + w, y, free.w - w, h
         
-        // Add Rect Bottom (Priority 1 for next placement due to X sort)
+        // Add Bottom first (so it's picked first by Left-sort if x is same)
         if (usedRect.h > h) {
             this.freeRects.push({
                 x: usedRect.x,
                 y: usedRect.y + h,
-                w: w, 
+                w: usedRect.w, // Full remaining width
                 h: usedRect.h - h
             });
         }
         
-        // Add Rect Right
+        // Add Right
         if (usedRect.w > w) {
             this.freeRects.push({
                 x: usedRect.x + w,
                 y: usedRect.y,
                 w: usedRect.w - w,
-                h: usedRect.h
+                h: h // Restricted height
             });
         }
     }
