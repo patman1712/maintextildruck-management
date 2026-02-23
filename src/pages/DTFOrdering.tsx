@@ -39,19 +39,52 @@ export default function DTFOrdering() {
   const [generationError, setGenerationError] = useState<string | null>(null);
 
   // Extract all available print files
+  // Extract all available print files from ALL orders
   const availableFiles = orders.flatMap(order => 
     (order.files || [])
-      .filter(f => f.type === 'print' || f.type === 'vector') // Allow vector files too if needed, or just print
+      .filter(f => f.type === 'print' || f.type === 'vector')
       .map(f => ({
-        id: f.url || Math.random().toString(36), // Use URL as ID or fallback
+        id: f.url || Math.random().toString(36),
         url: f.url,
         name: f.customName || f.name,
-        thumbnail: f.thumbnail, // Ensure this property exists on file object
+        thumbnail: f.thumbnail,
         orderId: order.id,
         customerName: order.customerName,
         date: order.createdAt
       }))
-  ).filter(f => f.url); // Only files with URL
+  ).filter(f => f.url);
+
+  // Group active orders that have print files (for the "Open Orders" list)
+  const openOrdersWithFiles = orders
+    .filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'archived')
+    .filter(o => (o.files || []).some(f => f.type === 'print' || f.type === 'vector'));
+
+  const addOrderFiles = (orderId: string) => {
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+      
+      const filesToAdd = (order.files || [])
+        .filter(f => f.type === 'print' || f.type === 'vector')
+        .map(f => ({
+            id: f.url || Math.random().toString(36),
+            url: f.url,
+            name: f.customName || f.name,
+            thumbnail: f.thumbnail,
+            orderId: order.id,
+            customerName: order.customerName,
+            date: order.createdAt,
+            quantity: 1, // Default quantity
+            width: 0,
+            height: 0
+        }));
+        
+      // Add all, avoid duplicates (or increment quantity?)
+      // Requirement: "alle dateien sollen automatisch dann in ausgewählte dateien"
+      
+      filesToAdd.forEach(file => {
+          addFile(file); // Re-use addFile logic which handles duplicates/increments
+      });
+  };
 
   // Filter for picker
   const filteredAvailableFiles = availableFiles.filter(f => 
@@ -187,6 +220,34 @@ export default function DTFOrdering() {
                     </div>
                 </div>
             </div>
+
+            {/* Open Orders Section */}
+            {openOrdersWithFiles.length > 0 && (
+                <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 shrink-0">
+                    <h3 className="font-semibold text-gray-700 mb-3 flex items-center">
+                        <span className="bg-slate-100 text-slate-600 w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">!</span>
+                        Offene Aufträge mit Druckdaten
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto">
+                        {openOrdersWithFiles.map(order => (
+                            <div key={order.id} className="border border-blue-100 bg-blue-50 p-3 rounded-md flex justify-between items-center">
+                                <div className="min-w-0 flex-1 mr-2">
+                                    <p className="font-medium text-blue-900 truncate text-sm" title={order.title}>{order.title}</p>
+                                    <p className="text-xs text-blue-700 truncate">{order.customerName}</p>
+                                    <p className="text-[10px] text-blue-500">{new Date(order.createdAt).toLocaleDateString('de-DE')}</p>
+                                </div>
+                                <button 
+                                    onClick={() => addOrderFiles(order.id)}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1.5 rounded shrink-0 flex items-center"
+                                >
+                                    <Check size={12} className="mr-1" />
+                                    Übernehmen
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Selected Files List */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 flex-1 flex flex-col min-h-0 overflow-hidden">
