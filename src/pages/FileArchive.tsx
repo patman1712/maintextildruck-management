@@ -21,7 +21,7 @@ export default function FileArchive() {
   
   const archivedOrders = orders.filter(o => o.status === 'archived');
   
-  const allFiles = archivedOrders.flatMap(order => 
+  const allFilesRaw = archivedOrders.flatMap(order => 
     (order.files || []).map(f => ({
         ...f,
         orderId: order.id,
@@ -31,28 +31,40 @@ export default function FileArchive() {
     }))
   ).filter(f => f.url);
 
+  // Deduplicate files by URL
+  // Keep the most recent one (since sorted later by createdAt, let's sort first)
+  allFilesRaw.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  
+  const allFiles: typeof allFilesRaw = [];
+  const seenUrls = new Set<string>();
+
+  for (const file of allFilesRaw) {
+      if (!seenUrls.has(file.url)) {
+          seenUrls.add(file.url);
+          allFiles.push(file);
+      }
+  }
+
   const filteredFiles = allFiles.filter(f => 
     (f.name && f.name.toLowerCase().includes(search.toLowerCase())) ||
     (f.customName && f.customName.toLowerCase().includes(search.toLowerCase())) ||
     (f.customerName && f.customerName.toLowerCase().includes(search.toLowerCase()))
   );
 
-  // Sort by date desc
-  filteredFiles.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
   const handleDeleteFile = async (fileToDelete: any) => {
     if (!confirm(`Möchten Sie die Datei "${fileToDelete.customName || fileToDelete.name}" wirklich entgültig löschen?`)) return;
 
-    // Find the order
-    const order = orders.find(o => o.id === fileToDelete.orderId);
-    if (!order) return;
+    // Find ALL orders that use this file URL
+    const ordersWithFile = orders.filter(o => 
+        (o.files || []).some(f => f.url === fileToDelete.url)
+    );
 
-    // Remove file from order
-    const updatedFiles = (order.files || []).filter(f => f.url !== fileToDelete.url);
+    // Remove file from ALL these orders
+    for (const order of ordersWithFile) {
+        const updatedFiles = (order.files || []).filter(f => f.url !== fileToDelete.url);
+        await updateOrder(order.id, { files: updatedFiles });
+    }
     
-    // Update order in DB
-    await updateOrder(order.id, { files: updatedFiles });
-
     // Delete file from disk
     try {
         await fetch('/api/upload/delete', {
@@ -62,14 +74,6 @@ export default function FileArchive() {
         });
     } catch (e) {
         console.error("Failed to delete physical file", e);
-    }
-
-    // If order has no files left, maybe delete the order too?
-    if (updatedFiles.length === 0) {
-        // We can't easily "delete" order via store yet without setting status to archived (which it already is).
-        // But since it's empty, maybe we don't care? Or we should clean it up?
-        // Ideally we would delete the empty container order.
-        // But for now, just removing the file is enough to clean disk space.
     }
     
     fetchData();

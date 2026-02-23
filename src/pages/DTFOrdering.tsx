@@ -48,7 +48,7 @@ export default function DTFOrdering() {
 
   // Extract all available print files
   // Extract all available print files from ALL orders
-  const availableFiles = orders.flatMap(order => 
+  const allFilesRaw = orders.flatMap(order => 
     (order.files || [])
       .filter(f => f.type === 'print' || f.type === 'vector')
       .map(f => ({
@@ -64,7 +64,18 @@ export default function DTFOrdering() {
   ).filter(f => f.url);
 
   // Sort files by date (newest first)
-  availableFiles.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  allFilesRaw.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // Deduplicate files by URL
+  const availableFiles: typeof allFilesRaw = [];
+  const seenUrls = new Set<string>();
+
+  for (const file of allFilesRaw) {
+      if (!seenUrls.has(file.url)) {
+          seenUrls.add(file.url);
+          availableFiles.push(file);
+      }
+  }
 
   // Group active orders that have print files (for the "Open Orders" list)
   const openOrdersWithFiles = orders
