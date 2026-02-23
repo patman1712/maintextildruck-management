@@ -131,21 +131,29 @@ export default function NewOrder() {
     
     // Find all orders for this customer
     const orders = useAppStore.getState().orders;
-    const customerOrders = orders.filter(o => o.customerId === selectedCustomerId || o.customerName === customerName);
+    // Sort orders by date descending (newest first)
+    const customerOrders = orders
+        .filter(o => o.customerId === selectedCustomerId || o.customerName === customerName)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     
     const allFiles: {name: string, url: string, type: 'print' | 'vector', date: string, orderTitle: string}[] = [];
+    const seenUrls = new Set<string>();
     
     customerOrders.forEach(order => {
         if (order.files) {
             order.files.forEach(f => {
                 if (f.type === 'print' && f.url) {
-                    allFiles.push({
-                        name: f.customName || f.name,
-                        url: f.url,
-                        type: 'print',
-                        date: order.createdAt,
-                        orderTitle: order.title
-                    });
+                    // Deduplicate by URL
+                    if (!seenUrls.has(f.url)) {
+                        seenUrls.add(f.url);
+                        allFiles.push({
+                            name: f.customName || f.name,
+                            url: f.url,
+                            type: 'print',
+                            date: order.createdAt,
+                            orderTitle: order.title
+                        });
+                    }
                 }
             });
         }
