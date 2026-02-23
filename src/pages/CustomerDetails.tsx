@@ -73,6 +73,7 @@ export default function CustomerDetails() {
   const [fileSearch, setFileSearch] = useState('');
   const [newManualProduct, setNewManualProduct] = useState({ name: '', productNumber: '', supplierId: '' });
   const [assignFileMode, setAssignFileMode] = useState(false);
+  const [assignFileType, setAssignFileType] = useState<'print' | 'view'>('print');
 
   // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -243,7 +244,7 @@ export default function CustomerDetails() {
       });
   };
 
-  const handleAssignFile = async (file: any) => {
+  const handleAssignFile = async (file: any, type: 'print' | 'view' = assignFileType) => {
       if (!editingProduct) return;
       try {
           await fetch(`/api/products/${editingProduct.id}/files`, {
@@ -252,7 +253,8 @@ export default function CustomerDetails() {
               body: JSON.stringify({
                   fileUrl: file.url,
                   fileName: file.customName || file.name,
-                  thumbnailUrl: file.thumbnail
+                  thumbnailUrl: file.thumbnail,
+                  type: type
               })
           });
           
@@ -261,13 +263,79 @@ export default function CustomerDetails() {
               id: Math.random().toString(), // Temp ID until refresh
               file_url: file.url,
               file_name: file.customName || file.name,
-              thumbnail_url: file.thumbnail
+              thumbnail_url: file.thumbnail,
+              type: type
           }];
           setEditingProduct({ ...editingProduct, files: updatedFiles });
           fetchProducts();
       } catch (err) {
           console.error(err);
       }
+  };
+
+  const handleDirectUploadAndAssign = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0] || !editingProduct || !customer) return;
+    const file = e.target.files[0];
+    const fileName = file.name;
+
+    try {
+        const formData = new FormData();
+        formData.append('print', file);
+
+        const res = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+
+        if (data.success && data.files && data.files.print && data.files.print.length > 0) {
+            const uploadedFile = data.files.print[0];
+            const fileUrl = uploadedFile.path;
+            const thumbnail = uploadedFile.thumbnail;
+            
+            // Create Archive Order
+            const newOrder: Order = {
+                id: Math.random().toString(36).substr(2, 9),
+                title: `Direkt-Upload: ${fileName}`,
+                customerId: customer.id,
+                customerName: customer.name,
+                customerEmail: customer.email,
+                customerPhone: customer.phone,
+                customerAddress: customer.address,
+                deadline: new Date().toISOString().split('T')[0],
+                status: "archived",
+                steps: { processing: true, produced: true, invoiced: true },
+                createdAt: new Date().toISOString(),
+                description: "Automatisch erstellt durch Produktzuweisung",
+                employees: [],
+                files: [{
+                    name: uploadedFile.originalName,
+                    type: assignFileType === 'view' ? 'preview' : 'print',
+                    url: fileUrl,
+                    thumbnail: thumbnail,
+                    customName: fileName
+                }]
+            };
+
+            await addOrder(newOrder);
+
+            // Assign to Product
+            await handleAssignFile({
+                url: fileUrl,
+                name: fileName,
+                customName: fileName,
+                thumbnail: thumbnail
+            }, assignFileType);
+            
+            // Close modal if desired, or keep open? 
+            // Usually user wants to see result.
+            // But handleAssignFile updates local state.
+            fetchData();
+        }
+    } catch (error) {
+        console.error("Upload failed:", error);
+        alert("Upload fehlgeschlagen.");
+    }
   };
 
   const handleRemoveFile = async (fileId: string) => {
@@ -1101,7 +1169,7 @@ export default function CustomerDetails() {
                   <div className="p-4 border-b flex justify-between items-center">
                       <h3 className="font-bold">
                           {assignFileMode 
-                              ? `Druckdatei zuweisen: ${editingProduct?.name}`
+                              ? (assignFileType === 'view' ? `Ansicht hinzufügen: ${editingProduct?.name}` : `Druckdaten hinzufügen: ${editingProduct?.name}`)
                               : editingProduct 
                                   ? 'Artikel bearbeiten' 
                                   : 'Neuer manueller Artikel'
@@ -1113,6 +1181,16 @@ export default function CustomerDetails() {
                   {assignFileMode ? (
                       // FILE ASSIGN MODE
                       <>
+                        <div className="p-4 border-b bg-gray-50">
+                            <label className="flex items-center justify-center w-full h-16 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                                <div className="flex items-center space-x-2 text-gray-500">
+                                    <Upload size={20} />
+                                    <span className="text-sm font-medium">Neue Datei hochladen & zuweisen</span>
+                                </div>
+                                <input type="file" className="hidden" onChange={handleDirectUploadAndAssign} accept="image/*,.pdf" />
+                            </label>
+                        </div>
+
                         <div className="p-4 border-b">
                             <div className="relative">
                                 <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
