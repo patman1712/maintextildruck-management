@@ -221,5 +221,75 @@ router.post('/delete', async (req: Request, res: Response) => {
     }
 });
 
+// POST /api/upload/delete-pdf
+// Expects JSON body: { filename: string }
+router.post('/delete-pdf', async (req: Request, res: Response) => {
+    try {
+        const { filename } = req.body;
+        
+        if (!filename) {
+            res.status(400).json({ success: false, error: 'No filename provided' });
+            return;
+        }
+
+        const fullPath = path.join(UPLOAD_DIR, filename);
+
+        // Security check
+        if (!fullPath.startsWith(UPLOAD_DIR)) {
+            res.status(403).json({ success: false, error: 'Invalid file path' });
+            return;
+        }
+
+        if (await fs.pathExists(fullPath)) {
+            await fs.remove(fullPath);
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ success: false, error: 'File not found' });
+        }
+    } catch (error) {
+        console.error('Error deleting PDF:', error);
+        res.status(500).json({ success: false, error: 'Delete failed' });
+    }
+});
+
+// GET /api/upload/list-pdfs
+router.get('/list-pdfs', async (req: Request, res: Response) => {
+    try {
+        const files = await fs.readdir(UPLOAD_DIR);
+        const pdfs = await Promise.all(files
+            .filter(f => f.startsWith('DTF_Job_') && f.endsWith('.pdf'))
+            .map(async f => {
+                const stat = await fs.stat(path.join(UPLOAD_DIR, f));
+                
+                // Check if thumbnail exists (convention: filename_thumb.png) - wait, PDF generation doesn't make thumbs yet.
+                // We should generate one on the fly or during generation.
+                // For now, let's check if we can generate one if missing?
+                // Or just rely on generic icon.
+                
+                // Actually, let's try to find a thumb if we made one.
+                // If not, maybe we can generate one now?
+                // Generating on list-view is slow.
+                // Let's assume no thumbnail for now unless we update the generator.
+                
+                return {
+                    name: f,
+                    url: `/uploads/${f}`,
+                    date: stat.mtime.toISOString(),
+                    thumbnail: await fs.pathExists(path.join(UPLOAD_DIR, `${f}_thumb.png`)) 
+                        ? `/uploads/${f}_thumb.png` 
+                        : null
+                };
+            }));
+            
+        // Sort by date desc
+        pdfs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        res.json({ success: true, files: pdfs });
+    } catch (error) {
+        console.error('Error listing PDFs:', error);
+        res.status(500).json({ success: false, error: 'List failed' });
+    }
+});
+
 export default router;
 export { UPLOAD_DIR };

@@ -2,9 +2,13 @@ import { Router, type Request, type Response } from 'express';
 import path from 'path';
 import fs from 'fs-extra';
 import { PDFDocument, PDFPage, degrees } from 'pdf-lib';
-import potpack from 'potpack'; // We will use potpack for better nesting if possible, or implement a Shelf/Guillotine
+import potpack from 'potpack'; 
 import { UPLOAD_DIR } from './upload.js';
 import { DATA_DIR } from '../db.js';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 const router = Router();
 
@@ -399,12 +403,23 @@ router.post('/generate', async (req: Request, res: Response) => {
             }
         }
 
-        const pdfBytes = await outputPdf.save();
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const outputFilename = `DTF_Job_${timestamp}.pdf`;
-        const outputPath = path.join(UPLOAD_DIR, outputFilename);
-        
         await fs.writeFile(outputPath, pdfBytes);
+
+        // Generate Thumbnail for the output PDF
+        try {
+            // pdftoppm with -singlefile appends .png to the output root name
+            const thumbRoot = path.join(UPLOAD_DIR, `${outputFilename}_thumb`);
+            
+            await execFileAsync('pdftoppm', [
+                '-png',
+                '-singlefile',
+                '-scale-to', '300',
+                outputPath,
+                thumbRoot
+            ]);
+        } catch (e) {
+            console.error('Failed to generate thumbnail for output PDF:', e);
+        }
 
         res.json({
             success: true,
