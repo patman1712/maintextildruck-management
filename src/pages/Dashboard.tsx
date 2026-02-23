@@ -66,7 +66,10 @@ export default function DashboardLayout() {
           <NavItem icon={<Users />} label="Kundendateien" to="/dashboard/customers" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
           
           {currentUser?.role === 'admin' && (
-             <NavItem icon={<Shield />} label="Mitarbeiter" to="/dashboard/employees" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
+             <>
+                <NavItem icon={<Shield />} label="Mitarbeiter" to="/dashboard/employees" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
+                <NavItem icon={<Shield />} label="Einstellungen" to="/dashboard/admin" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
+             </>
           )}
         </nav>
 

@@ -15,6 +15,7 @@ import Inventory from "@/pages/Inventory";
 import DTFOrdering from "@/pages/DTFOrdering";
 import DTFPdfs from "@/pages/DTFPdfs";
 import FileArchive from "@/pages/FileArchive";
+import AdminSettings from "@/pages/AdminSettings";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
 import { useEffect } from "react";
@@ -50,8 +51,9 @@ export default function App() {
           <Route path="dtf/pdfs" element={<DTFPdfs />} />
           <Route path="dtf/archive" element={<FileArchive />} />
           <Route path="employees" element={<Employees />} />
+          <Route path="admin" element={<AdminSettings />} />
           <Route path="profile" element={<Profile />} />
-          <Route path="*" element={<div className="p-8 text-center text-gray-500">Diese Seite ist noch in Arbeit...</div>} />
+        </Route> path="*" element={<div className="p-8 text-center text-gray-500">Diese Seite ist noch in Arbeit...</div>} />
         </Route>
       </Routes>
     </Router>
