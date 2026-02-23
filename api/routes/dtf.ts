@@ -118,54 +118,31 @@ class GuillotinePacker {
         const usedRect = freeRect;
         this.freeRects.splice(index, 1); 
         
-        // Dynamic Split Strategy:
-        // If w > h (Wide item), use Horizontal Split to preserve width for bottom free space.
-        // If h >= w (Tall item), use Vertical Split to preserve height for right free space.
+        // Revert to Vertical Split (Standard for Strip Packing)
+        // This preserves the full height for the right-hand split, allowing new columns to be formed efficiently.
+        // The previous "Horizontal Split" for wide items caused fragmentation of the right space, leading to more pages.
         
-        const splitHorizontal = w > h;
+        // Vertical Split:
+        // Bottom (Restricted Width): x, y+h, w, usedRect.h-h
+        // Right (Full Height): x+w, y, usedRect.w-w, usedRect.h
         
-        if (splitHorizontal) {
-            // Horizontal Split
-            // Bottom (Full Width): x, y+h, usedRect.w, usedRect.h-h
-            // Right (Restricted Height): x+w, y, usedRect.w-w, h
-            
-            if (usedRect.h > h) {
-                this.freeRects.push({
-                    x: usedRect.x,
-                    y: usedRect.y + h,
-                    w: usedRect.w, 
-                    h: usedRect.h - h
-                });
-            }
-            if (usedRect.w > w) {
-                this.freeRects.push({
-                    x: usedRect.x + w,
-                    y: usedRect.y,
-                    w: usedRect.w - w,
-                    h: h
-                });
-            }
-        } else {
-            // Vertical Split (Default)
-            // Bottom (Restricted Width): x, y+h, w, usedRect.h-h
-            // Right (Full Height): x+w, y, usedRect.w-w, usedRect.h
-            
-            if (usedRect.h > h) {
-                this.freeRects.push({
-                    x: usedRect.x,
-                    y: usedRect.y + h,
-                    w: w, 
-                    h: usedRect.h - h
-                });
-            }
-            if (usedRect.w > w) {
-                this.freeRects.push({
-                    x: usedRect.x + w,
-                    y: usedRect.y,
-                    w: usedRect.w - w, 
-                    h: usedRect.h
-                });
-            }
+        // Add Bottom first (so it's picked first by Left-sort if x is same)
+        if (usedRect.h > h) {
+            this.freeRects.push({
+                x: usedRect.x,
+                y: usedRect.y + h,
+                w: w, 
+                h: usedRect.h - h
+            });
+        }
+        
+        if (usedRect.w > w) {
+            this.freeRects.push({
+                x: usedRect.x + w,
+                y: usedRect.y,
+                w: usedRect.w - w, 
+                h: usedRect.h
+            });
         }
     }
 }
