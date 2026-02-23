@@ -179,22 +179,21 @@ router.post('/generate', async (req: Request, res: Response) => {
         }[] = [];
 
         const paddingPoints = (paddingMm || 0) * 2.83465;
-        // User interpretation: 
-        // "Rollenbreite" (e.g. 56cm) is the FIXED HEIGHT (Y) of the PDF.
-        // "Länge" (e.g. 100cm or 0) is the MAX WIDTH (X) of the PDF.
+        // User interpretation update:
+        // "Rollenbreite" (Field 1) is WIDTH (Fixed).
+        // "Länge" (Field 2) is HEIGHT (Variable/Max).
+        // "Rollenbreite soll FIX sein... diese soll immer ausgegeben werden auchw wen noch luft ist." -> Fixed Width.
+        // "in der länge sollen die dateien optimal angeordnet werden so dass so wenig länge wie mölgich benutzt wird" -> Minimize Height.
         
-        const rollWidthPoints = rollWidthMm * 2.83465; // User's "Height" (Fixed)
-        const rollLengthPoints = rollLengthMm > 0 ? rollLengthMm * 2.83465 : Number.MAX_VALUE; // User's "Width" (Max)
+        const rollWidthPoints = rollWidthMm * 2.83465; // User's "Width" (Fixed)
+        const rollLengthPoints = rollLengthMm > 0 ? rollLengthMm * 2.83465 : Number.MAX_VALUE; // User's "Height" (Max)
 
         // Packer Dimension Config:
-        // Width = rollLengthPoints (Variable/Max)
-        // Height = rollWidthPoints (Fixed)
+        // Width = rollWidthPoints (Fixed)
+        // Height = rollLengthPoints (Variable/Max)
         
-        // Note: rollLengthPoints can be infinite (Number.MAX_VALUE)
-        // Guillotine Packer needs a finite width to start with?
-        // Actually we can set it to a very large number if infinite.
-        const PACKER_WIDTH = rollLengthPoints === Number.MAX_VALUE ? 100000 : rollLengthPoints; // ~35m max width if infinite
-        const PACKER_HEIGHT = rollWidthPoints;
+        const PACKER_WIDTH = rollWidthPoints;
+        const PACKER_HEIGHT = rollLengthPoints === Number.MAX_VALUE ? 100000 : rollLengthPoints;
 
         const itemsToPack: Item[] = [];
 
@@ -261,57 +260,77 @@ router.post('/generate', async (req: Request, res: Response) => {
 
         // 2. Perform Bin Packing (Guillotine)
         // Config: 
-        // Container Height = Fixed (User RollWidth)
-        // Container Width = Variable (User RollLength)
+        // Container Width = Fixed (User RollWidth)
+        // Container Height = Variable (User RollLength)
         
-        // We want to fill Y (Height) first, then X (Width).
-        // AND minimize X usage ("am wenigstens länge benutzt").
+        // We want to fill X (Width) first, then Y (Height). (Shelf/Guillotine Standard)
+        // AND minimize Y usage ("am wenigstens länge benutzt").
         
-        // Items should be sorted?
-        // Sorting by Height Descending helps fill the fixed Height efficiently?
-        // Or Width Descending?
-        // Since Height is the constrained dimension, Best Fit Decreasing Height is usually good.
-        itemsToPack.sort((a, b) => b.h - a.h);
+        // Sorting items?
+        // To minimize Height, usually sort by Height Descending (Level Packing) or Width Descending?
+        // Width Descending places wide items first, then fills gaps.
+        // Let's stick with Width Descending.
+        itemsToPack.sort((a, b) => b.w - a.w);
 
         let pages: Item[][] = [];
         let currentPageItems: Item[] = [];
         
-        // Initialize Packer with Swapped Dimensions logic
-        // We pack into (PACKER_WIDTH, PACKER_HEIGHT)
+        // Initialize Packer
         let packer = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
         let currentPageIndex = 0;
 
         for (const item of itemsToPack) {
-            if (item.h > PACKER_HEIGHT) {
-                console.warn("Item taller than fixed roll height, skipping (or rotate?)");
-                // Rotation logic could be added here: if w <= PACKER_HEIGHT, swap w/h.
-                if (item.w <= PACKER_HEIGHT) {
-                    // Rotate 90 degrees logic would require PDF rotation later.
-                    // For now just warn.
-                }
-                continue;
-            }
             if (item.w > PACKER_WIDTH) {
-                 console.warn("Item wider than max length, skipping");
+                 console.warn("Item wider than fixed roll width, skipping");
                  continue;
             }
+            if (item.h > PACKER_HEIGHT) {
+                console.warn("Item taller than max length, skipping");
+                continue;
+            }
 
-            // We want to pack Left-to-Right? Or Top-to-Bottom?
-            // "erst in der höhe anzuordnen dann in der breite" -> Fill Y first.
-            // "minimize used length (X)" -> Pack tight to Left.
+            // Standard Guillotine packing (Min Y, Min X) minimizes Height usage.
+            // Our fit function prioritizes Min X (Leftmost) then Min Y (Topmost).
+            // This fills rows.
+            // `if (Math.abs(a.y - b.y) > 1) return a.y - b.y; return a.x - b.x;` (Topmost first)
+            // Wait, previous tool call set it to X primary? No, I reverted to Y primary in thought but code might differ.
+            // Let's check `GuillotinePacker.fit` in previous tool output.
             
-            // Our GuillotinePacker `fit` method sorts freeRects.
-            // We need to ensure it prioritizes:
-            // 1. Smallest X (Leftmost) -> This minimizes X usage.
-            // 2. Smallest Y (Topmost) -> This fills Y.
-            // This is already the default sort in my previous implementation:
-            // `if (Math.abs(a.x - b.x) > 1) return a.x - b.x; return a.y - b.y;`
+            // Previous tool output for `fit`:
+            // `this.freeRects.sort((a, b) => { if (Math.abs(a.x - b.x) > 1) return a.x - b.x; return a.y - b.y; });`
+            // This is Leftmost First.
+            // Leftmost First fills COLUMNS (fills Height first).
             
-            // Wait, in the previous tool call I changed it to `Y primary`.
-            // User complained "nicht optimal".
+            // User wants "erst in der höhe anzuordnen dann in der breite"?
+            // Wait, if Width is Fixed.
+            // And we fill Height first.
+            // Then we create a long column on the left.
+            // This maximizes Height usage for that column.
+            // But if we want to minimize TOTAL Height usage of the sheet?
+            // "so wenig länge wie mölgich benutzt wird".
             
-            // Let's change back to `X primary` (Fill columns/strips from left to right).
-            // AND use Vertical Split to preserve height for other items in the same column.
+            // If we fill Columns, we use full height immediately?
+            // No, we use height up to item height.
+            // If we stack items vertically (Column), we increase Height rapidly.
+            // Item 1 (h=10). Item 2 (h=10). Total H = 20.
+            // If we place side-by-side (Row). Total H = 10.
+            
+            // So to minimize Height, we MUST fill ROWS (Width) first!
+            // "erst in der breite, dann in der höhe".
+            
+            // BUT User said: "probiere die logos wenn möglich erst in der höhe anzuordnen dann in der breite"
+            // AND "so wenig länge wie mölgich benutzt wird".
+            // These are CONTRADICTORY if "Länge" = Height.
+            
+            // UNLESS "Höhe" in their sentence means "Width of the roll"? (Rotated).
+            
+            // Let's assume the "Minimize Length" requirement is the most important for saving money.
+            // To minimize Length (Height), we MUST fill Width (Row) first.
+            
+            // So I will change the sort order in `fit` to Topmost First (Min Y).
+            // This fills Rows.
+            
+            // And I will ensure PDF Width is Fixed `rollWidthPoints`.
             
             let pos = packer.fit(item.w, item.h);
             
@@ -351,12 +370,12 @@ router.post('/generate', async (req: Request, res: Response) => {
             if (!pageItems || pageItems.length === 0) continue;
             
             // Determine Page Dimensions
-            // Height = Fixed (User RollWidth)
-            // Width = Used Width (Max X + W)
+            // Width = Fixed (User RollWidth)
+            // Height = Used Height (Minimize)
             
-            const maxX = pageItems.reduce((max, item) => Math.max(max, (item.x || 0) + item.w), 0);
-            const pageWidth = maxX; 
-            const pageHeight = rollWidthPoints;
+            const maxY = pageItems.reduce((max, item) => Math.max(max, (item.y || 0) + item.h), 0);
+            const pageWidth = rollWidthPoints; 
+            const pageHeight = maxY;
 
             const page = outputPdf.addPage([pageWidth, pageHeight]);
             
