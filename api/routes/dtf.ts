@@ -122,80 +122,33 @@ class GuillotinePacker {
         // Rect Right: x+w, y, free.w-w, free.h (Tall strip to right)
         // Rect Bottom: x, y+h, w, free.h-h (Rest of column below)
         
-        // If we use Vertical Split, we create a specific slot below (width w).
-        // This forces next item below to be width <= w.
-        // If next item is wider, it must go to Rect Right.
-        
-        // Horizontal Split:
-        // Rect Right: x+w, y, free.w-w, h (Short strip to right)
-        // Rect Bottom: x, y+h, free.w, free.h-h (Wide strip below)
-        
-        // If we use Horizontal Split, Rect Bottom is wide.
-        // Next item can be wider than current item and still fit below.
-        // This is better for "Shelf" packing where we fill a shelf of height h.
-        
-        // But here height is fixed (56cm). We are filling "Columns".
-        // Actually, we are filling the "Sheet".
-        
-        // If we want to pack tight, we should use "Shorter Axis Split" (SAS) rule?
-        // Or "Maximize Area" rule?
-        
-        // Given the user wants "durcheinander" and "optimal":
-        // Let's use the standard Guillotine Split Rule:
-        // Split along the axis that minimizes the shorter side of the leftover rectangles?
-        // Or "Split Horizontally" if w < h?
-        
-        // Let's use a dynamic split:
-        // If free.w < free.h, split horizontally?
-        
-        // Let's try minimizing the "waste" aspect.
-        // Actually, for fixed height strip packing, keeping the "bottom" rect available as wide as possible is often good?
-        // No, we want to fill the "left" side.
-        
-        // Let's stick to Vertical Split (creates Rect Bottom restricted to w).
-        // This is standard for Column packing.
-        // BUT: User complained about gaps.
-        // Gaps appear if `w` is small, and we can't fit anything in `Rect Bottom`.
-        // Then `Rect Bottom` is wasted.
-        
-        // Maybe we should allow items to be placed in `Rect Right` even if `Rect Bottom` is empty?
-        // Yes, the packer does that.
-        
-        // What if we try `Horizontal Split`?
-        // Rect Bottom is full width.
-        // If we place Item 1 (top-left). Rect Bottom is (0, h, W, H-h).
-        // Next item can be placed at (0, h).
-        // This effectively fills Top-to-Bottom.
-        // This creates "Shelves" defined by item height? No, just fills Y.
-        
-        // Let's try Horizontal Split.
-        // It allows wider items to be placed below narrow items.
-        // This might reduce gaps!
+        // Vertical Split is standard for Column packing where Height is fixed and Width is infinite.
+        // It keeps the "Right" rectangle as tall as possible, allowing new columns to be formed easily.
         
         const usedRect = freeRect;
         this.freeRects.splice(index, 1); 
         
-        // Horizontal Split strategy
-        // Rect 1 (Bottom): x, y + h, free.w, free.h - h
-        // Rect 2 (Right): x + w, y, free.w - w, h
+        // Vertical Split strategy
         
         // Add Bottom first (so it's picked first by Left-sort if x is same)
+        // Rect Bottom: (x, y+h, w, usedRect.h - h)
         if (usedRect.h > h) {
             this.freeRects.push({
                 x: usedRect.x,
                 y: usedRect.y + h,
-                w: usedRect.w, // Full remaining width
+                w: w, // Constrained width
                 h: usedRect.h - h
             });
         }
         
         // Add Right
+        // Rect Right: (x+w, y, usedRect.w - w, usedRect.h)
         if (usedRect.w > w) {
             this.freeRects.push({
                 x: usedRect.x + w,
                 y: usedRect.y,
-                w: usedRect.w - w,
-                h: h // Restricted height
+                w: usedRect.w - w, // Full remaining width
+                h: usedRect.h // Full height
             });
         }
     }
@@ -391,9 +344,21 @@ router.post('/generate', async (req: Request, res: Response) => {
                     totalWidth += maxX;
                 }
                 
-                if (totalWidth < minTotalWidth) {
+                // PRIORITIZE FEWER PAGES FIRST
+                // If current result has FEWER pages than best result, take it.
+                // If same pages, check total width.
+                
+                const currentPagesCount = currentPages.length;
+                const bestPagesCount = bestPages ? bestPages.length : Number.MAX_VALUE;
+                
+                if (currentPagesCount < bestPagesCount) {
                     minTotalWidth = totalWidth;
                     bestPages = currentPages;
+                } else if (currentPagesCount === bestPagesCount) {
+                    if (totalWidth < minTotalWidth) {
+                        minTotalWidth = totalWidth;
+                        bestPages = currentPages;
+                    }
                 }
             }
         }
