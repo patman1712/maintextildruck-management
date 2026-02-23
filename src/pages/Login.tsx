@@ -50,7 +50,6 @@ export default function Login() {
           ) : (
              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600 font-bold text-2xl">M</div>
           )}
-          <h1 className="text-2xl font-bold text-gray-800">Maintextildruck</h1>
           <p className="text-gray-500">Management System</p>
         </div>
 
