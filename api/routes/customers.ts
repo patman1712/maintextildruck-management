@@ -38,9 +38,10 @@ router.put('/:id', (req: Request, res: Response) => {
   if (updates.email !== undefined) { fields.push('email = ?'); values.push(updates.email); }
   if (updates.phone !== undefined) { fields.push('phone = ?'); values.push(updates.phone); }
   if (updates.address !== undefined) { fields.push('address = ?'); values.push(updates.address); }
-  if (updates.shopwareUrl !== undefined) { fields.push('shopware_url = ?'); values.push(updates.shopwareUrl); }
-  if (updates.shopwareAccessKey !== undefined) { fields.push('shopware_access_key = ?'); values.push(updates.shopwareAccessKey); }
-  if (updates.shopwareSecretKey !== undefined) { fields.push('shopware_secret_key = ?'); values.push(updates.shopwareSecretKey); }
+  if (updates.shopware_url !== undefined) { fields.push('shopware_url = ?'); values.push(updates.shopware_url); }
+  if (updates.shopware_version !== undefined) { fields.push('shopware_version = ?'); values.push(updates.shopware_version); }
+  if (updates.shopware_access_key !== undefined) { fields.push('shopware_access_key = ?'); values.push(updates.shopware_access_key); }
+  if (updates.shopware_secret_key !== undefined) { fields.push('shopware_secret_key = ?'); values.push(updates.shopware_secret_key); }
 
   if (fields.length === 0) return res.json({ success: true, message: 'No changes' });
 

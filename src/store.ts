@@ -14,6 +14,7 @@ export interface Customer {
   phone: string;
   address: string;
   shopwareUrl?: string;
+  shopwareVersion?: '5' | '6';
   shopwareAccessKey?: string;
   shopwareSecretKey?: string;
   created_at: string;
@@ -139,6 +140,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         phone: c.phone,
         address: c.address,
         shopwareUrl: c.shopware_url,
+        shopwareVersion: c.shopware_version || '6',
         shopwareAccessKey: c.shopware_access_key,
         shopwareSecretKey: c.shopware_secret_key,
         created_at: c.created_at
@@ -340,10 +342,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         customers: state.customers.map((c) => (c.id === id ? { ...c, ...updatedCustomer } : c))
       }));
 
+      const payload: any = {};
+      if (updatedCustomer.name !== undefined) payload.name = updatedCustomer.name;
+      if (updatedCustomer.email !== undefined) payload.email = updatedCustomer.email;
+      if (updatedCustomer.phone !== undefined) payload.phone = updatedCustomer.phone;
+      if (updatedCustomer.address !== undefined) payload.address = updatedCustomer.address;
+      if (updatedCustomer.shopwareUrl !== undefined) payload.shopware_url = updatedCustomer.shopwareUrl;
+      if (updatedCustomer.shopwareVersion !== undefined) payload.shopware_version = updatedCustomer.shopwareVersion;
+      if (updatedCustomer.shopwareAccessKey !== undefined) payload.shopware_access_key = updatedCustomer.shopwareAccessKey;
+      if (updatedCustomer.shopwareSecretKey !== undefined) payload.shopware_secret_key = updatedCustomer.shopwareSecretKey;
+
       await fetch(`/api/customers/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedCustomer)
+        body: JSON.stringify(payload)
       });
     } catch (error) {
       console.error('Error updating customer:', error);

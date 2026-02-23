@@ -30,6 +30,7 @@ db.exec(`
     phone TEXT,
     address TEXT,
     shopware_url TEXT,
+    shopware_version TEXT DEFAULT '6',
     shopware_access_key TEXT,
     shopware_secret_key TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -170,8 +171,16 @@ try {
   if (!hasShopwareUrl) {
     console.log('Migrating database: Adding shopware columns to customers table');
     db.exec('ALTER TABLE customers ADD COLUMN shopware_url TEXT');
+    db.exec("ALTER TABLE customers ADD COLUMN shopware_version TEXT DEFAULT '6'");
     db.exec('ALTER TABLE customers ADD COLUMN shopware_access_key TEXT');
     db.exec('ALTER TABLE customers ADD COLUMN shopware_secret_key TEXT');
+  } else {
+    // Check if shopware_version exists
+    const hasShopwareVersion = customerColumns.some(col => col.name === 'shopware_version');
+    if (!hasShopwareVersion) {
+        console.log('Migrating database: Adding shopware_version to customers table');
+        db.exec("ALTER TABLE customers ADD COLUMN shopware_version TEXT DEFAULT '6'");
+    }
   }
 } catch (error) {
   console.error('Migration error:', error);

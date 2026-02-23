@@ -32,8 +32,14 @@ export default function CustomerDetails() {
   );
 
   // Shopware State
-  const [shopwareConfig, setShopwareConfig] = useState({
+  const [shopwareConfig, setShopwareConfig] = useState<{
+      url: string;
+      version: '5' | '6';
+      accessKey: string;
+      secretKey: string;
+  }>({
       url: '',
+      version: '6',
       accessKey: '',
       secretKey: ''
   });
@@ -62,6 +68,7 @@ export default function CustomerDetails() {
       });
       setShopwareConfig({
           url: foundCustomer.shopwareUrl || '',
+          version: foundCustomer.shopwareVersion || '6',
           accessKey: foundCustomer.shopwareAccessKey || '',
           secretKey: foundCustomer.shopwareSecretKey || ''
       });
@@ -91,6 +98,7 @@ export default function CustomerDetails() {
       if (!customer) return;
       await updateCustomer(customer.id, {
           shopwareUrl: shopwareConfig.url,
+          shopwareVersion: shopwareConfig.version,
           shopwareAccessKey: shopwareConfig.accessKey,
           shopwareSecretKey: shopwareConfig.secretKey
       });
@@ -637,6 +645,17 @@ export default function CustomerDetails() {
                         </h3>
                         <div className="space-y-4">
                             <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Shopware Version</label>
+                                <select 
+                                    value={shopwareConfig.version} 
+                                    onChange={(e) => setShopwareConfig({...shopwareConfig, version: e.target.value as '5' | '6'})}
+                                    className="w-full border border-gray-300 rounded p-2 text-sm"
+                                >
+                                    <option value="6">Shopware 6</option>
+                                    <option value="5">Shopware 5</option>
+                                </select>
+                            </div>
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Shop URL</label>
                                 <input 
                                     type="text" 
@@ -647,7 +666,7 @@ export default function CustomerDetails() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Client ID</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{shopwareConfig.version === '6' ? 'Client ID' : 'Benutzername (API User)'}</label>
                                 <input 
                                     type="text" 
                                     value={shopwareConfig.accessKey} 
@@ -656,7 +675,7 @@ export default function CustomerDetails() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Client Secret</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{shopwareConfig.version === '6' ? 'Client Secret' : 'API Key'}</label>
                                 <input 
                                     type="password" 
                                     value={shopwareConfig.secretKey} 
