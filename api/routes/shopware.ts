@@ -157,8 +157,25 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                         if (!p.imageUrl) {
                             const details = await getShopware5ArticleDetails(baseUrl, customer.shopware_access_key, customer.shopware_secret_key, p.id);
                             if (details && details.images && details.images.length > 0) {
-                                // Update the product object in the main array by reference
-                                p.imageUrl = details.images[0].link;
+                                // Find the main image (main === 1) or take the first one
+                                const mainImage = details.images.find((img: any) => img.main === 1) || details.images[0];
+                                
+                                // Robust URL extraction strategy
+                                if (mainImage.link) {
+                                    p.imageUrl = mainImage.link;
+                                } else if (mainImage.media?.path) {
+                                    p.imageUrl = mainImage.media.path;
+                                } else if (mainImage.path) {
+                                    // Fallback: Construct URL from path and extension
+                                    // Shopware 5 standard media path: /media/image/{name}.{extension}
+                                    const ext = mainImage.extension || 'jpg';
+                                    const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+                                    p.imageUrl = `${cleanBaseUrl}/media/image/${mainImage.path}.${ext}`;
+                                }
+                                
+                                console.log(`[Shopware 5 Sync] Image resolved for ${p.name}: ${p.imageUrl}`);
+                            } else {
+                                console.log(`[Shopware 5 Sync] No images found for ${p.name} in details.`);
                             }
                         }
                     }));
