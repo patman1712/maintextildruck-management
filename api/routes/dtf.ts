@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import path from 'path';
 import fs from 'fs-extra';
 import { PDFDocument, PDFPage, degrees } from 'pdf-lib';
+import potpack from 'potpack'; // We will use potpack for better nesting if possible, or implement a Shelf/Guillotine
 import { UPLOAD_DIR } from './upload.js';
 import { DATA_DIR } from '../db.js';
 
@@ -28,6 +29,108 @@ interface Item {
     pageIndex?: number;
 }
 
+// Simple Guillotine Bin Packing
+// We maintain a list of free rectangles.
+interface Rect {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+class GuillotinePacker {
+    width: number;
+    height: number;
+    freeRects: Rect[];
+
+    constructor(width: number, height: number) {
+        this.width = width;
+        this.height = height;
+        this.freeRects = [{ x: 0, y: 0, w: width, h: height }];
+    }
+
+    fit(w: number, h: number): { x: number, y: number } | null {
+        // Find best free rect (Best Area Fit or Best Short Side Fit)
+        // Let's use Best Area Fit (Smallest free rect that fits the item)
+        // Or "Bottom-Left" rule: pick rect with smallest Y, then smallest X.
+        
+        // We want to fill Height first ("erst in der höhe").
+        // So we should prioritize rects with small X (leftmost column)?
+        // No, if we fill Height first, we fill the strip at X=0 first.
+        // So we prioritize Rects with smallest X.
+        // If multiple rects at same X, pick smallest Y.
+        
+        // Let's sort freeRects by X primary, Y secondary.
+        this.freeRects.sort((a, b) => {
+            if (Math.abs(a.x - b.x) > 1) return a.x - b.x; // Smallest X first
+            return a.y - b.y; // Smallest Y first
+        });
+
+        for (let i = 0; i < this.freeRects.length; i++) {
+            const rect = this.freeRects[i];
+            if (w <= rect.w && h <= rect.h) {
+                // Fits!
+                const fitX = rect.x;
+                const fitY = rect.y;
+                
+                // Split the rect
+                this.splitFreeRect(rect, i, w, h);
+                return { x: fitX, y: fitY };
+            }
+        }
+        return null;
+    }
+
+    splitFreeRect(freeRect: Rect, index: number, w: number, h: number) {
+        // Guillotine Split: Split the remaining space into two rectangles.
+        // We can split Horizontally or Vertically.
+        // Horizontal Split: (Top-Left is used).
+        // Remaining: Right strip (free.w - w, h) AND Bottom strip (free.w, free.h - h).
+        // Wait, "Guillotine" means we cut the rect all the way across.
+        
+        // Option 1 (Split Horizontal Axis):
+        // New Rect 1 (Right): x + w, y, free.w - w, h
+        // New Rect 2 (Bottom): x, y + h, free.w, free.h - h  <-- This spans full width
+        
+        // Option 2 (Split Vertical Axis):
+        // New Rect 1 (Right): x + w, y, free.w - w, free.h <-- This spans full height
+        // New Rect 2 (Bottom): x, y + h, w, free.h - h
+        
+        // We want to fill HEIGHT first (Vertical strip).
+        // So we prefer Option 2?
+        // If we choose Option 2, we create a long vertical strip on the right.
+        // And a small gap below the item.
+        // The small gap below is available for next item.
+        // The long strip on right is available for when the column is full.
+        // This encourages filling the column (gap below) first.
+        
+        // Let's use Option 2 (Vertical Split).
+        
+        const usedRect = freeRect;
+        this.freeRects.splice(index, 1); // Remove used
+        
+        // New Rect Right
+        if (usedRect.w > w) {
+            this.freeRects.push({
+                x: usedRect.x + w,
+                y: usedRect.y,
+                w: usedRect.w - w,
+                h: usedRect.h
+            });
+        }
+        
+        // New Rect Bottom
+        if (usedRect.h > h) {
+            this.freeRects.push({
+                x: usedRect.x,
+                y: usedRect.y + h,
+                w: w, // Only width of item
+                h: usedRect.h - h
+            });
+        }
+    }
+}
+
 router.post('/generate', async (req: Request, res: Response) => {
     try {
         const { rollWidthMm, rollLengthMm, paddingMm, files } = req.body as DTFGenerateRequest;
@@ -45,9 +148,6 @@ router.post('/generate', async (req: Request, res: Response) => {
             originalUrl: string
         }[] = [];
 
-        // Flatten quantity: if qty=3, add 3 items to the packing list
-        // Add padding to dimensions for packing
-        // Convert mm to points: 1 mm = 2.83465 points
         const paddingPoints = (paddingMm || 0) * 2.83465;
         const rollWidthPoints = rollWidthMm * 2.83465;
         const maxPageHeightPoints = rollLengthMm > 0 ? rollLengthMm * 2.83465 : 14400; // ~5 meters if 0
@@ -114,344 +214,55 @@ router.post('/generate', async (req: Request, res: Response) => {
             return;
         }
 
-        // 2. Perform Bin Packing
+        // 2. Perform Bin Packing (Guillotine)
+        // Sort items: Widest First usually works best for Strip Packing to minimize gaps?
+        // Or Largest Area?
+        // User said: "schau mal bei den 3 logos neben der 17 ist viel platz"
+        // This implies small items should fill gaps.
+        // Sorting by Height Descending is good for "Level" packing.
+        // Sorting by Width Descending is good for filling width.
+        // Let's try Width Descending to place big items first, then small items fill gaps.
+        itemsToPack.sort((a, b) => b.w - a.w);
+
+        let pages: Item[][] = [];
+        let currentPageItems: Item[] = [];
+        let packer = new GuillotinePacker(rollWidthPoints, maxPageHeightPoints);
         let currentPageIndex = 0;
-        let shelves: { y: number, height: number, freeWidth: number, items: Item[] }[] = [];
-        let columns: { x: number, width: number, freeHeight: number, items: Item[] }[] = [];
-        
-        // Helper to find shelf (Row-based packing)
-        const placeItemRowFirst = (item: Item) => {
-            // Try to fit in existing shelves on current page
-            for (const shelf of shelves) {
-                if (item.w <= shelf.freeWidth) {
-                    item.x = rollWidthPoints - shelf.freeWidth; 
-                    item.y = shelf.y;
-                    item.pageIndex = currentPageIndex;
-                    
-                    shelf.freeWidth -= item.w;
-                    shelf.items.push(item);
-                    return true;
-                }
+
+        for (const item of itemsToPack) {
+            if (item.w > rollWidthPoints) {
+                console.warn("Item wider than roll width, skipping");
+                continue;
             }
+            if (item.h > maxPageHeightPoints) {
+                console.warn("Item taller than page height, skipping");
+                continue;
+            }
+
+            let pos = packer.fit(item.w, item.h);
             
-            // New shelf needed
-            const shelfHeight = item.h;
-            
-            // Check if shelf fits on page
-            // Calculate current max Y used by shelves
-            const currentMaxY = shelves.length > 0 ? shelves[shelves.length - 1].y + shelves[shelves.length - 1].height : 0;
-            
-            if (currentMaxY + shelfHeight > maxPageHeightPoints) {
+            if (!pos) {
+                // Page full, start new page
+                pages.push(currentPageItems);
+                currentPageItems = [];
                 currentPageIndex++;
-                shelves = [];
+                packer = new GuillotinePacker(rollWidthPoints, maxPageHeightPoints);
+                pos = packer.fit(item.w, item.h);
             }
-            
-            const startY = shelves.length > 0 ? shelves[shelves.length - 1].y + shelves[shelves.length - 1].height : 0;
-            
-            const newShelf = {
-                y: startY,
-                height: shelfHeight,
-                freeWidth: rollWidthPoints - item.w,
-                items: [item]
-            };
-            
-            item.x = 0;
-            item.y = startY;
-            item.pageIndex = currentPageIndex;
-            
-            shelves.push(newShelf);
-            return true;
-        };
 
-        // Helper to find column (Column-based packing, fill height first)
-        const placeItemColumnFirst = (item: Item) => {
-            // New logic v2:
-            // User says "genau falsch rum" (exactly wrong way around).
-            // Previous attempt: Height = Fixed Roll Width, Width = Variable.
-            // If that is "wrong way around", then:
-            // Width = Fixed Roll Width (as standard).
-            // Height = Variable (up to Roll Length).
-            
-            // "die breite soll immer genau so sein wie die angeben sind" (Width must be exactly as specified).
-            // User Input "Breite" (e.g. 55cm).
-            // User Input "Länge" (e.g. 100cm).
-            
-            // So: PDF Width = 55cm (Fixed).
-            // PDF Height = 100cm (Max) or less if not used.
-            
-            // "rollenbreite soll die datei nach unten sein" -> This confused me.
-            // Maybe "nach unten" means the vertical dimension on the screen/paper?
-            // If "Breite" is "nach unten", then Width is Height?
-            // But if I did that and it was "wrong", then "Breite" is Width!
-            
-            // So let's go back to Standard:
-            // PDF Width = Roll Width (Fixed).
-            // PDF Height = Variable (up to Max Length).
-            
-            // Packing Logic:
-            // "probiere die logos wenn möglich erst in der höhe anzuordnen dann in der breite"
-            // Fill Y axis first?
-            // In a fixed width page, filling Y first means creating columns.
-            // Column 1 fills top-to-bottom. Then Column 2 starts to the right.
-            
-            // This requires the page height to be known/fixed?
-            // "die länge soll so sein das die maximal breite eingehalten wird" (Length should be such that max width is kept??)
-            // This sentence is still cryptic.
-            // Maybe: "The Length (Height of PDF) should be minimized?"
-            // "wird weniger gebraucht. gibt man die datei schmaler aus." -> "Schmaler" = Narrower (Width) or Shorter (Height)?
-            // Usually "Schmal" = Width. "Kurz" = Height.
-            // If "Schmaler" means Width, then the Width is variable?
-            
-            // Let's try the other interpretation of "Falsch rum":
-            // Maybe they want:
-            // PDF Width = Variable (up to 55cm).
-            // PDF Height = Fixed (100cm).
-            
-            // But "Rollenbreite" usually implies the fixed hardware constraint.
-            // A printer has a 60cm roll. You cannot print wider.
-            // So one dimension MUST be fixed to 55cm.
-            
-            // If my previous "Landscape" attempt (Height=55, Width=Variable) was wrong.
-            // Then it must be "Portrait" (Width=55, Height=Variable).
-            
-            // So let's revert to Portrait Mode logic but with Column Filling?
-            // If Width is Fixed (55cm) and Height is Variable (up to 100cm).
-            // And we want to fill Y first ("erst in der höhe").
-            // We fill down to 100cm. Then start new column at right?
-            // If we start new column at right, we consume Width.
-            // Width is fixed 55cm.
-            // So we fill columns within the 55cm width.
-            
-            // This is exactly what `placeItemColumnFirst` does if we set:
-            // Page Height = 100cm (Fixed Limit).
-            // Page Width = 55cm (Fixed Limit).
-            
-            // But wait, "wird weniger gebraucht. gibt man die datei schmaler aus."
-            // If we use less space, make it smaller.
-            // If we fill columns (Y), we use full Height (100cm) first?
-            // Then we use Width?
-            // If we only need 1 column of 10cm width, the PDF should be 10cm wide?
-            // But 100cm high?
-            
-            // Or does "erst in der höhe" mean:
-            // Stack items vertically (Row 1, Row 2...) -> This is standard "Shelf" / Row packing.
-            // Shelf packing fills X (Width) first!
-            // Item 1 at 0,0. Item 2 at w1, 0.
-            // When row full, go to Y+h.
-            
-            // If User wants "Vertical" packing:
-            // Item 1 at 0,0. Item 2 at 0, h1.
-            // When column full (Height limit), go to X+w.
-            
-            // This requires a Height Limit.
-            // User Input "Länge" (e.g. 100cm) IS the Height Limit.
-            
-            // So:
-            // PDF Width = 55cm (Max/Fixed).
-            // PDF Height = 100cm (Max).
-            // Packing: Column First (Fill Y).
-            // Output Size:
-            // If we only use 30cm Width, should PDF be 30cm wide? Yes ("schmaler ausgeben").
-            // If we only use 50cm Height, should PDF be 50cm high?
-            // "die breite soll immer genau so sein wie die angeben sind" -> Width MUST be 55cm?
-            // If Width must be 55cm, then "schmaler" makes no sense unless they mean Height?
-            
-            // Let's assume:
-            // Rollenbreite (55cm) = PDF WIDTH. Fixed? Or Max?
-            // User says "Breite soll immer genau so sein". -> Fixed 55cm Width.
-            // User says "wird weniger gebraucht. gibt man die datei schmaler aus." -> This contradicts "Fixed".
-            // Unless "Breite" in their mind is the other dimension (Height)?
-            
-            // Let's look at "die datei dann immer genau falsch rum an".
-            // If I produced a Landscape PDF (W=Variable, H=55) and it was wrong.
-            // Then they want a Portrait PDF (W=55, H=Variable).
-            
-            // "die datei hat auch nicht die fixe höhe von 55 die ich eingeben habe".
-            // I produced H=55.
-            // If they say "it didn't have the fixed height of 55", maybe they checked the Width?
-            // Or maybe my previous code produced H=Auto because of a bug?
-            // In my previous code: `pageHeight = rollWidthPoints;` (Fixed).
-            // So it should have been 55cm high.
-            
-            // If they say "hat nicht die fixe höhe", maybe they mean it SHOULD have been 55cm WIDE?
-            // And they call 55cm "Height"? ("Rollenbreite soll die Datei nach unten sein" -> Width extends downwards?)
-            
-            // Let's try the Portrait orientation again (W=55, H=Auto).
-            // But maybe "Rollenbreite" (55) is meant to be the Height?
-            // If I produced H=55 and they say it's wrong, maybe they wanted W=55.
-            
-            // Let's go with the most standard print logic:
-            // Roll Width = PDF Width.
-            // Roll Length = PDF Height.
-            
-            // User input:
-            // Breite: 55.
-            // Länge: 100.
-            
-            // My Proposal:
-            // PDF Width = 55cm.
-            // PDF Height = Variable (up to 100cm).
-            // Packing: Fill Y (Height) first (Columns).
-            
-            // Wait, "Breite soll immer genau so sein".
-            // So PDF Width = 55cm Fixed.
-            // "wird weniger gebraucht, gibt man die datei schmaler aus".
-            // If Width is fixed 55cm, it cannot be narrower.
-            // So "Schmaler" MUST refer to Height (Length).
-            
-            // So:
-            // PDF Width = 55cm (Fixed).
-            // PDF Height = Minimized (Auto).
-            // Packing: If "erst in der höhe", we fill columns.
-            // Item 1 (0,0). Item 2 (0, h1).
-            // This fills Height quickly.
-            // This makes the file Long/Tall.
-            // If we want to minimize Height, we should fill Rows (Shelf) first?
-            // Item 1 (0,0). Item 2 (w1, 0).
-            // This fills Width. Keeps Height small.
-            
-            // User said: "probiere die logos wenn möglich erst in der höhe anzuordnen dann in der breite"
-            // This explicitly requests Column Filling.
-            // Why? Maybe to optimize cutting or material usage on a roll that is 55cm wide?
-            // If I fill Y first, I get a long strip on the left side of the 55cm roll.
-            // The rest of the 55cm width is empty.
-            // If I cut that strip, I save the rest of the roll width?
-            // Yes, that makes sense for expensive foil.
-            
-            // So:
-            // PDF Width = 55cm (Max).
-            // PDF Height = 100cm (Max/Constraint).
-            // Packing: Fill Y first (Column).
-            // Result: A filled column on the left.
-            // PDF Dimensions:
-            // Should the PDF be full 55cm wide? Or cropped to content?
-            // "Breite soll immer genau so sein wie angegeben" -> PDF Width = 55cm.
-            // "Länge soll so sein das die maximal breite eingehalten wird" -> Length (Height) is result?
-            // "wird weniger gebraucht. gibt man die datei schmaler aus."
-            // This is the contradiction.
-            // Maybe "Breite" = Length?
-            
-            // Let's try:
-            // PDF Width = 55cm (Fixed).
-            // PDF Height = Variable.
-            // Packing = Column First (Fill Y up to Limit).
-            
-            // Let's implement this Standard Portrait Column mode.
-            
-            const PAGE_WIDTH_FIXED = rollWidthPoints;
-            const PAGE_HEIGHT_MAX = rollLengthMm > 0 ? rollLengthMm * 2.83465 : 14400;
-
-            // Try to fit in existing columns on current page
-             for (const col of columns) {
-                if (item.h <= col.freeHeight) {
-                    item.x = col.x;
-                    // item.y is relative to top?
-                    // Let's use standard top-down accumulation
-                    // We need to store currentY in column
-                    
-                    // col.freeHeight is strictly space remaining.
-                    // We need to know WHERE to place.
-                    // Let's add `currentY` to column state.
-                    
-                    // Hack: calculate y from freeHeight?
-                    // No, freeHeight doesn't tell us start pos if we have max height.
-                    // We need `col.y`.
-                    
-                    // Let's fix the column structure type implicitly by logic change?
-                    // I can't change interface easily here without larger refactor.
-                    // I will use `maxPageHeightPoints - col.freeHeight` as `y`.
-                    // This assumes `freeHeight` started at `maxPageHeightPoints`.
-                    // Yes.
-                    
-                    item.y = PAGE_HEIGHT_MAX - col.freeHeight; 
-                    item.pageIndex = currentPageIndex;
-                    
-                    col.freeHeight -= item.h;
-                    col.items.push(item);
-                    return true;
-                }
-            }
-            
-            // New column needed
-            // Check if fits in Width
-            const currentMaxX = columns.length > 0 ? columns[columns.length - 1].x + columns[columns.length - 1].width : 0;
-            
-            // User says: "nur wenn nichts mehr hinpasst geh in die breite"
-            // This means we fill Y first (Column). If Y full, we create new Column (X).
-            // This is already what we do.
-            
-            if (currentMaxX + item.w > PAGE_WIDTH_FIXED) {
-                // Page full (width-wise)
-                // "geh in die breite" might mean: extend the page width?
-                // BUT User said "Breite soll immer genau so sein wie die angeben sind" (Fixed Width).
-                
-                // So if Page Full, we must create new Page.
-                currentPageIndex++;
-                columns = [];
-            }
-            
-            const startX = columns.length > 0 ? columns[columns.length - 1].x + columns[columns.length - 1].width : 0;
-            
-            const newCol = {
-                x: startX,
-                width: item.w,
-                freeHeight: PAGE_HEIGHT_MAX - item.h,
-                items: [item]
-            };
-            
-            item.x = startX;
-            item.y = 0;
-            item.pageIndex = currentPageIndex;
-            
-            columns.push(newCol);
-            return true;
-        };
-
-        if (rollLengthMm > 0) {
-            // FIXED SHEET MODE (User Request: "Genau falsch rum" fixed)
-            // Roll Width = PDF Width (Fixed)
-            // Roll Length = PDF Height (Max)
-            
-            // "erst in der höhe anzuordnen dann in der breite" -> Fill Columns (Y first)
-            
-            // Sort by HEIGHT descending for column packing efficiency? 
-            // Or Width descending to fit widest items first?
-            // Usually Width descending is better for strip packing.
-            itemsToPack.sort((a, b) => b.w - a.w);
-            
-            for (const item of itemsToPack) {
-                if (item.w > rollWidthPoints) {
-                    console.warn("Item wider than roll width, skipping or rotate?");
-                    continue;
-                }
-                if (item.h > (rollLengthMm * 2.83465)) {
-                     console.warn("Item taller than roll length, skipping");
-                     continue;
-                }
-                placeItemColumnFirst(item);
-            }
-        } else {
-            // ROLL MODE (Infinite length): Use Row-First Packing (Shelf)
-            // Standard Portrait: Width is Fixed (RollWidth), Height Grows
-            // Sort by HEIGHT descending to minimize vertical waste
-            itemsToPack.sort((a, b) => b.h - a.h);
-            
-            for (const item of itemsToPack) {
-                if (item.w > rollWidthPoints) {
-                    console.warn("Item wider than roll width, skipping");
-                    continue;
-                }
-                placeItemRowFirst(item);
+            if (pos) {
+                item.x = pos.x;
+                item.y = pos.y;
+                item.pageIndex = currentPageIndex;
+                currentPageItems.push(item);
+            } else {
+                console.error("Item could not fit even in new page!", item);
             }
         }
-
-        // Group by page index
-        const pages: Item[][] = [];
-        itemsToPack.forEach(item => {
-            if (item.pageIndex === undefined) return;
-            if (!pages[item.pageIndex]) pages[item.pageIndex] = [];
-            pages[item.pageIndex].push(item);
-        });
+        
+        if (currentPageItems.length > 0) {
+            pages.push(currentPageItems);
+        }
 
         // 3. Create Output PDF
         const outputPdf = await PDFDocument.create();
@@ -466,26 +277,17 @@ router.post('/generate', async (req: Request, res: Response) => {
             const pageItems = pages[pIdx];
             if (!pageItems || pageItems.length === 0) continue;
             
-            let pageWidth = 0;
+            let pageWidth = rollWidthPoints;
             let pageHeight = 0;
             
             if (rollLengthMm > 0) {
                  // FIXED SHEET MODE (Portrait)
-                 // Width = Roll Width (Fixed)
-                 // Height = User requested "auch 56cm höhe auche auch wenn leerraum dabei ist"
-                 // "nur wenn nichts mehr hinpasst geh in die breite" -> This means fill full page height first.
-                 
-                 // If page is full, we create new page.
-                 // So Page Height should be FIXED to Max Length (e.g. 56cm).
-                 
-                 pageHeight = maxPageHeightPoints; 
-                 pageWidth = rollWidthPoints;
+                 // Height is FIXED to Max Length as requested ("auch 56cm höhe")
+                 pageHeight = maxPageHeightPoints;
             } else {
-                 // Portrait Mode
-                 // Width = Fixed Roll Width
+                 // ROLL MODE
                  // Height = Used Height
                  const maxY = pageItems.reduce((max, item) => Math.max(max, (item.y || 0) + item.h), 0);
-                 pageWidth = rollWidthPoints;
                  pageHeight = maxY;
             }
 
