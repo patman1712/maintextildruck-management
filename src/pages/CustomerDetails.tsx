@@ -980,37 +980,67 @@ export default function CustomerDetails() {
                                 />
                             </div>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                        <div className="flex-1 overflow-y-auto p-4">
                             {filteredPrintFilesForAssign.length > 0 ? (
-                                filteredPrintFilesForAssign.map((file, idx) => (
-                                    <button 
-                                        key={idx}
-                                        onClick={() => handleAssignFile(file)}
-                                        className="w-full flex items-center p-3 hover:bg-gray-50 border border-gray-100 rounded text-left group"
-                                    >
-                                        <div className="h-10 w-10 bg-gray-100 rounded flex items-center justify-center mr-3 border border-gray-200 overflow-hidden">
-                                            {file.thumbnail ? (
-                                                <img src={file.thumbnail} className="h-full w-full object-contain" />
-                                            ) : (
-                                                <Printer size={16} className="text-gray-400" />
-                                            )}
-                                        </div>
-                                        <div className="flex-1 min-w-0 mr-4">
-                                            <div className="font-medium text-sm text-gray-900 truncate">{file.customName || file.name}</div>
-                                            <div className="text-xs text-gray-500">{new Date(file.orderDate).toLocaleDateString()}</div>
-                                        </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                    {filteredPrintFilesForAssign.map((file, idx) => {
+                                        const displayThumb = file.thumbnail || file.url;
+                                        const isAssigned = editingProduct?.files.some(f => f.file_url === file.url);
                                         
-                                        {editingProduct?.files.some(f => f.file_url === file.url) ? (
-                                            <span className="text-green-600 text-xs font-bold flex items-center"><CheckCircle size={14} className="mr-1"/> Zugewiesen</span>
-                                        ) : (
-                                            <div className="opacity-0 group-hover:opacity-100 text-blue-600 text-sm font-medium">
-                                                Auswählen
+                                        return (
+                                            <div 
+                                                key={idx} 
+                                                onClick={() => handleAssignFile(file)}
+                                                className={`
+                                                    cursor-pointer rounded-lg border p-2 relative group hover:shadow-md transition-all
+                                                    ${isAssigned ? 'border-green-500 bg-green-50 ring-1 ring-green-500' : 'border-gray-200 hover:border-red-300'}
+                                                `}
+                                            >
+                                                <div className="aspect-square bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden relative">
+                                                    {displayThumb ? (
+                                                        <img 
+                                                            src={displayThumb} 
+                                                            alt="" 
+                                                            className="w-full h-full object-contain" 
+                                                            onError={(e) => {
+                                                                e.currentTarget.style.display = 'none';
+                                                                e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
+                                                            }} 
+                                                        />
+                                                    ) : null}
+                                                    
+                                                    <div className={`fallback-icon ${displayThumb ? 'hidden' : ''} flex items-center justify-center w-full h-full absolute inset-0`}>
+                                                        {file.name.toLowerCase().endsWith('.pdf') ? (
+                                                            <FileText className="text-red-500 h-10 w-10" />
+                                                        ) : (
+                                                            <Printer className="text-gray-300 h-10 w-10" />
+                                                        )}
+                                                    </div>
+
+                                                    {isAssigned && (
+                                                        <div className="absolute inset-0 bg-green-500/10 flex items-center justify-center">
+                                                            <div className="bg-green-500 text-white rounded-full p-1 shadow-sm">
+                                                                <CheckCircle size={20} />
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                
+                                                <p className="text-xs font-medium truncate mb-0.5 text-gray-800" title={file.customName || file.name}>
+                                                    {file.customName || file.name}
+                                                </p>
+                                                <p className="text-[10px] text-gray-500 truncate">
+                                                    {new Date(file.orderDate).toLocaleDateString()}
+                                                </p>
                                             </div>
-                                        )}
-                                    </button>
-                                ))
+                                        );
+                                    })}
+                                </div>
                             ) : (
-                                <div className="text-center py-8 text-gray-500">Keine passende Datei gefunden.</div>
+                                <div className="text-center py-12 text-gray-500">
+                                    <Printer size={48} className="mx-auto text-gray-300 mb-4" />
+                                    <p>Keine passenden Druckdaten gefunden.</p>
+                                </div>
                             )}
                         </div>
                       </>
