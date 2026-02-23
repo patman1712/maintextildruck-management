@@ -482,16 +482,17 @@ router.post('/generate', async (req: Request, res: Response) => {
                 if (item.rotated) {
                     // Manually apply rotation using PDF operators because drawPage rotation option is unreliable in this version
                     // Save Graphics State
-                    page.pushOperators(PDFOperator.of('q'));
+                    page.pushOperators(PDFOperator.of('q' as any));
                     
                     // Translate to Anchor Point (Top-Left of the box)
                     // The box is at [drawX, drawY] with dimensions [source.height, source.width]
                     // We want to anchor at the top-left of this box: (drawX, drawY + source.width)
-                    page.pushOperators(PDFOperator.of('cm', [1, 0, 0, 1, drawX, drawY + source.width]));
+                    // PDFOperator.of expects args as array of specific types, we can use 'as any' to bypass for numbers
+                    page.pushOperators(PDFOperator.of('cm' as any, [1, 0, 0, 1, drawX, drawY + source.width] as any));
                     
                     // Rotate -90 degrees (270 degrees)
                     // -90 deg rotation matrix: [0, -1, 1, 0, 0, 0]
-                    page.pushOperators(PDFOperator.of('cm', [0, -1, 1, 0, 0, 0]));
+                    page.pushOperators(PDFOperator.of('cm' as any, [0, -1, 1, 0, 0, 0] as any));
                     
                     // Draw page at (0,0) relative to the transformed coordinate system
                     page.drawPage(embeddedPage, {
@@ -502,7 +503,7 @@ router.post('/generate', async (req: Request, res: Response) => {
                     });
                     
                     // Restore Graphics State
-                    page.pushOperators(PDFOperator.of('Q'));
+                    page.pushOperators(PDFOperator.of('Q' as any));
                 } else {
                     page.drawPage(embeddedPage, {
                         x: drawX,
