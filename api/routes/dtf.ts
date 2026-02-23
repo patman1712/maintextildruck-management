@@ -403,6 +403,11 @@ router.post('/generate', async (req: Request, res: Response) => {
             }
         }
 
+        const pdfBytes = await outputPdf.save();
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const outputFilename = `DTF_Job_${timestamp}.pdf`;
+        const outputPath = path.join(UPLOAD_DIR, outputFilename);
+
         await fs.writeFile(outputPath, pdfBytes);
 
         // Generate Thumbnail for the output PDF
