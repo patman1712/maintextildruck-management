@@ -692,16 +692,6 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                 </select>
                             </div>
                             <div className="lg:col-span-3">
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikelname / Farbe</label>
-                                <input 
-                                    type="text" 
-                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                    placeholder="z.B. Premium Hoodie - Navy"
-                                    value={newItem.itemName}
-                                    onChange={(e) => setNewItem({...newItem, itemName: e.target.value})}
-                                />
-                            </div>
-                            <div className="lg:col-span-2">
                                 <label className="block text-xs font-medium text-gray-700 mb-1">Auftragsnummer (Optional)</label>
                                 <input 
                                     type="text" 
@@ -709,6 +699,16 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                     placeholder="z.B. 2026-0012"
                                     value={newItem.manualOrderNumber}
                                     onChange={(e) => setNewItem({...newItem, manualOrderNumber: e.target.value})}
+                                />
+                            </div>
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikel Nr./ Artikelname / Farbe</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                    placeholder="z.B. Premium Hoodie - Navy"
+                                    value={newItem.itemName}
+                                    onChange={(e) => setNewItem({...newItem, itemName: e.target.value})}
                                 />
                             </div>
                             <div className="lg:col-span-2">
