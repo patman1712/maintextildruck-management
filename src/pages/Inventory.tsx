@@ -424,7 +424,13 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     const itemsByOrder: Record<string, typeof itemsToSend> = {};
     itemsToSend.forEach(item => {
         // Special display for Manual Order
-        const displayTitle = item.orderId === 'inventory-manual' ? 'Lagerbestellung' : item.orderTitle;
+        let displayTitle = item.orderTitle;
+        if (item.orderId === 'inventory-manual') {
+            displayTitle = 'Lagerbestellung';
+        } else if (item.orderNumber) {
+            displayTitle = item.orderNumber;
+        }
+
         if (!itemsByOrder[displayTitle]) itemsByOrder[displayTitle] = [];
         itemsByOrder[displayTitle].push(item);
     });
