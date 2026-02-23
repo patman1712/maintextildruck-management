@@ -376,8 +376,16 @@ router.post('/generate', async (req: Request, res: Response) => {
             // Check if fits in Width
             const currentMaxX = columns.length > 0 ? columns[columns.length - 1].x + columns[columns.length - 1].width : 0;
             
+            // User says: "nur wenn nichts mehr hinpasst geh in die breite"
+            // This means we fill Y first (Column). If Y full, we create new Column (X).
+            // This is already what we do.
+            
             if (currentMaxX + item.w > PAGE_WIDTH_FIXED) {
                 // Page full (width-wise)
+                // "geh in die breite" might mean: extend the page width?
+                // BUT User said "Breite soll immer genau so sein wie die angeben sind" (Fixed Width).
+                
+                // So if Page Full, we must create new Page.
                 currentPageIndex++;
                 columns = [];
             }
@@ -464,14 +472,13 @@ router.post('/generate', async (req: Request, res: Response) => {
             if (rollLengthMm > 0) {
                  // FIXED SHEET MODE (Portrait)
                  // Width = Roll Width (Fixed)
-                 // Height = Used Height (Minimized) or Fixed Max?
+                 // Height = User requested "auch 56cm höhe auche auch wenn leerraum dabei ist"
+                 // "nur wenn nichts mehr hinpasst geh in die breite" -> This means fill full page height first.
                  
-                 // User: "wird weniger gebraucht. gibt man die datei schmaler aus."
-                 // If "Schmaler" means Height (shorter file):
-                 const maxY = pageItems.reduce((max, item) => Math.max(max, (item.y || 0) + item.h), 0);
-                 pageHeight = maxY; 
+                 // If page is full, we create new page.
+                 // So Page Height should be FIXED to Max Length (e.g. 56cm).
                  
-                 // But Width must be "genau so sein wie die angeben sind" (Fixed Roll Width)
+                 pageHeight = maxPageHeightPoints; 
                  pageWidth = rollWidthPoints;
             } else {
                  // Portrait Mode
