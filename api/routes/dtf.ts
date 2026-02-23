@@ -50,66 +50,126 @@ class GuillotinePacker {
     }
 
     fit(w: number, h: number): { x: number, y: number } | null {
-        // Find best free rect (Best Area Fit or Best Short Side Fit)
-        // Let's use Best Area Fit (Smallest free rect that fits the item)
-        // Or "Bottom-Left" rule: pick rect with smallest Y, then smallest X.
+        // Find best free rect
+        // Best Short Side Fit (BSSF) usually performs better for packing density than Best Area Fit
+        // BSSF: Minimize min(free.w - w, free.h - h)
+        // Or Best Long Side Fit (BLSF)
         
-        // We want to fill Height first ("erst in der höhe").
-        // So we should prioritize rects with small X (leftmost column)?
-        // No, if we fill Height first, we fill the strip at X=0 first.
-        // So we prioritize Rects with smallest X.
-        // If multiple rects at same X, pick smallest Y.
+        // Let's use a heuristic:
+        // Try to place the item such that it leaves the most usable space.
         
-        // Let's sort freeRects by X primary, Y secondary.
+        // We want to minimize Roll Width usage?
+        // User said: "am wenigstens rollenbreite benutzt wird".
+        // This means we want to pack tight to the left? Or tight to the top?
+        // If Roll Width is the X axis (55cm), and Length is Y axis (infinite or 56cm).
+        // If we want to minimize Roll Width usage (X), we should pack tight to X=0?
+        // Wait, Roll Width is fixed 55cm. We can't "use less" of it unless we cut the paper.
+        // Usually "use less roll width" means "use less roll LENGTH" (Y axis)?
+        // "eben war hätte man noch 2-3 cm sparen können" -> implied height/length savings.
+        
+        // If we want to save Length (Y), we should pack as tight as possible in Y.
+        // We should pick the spot with smallest Y first.
+        
+        // Sort free rects by Y primary, X secondary.
         this.freeRects.sort((a, b) => {
-            if (Math.abs(a.x - b.x) > 1) return a.x - b.x; // Smallest X first
-            return a.y - b.y; // Smallest Y first
+             if (Math.abs(a.y - b.y) > 1) return a.y - b.y; // Topmost first
+             return a.x - b.x; // Leftmost first
         });
+
+        // Find the first rect where it fits (First Fit with Top-Left preference)
+        // Or find Best Fit?
+        // Best Area Fit tends to be robust.
+        
+        let bestRectIndex = -1;
+        let bestScore = Number.MAX_VALUE;
 
         for (let i = 0; i < this.freeRects.length; i++) {
             const rect = this.freeRects[i];
             if (w <= rect.w && h <= rect.h) {
-                // Fits!
-                const fitX = rect.x;
-                const fitY = rect.y;
+                // Score: Minimize Y?
+                // Or minimize wasted area in this rect?
+                // BSSF (Best Short Side Fit)
+                const leftoverHoriz = Math.abs(rect.w - w);
+                const leftoverVert = Math.abs(rect.h - h);
+                const shortSide = Math.min(leftoverHoriz, leftoverVert);
                 
-                // Split the rect
-                this.splitFreeRect(rect, i, w, h);
-                return { x: fitX, y: fitY };
+                // If we want to pack tight to top (min Y), we should penalize high Y.
+                // But `this.freeRects` is already sorted by Y.
+                // So the first one we find is the topmost available.
+                // Let's just take the first one that fits (First Fit).
+                // First Fit on Y-sorted list is extremely effective for minimizing height.
+                
+                bestRectIndex = i;
+                break;
             }
         }
+
+        if (bestRectIndex !== -1) {
+            const rect = this.freeRects[bestRectIndex];
+            const fitX = rect.x;
+            const fitY = rect.y;
+            this.splitFreeRect(rect, bestRectIndex, w, h);
+            return { x: fitX, y: fitY };
+        }
+        
         return null;
     }
 
     splitFreeRect(freeRect: Rect, index: number, w: number, h: number) {
-        // Guillotine Split: Split the remaining space into two rectangles.
-        // We can split Horizontally or Vertically.
-        // Horizontal Split: (Top-Left is used).
-        // Remaining: Right strip (free.w - w, h) AND Bottom strip (free.w, free.h - h).
-        // Wait, "Guillotine" means we cut the rect all the way across.
+        // Guillotine Split strategy affects packing quality.
+        // Split Horizontally (cut across Width) or Vertically (cut across Height)?
+        // If we split Horizontally:
+        //   New Rect Right: x+w, y, free.w-w, h
+        //   New Rect Bottom: x, y+h, free.w, free.h-h
+        //   -> This creates a full-width strip at the bottom. Good for minimizing height?
         
-        // Option 1 (Split Horizontal Axis):
-        // New Rect 1 (Right): x + w, y, free.w - w, h
-        // New Rect 2 (Bottom): x, y + h, free.w, free.h - h  <-- This spans full width
+        // If we split Vertically:
+        //   New Rect Right: x+w, y, free.w-w, free.h
+        //   New Rect Bottom: x, y+h, w, free.h-h
+        //   -> This creates a full-height strip on the right.
         
-        // Option 2 (Split Vertical Axis):
-        // New Rect 1 (Right): x + w, y, free.w - w, free.h <-- This spans full height
-        // New Rect 2 (Bottom): x, y + h, w, free.h - h
+        // To minimize Height (Length) usage:
+        // We want to fill the current Y-level as much as possible before moving down.
+        // So we prefer to leave space to the RIGHT of the item available for others.
+        // So we should perform a Vertical Split? (Create a tall strip on right).
+        // Or Horizontal Split? (Create a strip on right restricted to item height).
         
-        // We want to fill HEIGHT first (Vertical strip).
-        // So we prefer Option 2?
-        // If we choose Option 2, we create a long vertical strip on the right.
-        // And a small gap below the item.
-        // The small gap below is available for next item.
-        // The long strip on right is available for when the column is full.
-        // This encourages filling the column (gap below) first.
+        // "Shorter Axis Split" rule (SAS) often works well.
+        // Split along the shorter axis of the leftover space.
         
-        // Let's use Option 2 (Vertical Split).
+        const wRem = freeRect.w - w;
+        const hRem = freeRect.h - h;
+        
+        let splitHorizontal = false;
+        
+        // Heuristic:
+        // If we want to fill rows (minimize height), we prefer creating free space to the RIGHT.
+        // Horizontal Split creates: Rect Right (Height = Item Height). Rect Bottom (Width = Free Width).
+        // Vertical Split creates: Rect Right (Height = Free Height). Rect Bottom (Width = Item Width).
+        
+        // If we Vertical Split, we create a large free rect on the right (x+w, y, free.w-w, free.h).
+        // This large rect allows placing another tall item next to current item.
+        // This is good for filling width.
+        
+        // If we Horizontal Split, we create a rect on right (x+w, y, free.w-w, h).
+        // This forces next item to be same height or shorter to fit there.
+        // But we have a huge bottom rect.
+        
+        // Let's use Vertical Split to prioritize filling the row width.
+        // Unless remaining width is tiny.
+        
+        // Let's try "Minimize area of placed item" heuristic? No.
+        
+        // Let's stick to Vertical Split (Option 2 from before) but refine the sort order in `fit`.
+        // Vertical split maximizes the rectangle to the right, encouraging placement there.
         
         const usedRect = freeRect;
-        this.freeRects.splice(index, 1); // Remove used
+        this.freeRects.splice(index, 1); 
         
-        // New Rect Right
+        // Vertical Split (Option 2)
+        // Rect 1 (Right): x + w, y, free.w - w, free.h
+        // Rect 2 (Bottom): x, y + h, w, free.h - h
+        
         if (usedRect.w > w) {
             this.freeRects.push({
                 x: usedRect.x + w,
@@ -119,12 +179,11 @@ class GuillotinePacker {
             });
         }
         
-        // New Rect Bottom
         if (usedRect.h > h) {
             this.freeRects.push({
                 x: usedRect.x,
                 y: usedRect.y + h,
-                w: w, // Only width of item
+                w: w, 
                 h: usedRect.h - h
             });
         }
