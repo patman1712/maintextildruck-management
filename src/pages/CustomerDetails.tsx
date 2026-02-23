@@ -24,6 +24,7 @@ export default function CustomerDetails() {
   const suppliers = useAppStore((state) => state.suppliers);
   const orders = useAppStore((state) => state.orders);
   const loading = useAppStore((state) => state.loading);
+  const currentUser = useAppStore((state) => state.currentUser);
   const fetchData = useAppStore((state) => state.fetchData);
   const updateCustomer = useAppStore((state) => state.updateCustomer);
   const updateOrder = useAppStore((state) => state.updateOrder);
@@ -175,6 +176,26 @@ export default function CustomerDetails() {
           fetchProducts();
       } catch (err) {
           console.error(err);
+      }
+  };
+
+  const handleDeleteAllProducts = async () => {
+      if (!customer) return;
+      if (!confirm(`WARNUNG: Sind Sie sicher, dass Sie ALLE ${products.length} Artikel von "${customer.name}" unwiderruflich löschen möchten?`)) return;
+      if (!confirm("Dies löscht alle Artikeldaten und zugehörige Bilder. Diese Aktion kann NICHT rückgängig gemacht werden.")) return;
+
+      try {
+          const res = await fetch(`/api/products/customer/${customer.id}/all`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+              // alert(`${data.changes} Artikel wurden gelöscht.`);
+              fetchProducts();
+          } else {
+              alert('Fehler: ' + data.error);
+          }
+      } catch (err) {
+          console.error(err);
+          alert('Netzwerkfehler.');
       }
   };
 
@@ -744,18 +765,30 @@ export default function CustomerDetails() {
                             />
                         </div>
                     </div>
-                    <button 
-                        onClick={() => {
-                            setEditingProduct(null);
-                            setNewManualProduct({ name: '', productNumber: '', supplierId: '' });
-                            setShowMappingModal(true);
-                            setAssignFileMode(false);
-                        }}
-                        className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 flex items-center"
-                    >
-                        <Plus size={16} className="mr-2" />
-                        Manueller Artikel
-                    </button>
+                    <div className="flex space-x-2">
+                        {currentUser?.role === 'admin' && products.length > 0 && (
+                            <button 
+                                onClick={handleDeleteAllProducts}
+                                className="bg-white text-red-600 border border-red-200 px-4 py-2 rounded-md text-sm font-medium hover:bg-red-50 flex items-center"
+                                title="Nur für Admins: Alle Artikel löschen"
+                            >
+                                <Trash2 size={16} className="mr-2" />
+                                Alle löschen
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => {
+                                setEditingProduct(null);
+                                setNewManualProduct({ name: '', productNumber: '', supplierId: '' });
+                                setShowMappingModal(true);
+                                setAssignFileMode(false);
+                            }}
+                            className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 flex items-center"
+                        >
+                            <Plus size={16} className="mr-2" />
+                            Manueller Artikel
+                        </button>
+                    </div>
                 </div>
 
                 <div className="space-y-4">

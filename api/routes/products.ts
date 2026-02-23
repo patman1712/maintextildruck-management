@@ -33,6 +33,19 @@ router.get('/:customerId', (req: Request, res: Response) => {
     }
 });
 
+// DELETE ALL products for a customer (Admin only function)
+router.delete('/customer/:customerId/all', (req: Request, res: Response) => {
+    const { customerId } = req.params;
+    try {
+        // With ON DELETE CASCADE, this removes all related files/entries too
+        const result = db.prepare('DELETE FROM customer_products WHERE customer_id = ?').run(customerId);
+        res.json({ success: true, message: 'All products deleted', changes: result.changes });
+    } catch (error: any) {
+        console.error('Error deleting all products:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // POST create manual product
 router.post('/:customerId', (req: Request, res: Response) => {
     const { customerId } = req.params;
