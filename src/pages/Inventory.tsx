@@ -674,7 +674,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                     
                     <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                            <div className="lg:col-span-2">
+                            <div className="lg:col-span-3">
                                 <label className="block text-xs font-medium text-gray-700 mb-1">Lieferant / Shop</label>
                                 <select 
                                     className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
@@ -687,8 +687,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                     ))}
                                 </select>
                             </div>
-                            <div className="lg:col-span-2">
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikelname / Art.-Nr. / Farbe</label>
+                            <div className="lg:col-span-3">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikelname / Farbe</label>
                                 <input 
                                     type="text" 
                                     className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
@@ -697,7 +697,17 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                     onChange={(e) => setNewItem({...newItem, itemName: e.target.value})}
                                 />
                             </div>
-                            <div className="lg:col-span-1">
+                            <div className="lg:col-span-2">
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikelnummer (Optional)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                    placeholder="z.B. 12345"
+                                    value={newItem.itemNumber}
+                                    onChange={(e) => setNewItem({...newItem, itemNumber: e.target.value})}
+                                />
+                            </div>
+                            <div className="lg:col-span-2">
                                 <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Anzahl</label>
                                 <input 
                                     type="text" 
@@ -707,7 +717,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                     onChange={(e) => setNewItem({...newItem, size: e.target.value})}
                                 />
                             </div>
-                            <div className="lg:col-span-1">
+                            <div className="lg:col-span-2">
                                 <label className="block text-xs font-medium text-gray-700 mb-1">Notizen (Optional)</label>
                                 <input 
                                     type="text" 

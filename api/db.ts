@@ -133,6 +133,13 @@ try {
     console.log('Migrating database: Adding print_status to orders table');
     db.exec("ALTER TABLE orders ADD COLUMN print_status TEXT DEFAULT 'pending'");
   }
+
+  const orderItemColumns = db.prepare("PRAGMA table_info(order_items)").all() as any[];
+  const hasItemNumber = orderItemColumns.some(col => col.name === 'item_number');
+  if (!hasItemNumber) {
+    console.log('Migrating database: Adding item_number to order_items table');
+    db.exec('ALTER TABLE order_items ADD COLUMN item_number TEXT');
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }
