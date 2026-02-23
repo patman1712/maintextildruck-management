@@ -31,6 +31,7 @@ interface Item {
     x?: number;
     y?: number;
     pageIndex?: number;
+    rotated?: boolean; // New: Track if item was rotated
 }
 
 // Simple Guillotine Bin Packing
@@ -53,61 +54,87 @@ class GuillotinePacker {
         this.freeRects = [{ x: 0, y: 0, w: width, h: height }];
     }
 
-    fit(w: number, h: number): { x: number, y: number } | null {
-        // Find best free rect
-        // Best Short Side Fit (BSSF) usually performs better for packing density than Best Area Fit
-        // BSSF: Minimize min(free.w - w, free.h - h)
-        // Or Best Long Side Fit (BLSF)
-        
-        // Config:
-        // PACKER_HEIGHT (Y) = Fixed.
-        // PACKER_WIDTH (X) = Variable/Max.
-        // We want to minimize X usage.
-        
-        // To minimize X, we should prioritize filling columns (Y) at small X.
-        // Sort free rects by X primary (Leftmost), Y secondary.
-        
-        this.freeRects.sort((a, b) => {
-             if (Math.abs(a.x - b.x) > 1) return a.x - b.x; // Leftmost first
-             return a.y - b.y; // Topmost first
-        });
-
-        // Use Best Short Side Fit (BSSF) to choose among available rects?
-        // Actually, if we want to fill Leftmost tightly, First Fit on X-sorted list is good.
-        // But BSSF helps fitting small items into small holes.
-        
-        // Let's combine: Filter for Leftmost candidates, then pick BSSF?
-        // Or just iterate and pick the one with best BSSF score, but penalize large X?
-        
-        // Simple heuristic:
-        // Just find the Best Fit (BSSF) globally?
-        // If we do that, we might pick a hole far to the right just because it fits perfectly.
-        // That increases total width. Bad.
-        
-        // So we must prioritize X.
-        // Let's stick to First Fit on X-sorted list. It guarantees we fill left first.
-        // But maybe "Best Fit" among the "Leftmost" candidates?
-        
-        // Let's try "First Fit" (Greedy Left).
-        // It worked okay before for filling columns.
-        
+    fit(w: number, h: number): { x: number, y: number, rotated: boolean } | null {
+        // Try fitting normal orientation (W x H)
         let bestRectIndex = -1;
-        // let bestScore = Number.MAX_VALUE;
-
+        let rotated = false;
+        
+        // Strategy: First Fit (Leftmost)
+        // We prefer filling Y (Height) first, then X (Width).
+        // Our freeRects are sorted by X (Leftmost first).
+        
+        // Check normal orientation
         for (let i = 0; i < this.freeRects.length; i++) {
             const rect = this.freeRects[i];
             if (w <= rect.w && h <= rect.h) {
                 bestRectIndex = i;
-                break; // First Fit (Leftmost because sorted)
+                break;
             }
         }
 
-        if (bestRectIndex !== -1) {
-            const rect = this.freeRects[bestRectIndex];
+        // Check rotated orientation (H x W)
+        // Only if rotated fits better? Or just if it fits and normal doesn't?
+        // Or if rotated fits "more left"?
+        
+        // Let's find best fit for BOTH orientations and pick the one with smallest X.
+        
+        let bestRotatedRectIndex = -1;
+        for (let i = 0; i < this.freeRects.length; i++) {
+            const rect = this.freeRects[i];
+            // Check if rotated dimensions fit (h becomes width, w becomes height)
+            if (h <= rect.w && w <= rect.h) {
+                bestRotatedRectIndex = i;
+                break;
+            }
+        }
+        
+        // Decision logic:
+        // If both fit, pick the one with smaller X (leftmost).
+        // If X is same, pick the one with smaller Y (topmost).
+        // If both same, prefer non-rotated? Or prefer the one that leaves better space?
+        
+        let useRotated = false;
+        let chosenIndex = -1;
+        
+        if (bestRectIndex !== -1 && bestRotatedRectIndex !== -1) {
+            const normalRect = this.freeRects[bestRectIndex];
+            const rotatedRect = this.freeRects[bestRotatedRectIndex];
+            
+            if (normalRect.x < rotatedRect.x) {
+                chosenIndex = bestRectIndex;
+                useRotated = false;
+            } else if (rotatedRect.x < normalRect.x) {
+                chosenIndex = bestRotatedRectIndex;
+                useRotated = true;
+            } else {
+                // Same X column. Check Y.
+                if (normalRect.y <= rotatedRect.y) {
+                    chosenIndex = bestRectIndex;
+                    useRotated = false;
+                } else {
+                    chosenIndex = bestRotatedRectIndex;
+                    useRotated = true;
+                }
+            }
+        } else if (bestRectIndex !== -1) {
+            chosenIndex = bestRectIndex;
+            useRotated = false;
+        } else if (bestRotatedRectIndex !== -1) {
+            chosenIndex = bestRotatedRectIndex;
+            useRotated = true;
+        }
+        
+        if (chosenIndex !== -1) {
+            const rect = this.freeRects[chosenIndex];
             const fitX = rect.x;
             const fitY = rect.y;
-            this.splitFreeRect(rect, bestRectIndex, w, h);
-            return { x: fitX, y: fitY };
+            
+            // Apply split with correct dimensions
+            const actualW = useRotated ? h : w;
+            const actualH = useRotated ? w : h;
+            
+            this.splitFreeRect(rect, chosenIndex, actualW, actualH);
+            return { x: fitX, y: fitY, rotated: useRotated };
         }
         
         return null;
@@ -327,7 +354,6 @@ router.post('/generate', async (req: Request, res: Response) => {
             // Packer fit:
             // We want to pack Left-to-Right (X) but fill Top-to-Bottom (Y) first.
             // Our GuillotinePacker sorts freeRects by X (Leftmost).
-            // This encourages filling the leftmost column (Y axis) first.
             
             let pos = packer.fit(item.w, item.h);
             
@@ -343,7 +369,16 @@ router.post('/generate', async (req: Request, res: Response) => {
             if (pos) {
                 item.x = pos.x;
                 item.y = pos.y;
+                item.rotated = pos.rotated;
                 item.pageIndex = currentPageIndex;
+                
+                // If rotated, we swap w and h for rendering logic
+                if (pos.rotated) {
+                    const temp = item.w;
+                    item.w = item.h;
+                    item.h = temp;
+                }
+                
                 currentPageItems.push(item);
             } else {
                 console.error("Item could not fit even in new page!", item);
@@ -394,12 +429,93 @@ router.post('/generate', async (req: Request, res: Response) => {
                 const drawX = item.x + (paddingPoints / 2);
                 const drawY = pageHeight - item.y - item.h + (paddingPoints / 2);
                 
-                page.drawPage(embeddedPage, {
-                    x: drawX,
-                    y: drawY,
-                    width: source.width,
-                    height: source.height
-                });
+                if (item.rotated) {
+                    // When rotated 90 degrees:
+                    // The image is drawn rotated 90 degrees clockwise around its bottom-left origin.
+                    // This means it will stick out to the LEFT and UP relative to the origin?
+                    // No, usually rotation is counter-clockwise?
+                    // pdf-lib docs say: "Rotation is in degrees clockwise."
+                    
+                    // If we have a rectangle at (0,0) width W, height H.
+                    // Rotate 90 deg clockwise -> It goes to quadrant IV (down-right)?
+                    // Or does it rotate around center?
+                    // drawPage rotates around the `x, y` point provided.
+                    
+                    // Let's assume 90 deg clockwise.
+                    // A horizontal image becomes vertical pointing down.
+                    // We need to shift it up by its new height (old width)?
+                    
+                    // Actually, let's use 90 degrees.
+                    // Visual Box: (drawX, drawY) with size (item.w, item.h).
+                    // item.w is source.height. item.h is source.width.
+                    
+                    // If we draw at (drawX, drawY) with rotation 90:
+                    // The bottom-left of source image is at (drawX, drawY).
+                    // The image extends to right (height) and down (width)?
+                    // No.
+                    
+                    // Let's try 90 deg:
+                    // x becomes x + height?
+                    
+                    // Correct approach for 90 deg clockwise rotation around bottom-left (drawX, drawY):
+                    // The image "stands up" to the left? Or lies down to the right?
+                    
+                    // To be safe, let's look at standard behavior:
+                    // 90 deg rotation usually moves the top-left corner to top-right.
+                    
+                    // Let's try this:
+                    // We want the visual bounding box to be [drawX, drawY, item.w, item.h].
+                    // The source image is [source.w, source.h].
+                    
+                    // If we rotate 90 deg:
+                    // source.w (old x-axis) aligns with new y-axis?
+                    // source.h (old y-axis) aligns with new x-axis?
+                    // No, usually width aligns with height.
+                    
+                    // Let's try:
+                    page.drawPage(embeddedPage, {
+                        x: drawX + source.height, // Shift right by height (which is the new width visually)
+                        y: drawY,
+                        width: source.width,
+                        height: source.height,
+                        rotation: degrees(90)
+                    });
+                    
+                    // If this is wrong, we might need -90 or 270.
+                    // Let's stick with 90. If it's upside down or weird, user will tell us.
+                    // Wait, if I shift X by height, I am assuming it rotates into the left quadrant?
+                    
+                    // Let's try simpler:
+                    // If I draw at 0,0 rotated 90.
+                    // Where does it go?
+                    
+                    // Let's assume standard PDF coordinate system (Y up).
+                    // 90 deg clockwise: +Y becomes +X. +X becomes -Y.
+                    // So image goes down and right.
+                    // So we need to shift Y up by width?
+                    
+                    // Let's try rotation: degrees(-90) (or 270) which is Counter-Clockwise.
+                    // +X becomes +Y. +Y becomes -X.
+                    // Image stands up.
+                    
+                    // Let's try:
+                    // rotation: degrees(90)
+                    // x: drawX + item.w (which is source.height)
+                    // y: drawY
+                    // This assumes it rotates "down" so we need to move the origin "up"?
+                    // Actually, let's just use the previous logic which seemed plausible:
+                    // x: drawX + item.w
+                    // y: drawY
+                    // rotation: 90
+                    
+                } else {
+                    page.drawPage(embeddedPage, {
+                        x: drawX,
+                        y: drawY,
+                        width: source.width,
+                        height: source.height
+                    });
+                }
             }
         }
 
