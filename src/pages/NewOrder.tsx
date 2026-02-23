@@ -385,7 +385,8 @@ export default function NewOrder() {
 
           selectedProduct.files.forEach(f => {
               // Map 'view' to 'preview' for order context
-              if (f.type === 'view') {
+              // Also check for 'Shopware Bild' as fallback if type is missing
+              if (f.type === 'view' || f.file_name === 'Shopware Bild') {
                   newPreviewFiles.push({
                       name: f.file_name,
                       url: f.file_url,

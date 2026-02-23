@@ -312,7 +312,7 @@ export default function EditOrder() {
           const newAttachments = selectedProduct.files.map(f => ({
               name: f.file_name,
               url: f.file_url,
-              type: (f.type === 'view' ? 'preview' : 'print') as 'preview' | 'print' | 'vector',
+              type: (f.type === 'view' || f.file_name === 'Shopware Bild' ? 'preview' : 'print') as 'preview' | 'print' | 'vector',
               thumbnail: f.thumbnail_url
           }));
           
