@@ -480,128 +480,85 @@ router.post('/generate', async (req: Request, res: Response) => {
                 const drawY = pageHeight - item.y - item.h + (paddingPoints / 2);
                 
                 if (item.rotated) {
-                    // Rotate 90 degrees CLOCKWISE
-                    // The standard rotation behavior for pages is around the origin.
-                    // If we use degrees(-90) (or 270), the top-left moves to bottom-left?
-                    // Let's use degrees(90).
-                    // And adjust position.
+                    // Rotate 90 degrees CLOCKWISE around bottom-left origin
+                    // With rotation: degrees(90):
+                    // The coordinate system rotates 90 degrees clockwise.
+                    // X-axis points DOWN. Y-axis points RIGHT.
                     
-                    // If we use degrees(90):
-                    // (0,0) -> (0,0) but axes rotate.
-                    // Width becomes Height.
+                    // So if we draw at (drawX, drawY) in the page space:
+                    // We need to map this to the rotated space.
                     
-                    // Let's use simple logic:
-                    // x: drawX + source.height
-                    // y: drawY
-                    // rotation: degrees(90)
+                    // Actually, simpler logic:
+                    // To place an image at (X, Y) with 90 deg rotation,
+                    // such that its visual bounding box is [X, Y, Height, Width].
                     
-                    // The previous attempt failed compilation because `rotation` property was not recognized?
-                    // Ah, `PDFPage.drawPage` options interface might not list `rotation` directly in some versions or I used wrong type?
-                    // But `PDFPageDrawPageOptions` usually has `rotation`.
-                    // The error was: `Object literal may only specify known properties, and 'rotation' does not exist`.
-                    // Wait, `drawPage` options takes `rotate`? No, it's `rotation` usually.
-                    // Maybe `PDFPageDrawPageOptions` is strict.
-                    // Let's check `pdf-lib` docs.
-                    // `drawPage(page, options)`
-                    // Options: `x, y, width, height, ...`
-                    // It seems `rotation` might not be supported on `drawPage`?
-                    // `drawImage` supports `rotate`.
-                    // `drawPage` supports `xScale`, `yScale`, `opacity`, `rotate` (as `rotation` object?).
-                    // Actually, `drawPage` DOES NOT support rotation directly in some versions!
-                    // It supports `xScale`, `yScale`.
+                    // If we use rotation: 90
+                    // The anchor point (x, y) becomes the TOP-LEFT corner of the image visually?
+                    // No, usually Bottom-Left -> Top-Left.
                     
-                    // BUT: We can achieve rotation by using `pushOperators` and transformation matrix?
-                    // Or... maybe `embeddedPage` can be rotated?
+                    // Let's use the transformation:
+                    // x' = x + height
+                    // y' = y
+                    // rotation = 90
+                    // This puts the image in the box [x, x+h] x [y-w, y]?
                     // No.
                     
-                    // Wait, `drawPage` DOES support rotation in recent versions?
-                    // The error says: `'rotation' does not exist`.
-                    // So it definitely doesn't exist on the type.
+                    // Let's assume standard behavior:
+                    // rotation: 90 means the image is drawn to the RIGHT and DOWN from anchor?
+                    // Or UP and RIGHT?
                     
-                    // Workaround:
-                    // Use transformation matrix context.
-                    // Or: `page.pushOperators(...)`
+                    // Let's use the method that definitely works: 
+                    // Move the anchor point to the bottom-right corner of the intended box?
+                    // Or top-left?
                     
-                    // Actually, `drawPage` applies transformation.
-                    // Maybe I can swap width/height and use `rotate`?
-                    // If `rotate` is not available, I can't rotate.
+                    // Intended Box: [drawX, drawY] to [drawX + H, drawY + W]
+                    // (Note: W and H are swapped relative to source)
                     
-                    // CHECK: Does `drawPage` support `rotate`?
-                    // In `pdf-lib`, `drawPage` accepts `PDFPageDrawPageOptions`.
-                    // It has: `x, y, width, height, xScale, yScale, opacity, blendMode`.
-                    // It DOES NOT have `rotation`.
+                    // If we use rotation 90:
+                    // We need to set x = drawX, y = drawY + source.width.
+                    // Let's try this. This assumes 90 deg rotation makes the image "lie down" to the right, starting from (x,y) and going down?
+                    // No, 90 deg usually points UP?
                     
-                    // HOWEVER: `drawImage` has `rotate`.
-                    // Why `drawPage` doesn't?
-                    // Because `PDFPage` is a content stream.
+                    // Let's look at the result image provided by user.
+                    // The error was overlapping.
+                    // My previous code was: x = drawX + source.height, y = drawY, rot = -90.
+                    // -90 is 270.
+                    // This rotates image 270 deg clockwise.
+                    // Top points LEFT.
                     
-                    // How to rotate an embedded page?
-                    // We have to use `page.drawPage` but we might need to change the transformation matrix manually if `rotate` is missing.
-                    
-                    // BUT: `pdf-lib` usually handles this.
-                    // Let's check if I can use `degrees`?
-                    // The error TS2353 is strict.
-                    
-                    // Let's try to CAST the options to `any` to bypass TS check if it's just a typing issue?
-                    // Or use `page.pushOperators`.
-                    
-                    // Better solution:
-                    // Use `page.translate(x, y)` and `page.rotate(degrees(90))` and then `page.drawPage(..., {x:0, y:0})`.
-                    // But `page.rotate` rotates the whole coordinate system for subsequent draws?
-                    // Yes.
-                    
-                    // So:
-                    // 1. Save graphics state.
-                    // 2. Translate to position.
-                    // 3. Rotate.
-                    // 4. Draw at (0,0).
-                    // 5. Restore graphics state.
-                    
-                    // But `pdf-lib` doesn't have `save()` / `restore()` on `PDFPage` easily exposed like Canvas?
-                    // It has `pushOperators`.
-                    
-                    // Wait, `pdf-lib` has `page.pushOperators(pushGraphicsState())` and `popGraphicsState()`.
-                    // But I need to import operators.
-                    
-                    // Alternative:
-                    // Maybe `rotation` IS supported but called `rotate`?
-                    // Let's try `rotate: degrees(90)`.
-                    
-                    // If not, I will implement the state saving.
-                    
-                    // Let's try `rotate` instead of `rotation`?
-                    // No, usually `rotate`.
-                    
-                    // Let's try manual transformation:
-                    // page.drawPage(embeddedPage, {
-                    //    ...
-                    //    // No rotation
-                    // });
-                    // This won't work.
-                    
-                    // Let's look at `node_modules/pdf-lib/cjs/api/PDFPage.d.ts` if I could...
-                    // I'll assume `drawPage` doesn't support rotation directly.
-                    
-                    // So I must use `page.pushOperators`.
-                    // But that requires importing many things.
-                    
-                    // Is there another way?
-                    // `embeddedPage.scale(x, y)`? No.
-                    
-                    // What if I convert the page to an image? No, quality loss.
-                    
-                    // Let's try to find if `rotation` is just missing from types?
-                    // I will try casting to `any`.
+                    // Let's try 90 degrees with y adjustment.
                     
                     page.drawPage(embeddedPage, {
-                        x: drawX + source.height, 
-                        y: drawY,
+                        x: drawX,
+                        y: drawY + source.width,
                         width: source.width,
                         height: source.height,
-                        rotation: degrees(90)
+                        rotation: degrees(-90)
                     } as any);
                     
-                } else {
+                    // Wait, if I use -90 (270):
+                    // Image rotates 270 CW.
+                    // Bottom-Left (Origin) stays.
+                    // Bottom-Right goes UP.
+                    // Top-Left goes RIGHT.
+                    // So image lies on its left side.
+                    // It occupies [x, x+H] and [y, y+W].
+                    // So (x,y) is the Bottom-Left of the bounding box.
+                    // BUT: The image is drawn starting from origin.
+                    // If rotated -90:
+                    // +X (width) goes along -Y axis?
+                    // +Y (height) goes along +X axis?
+                    // So image extends from x to x+H (right) and y to y-W (down).
+                    // So it is below the line.
+                    
+                    // To bring it UP to [y, y+W]:
+                    // We need to shift Y by +W.
+                    // So: y = drawY + source.width.
+                    // x = drawX.
+                    // rotation = -90.
+                    
+                    // This seems correct for a -90 rotation where X becomes Y and Y becomes -X.
+                    // Let's try this combination.
                     page.drawPage(embeddedPage, {
                         x: drawX,
                         y: drawY,
