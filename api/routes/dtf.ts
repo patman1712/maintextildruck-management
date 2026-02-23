@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import path from 'path';
 import fs from 'fs-extra';
-import { PDFDocument, PDFPage, degrees, pushGraphicsState, popGraphicsState, translate, rotate } from 'pdf-lib';
+import { PDFDocument, PDFPage, degrees } from 'pdf-lib';
 import potpack from 'potpack'; 
 import { UPLOAD_DIR } from './upload.js';
 import { DATA_DIR } from '../db.js';
@@ -480,21 +480,35 @@ router.post('/generate', async (req: Request, res: Response) => {
                 const drawY = pageHeight - item.y - item.h + (paddingPoints / 2);
                 
                 if (item.rotated) {
-                    // Manual rotation using graphics state
-                    page.pushOperators(
-                        pushGraphicsState(),
-                        translate(drawX, drawY + source.width),
-                        rotate(degrees(-90))
-                    );
-
+                    // Manual rotation using graphics state is not supported in this pdf-lib version directly.
+                    // We must rely on `drawPage` options which support rotation (undocumented in types but works).
+                    
+                    // Rotation 90 degrees CLOCKWISE:
+                    // Axis X -> -Y (Down)
+                    // Axis Y -> X (Right)
+                    
+                    // We want to fill box [drawX, drawY] to [drawX + source.height, drawY + source.width]
+                    // (Note: source.height is new width, source.width is new height)
+                    
+                    // To fill this box with axes (Down, Right):
+                    // We need anchor at Top-Left: (drawX, drawY + source.width)
+                    // Then draw Width (source.width) Down? NO.
+                    // Source Width is mapped to new X-axis (Down).
+                    // Source Height is mapped to new Y-axis (Right).
+                    
+                    // So we draw source.width Down and source.height Right.
+                    // This matches the box size!
+                    
+                    // So we need anchor at (drawX, drawY + source.width).
+                    // And rotation = 90.
+                    
                     page.drawPage(embeddedPage, {
-                        x: 0,
-                        y: 0,
+                        x: drawX,
+                        y: drawY + source.width,
                         width: source.width,
-                        height: source.height
-                    });
-
-                    page.pushOperators(popGraphicsState());
+                        height: source.height,
+                        rotation: degrees(90)
+                    } as any);
                 } else {
                     page.drawPage(embeddedPage, {
                         x: drawX,
