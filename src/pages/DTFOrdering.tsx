@@ -15,8 +15,8 @@ export default function DTFOrdering() {
   }, [fetchData]);
 
   // Configuration State
-  const [rollWidth, setRollWidth] = useState(55); // in cm
-  const [rollLength, setRollLength] = useState(0); // 0 = infinite/auto
+  const [rollWidth, setRollWidth] = useState(57); // in cm
+  const [rollLength, setRollLength] = useState(200); // 0 = infinite/auto
   const [padding, setPadding] = useState(5); // in mm (gap between items)
 
   // Selection State
