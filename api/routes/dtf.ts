@@ -55,50 +55,25 @@ class GuillotinePacker {
         // BSSF: Minimize min(free.w - w, free.h - h)
         // Or Best Long Side Fit (BLSF)
         
-        // Let's use a heuristic:
-        // Try to place the item such that it leaves the most usable space.
+        // Config:
+        // PACKER_WIDTH (X) = Variable/Max. We want to minimize MAX X usage.
+        // PACKER_HEIGHT (Y) = Fixed. We want to fill this tightly.
         
-        // We want to minimize Roll Width usage?
-        // User said: "am wenigstens rollenbreite benutzt wird".
-        // This means we want to pack tight to the left? Or tight to the top?
-        // If Roll Width is the X axis (55cm), and Length is Y axis (infinite or 56cm).
-        // If we want to minimize Roll Width usage (X), we should pack tight to X=0?
-        // Wait, Roll Width is fixed 55cm. We can't "use less" of it unless we cut the paper.
-        // Usually "use less roll width" means "use less roll LENGTH" (Y axis)?
-        // "eben war hätte man noch 2-3 cm sparen können" -> implied height/length savings.
+        // So we prefer rects with smallest X (Leftmost).
+        // If same X, smallest Y (Topmost).
         
-        // If we want to save Length (Y), we should pack as tight as possible in Y.
-        // We should pick the spot with smallest Y first.
-        
-        // Sort free rects by Y primary, X secondary.
         this.freeRects.sort((a, b) => {
-             if (Math.abs(a.y - b.y) > 1) return a.y - b.y; // Topmost first
-             return a.x - b.x; // Leftmost first
+             if (Math.abs(a.x - b.x) > 1) return a.x - b.x; // Leftmost first
+             return a.y - b.y; // Topmost first
         });
 
-        // Find the first rect where it fits (First Fit with Top-Left preference)
-        // Or find Best Fit?
-        // Best Area Fit tends to be robust.
+        // Find the first rect where it fits (First Fit)
         
         let bestRectIndex = -1;
-        let bestScore = Number.MAX_VALUE;
 
         for (let i = 0; i < this.freeRects.length; i++) {
             const rect = this.freeRects[i];
             if (w <= rect.w && h <= rect.h) {
-                // Score: Minimize Y?
-                // Or minimize wasted area in this rect?
-                // BSSF (Best Short Side Fit)
-                const leftoverHoriz = Math.abs(rect.w - w);
-                const leftoverVert = Math.abs(rect.h - h);
-                const shortSide = Math.min(leftoverHoriz, leftoverVert);
-                
-                // If we want to pack tight to top (min Y), we should penalize high Y.
-                // But `this.freeRects` is already sorted by Y.
-                // So the first one we find is the topmost available.
-                // Let's just take the first one that fits (First Fit).
-                // First Fit on Y-sorted list is extremely effective for minimizing height.
-                
                 bestRectIndex = i;
                 break;
             }
@@ -116,75 +91,71 @@ class GuillotinePacker {
     }
 
     splitFreeRect(freeRect: Rect, index: number, w: number, h: number) {
-        // Guillotine Split strategy affects packing quality.
-        // Split Horizontally (cut across Width) or Vertically (cut across Height)?
+        // We want to fill columns (Y axis) first.
+        // So when we place an item, we want to create a space BELOW it (same column) 
+        // and a space to the RIGHT of it (next column).
+        
         // If we split Horizontally:
-        //   New Rect Right: x+w, y, free.w-w, h
-        //   New Rect Bottom: x, y+h, free.w, free.h-h
-        //   -> This creates a full-width strip at the bottom. Good for minimizing height?
+        //   New Rect Right: x+w, y, free.w-w, h  <-- Restricted height strip to right
+        //   New Rect Bottom: x, y+h, free.w, free.h-h <-- Full width strip at bottom
         
         // If we split Vertically:
-        //   New Rect Right: x+w, y, free.w-w, free.h
-        //   New Rect Bottom: x, y+h, w, free.h-h
-        //   -> This creates a full-height strip on the right.
+        //   New Rect Right: x+w, y, free.w-w, free.h <-- Full height strip to right
+        //   New Rect Bottom: x, y+h, w, free.h-h <-- Restricted width strip below
         
-        // To minimize Height (Length) usage:
-        // We want to fill the current Y-level as much as possible before moving down.
-        // So we prefer to leave space to the RIGHT of the item available for others.
-        // So we should perform a Vertical Split? (Create a tall strip on right).
-        // Or Horizontal Split? (Create a strip on right restricted to item height).
+        // We want to fill Y first.
+        // So we want the space BELOW the item to be available for next items in this "column".
+        // The space BELOW is `Rect Bottom`.
+        // In Vertical Split, `Rect Bottom` has width `w` (restricted).
+        // This forces next item below to fit in width `w`.
+        // This is good for "Column" packing of same-width items.
         
-        // "Shorter Axis Split" rule (SAS) often works well.
-        // Split along the shorter axis of the leftover space.
+        // However, if next item is wider, it won't fit below.
+        // But we want to fill Y first.
         
-        const wRem = freeRect.w - w;
-        const hRem = freeRect.h - h;
+        // If we use Horizontal Split:
+        // Rect Bottom spans full remaining width.
+        // This is good for "Shelf" packing (Rows).
         
-        let splitHorizontal = false;
+        // Since we treat Y as the Fixed Dimension (Height), and X as Variable (Length).
+        // We are effectively packing into a Fixed-Height Strip.
+        // We want to minimize X.
         
-        // Heuristic:
-        // If we want to fill rows (minimize height), we prefer creating free space to the RIGHT.
-        // Horizontal Split creates: Rect Right (Height = Item Height). Rect Bottom (Width = Free Width).
-        // Vertical Split creates: Rect Right (Height = Free Height). Rect Bottom (Width = Item Width).
+        // To minimize X, we should fill Y as much as possible at current X.
+        // So we want to prioritize placing items in the "strip" defined by current X.
+        // Vertical Split creates a "strip" below the item with width `w`.
+        // And a "remainder" to the right.
         
-        // If we Vertical Split, we create a large free rect on the right (x+w, y, free.w-w, free.h).
-        // This large rect allows placing another tall item next to current item.
-        // This is good for filling width.
-        
-        // If we Horizontal Split, we create a rect on right (x+w, y, free.w-w, h).
-        // This forces next item to be same height or shorter to fit there.
-        // But we have a huge bottom rect.
-        
-        // Let's use Vertical Split to prioritize filling the row width.
-        // Unless remaining width is tiny.
-        
-        // Let's try "Minimize area of placed item" heuristic? No.
-        
-        // Let's stick to Vertical Split (Option 2 from before) but refine the sort order in `fit`.
-        // Vertical split maximizes the rectangle to the right, encouraging placement there.
+        // Let's stick with Vertical Split (Option 2).
+        // Rect Right is the "rest of the roll length".
+        // Rect Bottom is the "rest of the column height".
+        // We process Rect Bottom first?
+        // Our sort order (Min X) will pick Rect Bottom (x, y+h) before Rect Right (x+w, y)
+        // because x < x+w.
+        // So we will try to fill below the item first.
         
         const usedRect = freeRect;
         this.freeRects.splice(index, 1); 
         
-        // Vertical Split (Option 2)
-        // Rect 1 (Right): x + w, y, free.w - w, free.h
-        // Rect 2 (Bottom): x, y + h, w, free.h - h
+        // Vertical Split
         
-        if (usedRect.w > w) {
-            this.freeRects.push({
-                x: usedRect.x + w,
-                y: usedRect.y,
-                w: usedRect.w - w,
-                h: usedRect.h
-            });
-        }
-        
+        // Add Rect Bottom (Priority 1 for next placement due to X sort)
         if (usedRect.h > h) {
             this.freeRects.push({
                 x: usedRect.x,
                 y: usedRect.y + h,
                 w: w, 
                 h: usedRect.h - h
+            });
+        }
+        
+        // Add Rect Right
+        if (usedRect.w > w) {
+            this.freeRects.push({
+                x: usedRect.x + w,
+                y: usedRect.y,
+                w: usedRect.w - w,
+                h: usedRect.h
             });
         }
     }
@@ -208,12 +179,27 @@ router.post('/generate', async (req: Request, res: Response) => {
         }[] = [];
 
         const paddingPoints = (paddingMm || 0) * 2.83465;
-        const rollWidthPoints = rollWidthMm * 2.83465;
-        const maxPageHeightPoints = rollLengthMm > 0 ? rollLengthMm * 2.83465 : 14400; // ~5 meters if 0
+        // User interpretation: 
+        // "Rollenbreite" (e.g. 56cm) is the FIXED HEIGHT (Y) of the PDF.
+        // "Länge" (e.g. 100cm or 0) is the MAX WIDTH (X) of the PDF.
+        
+        const rollWidthPoints = rollWidthMm * 2.83465; // User's "Height" (Fixed)
+        const rollLengthPoints = rollLengthMm > 0 ? rollLengthMm * 2.83465 : Number.MAX_VALUE; // User's "Width" (Max)
+
+        // Packer Dimension Config:
+        // Width = rollLengthPoints (Variable/Max)
+        // Height = rollWidthPoints (Fixed)
+        
+        // Note: rollLengthPoints can be infinite (Number.MAX_VALUE)
+        // Guillotine Packer needs a finite width to start with?
+        // Actually we can set it to a very large number if infinite.
+        const PACKER_WIDTH = rollLengthPoints === Number.MAX_VALUE ? 100000 : rollLengthPoints; // ~35m max width if infinite
+        const PACKER_HEIGHT = rollWidthPoints;
 
         const itemsToPack: Item[] = [];
 
         for (const file of files) {
+            // ... (file loading same)
             const filename = path.basename(file.url);
             const filePath = path.join(UPLOAD_DIR, filename);
 
@@ -274,30 +260,59 @@ router.post('/generate', async (req: Request, res: Response) => {
         }
 
         // 2. Perform Bin Packing (Guillotine)
-        // Sort items: Widest First usually works best for Strip Packing to minimize gaps?
-        // Or Largest Area?
-        // User said: "schau mal bei den 3 logos neben der 17 ist viel platz"
-        // This implies small items should fill gaps.
-        // Sorting by Height Descending is good for "Level" packing.
-        // Sorting by Width Descending is good for filling width.
-        // Let's try Width Descending to place big items first, then small items fill gaps.
-        itemsToPack.sort((a, b) => b.w - a.w);
+        // Config: 
+        // Container Height = Fixed (User RollWidth)
+        // Container Width = Variable (User RollLength)
+        
+        // We want to fill Y (Height) first, then X (Width).
+        // AND minimize X usage ("am wenigstens länge benutzt").
+        
+        // Items should be sorted?
+        // Sorting by Height Descending helps fill the fixed Height efficiently?
+        // Or Width Descending?
+        // Since Height is the constrained dimension, Best Fit Decreasing Height is usually good.
+        itemsToPack.sort((a, b) => b.h - a.h);
 
         let pages: Item[][] = [];
         let currentPageItems: Item[] = [];
-        let packer = new GuillotinePacker(rollWidthPoints, maxPageHeightPoints);
+        
+        // Initialize Packer with Swapped Dimensions logic
+        // We pack into (PACKER_WIDTH, PACKER_HEIGHT)
+        let packer = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
         let currentPageIndex = 0;
 
         for (const item of itemsToPack) {
-            if (item.w > rollWidthPoints) {
-                console.warn("Item wider than roll width, skipping");
+            if (item.h > PACKER_HEIGHT) {
+                console.warn("Item taller than fixed roll height, skipping (or rotate?)");
+                // Rotation logic could be added here: if w <= PACKER_HEIGHT, swap w/h.
+                if (item.w <= PACKER_HEIGHT) {
+                    // Rotate 90 degrees logic would require PDF rotation later.
+                    // For now just warn.
+                }
                 continue;
             }
-            if (item.h > maxPageHeightPoints) {
-                console.warn("Item taller than page height, skipping");
-                continue;
+            if (item.w > PACKER_WIDTH) {
+                 console.warn("Item wider than max length, skipping");
+                 continue;
             }
 
+            // We want to pack Left-to-Right? Or Top-to-Bottom?
+            // "erst in der höhe anzuordnen dann in der breite" -> Fill Y first.
+            // "minimize used length (X)" -> Pack tight to Left.
+            
+            // Our GuillotinePacker `fit` method sorts freeRects.
+            // We need to ensure it prioritizes:
+            // 1. Smallest X (Leftmost) -> This minimizes X usage.
+            // 2. Smallest Y (Topmost) -> This fills Y.
+            // This is already the default sort in my previous implementation:
+            // `if (Math.abs(a.x - b.x) > 1) return a.x - b.x; return a.y - b.y;`
+            
+            // Wait, in the previous tool call I changed it to `Y primary`.
+            // User complained "nicht optimal".
+            
+            // Let's change back to `X primary` (Fill columns/strips from left to right).
+            // AND use Vertical Split to preserve height for other items in the same column.
+            
             let pos = packer.fit(item.w, item.h);
             
             if (!pos) {
@@ -305,7 +320,7 @@ router.post('/generate', async (req: Request, res: Response) => {
                 pages.push(currentPageItems);
                 currentPageItems = [];
                 currentPageIndex++;
-                packer = new GuillotinePacker(rollWidthPoints, maxPageHeightPoints);
+                packer = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
                 pos = packer.fit(item.w, item.h);
             }
 
@@ -326,7 +341,6 @@ router.post('/generate', async (req: Request, res: Response) => {
         // 3. Create Output PDF
         const outputPdf = await PDFDocument.create();
         
-        // Set metadata
         outputPdf.setTitle('DTF Print Job');
         outputPdf.setSubject('Nesting Output');
         outputPdf.setProducer('MainTextildruck Manager');
@@ -336,19 +350,13 @@ router.post('/generate', async (req: Request, res: Response) => {
             const pageItems = pages[pIdx];
             if (!pageItems || pageItems.length === 0) continue;
             
-            let pageWidth = rollWidthPoints;
-            let pageHeight = 0;
+            // Determine Page Dimensions
+            // Height = Fixed (User RollWidth)
+            // Width = Used Width (Max X + W)
             
-            if (rollLengthMm > 0) {
-                 // FIXED SHEET MODE (Portrait)
-                 // Height is FIXED to Max Length as requested ("auch 56cm höhe")
-                 pageHeight = maxPageHeightPoints;
-            } else {
-                 // ROLL MODE
-                 // Height = Used Height
-                 const maxY = pageItems.reduce((max, item) => Math.max(max, (item.y || 0) + item.h), 0);
-                 pageHeight = maxY;
-            }
+            const maxX = pageItems.reduce((max, item) => Math.max(max, (item.x || 0) + item.w), 0);
+            const pageWidth = maxX; 
+            const pageHeight = rollWidthPoints;
 
             const page = outputPdf.addPage([pageWidth, pageHeight]);
             
@@ -360,9 +368,9 @@ router.post('/generate', async (req: Request, res: Response) => {
                 // Embed page
                 const [embeddedPage] = await outputPdf.embedPages(source.pdf.getPages().slice(0, 1));
                 
-                // Calculate position
-                // PDF coordinate system: (0,0) is bottom-left.
-                // Our packing (0,0) is top-left.
+                // Position:
+                // PDF Origin is Bottom-Left.
+                // Packer Origin is Top-Left (0,0).
                 
                 // x = item.x
                 // y = pageHeight - item.y - item.h
