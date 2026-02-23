@@ -821,6 +821,10 @@ export default function CustomerDetails() {
                                                 <div className="h-20 w-20 bg-gray-50 rounded border border-gray-200 overflow-hidden flex items-center justify-center">
                                                     {file.thumbnail_url ? (
                                                         <img src={file.thumbnail_url} className="w-full h-full object-contain" />
+                                                    ) : (file.file_url && (file.file_name.toLowerCase().endsWith('.png') || file.file_name.toLowerCase().endsWith('.jpg') || file.file_name.toLowerCase().endsWith('.jpeg') || file.file_name.toLowerCase().endsWith('.webp'))) ? (
+                                                        <img src={file.file_url} className="w-full h-full object-contain" />
+                                                    ) : file.file_name.toLowerCase().endsWith('.pdf') ? (
+                                                        <FileText size={24} className="text-red-500" />
                                                     ) : (
                                                         <ImageIcon size={24} className="text-gray-300" />
                                                     )}

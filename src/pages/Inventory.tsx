@@ -410,7 +410,12 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
     const selectedIds = selectedOrders[supplierId] || [];
     // Only process PENDING items for these orders
-    const itemsToSend = group.items.filter(i => selectedIds.includes(i.orderId) && i.status === 'pending');
+    const itemsToSend = group.items.filter(i => {
+        const effectiveOrderId = (i.orderId === 'inventory-manual' && i.manualOrderNumber)
+            ? `manual-${i.manualOrderNumber}`
+            : i.orderId;
+        return selectedIds.includes(effectiveOrderId) && i.status === 'pending';
+    });
 
     if (itemsToSend.length === 0) {
         alert("Bitte wählen Sie Aufträge mit offenen Positionen aus.");
@@ -494,16 +499,24 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
             // Group items by Order within this Supplier block
             const ordersInGroup: Record<string, { orderId: string, title: string, orderNumber?: string, deadline: string, items: typeof group.items }> = {};
             group.items.forEach(item => {
-                if (!ordersInGroup[item.orderId]) {
-                    ordersInGroup[item.orderId] = {
-                        orderId: item.orderId,
-                        title: item.orderTitle,
+                let groupKey = item.orderId;
+                let groupTitle = item.orderTitle;
+
+                if (item.orderId === 'inventory-manual' && item.manualOrderNumber) {
+                    groupKey = `manual-${item.manualOrderNumber}`;
+                    groupTitle = item.manualOrderNumber;
+                }
+
+                if (!ordersInGroup[groupKey]) {
+                    ordersInGroup[groupKey] = {
+                        orderId: groupKey,
+                        title: groupTitle,
                         orderNumber: item.orderNumber,
                         deadline: item.orderDeadline,
                         items: []
                     };
                 }
-                ordersInGroup[item.orderId].items.push(item);
+                ordersInGroup[groupKey].items.push(item);
             });
 
             const orderIds = Object.keys(ordersInGroup);
@@ -577,7 +590,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                 <span className="truncate">{orderGroup.orderId === 'inventory-manual' ? 'Lagerbestellung' : orderGroup.title}</span>
                                                 {!hasPending && <span className="text-xs font-normal text-green-600 bg-green-50 px-2 py-0.5 rounded shrink-0">Erledigt</span>}
                                             </h4>
-                                            {orderGroup.orderId !== 'inventory-manual' && (
+                                            {orderGroup.orderId !== 'inventory-manual' && !orderGroup.orderId.startsWith('manual-') && (
                                                 <div className="text-xs text-gray-500 flex items-center mt-0.5">
                                                     <Clock size={12} className="mr-1" />
                                                     Deadline: {new Date(orderGroup.deadline).toLocaleDateString()}
