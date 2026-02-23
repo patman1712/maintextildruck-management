@@ -282,7 +282,8 @@ export default function NewOrder() {
             name: customerName,
             email: customerEmail,
             phone: customerPhone,
-            address: customerAddress
+            address: customerAddress,
+            created_at: new Date().toISOString()
         });
     }
 

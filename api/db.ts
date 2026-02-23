@@ -29,6 +29,9 @@ db.exec(`
     email TEXT,
     phone TEXT,
     address TEXT,
+    shopware_url TEXT,
+    shopware_access_key TEXT,
+    shopware_secret_key TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -114,6 +117,20 @@ if (userCount === 0) {
   console.log('Admin user created. Username: admin, Password: admin123');
 }
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS shopware_product_mappings (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    shopware_product_id TEXT NOT NULL,
+    shopware_product_number TEXT,
+    shopware_product_name TEXT,
+    file_url TEXT NOT NULL,
+    file_name TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(customer_id) REFERENCES customers(id)
+  )
+`);
+
 // Migration: Add customer_id if it doesn't exist (for existing databases)
 try {
   const columns = db.prepare("PRAGMA table_info(orders)").all() as any[];
@@ -146,6 +163,15 @@ try {
   if (!hasManualOrderNumber) {
     console.log('Migrating database: Adding manual_order_number to order_items table');
     db.exec('ALTER TABLE order_items ADD COLUMN manual_order_number TEXT');
+  }
+
+  const customerColumns = db.prepare("PRAGMA table_info(customers)").all() as any[];
+  const hasShopwareUrl = customerColumns.some(col => col.name === 'shopware_url');
+  if (!hasShopwareUrl) {
+    console.log('Migrating database: Adding shopware columns to customers table');
+    db.exec('ALTER TABLE customers ADD COLUMN shopware_url TEXT');
+    db.exec('ALTER TABLE customers ADD COLUMN shopware_access_key TEXT');
+    db.exec('ALTER TABLE customers ADD COLUMN shopware_secret_key TEXT');
   }
 } catch (error) {
   console.error('Migration error:', error);

@@ -13,6 +13,10 @@ export interface Customer {
   email: string;
   phone: string;
   address: string;
+  shopwareUrl?: string;
+  shopwareAccessKey?: string;
+  shopwareSecretKey?: string;
+  created_at: string;
 }
 
 export interface User {
@@ -127,6 +131,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       const suppliersRes = await fetch('/api/suppliers');
       const suppliersData = await suppliersRes.json();
 
+      // Map Customers
+      const mappedCustomers: Customer[] = (customersData.data || []).map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
+        address: c.address,
+        shopwareUrl: c.shopware_url,
+        shopwareAccessKey: c.shopware_access_key,
+        shopwareSecretKey: c.shopware_secret_key,
+        created_at: c.created_at
+      }));
+
       // Map Supabase data to frontend interface
       const mappedOrders: Order[] = (ordersData.data || []).map((o: any) => ({
         id: o.id,
@@ -178,7 +195,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       if (customersData.success && ordersData.success) {
         set({ 
-          customers: customersData.data, 
+          customers: mappedCustomers, 
           orders: mappedOrders,
           suppliers: mappedSuppliers
         });

@@ -18,6 +18,7 @@ import uploadRoutes, { UPLOAD_DIR } from './routes/upload.js'
 import dtfRoutes from './routes/dtf.js'
 import userRoutes from './routes/users.js'
 import supplierRoutes from './routes/suppliers.js'
+import shopwareRoutes from './routes/shopware.js'
 
 // for esm mode
 const __filename = fileURLToPath(import.meta.url)
@@ -42,6 +43,7 @@ app.use('/api/upload', uploadRoutes)
 app.use('/api/dtf', dtfRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/suppliers', supplierRoutes)
+app.use('/api/shopware', shopwareRoutes)
 
 // Serve uploads
 app.use('/uploads', express.static(UPLOAD_DIR))
