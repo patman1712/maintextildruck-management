@@ -69,31 +69,46 @@ export default function AdminSettings() {
         if (!confirm(`Die gewählte Nummer (${manualNextNumber}) ist kleiner oder gleich der nächsten freien Nummer (${nextOrderNumber}).\nDies hat normalerweise keinen Effekt, da das System immer die höchste existierende Nummer + 1 nimmt.\n\nMöchten Sie trotzdem fortfahren? (Dies ist nur sinnvoll, wenn Sie alle höheren Aufträge gelöscht haben)`)) {
             return;
         }
-    } else {
-        if (confirm(`Möchten Sie den Nummernkreis wirklich auf ${manualNextNumber} setzen?\nDazu wird ein technischer Platzhalter-Auftrag mit der Nummer ${currentYear}-${String(manualNextNumber - 1).padStart(4, '0')} erstellt.`)) {
-            // Create placeholder order
-            const seedNumber = manualNextNumber - 1;
-            const seedOrderNumber = `${currentYear}-${String(seedNumber).padStart(4, '0')}`;
-            
-            await fetch('/api/orders', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    id: `seed-${seedOrderNumber}`,
-                    title: 'System-Platzhalter für Nummernkreis',
-                    order_number: seedOrderNumber,
-                    customer_name: 'System',
-                    status: 'archived', // Hidden
-                    deadline: new Date().toISOString(),
-                    description: 'Dieser Auftrag dient nur dazu, den Nummernkreis zu definieren. Bitte nicht löschen, solange keine höheren Nummern existieren.',
-                    files: [],
-                    employees: []
-                })
-            });
-            
-            fetchData();
-            setIsEditing(false);
-        }
+    }
+    
+    // Special handling for "reset to 1" or explicit setting
+    // We should delete any existing "seed" orders for this year to avoid conflicts or sticking to high numbers
+    // BUT we can't easily delete via API without knowing IDs.
+    // However, if we want to set it to X, we can create a seed X-1.
+    // If there are real orders > X, this won't help unless we delete them.
+    // Assuming the user knows what they are doing (cleared DB or just starting).
+    
+    if (confirm(`Möchten Sie den Nummernkreis wirklich auf ${manualNextNumber} setzen?\nDazu wird ein technischer Platzhalter-Auftrag mit der Nummer ${currentYear}-${String(manualNextNumber - 1).padStart(4, '0')} erstellt.`)) {
+        // Create placeholder order
+        const seedNumber = manualNextNumber - 1;
+        const seedOrderNumber = `${currentYear}-${String(seedNumber).padStart(4, '0')}`;
+        
+        // If we are resetting to 1, seed is 0.
+        // If there are NO orders, this works.
+        // If there are orders, max+1 will still be high.
+        
+        await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: `seed-${seedOrderNumber}-${Date.now()}`, // Unique ID to allow multiple attempts/overwrites
+                title: 'System-Platzhalter für Nummernkreis',
+                order_number: seedOrderNumber,
+                customer_name: 'System',
+                status: 'archived', // Hidden
+                deadline: new Date().toISOString(),
+                description: 'Dieser Auftrag dient nur dazu, den Nummernkreis zu definieren. Bitte nicht löschen, solange keine höheren Nummern existieren.',
+                files: [],
+                employees: []
+            })
+        });
+        
+        // Force refresh
+        await fetchData();
+        
+        // Recalculate locally to show immediate effect if possible, but the effect depends on max number.
+        // If orders exist with higher numbers, the displayed "Next Number" will NOT change down.
+        setIsEditing(false);
     }
   };
 
