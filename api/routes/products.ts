@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import db from '../db.js';
+import fs from 'fs';
+import path from 'path';
 
 const router = Router();
 
@@ -37,9 +39,44 @@ router.get('/:customerId', (req: Request, res: Response) => {
 router.delete('/customer/:customerId/all', (req: Request, res: Response) => {
     const { customerId } = req.params;
     try {
-        // With ON DELETE CASCADE, this removes all related files/entries too
+        // 1. Find all files associated with products of this customer
+        const files = db.prepare(`
+            SELECT f.file_url, f.thumbnail_url 
+            FROM customer_product_files f
+            JOIN customer_products p ON f.product_id = p.id
+            WHERE p.customer_id = ?
+        `).all(customerId) as { file_url: string, thumbnail_url?: string }[];
+
+        // 2. Delete physical files
+        files.forEach(file => {
+            // Check file_url
+            if (file.file_url && file.file_url.startsWith('/uploads/')) {
+                const filePath = path.join(process.cwd(), 'data', file.file_url);
+                try {
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                    }
+                } catch (e) {
+                    console.error('Failed to delete file:', filePath, e);
+                }
+            }
+            
+            // Check thumbnail_url
+            if (file.thumbnail_url && file.thumbnail_url.startsWith('/uploads/')) {
+                const thumbPath = path.join(process.cwd(), 'data', file.thumbnail_url);
+                try {
+                    if (fs.existsSync(thumbPath)) {
+                        fs.unlinkSync(thumbPath);
+                    }
+                } catch (e) {
+                    console.error('Failed to delete thumbnail:', thumbPath, e);
+                }
+            }
+        });
+
+        // 3. With ON DELETE CASCADE, this removes all related files/entries too
         const result = db.prepare('DELETE FROM customer_products WHERE customer_id = ?').run(customerId);
-        res.json({ success: true, message: 'All products deleted', changes: result.changes });
+        res.json({ success: true, message: 'All products and files deleted', changes: result.changes });
     } catch (error: any) {
         console.error('Error deleting all products:', error);
         res.status(500).json({ success: false, error: error.message });
