@@ -318,7 +318,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
   // Group items by Supplier -> then list items with order info
   const itemsBySupplier = useMemo(() => {
-    const grouped: Record<string, { supplier: Supplier | undefined, items: (OrderItem & { orderTitle: string, orderDeadline: string })[] }> = {};
+    const grouped: Record<string, { supplier: Supplier | undefined, items: (OrderItem & { orderTitle: string, orderNumber?: string, orderDeadline: string })[] }> = {};
     
     orders.forEach(order => {
         if (order.orderItems) {
@@ -336,6 +336,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                 grouped[item.supplierId].items.push({
                     ...item,
                     orderTitle: order.title,
+                    orderNumber: order.orderNumber,
                     orderDeadline: order.deadline
                 });
             });
@@ -481,12 +482,13 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
             const supplier = group.supplier;
             
             // Group items by Order within this Supplier block
-            const ordersInGroup: Record<string, { orderId: string, title: string, deadline: string, items: typeof group.items }> = {};
+            const ordersInGroup: Record<string, { orderId: string, title: string, orderNumber?: string, deadline: string, items: typeof group.items }> = {};
             group.items.forEach(item => {
                 if (!ordersInGroup[item.orderId]) {
                     ordersInGroup[item.orderId] = {
                         orderId: item.orderId,
                         title: item.orderTitle,
+                        orderNumber: item.orderNumber,
                         deadline: item.orderDeadline,
                         items: []
                     };
@@ -561,6 +563,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                         )}
                                         <div className="flex-1 min-w-0">
                                             <h4 className="font-bold text-gray-900 text-sm flex flex-wrap items-center gap-2">
+                                                {orderGroup.orderNumber && <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs font-mono">{orderGroup.orderNumber}</span>}
                                                 <span className="truncate">{orderGroup.orderId === 'inventory-manual' ? 'Lagerbestellung' : orderGroup.title}</span>
                                                 {!hasPending && <span className="text-xs font-normal text-green-600 bg-green-50 px-2 py-0.5 rounded shrink-0">Erledigt</span>}
                                             </h4>

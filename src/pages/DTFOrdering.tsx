@@ -380,7 +380,10 @@ export default function DTFOrdering() {
                         {openOrdersWithFiles.map(order => (
                             <div key={order.id} className="border border-blue-100 bg-blue-50 p-3 rounded-md flex justify-between items-center">
                                 <div className="min-w-0 flex-1 mr-2">
-                                    <p className="font-medium text-blue-900 truncate text-sm" title={order.title}>{order.title}</p>
+                                    <p className="font-medium text-blue-900 truncate text-sm" title={order.title}>
+                                        {order.orderNumber && <span className="text-blue-400 mr-1 font-mono text-xs">{order.orderNumber}</span>}
+                                        {order.title}
+                                    </p>
                                     <p className="text-xs text-blue-700 truncate">{order.customerName}</p>
                                     <p className="text-[10px] text-blue-500">{new Date(order.createdAt).toLocaleDateString('de-DE')}</p>
                                 </div>

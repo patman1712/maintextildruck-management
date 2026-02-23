@@ -107,7 +107,10 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
                   >
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="text-sm font-medium text-gray-900">{order.title}</span>
+                        <span className="text-sm font-medium text-gray-900">
+                            {order.orderNumber && <span className="text-gray-400 mr-2 text-xs font-mono">{order.orderNumber}</span>}
+                            {order.title}
+                        </span>
                         <span className="text-sm text-gray-500 flex items-center mt-1">
                           <User size={14} className="mr-1" /> {order.customerName}
                         </span>
