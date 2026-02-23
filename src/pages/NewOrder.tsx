@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 
 export default function NewOrder() {
   const navigate = useNavigate();
+  const orders = useAppStore((state) => state.orders); // Needed for generating order number
   const addOrder = useAppStore((state) => state.addOrder);
   const customers = useAppStore((state) => state.customers);
   const addCustomer = useAppStore((state) => state.addCustomer);
@@ -26,8 +27,41 @@ export default function NewOrder() {
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   
   // Form States
+  const [orderNumber, setOrderNumber] = useState(""); // State for automatic order number
   const [title, setTitle] = useState("");
   const [deadline, setDeadline] = useState("");
+
+  // Calculate next order number on mount or when orders change
+  useEffect(() => {
+    const currentYear = new Date().getFullYear();
+    const prefix = `${currentYear}-`;
+    
+    // Find all orders for current year that follow the pattern YYYY-XXXX
+    const currentYearOrders = orders.filter(o => 
+        (o.orderNumber && o.orderNumber.startsWith(prefix)) || 
+        (o.createdAt && o.createdAt.startsWith(String(currentYear)))
+    );
+
+    let maxNum = 0;
+    
+    currentYearOrders.forEach(o => {
+        if (o.orderNumber && o.orderNumber.startsWith(prefix)) {
+            const numPart = parseInt(o.orderNumber.split('-')[1]);
+            if (!isNaN(numPart) && numPart > maxNum) {
+                maxNum = numPart;
+            }
+        }
+    });
+
+    // If no order numbers found, maybe count orders? 
+    // But better to stick to explicit numbers. If it's the first one, maxNum is 0.
+    
+    const nextNum = maxNum + 1;
+    const nextOrderNumber = `${prefix}${String(nextNum).padStart(4, '0')}`;
+    
+    setOrderNumber(nextOrderNumber);
+  }, [orders]);
+
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -247,6 +281,7 @@ export default function NewOrder() {
     const newOrder: Order = {
       id: Math.random().toString(36).substr(2, 9),
       title: title || "Neuer Auftrag",
+      orderNumber: orderNumber, // Include generated number
       customerId: newCustomerId || undefined,
       customerName: customerName || "Unbekannter Kunde",
       customerEmail,
@@ -293,8 +328,21 @@ export default function NewOrder() {
         {/* Section 1: Order Basics */}
         <div>
           <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2">Auftragsdaten</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+            <div className="md:col-span-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Auftrags-Nr.</label>
+              <div className="flex items-center">
+                  <span className="bg-gray-100 border border-r-0 border-gray-300 rounded-l-md px-3 py-2 text-gray-500 text-sm font-mono">#</span>
+                  <input 
+                    type="text" 
+                    className="w-full border-gray-300 rounded-r-md shadow-sm focus:ring-red-500 focus:border-red-500 border p-2 bg-gray-50 text-gray-600 font-mono" 
+                    value={orderNumber}
+                    readOnly
+                    title="Automatisch generiert (Jahr-Laufnummer)"
+                  />
+              </div>
+            </div>
+            <div className="md:col-span-6">
               <label className="block text-sm font-medium text-gray-700 mb-1">Auftragstitel</label>
               <input 
                 type="text" 
@@ -305,8 +353,8 @@ export default function NewOrder() {
                 required
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Deadline (Bis wann fertig?)</label>
+            <div className="md:col-span-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Deadline</label>
               <div className="relative">
                 <input 
                   type="date" 

@@ -42,6 +42,7 @@ db.exec(`
     customer_address TEXT,
     deadline TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
+    order_number TEXT, -- Format: YYYY-XXXX
     processing INTEGER DEFAULT 0,
     produced INTEGER DEFAULT 0,
     invoiced INTEGER DEFAULT 0,
@@ -118,6 +119,12 @@ try {
   if (!hasCustomerId) {
     console.log('Migrating database: Adding customer_id to orders table');
     db.exec('ALTER TABLE orders ADD COLUMN customer_id TEXT');
+  }
+
+  const hasOrderNumber = columns.some(col => col.name === 'order_number');
+  if (!hasOrderNumber) {
+    console.log('Migrating database: Adding order_number to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN order_number TEXT');
   }
 } catch (error) {
   console.error('Migration error:', error);

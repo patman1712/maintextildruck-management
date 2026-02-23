@@ -11,6 +11,7 @@ router.get('/', (req: Request, res: Response) => {
   const orders = rows.map((row: any) => ({
     id: row.id,
     title: row.title,
+    orderNumber: row.order_number,
     customerId: row.customer_id,
     customer_name: row.customer_name,
     customer_email: row.customer_email,
@@ -33,7 +34,7 @@ router.get('/', (req: Request, res: Response) => {
 // POST new order
 router.post('/', (req: Request, res: Response) => {
   const { 
-    id, title, customer_id, customer_name, customer_email, customer_phone, customer_address, 
+    id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, 
     deadline, status, processing, produced, invoiced, description, employees, files 
   } = req.body;
 
@@ -42,14 +43,14 @@ router.post('/', (req: Request, res: Response) => {
   try {
     const stmt = db.prepare(`
       INSERT INTO orders (
-        id, title, customer_id, customer_name, customer_email, customer_phone, customer_address,
+        id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address,
         deadline, status, processing, produced, invoiced, description, employees, files
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
-      id, title, customer_id, customer_name, customer_email, customer_phone, customer_address,
+      id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address,
       deadline, status, processing ? 1 : 0, produced ? 1 : 0, invoiced ? 1 : 0, 
       description, JSON.stringify(employees || []), JSON.stringify(files || [])
     );
@@ -104,6 +105,7 @@ router.put('/:id', (req: Request, res: Response) => {
   const values = [];
 
   if (updates.title !== undefined) { fields.push('title = ?'); values.push(updates.title); }
+  if (updates.order_number !== undefined) { fields.push('order_number = ?'); values.push(updates.order_number); }
   if (updates.customer_id !== undefined) { fields.push('customer_id = ?'); values.push(updates.customer_id); }
   if (updates.customer_name !== undefined) { fields.push('customer_name = ?'); values.push(updates.customer_name); }
   if (updates.customer_email !== undefined) { fields.push('customer_email = ?'); values.push(updates.customer_email); }

@@ -41,6 +41,7 @@ export interface OrderItem {
 export interface Order {
   id: string;
   title: string;
+  orderNumber?: string; // New field for formatted order number (e.g. 2024-0001)
   customerId?: string; // Optional for now to support legacy orders
   customerName: string;
   customerEmail?: string;
@@ -128,6 +129,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const mappedOrders: Order[] = (ordersData.data || []).map((o: any) => ({
         id: o.id,
         title: o.title,
+        orderNumber: o.orderNumber, // Map from backend
         customerId: o.customerId,
         customerName: o.customer_name,
         customerEmail: o.customer_email,
@@ -213,6 +215,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const orderPayload = {
         id: order.id,
         title: order.title,
+        order_number: order.orderNumber,
         customer_id: order.customerId,
         customer_name: order.customerName,
         customer_email: order.customerEmail,
@@ -333,6 +336,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const updatePayload: any = {};
       if (updatedOrder.title !== undefined) updatePayload.title = updatedOrder.title;
+      if (updatedOrder.orderNumber !== undefined) updatePayload.order_number = updatedOrder.orderNumber;
       if (updatedOrder.customerId !== undefined) updatePayload.customer_id = updatedOrder.customerId;
       if (updatedOrder.customerName !== undefined) updatePayload.customer_name = updatedOrder.customerName;
       if (updatedOrder.customerEmail !== undefined) updatePayload.customer_email = updatedOrder.customerEmail;
