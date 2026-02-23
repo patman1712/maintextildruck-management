@@ -763,8 +763,14 @@ export default function CustomerDetails() {
                         <div key={product.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-all">
                             <div className="flex justify-between items-start">
                                 <div className="flex items-start">
-                                    <div className={`p-2 rounded-lg mr-4 ${product.source === 'shopware' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>
-                                        <Package size={24} />
+                                    <div className={`rounded-lg mr-4 overflow-hidden w-16 h-16 flex-shrink-0 flex items-center justify-center border border-gray-100 ${product.source === 'shopware' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>
+                                        {(() => {
+                                            const image = product.files?.find(f => f.thumbnail_url || f.file_name.match(/\.(jpg|jpeg|png|webp)$/i));
+                                            if (image) {
+                                                return <img src={image.thumbnail_url || image.file_url} alt={product.name} className="w-full h-full object-contain bg-white" />;
+                                            }
+                                            return <Package size={24} />;
+                                        })()}
                                     </div>
                                     <div>
                                         <h4 className="font-bold text-gray-900">{product.name}</h4>
