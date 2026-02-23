@@ -480,34 +480,31 @@ router.post('/generate', async (req: Request, res: Response) => {
                 const drawY = pageHeight - item.y - item.h + (paddingPoints / 2);
                 
                 if (item.rotated) {
-                    // Use drawPage with rotation option (supported at runtime despite type definition)
-                    // Rotation -90 degrees (90 degrees Counter-Clockwise)
-                    // In PDF-Lib (Clockwise positive): -90 is 90 CCW.
-                    // X-axis (Width) rotates to +Y (Up)
-                    // Y-axis (Height) rotates to -X (Left)
+                    // Switch to 90 degrees Clockwise rotation.
+                    // This seems more standard for PDF coordinate systems where Y is Up.
                     
-                    // We want to fill the box:
+                    // Rotation 90 degrees CW:
+                    // X-axis (Width vector) rotates: Right -> Down
+                    // Y-axis (Height vector) rotates: Up -> Right
+                    
+                    // Target Box:
                     // X: [drawX, drawX + source.height]
                     // Y: [drawY, drawY + source.width]
                     
-                    // If we anchor at (X, Y) and draw:
-                    // Width goes Up (Y). Height goes Left (-X).
+                    // We need to anchor at Top-Left of this box:
+                    // X = drawX
+                    // Y = drawY + source.width
                     
-                    // So we need to anchor at the Bottom-Right of the box?
-                    // X should be the Right edge: drawX + source.height
-                    // Y should be the Bottom edge: drawY
-                    
-                    // Let's verify:
-                    // Anchor (drawX + source.height, drawY)
-                    // Width (source.width) goes Up -> Y goes from drawY to drawY + source.width. (Correct)
-                    // Height (source.height) goes Left -> X goes from drawX + source.height to drawX. (Correct)
+                    // Drawing:
+                    // Width (source.width) extends along new X-axis (Down) -> drawY + source.width down to drawY.
+                    // Height (source.height) extends along new Y-axis (Right) -> drawX to drawX + source.height.
                     
                     page.drawPage(embeddedPage, {
-                        x: drawX + source.height,
-                        y: drawY,
+                        x: drawX,
+                        y: drawY + source.width,
                         width: source.width,
                         height: source.height,
-                        rotation: degrees(-90)
+                        rotation: degrees(90)
                     } as any);
                 } else {
                     page.drawPage(embeddedPage, {
