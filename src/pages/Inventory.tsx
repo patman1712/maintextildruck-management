@@ -523,7 +523,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                     <span className="sm:hidden">Web</span>
                                 </a>
                             )}
-                            {supplier?.email && !showCompleted && (
+                            {!showCompleted && (
                                 <button
                                     onClick={() => handleSendEmail(supplierId)}
                                     disabled={!hasSelection}
