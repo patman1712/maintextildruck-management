@@ -36,13 +36,7 @@ async function getShopware6Token(baseUrl: string, accessKey: string, secretKey: 
 async function getShopware5Products(baseUrl: string, username: string, apiKey: string) {
     const url = baseUrl.replace(/\/$/, '');
     
-    // Shopware 5 uses Basic Auth or Digest Auth
-    // Standard is Digest, but often Basic is enabled or handled via middleware
-    // Actually SW5 API uses Digest Auth by default, which is tricky with fetch.
-    // However, many plugins or configs allow Basic Auth.
-    // Let's try Basic Auth first as it's simpler.
-    // Format: Authorization: Basic base64(username:apiKey)
-    
+    // Shopware 5 uses Basic Auth (Digest is default but Basic often supported)
     const authString = Buffer.from(`${username}:${apiKey}`).toString('base64');
     
     try {
@@ -54,13 +48,16 @@ async function getShopware5Products(baseUrl: string, username: string, apiKey: s
         });
 
         if (!response.ok) {
-            // Try to provide helpful error message
             const text = await response.text();
             throw new Error(`Shopware 5 Request failed (${response.status}): ${text.substring(0, 100)}`);
         }
 
         const data = await response.json();
-        return data.data; // Shopware 5 returns { data: [...], success: true }
+        // Shopware 5 API returns { data: [...], success: true }
+        if (!data.success && !Array.isArray(data.data)) {
+             throw new Error('Invalid Shopware 5 response format');
+        }
+        return data.data; 
     } catch (error) {
         console.error('Shopware 5 Product Fetch Error:', error);
         throw error;
@@ -79,10 +76,8 @@ router.post('/test-connection', async (req: Request, res: Response) => {
 
     try {
         if (version === '5') {
-            // For SW5, we test by fetching 1 product
             await getShopware5Products(url, accessKey, secretKey);
         } else {
-            // For SW6, we test by getting a token
             await getShopware6Token(url, accessKey, secretKey);
         }
         res.json({ success: true, message: 'Connection successful' });
@@ -115,9 +110,8 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
             // Shopware 5 Logic
             const rawProducts = await getShopware5Products(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
             
-            // Map SW5 products to common format
             products = rawProducts.map((p: any) => ({
-                id: p.id, // SW5 uses numeric IDs mostly, but we treat as string/any
+                id: String(p.id),
                 name: p.name,
                 productNumber: p.mainDetail?.number || p.mainDetail?.ordernumber || '',
                 active: p.active,
@@ -128,7 +122,6 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
             // Shopware 6 Logic
             const token = await getShopware6Token(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
             
-            // Fetch products with basic info
             const response = await fetch(`${baseUrl}/api/product?limit=100`, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -142,7 +135,6 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
 
             const data = await response.json();
             
-            // Map SW6 products to common format
             products = data.data.map((p: any) => ({
                 id: p.id,
                 name: p.name,
@@ -152,53 +144,31 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
             }));
         }
 
+        // Sync with local DB (upsert)
+        const existingProducts = db.prepare('SELECT id, shopware_product_id FROM customer_products WHERE customer_id = ? AND source = "shopware"').all(customerId) as any[];
+        
+        const upsertTransaction = db.transaction((productsToSync: any[]) => {
+            for (const p of productsToSync) {
+                const existing = existingProducts.find(ep => ep.shopware_product_id === p.id);
+                
+                if (existing) {
+                    db.prepare('UPDATE customer_products SET name = ?, product_number = ? WHERE id = ?')
+                      .run(p.name, p.productNumber, existing.id);
+                } else {
+                    const newId = Math.random().toString(36).substr(2, 9);
+                    db.prepare('INSERT INTO customer_products (id, customer_id, name, product_number, source, shopware_product_id) VALUES (?, ?, ?, ?, "shopware", ?)')
+                      .run(newId, customerId, p.name, p.productNumber, p.id);
+                }
+            }
+        });
+
+        upsertTransaction(products);
+
         res.json({ success: true, data: products });
 
     } catch (error: any) {
         console.error('Shopware Product Fetch Error:', error);
         res.status(500).json({ success: false, error: error.message || 'Failed to fetch products' });
-    }
-});
-
-// Mappings CRUD
-
-// GET mappings for customer
-router.get('/mappings/:customerId', (req: Request, res: Response) => {
-    const { customerId } = req.params;
-    const mappings = db.prepare('SELECT * FROM shopware_product_mappings WHERE customer_id = ?').all(customerId);
-    res.json({ success: true, data: mappings });
-});
-
-// POST create mapping
-router.post('/mappings', (req: Request, res: Response) => {
-    const { customerId, shopwareProductId, shopwareProductNumber, shopwareProductName, fileUrl, fileName } = req.body;
-    
-    if (!customerId || !shopwareProductId || !fileUrl) {
-        return res.status(400).json({ success: false, error: 'Missing required fields' });
-    }
-
-    try {
-        const id = Math.random().toString(36).substr(2, 9);
-        db.prepare(`
-            INSERT INTO shopware_product_mappings (id, customer_id, shopware_product_id, shopware_product_number, shopware_product_name, file_url, file_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(id, customerId, shopwareProductId, shopwareProductNumber, shopwareProductName, fileUrl, fileName);
-        
-        res.json({ success: true, message: 'Mapping created', id });
-    } catch (error: any) {
-        console.error('Create Mapping Error:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// DELETE mapping
-router.delete('/mappings/:id', (req: Request, res: Response) => {
-    const { id } = req.params;
-    try {
-        db.prepare('DELETE FROM shopware_product_mappings WHERE id = ?').run(id);
-        res.json({ success: true, message: 'Mapping deleted' });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
     }
 });
 

@@ -132,6 +132,31 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS customer_products (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    product_number TEXT,
+    source TEXT DEFAULT 'manual', -- 'manual' or 'shopware'
+    shopware_product_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(customer_id) REFERENCES customers(id)
+  )
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS customer_product_files (
+    id TEXT PRIMARY KEY,
+    product_id TEXT NOT NULL,
+    file_url TEXT NOT NULL,
+    file_name TEXT,
+    thumbnail_url TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(product_id) REFERENCES customer_products(id) ON DELETE CASCADE
+  )
+`);
+
 // Migration: Add customer_id if it doesn't exist (for existing databases)
 try {
   const columns = db.prepare("PRAGMA table_info(orders)").all() as any[];

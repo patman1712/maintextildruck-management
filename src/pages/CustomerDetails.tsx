@@ -1,7 +1,20 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore, Order } from "@/store";
-import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search } from "lucide-react";
+import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon } from "lucide-react";
+
+interface Product {
+    id: string;
+    name: string;
+    product_number: string;
+    source: 'shopware' | 'manual';
+    files: {
+        id: string;
+        file_url: string;
+        file_name: string;
+        thumbnail_url?: string;
+    }[];
+}
 
 export default function CustomerDetails() {
   const { id } = useParams<{ id: string }>();
@@ -24,7 +37,7 @@ export default function CustomerDetails() {
   const [uploadFileName, setUploadFileName] = useState("");
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'shopware'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'products' | 'shopware'>('overview');
   
   const [customer, setCustomer] = useState(customers.find(c => c.id === id));
   const [customerOrders, setCustomerOrders] = useState(
@@ -45,11 +58,16 @@ export default function CustomerDetails() {
   });
   const [shopwareStatus, setShopwareStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [shopwareMessage, setShopwareMessage] = useState('');
-  const [shopwareProducts, setShopwareProducts] = useState<any[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
-  const [mappings, setMappings] = useState<any[]>([]);
-  const [showMappingModal, setShowMappingModal] = useState<string | null>(null); // Product ID for mapping
-  const [mappingSearch, setMappingSearch] = useState('');
+
+  // Products State
+  const [products, setProducts] = useState<Product[]>([]);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [showProductModal, setShowMappingModal] = useState(false); // Using this for both edit/create and file assign
+  const [productSearch, setProductSearch] = useState('');
+  const [fileSearch, setFileSearch] = useState('');
+  const [newManualProduct, setNewManualProduct] = useState({ name: '', productNumber: '' });
+  const [assignFileMode, setAssignFileMode] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -79,8 +97,8 @@ export default function CustomerDetails() {
   }, [id, customers, orders, navigate, loading]);
 
   useEffect(() => {
-      if (activeTab === 'shopware' && customer && customer.shopwareUrl) {
-          fetchMappings();
+      if (activeTab === 'products' && customer) {
+          fetchProducts();
       }
   }, [activeTab, customer]);
 
@@ -90,6 +108,113 @@ export default function CustomerDetails() {
     await updateCustomer(customer.id, editedCustomer);
     setCustomer({ ...customer, ...editedCustomer });
     setIsEditing(false);
+  };
+
+  // --- Products Logic ---
+
+  const fetchProducts = async () => {
+      if (!customer) return;
+      try {
+          const res = await fetch(`/api/products/${customer.id}`);
+          const data = await res.json();
+          if (data.success) {
+              setProducts(data.data);
+          }
+      } catch (err) {
+          console.error(err);
+      }
+  };
+
+  const handleCreateManualProduct = async () => {
+      if (!customer || !newManualProduct.name) return;
+      try {
+          const res = await fetch(`/api/products/${customer.id}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(newManualProduct)
+          });
+          const data = await res.json();
+          if (data.success) {
+              fetchProducts();
+              setShowMappingModal(false);
+              setNewManualProduct({ name: '', productNumber: '' });
+          }
+      } catch (err) {
+          console.error(err);
+      }
+  };
+
+  const handleUpdateProduct = async () => {
+      if (!editingProduct) return;
+      try {
+          await fetch(`/api/products/${editingProduct.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  name: editingProduct.name,
+                  productNumber: editingProduct.product_number
+              })
+          });
+          fetchProducts();
+          setShowMappingModal(false);
+          setEditingProduct(null);
+      } catch (err) {
+          console.error(err);
+      }
+  };
+
+  const handleDeleteProduct = async (productId: string) => {
+      if (!confirm('Produkt wirklich löschen?')) return;
+      try {
+          await fetch(`/api/products/${productId}`, {
+              method: 'DELETE'
+          });
+          fetchProducts();
+      } catch (err) {
+          console.error(err);
+      }
+  };
+
+  const handleAssignFile = async (file: any) => {
+      if (!editingProduct) return;
+      try {
+          await fetch(`/api/products/${editingProduct.id}/files`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  fileUrl: file.url,
+                  fileName: file.customName || file.name,
+                  thumbnailUrl: file.thumbnail
+              })
+          });
+          
+          // Refresh product data locally
+          const updatedFiles = [...editingProduct.files, {
+              id: Math.random().toString(), // Temp ID until refresh
+              file_url: file.url,
+              file_name: file.customName || file.name,
+              thumbnail_url: file.thumbnail
+          }];
+          setEditingProduct({ ...editingProduct, files: updatedFiles });
+          fetchProducts();
+      } catch (err) {
+          console.error(err);
+      }
+  };
+
+  const handleRemoveFile = async (fileId: string) => {
+      if (!editingProduct) return;
+      try {
+          await fetch(`/api/products/${editingProduct.id}/files/${fileId}`, {
+              method: 'DELETE'
+          });
+          
+          const updatedFiles = editingProduct.files.filter(f => f.id !== fileId);
+          setEditingProduct({ ...editingProduct, files: updatedFiles });
+          fetchProducts();
+      } catch (err) {
+          console.error(err);
+      }
   };
 
   // --- Shopware Logic ---
@@ -136,7 +261,8 @@ export default function CustomerDetails() {
           const res = await fetch(`/api/shopware/products/${customer.id}`);
           const data = await res.json();
           if (data.success) {
-              setShopwareProducts(data.data);
+              alert(`${data.data.length} Produkte geladen und synchronisiert.`);
+              fetchProducts(); // Refresh local list
           } else {
               alert('Fehler beim Laden der Produkte: ' + data.error);
           }
@@ -145,57 +271,6 @@ export default function CustomerDetails() {
           alert('Netzwerkfehler beim Laden der Produkte');
       } finally {
           setIsLoadingProducts(false);
-      }
-  };
-
-  const fetchMappings = async () => {
-      if (!customer) return;
-      try {
-          const res = await fetch(`/api/shopware/mappings/${customer.id}`);
-          const data = await res.json();
-          if (data.success) {
-              setMappings(data.data);
-          }
-      } catch (err) {
-          console.error(err);
-      }
-  };
-
-  const handleCreateMapping = async (product: any, file: any) => {
-      if (!customer) return;
-      try {
-          const res = await fetch('/api/shopware/mappings', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  customerId: customer.id,
-                  shopwareProductId: product.id,
-                  shopwareProductNumber: product.productNumber,
-                  shopwareProductName: product.name,
-                  fileUrl: file.url,
-                  fileName: file.customName || file.name
-              })
-          });
-          const data = await res.json();
-          if (data.success) {
-              fetchMappings();
-              setShowMappingModal(null);
-          }
-      } catch (err) {
-          console.error(err);
-          alert('Fehler beim Speichern der Verknüpfung');
-      }
-  };
-
-  const handleDeleteMapping = async (mappingId: string) => {
-      if (!confirm('Verknüpfung wirklich löschen?')) return;
-      try {
-          await fetch(`/api/shopware/mappings/${mappingId}`, {
-              method: 'DELETE'
-          });
-          fetchMappings();
-      } catch (err) {
-          console.error(err);
       }
   };
 
@@ -347,8 +422,13 @@ export default function CustomerDetails() {
   });
   const printFiles = Array.from(uniqueFilesMap.values());
 
-  const filteredPrintFilesForMapping = printFiles.filter(f => 
-      (f.customName || f.name).toLowerCase().includes(mappingSearch.toLowerCase())
+  const filteredPrintFilesForAssign = printFiles.filter(f => 
+      (f.customName || f.name).toLowerCase().includes(fileSearch.toLowerCase())
+  );
+
+  const filteredProducts = products.filter(p => 
+      p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
+      (p.product_number && p.product_number.toLowerCase().includes(productSearch.toLowerCase()))
   );
 
   return (
@@ -428,6 +508,15 @@ export default function CustomerDetails() {
                 </div>
             </button>
             <button
+                onClick={() => setActiveTab('products')}
+                className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'products' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+                <div className="flex items-center">
+                    <Package size={16} className="mr-2" />
+                    Artikel ({products.length})
+                </div>
+            </button>
+            <button
                 onClick={() => setActiveTab('shopware')}
                 className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'shopware' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
@@ -445,6 +534,7 @@ export default function CustomerDetails() {
         {/* TAB: OVERVIEW */}
         {activeTab === 'overview' && (
             <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in">
+                {/* ... (Overview content remains same) ... */}
                 <div>
                 <h3 className="text-lg font-semibold text-slate-800 mb-4 border-b pb-2">Kontaktdaten</h3>
                 <div className="space-y-4">
@@ -527,6 +617,7 @@ export default function CustomerDetails() {
 
         {/* TAB: FILES */}
         {activeTab === 'files' && (
+            // ... (Files tab content remains same) ...
             <div className="animate-in fade-in">
                 <div className="px-8 py-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
                     <div>
@@ -633,6 +724,135 @@ export default function CustomerDetails() {
             </div>
         )}
 
+        {/* TAB: PRODUCTS */}
+        {activeTab === 'products' && (
+            <div className="p-8 animate-in fade-in">
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex items-center space-x-4">
+                        <h3 className="text-lg font-bold text-gray-800">Artikelverwaltung</h3>
+                        <div className="relative">
+                            <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
+                            <input 
+                                type="text" 
+                                placeholder="Suchen..." 
+                                value={productSearch}
+                                onChange={(e) => setProductSearch(e.target.value)}
+                                className="pl-9 border border-gray-300 rounded-md py-1.5 text-sm w-64"
+                            />
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => {
+                            setEditingProduct(null);
+                            setNewManualProduct({ name: '', productNumber: '' });
+                            setShowMappingModal(true);
+                            setAssignFileMode(false);
+                        }}
+                        className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 flex items-center"
+                    >
+                        <Plus size={16} className="mr-2" />
+                        Manueller Artikel
+                    </button>
+                </div>
+
+                <div className="space-y-4">
+                    {filteredProducts.map(product => (
+                        <div key={product.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-all">
+                            <div className="flex justify-between items-start">
+                                <div className="flex items-start">
+                                    <div className={`p-2 rounded-lg mr-4 ${product.source === 'shopware' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>
+                                        <Package size={24} />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-gray-900">{product.name}</h4>
+                                        <div className="flex items-center mt-1 space-x-2">
+                                            {product.product_number && (
+                                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">
+                                                    {product.product_number}
+                                                </span>
+                                            )}
+                                            <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border ${product.source === 'shopware' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>
+                                                {product.source}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex space-x-2">
+                                    <button 
+                                        onClick={() => {
+                                            setEditingProduct(product);
+                                            setShowMappingModal(true);
+                                            setAssignFileMode(false);
+                                        }}
+                                        className="text-gray-400 hover:text-blue-600 p-1"
+                                        title="Bearbeiten"
+                                    >
+                                        <Edit size={18} />
+                                    </button>
+                                    <button 
+                                        onClick={() => handleDeleteProduct(product.id)}
+                                        className="text-gray-400 hover:text-red-600 p-1"
+                                        title="Löschen"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 pt-4 border-t border-gray-100">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-semibold text-gray-500 uppercase">Zugeordnete Druckdaten</span>
+                                    <button 
+                                        onClick={() => {
+                                            setEditingProduct(product);
+                                            setShowMappingModal(true);
+                                            setAssignFileMode(true);
+                                        }}
+                                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center font-medium"
+                                    >
+                                        <Plus size={12} className="mr-1" />
+                                        Datei hinzufügen
+                                    </button>
+                                </div>
+                                {product.files && product.files.length > 0 ? (
+                                    <div className="flex flex-wrap gap-3">
+                                        {product.files.map(file => (
+                                            <div key={file.id} className="relative group w-20">
+                                                <div className="h-20 w-20 bg-gray-50 rounded border border-gray-200 overflow-hidden flex items-center justify-center">
+                                                    {file.thumbnail_url ? (
+                                                        <img src={file.thumbnail_url} className="w-full h-full object-contain" />
+                                                    ) : (
+                                                        <ImageIcon size={24} className="text-gray-300" />
+                                                    )}
+                                                </div>
+                                                <button 
+                                                    onClick={() => handleRemoveFile(file.id)}
+                                                    className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                >
+                                                    <X size={12} />
+                                                </button>
+                                                <div className="text-[10px] truncate mt-1 text-gray-600" title={file.file_name}>
+                                                    {file.file_name}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-400 italic">Keine Dateien zugeordnet</p>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                    {filteredProducts.length === 0 && (
+                        <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
+                            <Package size={48} className="mx-auto text-gray-300 mb-4" />
+                            <p>Keine Artikel gefunden.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
         {/* TAB: SHOPWARE */}
         {activeTab === 'shopware' && (
             <div className="p-8 animate-in fade-in">
@@ -710,116 +930,130 @@ export default function CustomerDetails() {
                     {/* Products Column */}
                     <div className="lg:col-span-2">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold text-lg">Artikel & Zuweisung</h3>
+                            <h3 className="font-bold text-lg">Shopware Synchronisation</h3>
                             <button 
                                 onClick={fetchShopwareProducts}
                                 disabled={isLoadingProducts || !shopwareConfig.url}
-                                className="text-blue-600 text-sm hover:underline disabled:opacity-50"
+                                className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
                             >
-                                {isLoadingProducts ? 'Lade...' : 'Produkte aus Shopware laden'}
+                                {isLoadingProducts ? 'Lade...' : 'Produkte importieren'}
                             </button>
                         </div>
-
-                        {shopwareProducts.length > 0 ? (
-                            <div className="space-y-2">
-                                {shopwareProducts.map(product => {
-                                    const mapping = mappings.find(m => m.shopware_product_id === product.id);
-                                    
-                                    return (
-                                        <div key={product.id} className="border border-gray-200 rounded p-3 flex justify-between items-center hover:bg-gray-50">
-                                            <div>
-                                                <div className="font-medium text-gray-900">{product.name}</div>
-                                                <div className="text-xs text-gray-500 font-mono">{product.productNumber}</div>
-                                            </div>
-                                            
-                                            {mapping ? (
-                                                <div className="flex items-center bg-green-50 border border-green-100 rounded px-3 py-1.5">
-                                                    <FileText size={14} className="text-green-600 mr-2" />
-                                                    <span className="text-sm text-green-800 mr-2 truncate max-w-[150px]" title={mapping.file_name}>
-                                                        {mapping.file_name}
-                                                    </span>
-                                                    <button 
-                                                        onClick={() => handleDeleteMapping(mapping.id)}
-                                                        className="text-gray-400 hover:text-red-600"
-                                                    >
-                                                        <X size={14} />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <button 
-                                                    onClick={() => setShowMappingModal(product)}
-                                                    className="flex items-center text-sm text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded"
-                                                >
-                                                    <Link size={14} className="mr-1" />
-                                                    Datei zuweisen
-                                                </button>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <div className="text-center py-12 text-gray-500 bg-gray-50 rounded border border-gray-100">
-                                <ShoppingBag size={32} className="mx-auto text-gray-300 mb-2" />
-                                <p>Keine Produkte geladen. Konfigurieren Sie den Shop und klicken Sie auf "Laden".</p>
-                            </div>
-                        )}
+                        <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-blue-800 text-sm">
+                            <p>Hier können Sie alle Produkte aus Ihrem Shopware-Shop importieren.</p>
+                            <p className="mt-2">Nach dem Import finden Sie die Produkte im Reiter <strong>"Artikel"</strong>, wo Sie ihnen Druckdaten zuweisen können.</p>
+                        </div>
                     </div>
                 </div>
             </div>
         )}
       </div>
 
-      {/* Mapping Modal */}
-      {showMappingModal && (
+      {/* Modal for Product Edit / Create / File Assign */}
+      {showProductModal && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
               <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
                   <div className="p-4 border-b flex justify-between items-center">
-                      <h3 className="font-bold">Datei zuweisen für: {(showMappingModal as any).name}</h3>
-                      <button onClick={() => setShowMappingModal(null)}><X size={20} className="text-gray-500" /></button>
+                      <h3 className="font-bold">
+                          {assignFileMode 
+                              ? `Druckdatei zuweisen: ${editingProduct?.name}`
+                              : editingProduct 
+                                  ? 'Artikel bearbeiten' 
+                                  : 'Neuer manueller Artikel'
+                          }
+                      </h3>
+                      <button onClick={() => setShowMappingModal(false)}><X size={20} className="text-gray-500" /></button>
                   </div>
                   
-                  <div className="p-4 border-b">
-                      <div className="relative">
-                          <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
-                          <input 
-                              type="text" 
-                              placeholder="Datei suchen..." 
-                              value={mappingSearch}
-                              onChange={(e) => setMappingSearch(e.target.value)}
-                              className="w-full pl-9 border border-gray-300 rounded p-2 text-sm"
-                          />
-                      </div>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                      {filteredPrintFilesForMapping.length > 0 ? (
-                          filteredPrintFilesForMapping.map((file, idx) => (
+                  {assignFileMode ? (
+                      // FILE ASSIGN MODE
+                      <>
+                        <div className="p-4 border-b">
+                            <div className="relative">
+                                <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
+                                <input 
+                                    type="text" 
+                                    placeholder="Druckdaten suchen..." 
+                                    value={fileSearch}
+                                    onChange={(e) => setFileSearch(e.target.value)}
+                                    className="w-full pl-9 border border-gray-300 rounded p-2 text-sm"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                            {filteredPrintFilesForAssign.length > 0 ? (
+                                filteredPrintFilesForAssign.map((file, idx) => (
+                                    <button 
+                                        key={idx}
+                                        onClick={() => handleAssignFile(file)}
+                                        className="w-full flex items-center p-3 hover:bg-gray-50 border border-gray-100 rounded text-left group"
+                                    >
+                                        <div className="h-10 w-10 bg-gray-100 rounded flex items-center justify-center mr-3 border border-gray-200 overflow-hidden">
+                                            {file.thumbnail ? (
+                                                <img src={file.thumbnail} className="h-full w-full object-contain" />
+                                            ) : (
+                                                <Printer size={16} className="text-gray-400" />
+                                            )}
+                                        </div>
+                                        <div className="flex-1 min-w-0 mr-4">
+                                            <div className="font-medium text-sm text-gray-900 truncate">{file.customName || file.name}</div>
+                                            <div className="text-xs text-gray-500">{new Date(file.orderDate).toLocaleDateString()}</div>
+                                        </div>
+                                        
+                                        {editingProduct?.files.some(f => f.file_url === file.url) ? (
+                                            <span className="text-green-600 text-xs font-bold flex items-center"><CheckCircle size={14} className="mr-1"/> Zugewiesen</span>
+                                        ) : (
+                                            <div className="opacity-0 group-hover:opacity-100 text-blue-600 text-sm font-medium">
+                                                Auswählen
+                                            </div>
+                                        )}
+                                    </button>
+                                ))
+                            ) : (
+                                <div className="text-center py-8 text-gray-500">Keine passende Datei gefunden.</div>
+                            )}
+                        </div>
+                      </>
+                  ) : (
+                      // EDIT / CREATE MODE
+                      <div className="p-6 space-y-4">
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Artikelname</label>
+                              <input 
+                                  type="text" 
+                                  value={editingProduct ? editingProduct.name : newManualProduct.name}
+                                  onChange={(e) => editingProduct 
+                                      ? setEditingProduct({...editingProduct, name: e.target.value}) 
+                                      : setNewManualProduct({...newManualProduct, name: e.target.value})
+                                  }
+                                  className="w-full border border-gray-300 rounded p-2"
+                                  placeholder="z.B. Premium T-Shirt"
+                              />
+                          </div>
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Artikelnummer (SKU)</label>
+                              <input 
+                                  type="text" 
+                                  value={editingProduct ? editingProduct.product_number : newManualProduct.productNumber}
+                                  onChange={(e) => editingProduct 
+                                      ? setEditingProduct({...editingProduct, product_number: e.target.value}) 
+                                      : setNewManualProduct({...newManualProduct, productNumber: e.target.value})
+                                  }
+                                  className="w-full border border-gray-300 rounded p-2"
+                                  placeholder="z.B. SW-1001"
+                              />
+                          </div>
+                          
+                          <div className="pt-4 flex justify-end">
                               <button 
-                                  key={idx}
-                                  onClick={() => handleCreateMapping(showMappingModal, file)}
-                                  className="w-full flex items-center p-3 hover:bg-gray-50 border border-gray-100 rounded text-left group"
+                                  onClick={() => editingProduct ? handleUpdateProduct() : handleCreateManualProduct()}
+                                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
                               >
-                                  <div className="h-10 w-10 bg-gray-100 rounded flex items-center justify-center mr-3 border border-gray-200">
-                                      {file.thumbnail ? (
-                                          <img src={file.thumbnail} className="h-full w-full object-contain" />
-                                      ) : (
-                                          <Printer size={16} className="text-gray-400" />
-                                      )}
-                                  </div>
-                                  <div>
-                                      <div className="font-medium text-sm text-gray-900">{file.customName || file.name}</div>
-                                      <div className="text-xs text-gray-500">{new Date(file.orderDate).toLocaleDateString()}</div>
-                                  </div>
-                                  <div className="ml-auto opacity-0 group-hover:opacity-100 text-blue-600 text-sm font-medium">
-                                      Auswählen
-                                  </div>
+                                  {editingProduct ? 'Speichern' : 'Erstellen'}
                               </button>
-                          ))
-                      ) : (
-                          <div className="text-center py-8 text-gray-500">Keine passende Datei gefunden.</div>
-                      )}
-                  </div>
+                          </div>
+                      </div>
+                  )}
               </div>
           </div>
       )}
