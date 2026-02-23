@@ -480,46 +480,35 @@ router.post('/generate', async (req: Request, res: Response) => {
                 const drawY = pageHeight - item.y - item.h + (paddingPoints / 2);
                 
                 if (item.rotated) {
-                    // Manual Rotation with Explicit Matrix to ensure correct placement
-                    // We want to fill the box defined by:
-                    // Bottom-Left: (drawX, drawY)
-                    // Dimensions: (source.height, source.width)  <-- Note dimensions are swapped relative to axes
+                    // Reverting to drawPage with rotation option as manual matrix caused blank output.
+                    // Correcting Geometry based on "Overlapping" feedback.
+                    // Feedback: "Overlapping to the left" implies we were drawing Left/Up from Top-Left.
+                    // This confirms rotation is CCW (Standard PDF).
                     
-                    // We use a matrix that maps the image coordinate space (0..W, 0..H) 
-                    // to the target box in PDF space.
-                    // Transformation: Rotate 90 deg CCW + Translate.
+                    // Rotation: 90 degrees CCW.
+                    // X-axis (Width) rotates to +Y (Up).
+                    // Y-axis (Height) rotates to -X (Left).
                     
-                    // Matrix [a b c d e f]:
-                    // x' = ax + cy + e
-                    // y' = bx + dy + f
+                    // We want to fill the box:
+                    // X: [drawX, drawX + source.height]
+                    // Y: [drawY, drawY + source.width]
                     
-                    // We want:
-                    // (0,0) -> (Right, Bottom) = (drawX + source.height, drawY)
-                    // (W,0) -> (Right, Top)    = (drawX + source.height, drawY + source.width)
-                    // (0,H) -> (Left, Bottom)  = (drawX, drawY)
+                    // To fill this box with 90 deg CCW vectors:
+                    // We must start at the Bottom-Right corner.
+                    // Anchor X = drawX + source.height
+                    // Anchor Y = drawY
                     
-                    // Check 90 deg CCW Matrix: [0, 1, -1, 0, tx, ty]
-                    // x' = -y + tx
-                    // y' = x + ty
-                    
-                    // Map (0,0): x'=tx, y'=ty.  => tx = drawX + source.height, ty = drawY.
-                    // Map (W,0): x'=tx, y'=W+ty. => (Right, Top). Correct.
-                    // Map (0,H): x'=-H+tx, y'=ty. => (Right-H, Bottom) = (drawX, Bottom). Correct.
-                    
-                    const tx = drawX + source.height;
-                    const ty = drawY;
-                    
-                    page.pushOperators(PDFOperator.of('q' as any));
-                    page.pushOperators(PDFOperator.of('cm' as any, [0, 1, -1, 0, tx, ty] as any));
+                    // Drawing:
+                    // Width (source.width) goes along rotated X (+Y) -> Up from drawY.
+                    // Height (source.height) goes along rotated Y (-X) -> Left from Right Edge.
                     
                     page.drawPage(embeddedPage, {
-                        x: 0,
-                        y: 0,
+                        x: drawX + source.height,
+                        y: drawY,
                         width: source.width,
-                        height: source.height
-                    });
-                    
-                    page.pushOperators(PDFOperator.of('Q' as any));
+                        height: source.height,
+                        rotation: degrees(90)
+                    } as any);
                 } else {
                     page.drawPage(embeddedPage, {
                         x: drawX,
