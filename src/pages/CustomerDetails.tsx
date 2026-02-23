@@ -1003,10 +1003,10 @@ export default function CustomerDetails() {
                                         return (
                                             <div 
                                                 key={idx} 
-                                                onClick={() => handleAssignFile(file)}
+                                                onClick={() => !isAssigned && handleAssignFile(file)}
                                                 className={`
-                                                    cursor-pointer rounded-lg border p-2 relative group hover:shadow-md transition-all
-                                                    ${isAssigned ? 'border-green-500 bg-green-50 ring-1 ring-green-500' : 'border-gray-200 hover:border-red-300'}
+                                                    rounded-lg border p-2 relative group hover:shadow-md transition-all
+                                                    ${isAssigned ? 'border-green-500 bg-green-50 ring-1 ring-green-500 cursor-default' : 'border-gray-200 hover:border-red-300 cursor-pointer'}
                                                 `}
                                             >
                                                 <div className="aspect-square bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden relative">
