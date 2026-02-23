@@ -1,7 +1,20 @@
 import { useState, useEffect } from "react";
-import { Upload, Plus, X, User, Calendar, FileText, ShoppingCart, Trash2 } from "lucide-react";
+import { Upload, Plus, X, User, Calendar, FileText, ShoppingCart, Trash2, Package } from "lucide-react";
 import { useAppStore, Order } from "@/store";
 import { useNavigate } from "react-router-dom";
+
+interface CustomerProduct {
+    id: string;
+    name: string;
+    product_number: string;
+    supplier_id?: string;
+    files: {
+        id: string;
+        file_url: string;
+        file_name: string;
+        thumbnail_url?: string;
+    }[];
+}
 
 export default function NewOrder() {
   const navigate = useNavigate();
@@ -323,6 +336,65 @@ export default function NewOrder() {
     }
 
     navigate("/dashboard/orders");
+  };
+
+  // --- Customer Product Logic ---
+  const [showProductSelector, setShowProductSelector] = useState(false);
+  const [customerProducts, setCustomerProducts] = useState<CustomerProduct[]>([]);
+  const [productSearchTerm, setProductSearchTerm] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState<CustomerProduct | null>(null);
+  const [productSizeInput, setProductSizeInput] = useState("");
+  
+  const loadCustomerProducts = async () => {
+      if (!selectedCustomerId) return;
+      try {
+          const res = await fetch(`/api/products/${selectedCustomerId}`);
+          const data = await res.json();
+          if (data.success) {
+              setCustomerProducts(data.data);
+              setShowProductSelector(true);
+          }
+      } catch (err) {
+          console.error(err);
+      }
+  };
+
+  const handleAddProduct = () => {
+      if (!selectedProduct) return;
+      
+      // Add Item
+      const newItemEntry = {
+          supplierId: selectedProduct.supplier_id || "",
+          itemName: selectedProduct.name,
+          itemNumber: selectedProduct.product_number,
+          color: "",
+          size: productSizeInput,
+          quantity: 1, // Quantity is implied in size input usually like "5x L", but we can set 1 as base
+          notes: "Aus Kundenartikel"
+      };
+      
+      setOrderItems([...orderItems, { ...newItemEntry, id: Math.random().toString(36).substr(2, 9), status: 'pending' }]);
+
+      // Add Files
+      if (selectedProduct.files && selectedProduct.files.length > 0) {
+          const newAttachments = selectedProduct.files.map(f => ({
+              name: f.file_name,
+              url: f.file_url,
+              type: 'print' as const
+          }));
+          
+          // Filter out duplicates
+          const currentUrls = existingFilesToAttach.map(f => f.url);
+          const uniqueNewAttachments = newAttachments.filter(f => !currentUrls.includes(f.url));
+          
+          if (uniqueNewAttachments.length > 0) {
+              setExistingFilesToAttach([...existingFilesToAttach, ...uniqueNewAttachments]);
+          }
+      }
+
+      setShowProductSelector(false);
+      setSelectedProduct(null);
+      setProductSizeInput("");
   };
 
   return (
@@ -742,9 +814,21 @@ export default function NewOrder() {
 
         {/* Section 6: Order Items / Goods */}
         <div>
-          <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex items-center">
-            <ShoppingCart className="mr-2 text-red-600" size={20} />
-            Benötigte Ware / Textilien
+          <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex items-center justify-between">
+            <div className="flex items-center">
+                <ShoppingCart className="mr-2 text-red-600" size={20} />
+                Benötigte Ware / Textilien
+            </div>
+            {selectedCustomerId && (
+                <button 
+                    type="button"
+                    onClick={loadCustomerProducts}
+                    className="text-xs text-red-600 hover:text-red-800 underline font-medium flex items-center"
+                >
+                    <Package size={14} className="mr-1" />
+                    Aus Kundenartikel wählen
+                </button>
+            )}
           </h3>
           
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
@@ -878,6 +962,121 @@ export default function NewOrder() {
         </div>
 
       </form>
+
+      {/* Product Selector Modal */}
+      {showProductSelector && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+                <div className="p-4 border-b flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-gray-800">Artikel aus Kundenstamm wählen</h3>
+                    <button onClick={() => setShowProductSelector(false)} className="text-gray-500 hover:text-gray-700">
+                        <X size={20} />
+                    </button>
+                </div>
+                
+                {!selectedProduct ? (
+                    // Step 1: Select Product
+                    <div className="p-4 overflow-y-auto flex-1">
+                        <div className="mb-4">
+                            <input 
+                                type="text" 
+                                placeholder="Artikel suchen..." 
+                                className="w-full border p-2 rounded text-sm focus:ring-red-500 focus:border-red-500"
+                                value={productSearchTerm}
+                                onChange={(e) => setProductSearchTerm(e.target.value)}
+                                autoFocus
+                            />
+                        </div>
+                        
+                        {customerProducts.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase())).length === 0 ? (
+                            <p className="text-center text-gray-500 py-8">
+                                {productSearchTerm ? "Keine passenden Artikel gefunden." : "Keine Artikel für diesen Kunden hinterlegt."}
+                            </p>
+                        ) : (
+                            <div className="grid grid-cols-1 gap-2">
+                                {customerProducts
+                                    .filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()))
+                                    .map((product) => (
+                                    <div 
+                                        key={product.id} 
+                                        className="border rounded p-3 cursor-pointer hover:bg-gray-50 hover:border-red-300 transition-all flex justify-between items-center group"
+                                        onClick={() => setSelectedProduct(product)}
+                                    >
+                                        <div>
+                                            <p className="font-medium text-gray-800">{product.name}</p>
+                                            <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
+                                                {product.product_number && <span className="bg-gray-100 px-1.5 py-0.5 rounded font-mono">{product.product_number}</span>}
+                                                {product.supplier_id && suppliers.find(s => s.id === product.supplier_id) && (
+                                                    <span className="text-purple-600 flex items-center">
+                                                        <Package size={10} className="mr-1" />
+                                                        {suppliers.find(s => s.id === product.supplier_id)?.name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="text-red-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Plus size={20} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    // Step 2: Enter Details
+                    <div className="p-6">
+                        <div className="mb-4 p-3 bg-gray-50 rounded border border-gray-200">
+                            <h4 className="font-bold text-gray-800">{selectedProduct.name}</h4>
+                            <p className="text-sm text-gray-500">{selectedProduct.product_number}</p>
+                        </div>
+
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Größe / Anzahl</label>
+                            <input 
+                                type="text" 
+                                className="w-full border p-2 rounded focus:ring-red-500 focus:border-red-500"
+                                placeholder="z.B. 5x L, 3x XL"
+                                value={productSizeInput}
+                                onChange={(e) => setProductSizeInput(e.target.value)}
+                                autoFocus
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Bitte geben Sie die benötigten Größen und Mengen an.</p>
+                        </div>
+
+                        {selectedProduct.files && selectedProduct.files.length > 0 && (
+                            <div className="mb-4">
+                                <p className="text-sm font-medium text-gray-700 mb-2">Automatisch zugeordnete Druckdaten:</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {selectedProduct.files.map(f => (
+                                        <div key={f.id} className="text-xs bg-red-50 text-red-800 border border-red-100 px-2 py-1 rounded flex items-center">
+                                            <FileText size={12} className="mr-1" />
+                                            {f.file_name}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end space-x-3 mt-6">
+                            <button 
+                                onClick={() => setSelectedProduct(null)}
+                                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                            >
+                                Zurück
+                            </button>
+                            <button 
+                                onClick={handleAddProduct}
+                                disabled={!productSizeInput}
+                                className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                            >
+                                Zum Auftrag hinzufügen
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+      )}
     </div>
   );
 }
