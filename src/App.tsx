@@ -14,6 +14,7 @@ import Profile from "@/pages/Profile";
 import Inventory from "@/pages/Inventory";
 import DTFOrdering from "@/pages/DTFOrdering";
 import DTFPdfs from "@/pages/DTFPdfs";
+import FileArchive from "@/pages/FileArchive";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
 import { useEffect } from "react";
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="dtf" element={<DTFOrdering />} />
           <Route path="dtf/pdfs" element={<DTFPdfs />} />
+          <Route path="dtf/archive" element={<FileArchive />} />
           <Route path="employees" element={<Employees />} />
           <Route path="profile" element={<Profile />} />
           <Route path="*" element={<div className="p-8 text-center text-gray-500">Diese Seite ist noch in Arbeit...</div>} />
