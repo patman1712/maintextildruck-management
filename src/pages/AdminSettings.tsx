@@ -66,26 +66,53 @@ export default function AdminSettings() {
     if (manualNextNumber <= nextOrderNumber && manualNextNumber !== 1) {
         // Allow resetting to 1 if user explicitly wants to restart (e.g. new year or clean slate)
         // But warn them if higher numbers exist
-        if (!confirm(`Die gewählte Nummer (${manualNextNumber}) ist kleiner oder gleich der nächsten freien Nummer (${nextOrderNumber}).\nDies hat normalerweise keinen Effekt, da das System immer die höchste existierende Nummer + 1 nimmt.\n\nMöchten Sie trotzdem fortfahren? (Dies ist nur sinnvoll, wenn Sie alle höheren Aufträge gelöscht haben)`)) {
+        if (!confirm(`Die gewählte Nummer (${manualNextNumber}) ist kleiner oder gleich der nächsten freien Nummer (${nextOrderNumber}).\n\nACHTUNG: Wenn Sie fortfahren, versucht das System, ALLE existierenden Aufträge (auch archivierte) des Jahres ${currentYear}, die eine höhere oder gleiche Nummer haben, zu löschen!\n\nDies ist notwendig, um den Zähler zurückzusetzen. Sind Sie sicher?`)) {
             return;
         }
     }
     
-    // Special handling for "reset to 1" or explicit setting
-    // We should delete any existing "seed" orders for this year to avoid conflicts or sticking to high numbers
-    // BUT we can't easily delete via API without knowing IDs.
-    // However, if we want to set it to X, we can create a seed X-1.
-    // If there are real orders > X, this won't help unless we delete them.
-    // Assuming the user knows what they are doing (cleared DB or just starting).
-    
-    if (confirm(`Möchten Sie den Nummernkreis wirklich auf ${manualNextNumber} setzen?\nDazu wird ein technischer Platzhalter-Auftrag mit der Nummer ${currentYear}-${String(manualNextNumber - 1).padStart(4, '0')} erstellt.`)) {
+    if (confirm(`Möchten Sie den Nummernkreis wirklich auf ${manualNextNumber} setzen?`)) {
+        
+        // If resetting downwards, we MUST delete higher number orders
+        if (manualNextNumber < nextOrderNumber) {
+             const prefix = `${currentYear}-`;
+             const ordersToDelete = orders.filter(o => {
+                 if (o.orderNumber && o.orderNumber.startsWith(prefix)) {
+                     const numPart = parseInt(o.orderNumber.split('-')[1]);
+                     // Delete everything that is >= the new start number
+                     // Example: Next is 10. We want to start at 1.
+                     // We must delete 1, 2, ..., 9? NO.
+                     // Wait. If we want next to be 1.
+                     // We need to delete everything >= 1.
+                     return !isNaN(numPart) && numPart >= manualNextNumber;
+                 }
+                 return false;
+             });
+
+             if (ordersToDelete.length > 0) {
+                 console.log("Deleting orders to reset counter:", ordersToDelete.map(o => o.orderNumber));
+                 // Delete them one by one via API
+                 // We need a real DELETE endpoint in backend, but currently DELETE just archives.
+                 // We need a HARD DELETE.
+                 // Let's assume we implement a hard delete or just accept that "Archive" isn't enough.
+                 // Actually, if we just Archive, they still exist and block the number.
+                 // We need to Nuke them.
+                 
+                 // Since we don't have a bulk hard delete, let's try to update their order numbers to something else?
+                 // e.g. "DELETED-YYYY-XXXX" so they don't block the sequence.
+                 
+                 for (const order of ordersToDelete) {
+                     await updateOrder(order.id, { 
+                         orderNumber: `DEL-${order.orderNumber}-${Date.now()}`,
+                         status: 'archived'
+                     });
+                 }
+             }
+        }
+
         // Create placeholder order
         const seedNumber = manualNextNumber - 1;
         const seedOrderNumber = `${currentYear}-${String(seedNumber).padStart(4, '0')}`;
-        
-        // If we are resetting to 1, seed is 0.
-        // If there are NO orders, this works.
-        // If there are orders, max+1 will still be high.
         
         await fetch('/api/orders', {
             method: 'POST',
@@ -105,9 +132,6 @@ export default function AdminSettings() {
         
         // Force refresh
         await fetchData();
-        
-        // Recalculate locally to show immediate effect if possible, but the effect depends on max number.
-        // If orders exist with higher numbers, the displayed "Next Number" will NOT change down.
         setIsEditing(false);
     }
   };
