@@ -43,7 +43,7 @@ export default function DTFOrdering() {
 
   // Processing State
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedPdfUrl, setGeneratedPdfUrl] = useState<string | null>(null);
+  const [generatedPdfUrls, setGeneratedPdfUrls] = useState<string[]>([]);
   const [generationError, setGenerationError] = useState<string | null>(null);
 
   // Extract all available print files
@@ -241,7 +241,7 @@ export default function DTFOrdering() {
 
   const handleGenerate = async () => {
     setIsGenerating(true);
-    setGeneratedPdfUrl(null);
+    setGeneratedPdfUrls([]);
     setGenerationError(null);
 
     try {
@@ -263,8 +263,12 @@ export default function DTFOrdering() {
 
         const data = await res.json();
 
-        if (data.success && data.url) {
-            setGeneratedPdfUrl(data.url);
+        if (data.success && (data.url || data.urls)) {
+            if (data.urls && data.urls.length > 0) {
+                setGeneratedPdfUrls(data.urls);
+            } else if (data.url) {
+                setGeneratedPdfUrls([data.url]);
+            }
         } else {
             setGenerationError(data.error || "Generierung fehlgeschlagen.");
         }
@@ -283,16 +287,19 @@ export default function DTFOrdering() {
           <Printer className="mr-3 text-red-600" />
           DTF-Bestellung vorbereiten
         </h1>
-        {generatedPdfUrl && (
-            <a 
-                href={generatedPdfUrl} 
-                download="DTF_Print_Job.pdf"
-                className="bg-green-600 text-white px-4 py-2 rounded-md shadow hover:bg-green-700 flex items-center animate-in fade-in zoom-in"
-            >
-                <Download className="mr-2" size={18} />
-                Fertiges PDF herunterladen
-            </a>
-        )}
+        <div className="flex gap-2">
+            {generatedPdfUrls.map((url, idx) => (
+                <a 
+                    key={idx}
+                    href={url} 
+                    download={`DTF_Print_Job_Part${idx + 1}.pdf`}
+                    className="bg-green-600 text-white px-4 py-2 rounded-md shadow hover:bg-green-700 flex items-center animate-in fade-in zoom-in"
+                >
+                    <Download className="mr-2" size={18} />
+                    {generatedPdfUrls.length > 1 ? `PDF ${idx + 1} herunterladen` : 'Fertiges PDF herunterladen'}
+                </a>
+            ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">

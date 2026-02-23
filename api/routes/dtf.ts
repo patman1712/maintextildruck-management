@@ -395,17 +395,20 @@ router.post('/generate', async (req: Request, res: Response) => {
              if (currentPageItems.length > 0) pages.push(currentPageItems);
         }
 
-        // 3. Create Output PDF
-        const outputPdf = await PDFDocument.create();
+        // 3. Create Output PDFs (One per page)
+        const generatedUrls: string[] = [];
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         
-        outputPdf.setTitle('DTF Print Job');
-        outputPdf.setSubject('Nesting Output');
-        outputPdf.setProducer('MainTextildruck Manager');
-        outputPdf.setCreator('MainTextildruck Manager');
-
         for (let pIdx = 0; pIdx < pages.length; pIdx++) {
             const pageItems = pages[pIdx];
             if (!pageItems || pageItems.length === 0) continue;
+            
+            const outputPdf = await PDFDocument.create();
+            
+            outputPdf.setTitle(`DTF Print Job - Part ${pIdx + 1}`);
+            outputPdf.setSubject('Nesting Output');
+            outputPdf.setProducer('MainTextildruck Manager');
+            outputPdf.setCreator('MainTextildruck Manager');
             
             // Determine Page Dimensions
             // Height = Fixed (User RollWidth)
@@ -452,34 +455,43 @@ router.post('/generate', async (req: Request, res: Response) => {
                     });
                 }
             }
-        }
-
-        const pdfBytes = await outputPdf.save();
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const outputFilename = `DTF_Job_${timestamp}.pdf`;
-        const outputPath = path.join(UPLOAD_DIR, outputFilename);
-
-        await fs.writeFile(outputPath, pdfBytes);
-
-        // Generate Thumbnail for the output PDF
-        try {
-            // pdftoppm with -singlefile appends .png to the output root name
-            const thumbRoot = path.join(UPLOAD_DIR, `${outputFilename}_thumb`);
             
-            await execFileAsync('pdftoppm', [
-                '-png',
-                '-singlefile',
-                '-scale-to', '300',
-                outputPath,
-                thumbRoot
-            ]);
-        } catch (e) {
-            console.error('Failed to generate thumbnail for output PDF:', e);
+            const pdfBytes = await outputPdf.save();
+            // If multiple pages, append suffix. If only one, keep standard name (or also append suffix for consistency?)
+            // Let's append suffix if > 1 page or always?
+            // User requested "mehrere pdfs ausgeben".
+            
+            let outputFilename = `DTF_Job_${timestamp}.pdf`;
+            if (pages.length > 1) {
+                outputFilename = `DTF_Job_${timestamp}_Part${pIdx + 1}.pdf`;
+            }
+            
+            const outputPath = path.join(UPLOAD_DIR, outputFilename);
+            await fs.writeFile(outputPath, pdfBytes);
+            
+            generatedUrls.push(`/uploads/${outputFilename}`);
+            
+            // Generate Thumbnail for the first page only (as preview)
+            if (pIdx === 0) {
+                try {
+                    const thumbRoot = path.join(UPLOAD_DIR, `${outputFilename}_thumb`);
+                    await execFileAsync('pdftoppm', [
+                        '-png',
+                        '-singlefile',
+                        '-scale-to', '300',
+                        outputPath,
+                        thumbRoot
+                    ]);
+                } catch (e) {
+                    console.error('Failed to generate thumbnail for output PDF:', e);
+                }
+            }
         }
 
         res.json({
             success: true,
-            url: `/uploads/${outputFilename}`,
+            url: generatedUrls[0], // Backward compatibility
+            urls: generatedUrls,   // New field for multiple files
             pages: pages.length
         });
 
