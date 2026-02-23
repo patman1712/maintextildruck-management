@@ -969,17 +969,32 @@ export default function CustomerDetails() {
                             <div className="mt-4 pt-4 border-t border-gray-100">
                                 <div className="flex items-center justify-between mb-2">
                                     <span className="text-xs font-semibold text-gray-500 uppercase">Dateien & Ansichten</span>
-                                    <button 
-                                        onClick={() => {
-                                            setEditingProduct(product);
-                                            setShowMappingModal(true);
-                                            setAssignFileMode(true);
-                                        }}
-                                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center font-medium"
-                                    >
-                                        <Plus size={12} className="mr-1" />
-                                        Datei hinzufügen
-                                    </button>
+                                    <div className="flex space-x-2">
+                                        <button 
+                                            onClick={() => {
+                                                setEditingProduct(product);
+                                                setShowMappingModal(true);
+                                                setAssignFileMode(true);
+                                                setAssignFileType('view');
+                                            }}
+                                            className="text-xs text-blue-600 hover:text-blue-800 flex items-center font-medium"
+                                        >
+                                            <ImageIcon size={12} className="mr-1" />
+                                            Ansicht +
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                setEditingProduct(product);
+                                                setShowMappingModal(true);
+                                                setAssignFileMode(true);
+                                                setAssignFileType('print');
+                                            }}
+                                            className="text-xs text-red-600 hover:text-red-800 flex items-center font-medium"
+                                        >
+                                            <Plus size={12} className="mr-1" />
+                                            Druckdaten +
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Shopware Images (Views) */}
