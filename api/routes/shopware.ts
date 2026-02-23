@@ -64,6 +64,28 @@ async function getShopware5Products(baseUrl: string, username: string, apiKey: s
     }
 }
 
+async function getShopware5ArticleDetails(baseUrl: string, username: string, apiKey: string, articleId: number | string) {
+    const url = baseUrl.replace(/\/$/, '');
+    const authString = Buffer.from(`${username}:${apiKey}`).toString('base64');
+    
+    try {
+        const response = await fetch(`${url}/api/articles/${articleId}`, {
+            headers: {
+                'Authorization': `Basic ${authString}`,
+                'Accept': 'application/json'
+            }
+        });
+
+        if (!response.ok) return null;
+        
+        const data = await response.json();
+        return data.data; 
+    } catch (error) {
+        console.error('Shopware 5 Article Detail Fetch Error:', error);
+        return null;
+    }
+}
+
 // --- Routes ---
 
 // Test connection
@@ -118,6 +140,30 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                 stock: p.mainDetail?.inStock,
                 imageUrl: p.images?.[0]?.link // Shopware 5 often provides 'link' or 'path'
             }));
+
+            // Check which products are new and might need image enrichment
+            const existingProductsDb = db.prepare("SELECT shopware_product_id FROM customer_products WHERE customer_id = ? AND source = 'shopware'").all(customerId) as any[];
+            const existingIds = new Set(existingProductsDb.map(row => String(row.shopware_product_id)));
+            
+            const newProducts = products.filter((p: any) => !existingIds.has(p.id));
+
+            if (newProducts.length > 0) {
+                // Fetch details for new products if images are missing in list view
+                // We do this in batches to be nice to the API
+                const batchSize = 5;
+                for (let i = 0; i < newProducts.length; i += batchSize) {
+                    const batch = newProducts.slice(i, i + batchSize);
+                    await Promise.all(batch.map(async (p: any) => {
+                        if (!p.imageUrl) {
+                            const details = await getShopware5ArticleDetails(baseUrl, customer.shopware_access_key, customer.shopware_secret_key, p.id);
+                            if (details && details.images && details.images.length > 0) {
+                                // Update the product object in the main array by reference
+                                p.imageUrl = details.images[0].link;
+                            }
+                        }
+                    }));
+                }
+            }
 
         } else {
             // Shopware 6 Logic
