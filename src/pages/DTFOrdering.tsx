@@ -132,10 +132,15 @@ export default function DTFOrdering() {
   };
 
   const handleDirectUpload = async () => {
-    if (!uploadFile || !uploadCustomerId) return;
+    if (!uploadFile) return;
     
-    const customer = customers.find(c => c.id === uploadCustomerId);
-    if (!customer) return;
+    // Support for upload without customer (One-Time-DTF)
+    const isOneTime = !uploadCustomerId;
+    let customer = null;
+    
+    if (uploadCustomerId) {
+        customer = customers.find(c => c.id === uploadCustomerId);
+    }
 
     try {
         const formData = new FormData();
@@ -155,17 +160,17 @@ export default function DTFOrdering() {
             // Create a "storage" order for this file
             const newOrder: any = {
                 id: Math.random().toString(36).substr(2, 9),
-                title: "Direkter Dateiupload (DTF)",
-                customerId: customer.id,
-                customerName: customer.name,
-                customerEmail: customer.email,
-                customerPhone: customer.phone,
-                customerAddress: customer.address,
+                title: isOneTime ? "Einmaliger DTF Upload" : "Direkter Dateiupload (DTF)",
+                customerId: customer?.id || 'one-time',
+                customerName: customer?.name || 'Einmaliger Kunde (Kein Profil)',
+                customerEmail: customer?.email || '',
+                customerPhone: customer?.phone || '',
+                customerAddress: customer?.address || '',
                 deadline: new Date().toISOString().split('T')[0],
-                status: "archived", // Special status for direct uploads
+                status: isOneTime ? "archived" : "archived", // Both archived to hide from main list
                 steps: { processing: true, produced: true, invoiced: true },
                 createdAt: new Date().toISOString(),
-                description: "Direkt im DTF-Bestellbereich hochgeladen",
+                description: isOneTime ? "Temporärer Upload für einmaligen DTF Druck" : "Direkt im DTF-Bestellbereich hochgeladen",
                 employees: [],
                 files: [{
                     name: uploadedFile.originalName,
@@ -188,7 +193,7 @@ export default function DTFOrdering() {
                 name: uploadedFile.originalName,
                 thumbnail: thumbnail,
                 orderId: newOrder.id,
-                customerName: customer.name,
+                customerName: newOrder.customerName,
                 date: newOrder.createdAt,
                 quantity: 1,
                 width: 0,
@@ -200,9 +205,6 @@ export default function DTFOrdering() {
             setIsUploading(false);
             setUploadFile(null);
             setUploadCustomerId("");
-            
-            // Close picker or stay open? Let's stay open so user can see it or add more.
-            // But we reset upload state.
         }
     } catch (error) {
         console.error("Upload failed:", error);
@@ -492,17 +494,22 @@ export default function DTFOrdering() {
                             
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Kunde auswählen</label>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">Kunde auswählen (Optional)</label>
                                     <select 
                                         value={uploadCustomerId}
                                         onChange={(e) => setUploadCustomerId(e.target.value)}
                                         className="w-full border border-gray-300 rounded p-2 text-sm focus:ring-red-500 focus:border-red-500"
                                     >
-                                        <option value="">-- Kunde wählen --</option>
+                                        <option value="">-- Ohne Kunde (Einmalig) --</option>
                                         {customers.map(c => (
                                             <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
                                     </select>
+                                    {!uploadCustomerId && (
+                                        <p className="text-[10px] text-gray-500 mt-1 italic">
+                                            Datei wird für diesen Auftrag genutzt und danach gelöscht.
+                                        </p>
+                                    )}
                                 </div>
                                 
                                 <div>
@@ -518,7 +525,7 @@ export default function DTFOrdering() {
                                 <div className="flex justify-end pt-2">
                                     <button 
                                         onClick={handleDirectUpload}
-                                        disabled={!uploadFile || !uploadCustomerId}
+                                        disabled={!uploadFile}
                                         className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                                     >
                                         <Upload size={16} className="mr-2" />
