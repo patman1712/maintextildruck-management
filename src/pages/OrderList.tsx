@@ -27,8 +27,15 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
       const data = await res.json();
       if (data.success) {
         const link = `${window.location.origin}/proof/${data.token}`;
-        await navigator.clipboard.writeText(link);
-        alert("Link für digitalen Abzug kopiert:\n" + link);
+        
+        try {
+          await navigator.clipboard.writeText(link);
+          alert("Link für digitalen Abzug in die Zwischenablage kopiert!");
+        } catch (clipboardError) {
+          console.warn("Clipboard access denied, falling back to prompt", clipboardError);
+          window.prompt("Bitte Link kopieren:", link);
+        }
+
         // Refresh orders to show "pending" status if it changed
         fetchData();
       } else {
