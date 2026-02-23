@@ -62,7 +62,8 @@ export default function EditOrder() {
   }, [fetchUsers]);
 
   const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
-  const [files, setFiles] = useState<{ name: string; type: 'preview' | 'print' | 'vector'; url?: string; file?: File }[]>([]);
+  const [files, setFiles] = useState<{ name: string; type: 'preview' | 'print' | 'vector'; url?: string; file?: File; thumbnail?: string }[]>([]);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   // Form States
   const [title, setTitle] = useState("");
@@ -310,7 +311,7 @@ export default function EditOrder() {
           const newAttachments = selectedProduct.files.map(f => ({
               name: f.file_name,
               url: f.file_url,
-              type: 'print' as const,
+              type: (f.type === 'view' ? 'preview' : 'print') as 'preview' | 'print' | 'vector',
               thumbnail: f.thumbnail_url
           }));
           
@@ -486,16 +487,29 @@ export default function EditOrder() {
               <p className="text-sm text-gray-600">Dateien hinzufügen</p>
             </div>
             {previewFiles.length > 0 && (
-              <ul className="mt-4 space-y-2">
+              <div className="mt-4 grid grid-cols-3 gap-2">
                 {previewFiles.map((file, idx) => (
-                  <li key={idx} className="flex justify-between items-center text-sm bg-gray-50 p-2 rounded border border-gray-100">
-                    <span className="truncate max-w-[200px]">{file.name}</span>
-                    <button type="button" onClick={() => removeFile(files.indexOf(file))} className="text-gray-400 hover:text-red-500">
-                      <X size={16} />
-                    </button>
-                  </li>
+                  <div key={idx} className="relative group">
+                      <div 
+                          className="h-24 bg-gray-100 rounded border border-gray-200 overflow-hidden flex items-center justify-center cursor-pointer hover:border-blue-300"
+                          onClick={() => file.url && setLightboxImage(file.url)}
+                      >
+                          {file.url ? (
+                              <img src={file.url} className="w-full h-full object-contain" alt={file.name} />
+                          ) : (
+                              <div className="text-xs text-gray-500 text-center p-1 break-words">{file.name}</div>
+                          )}
+                      </div>
+                      <button 
+                          type="button" 
+                          onClick={() => removeFile(files.indexOf(file))} 
+                          className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                      >
+                        <X size={12} />
+                      </button>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
 
@@ -934,6 +948,20 @@ export default function EditOrder() {
                 )}
             </div>
         </div>
+      )}
+      {/* Lightbox Modal */}
+      {lightboxImage && (
+          <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4" onClick={() => setLightboxImage(null)}>
+              <div className="relative max-w-4xl max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                  <img src={lightboxImage} className="max-w-full max-h-[90vh] object-contain rounded shadow-2xl" />
+                  <button 
+                      className="absolute -top-4 -right-4 bg-white text-black rounded-full p-2 hover:bg-gray-200 shadow-lg"
+                      onClick={() => setLightboxImage(null)}
+                  >
+                      <X size={24} />
+                  </button>
+              </div>
+          </div>
       )}
     </div>
   );

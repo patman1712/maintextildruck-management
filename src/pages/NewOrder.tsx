@@ -34,8 +34,10 @@ export default function NewOrder() {
   
   const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
   const [files, setFiles] = useState<File[]>([]);
+  const [existingPreviewFiles, setExistingPreviewFiles] = useState<{name: string, url: string, type: 'preview'}[]>([]);
   const [printFiles, setPrintFiles] = useState<{file: File, customName?: string}[]>([]);
   const [vectorFiles, setVectorFiles] = useState<File[]>([]);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   
@@ -250,7 +252,7 @@ export default function NewOrder() {
     let uploadedFiles: { name: string; type: 'preview' | 'print' | 'vector'; url?: string; customName?: string }[] = [];
     
     // Add existing attached files first
-    uploadedFiles = [...uploadedFiles, ...existingFilesToAttach];
+    uploadedFiles = [...uploadedFiles, ...existingFilesToAttach, ...existingPreviewFiles];
 
     try {
       // Only fetch if there are files
@@ -377,18 +379,41 @@ export default function NewOrder() {
 
       // Add Files
       if (selectedProduct.files && selectedProduct.files.length > 0) {
-          const newAttachments = selectedProduct.files.map(f => ({
-              name: f.file_name,
-              url: f.file_url,
-              type: 'print' as const
-          }));
+          const newPrintFiles: {name: string, url: string, type: 'print'}[] = [];
+          const newPreviewFiles: {name: string, url: string, type: 'preview'}[] = [];
+
+          selectedProduct.files.forEach(f => {
+              // Map 'view' to 'preview' for order context
+              if (f.type === 'view') {
+                  newPreviewFiles.push({
+                      name: f.file_name,
+                      url: f.file_url,
+                      type: 'preview' as const
+                  });
+              } else {
+                  // Default to print if type is 'print' or undefined
+                  newPrintFiles.push({
+                      name: f.file_name,
+                      url: f.file_url,
+                      type: 'print' as const
+                  });
+              }
+          });
           
-          // Filter out duplicates
-          const currentUrls = existingFilesToAttach.map(f => f.url);
-          const uniqueNewAttachments = newAttachments.filter(f => !currentUrls.includes(f.url));
+          // Filter out duplicates for Print Files
+          const currentPrintUrls = existingFilesToAttach.map(f => f.url);
+          const uniquePrintAttachments = newPrintFiles.filter(f => !currentPrintUrls.includes(f.url));
           
-          if (uniqueNewAttachments.length > 0) {
-              setExistingFilesToAttach([...existingFilesToAttach, ...uniqueNewAttachments]);
+          if (uniquePrintAttachments.length > 0) {
+              setExistingFilesToAttach([...existingFilesToAttach, ...uniquePrintAttachments]);
+          }
+
+          // Filter out duplicates for Preview Files
+          const currentPreviewUrls = existingPreviewFiles.map(f => f.url);
+          const uniquePreviewAttachments = newPreviewFiles.filter(f => !currentPreviewUrls.includes(f.url));
+
+          if (uniquePreviewAttachments.length > 0) {
+              setExistingPreviewFiles([...existingPreviewFiles, ...uniquePreviewAttachments]);
           }
       }
 
@@ -603,6 +628,35 @@ export default function NewOrder() {
               <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
               <p className="text-sm text-gray-600">Dateien hierher ziehen oder klicken</p>
             </div>
+            
+            {/* Existing Preview Files */}
+            {existingPreviewFiles.length > 0 && (
+              <div className="mt-4 mb-4">
+                  <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Aus Artikel übernommen</h4>
+                  <div className="grid grid-cols-3 gap-2">
+                      {existingPreviewFiles.map((file, idx) => (
+                          <div key={`existing-preview-${idx}`} className="relative group">
+                              <div 
+                                  className="h-24 bg-gray-100 rounded border border-gray-200 overflow-hidden flex items-center justify-center cursor-pointer hover:border-blue-300"
+                                  onClick={() => setLightboxImage(file.url)}
+                              >
+                                  <img src={file.url} className="w-full h-full object-contain" alt={file.name} />
+                              </div>
+                              <button 
+                                  type="button"
+                                  onClick={() => {
+                                      setExistingPreviewFiles(existingPreviewFiles.filter((_, i) => i !== idx));
+                                  }}
+                                  className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                              >
+                                  <X size={12} />
+                              </button>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+            )}
+
             {files.length > 0 && (
               <ul className="mt-4 space-y-2">
                 {files.map((file, idx) => (
@@ -1076,6 +1130,20 @@ export default function NewOrder() {
                 )}
             </div>
         </div>
+      )}
+      {/* Lightbox Modal */}
+      {lightboxImage && (
+          <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4" onClick={() => setLightboxImage(null)}>
+              <div className="relative max-w-4xl max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                  <img src={lightboxImage} className="max-w-full max-h-[90vh] object-contain rounded shadow-2xl" />
+                  <button 
+                      className="absolute -top-4 -right-4 bg-white text-black rounded-full p-2 hover:bg-gray-200 shadow-lg"
+                      onClick={() => setLightboxImage(null)}
+                  >
+                      <X size={24} />
+                  </button>
+              </div>
+          </div>
       )}
     </div>
   );
