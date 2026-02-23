@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore, Order } from "@/store";
 import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon } from "lucide-react";
+import ConfirmationModal from "@/components/ConfirmationModal";
 
 interface Product {
     id: string;
@@ -71,6 +72,17 @@ export default function CustomerDetails() {
   const [fileSearch, setFileSearch] = useState('');
   const [newManualProduct, setNewManualProduct] = useState({ name: '', productNumber: '', supplierId: '' });
   const [assignFileMode, setAssignFileMode] = useState(false);
+
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+      isOpen: boolean;
+      title: string;
+      message: string;
+      onConfirm: () => void;
+      type?: 'danger' | 'warning' | 'info' | 'success';
+      confirmText?: string;
+      cancelText?: string;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   useEffect(() => {
     fetchData();
@@ -167,36 +179,67 @@ export default function CustomerDetails() {
       }
   };
 
-  const handleDeleteProduct = async (productId: string) => {
-      if (!confirm('Produkt wirklich löschen?')) return;
-      try {
-          await fetch(`/api/products/${productId}`, {
-              method: 'DELETE'
-          });
-          fetchProducts();
-      } catch (err) {
-          console.error(err);
-      }
+  const handleDeleteProduct = (productId: string) => {
+      setConfirmModal({
+          isOpen: true,
+          title: 'Produkt löschen',
+          message: 'Möchten Sie dieses Produkt wirklich löschen?',
+          type: 'danger',
+          confirmText: 'Löschen',
+          onConfirm: async () => {
+              try {
+                  await fetch(`/api/products/${productId}`, {
+                      method: 'DELETE'
+                  });
+                  fetchProducts();
+              } catch (err) {
+                  console.error(err);
+              }
+          }
+      });
   };
 
-  const handleDeleteAllProducts = async () => {
+  const handleDeleteAllProducts = () => {
       if (!customer) return;
-      if (!confirm(`WARNUNG: Sind Sie sicher, dass Sie ALLE ${products.length} Artikel von "${customer.name}" unwiderruflich löschen möchten?`)) return;
-      if (!confirm("Dies löscht alle Artikeldaten und zugehörige Bilder. Diese Aktion kann NICHT rückgängig gemacht werden.")) return;
 
-      try {
-          const res = await fetch(`/api/products/customer/${customer.id}/all`, { method: 'DELETE' });
-          const data = await res.json();
-          if (data.success) {
-              // alert(`${data.changes} Artikel wurden gelöscht.`);
-              fetchProducts();
-          } else {
-              alert('Fehler: ' + data.error);
+      const executeDelete = async () => {
+          try {
+              const res = await fetch(`/api/products/customer/${customer.id}/all`, { method: 'DELETE' });
+              const data = await res.json();
+              if (data.success) {
+                  fetchProducts();
+                  // Optional: Show success toast/modal
+              } else {
+                  alert('Fehler: ' + data.error);
+              }
+          } catch (err) {
+              console.error(err);
+              alert('Netzwerkfehler.');
           }
-      } catch (err) {
-          console.error(err);
-          alert('Netzwerkfehler.');
-      }
+      };
+
+      const confirmStep2 = () => {
+          // Small delay to allow modal transition if reusing same component
+          setTimeout(() => {
+            setConfirmModal({
+                isOpen: true,
+                title: 'Endgültige Bestätigung',
+                message: "Dies löscht alle Artikeldaten und zugehörige Bilder physisch vom Server.\nDiese Aktion kann NICHT rückgängig gemacht werden.",
+                type: 'danger',
+                confirmText: 'Ja, unwiderruflich löschen',
+                onConfirm: executeDelete
+            });
+          }, 200);
+      };
+
+      setConfirmModal({
+          isOpen: true,
+          title: 'Alle Artikel löschen',
+          message: `WARNUNG: Sind Sie sicher, dass Sie ALLE ${products.length} Artikel von "${customer.name}" löschen möchten?`,
+          type: 'danger',
+          confirmText: 'Fortfahren',
+          onConfirm: confirmStep2
+      });
   };
 
   const handleAssignFile = async (file: any) => {
@@ -326,30 +369,37 @@ export default function CustomerDetails() {
     await updateOrder(order.id, { files: updatedFiles });
   };
 
-  const handleDeleteFile = async (fileToDelete: { name: string, url?: string, orderTitle?: string, customName?: string, thumbnail?: string }) => {
-    if (!confirm(`Möchten Sie die Datei "${fileToDelete.customName || fileToDelete.name}" wirklich löschen? Sie wird auch aus dem Auftrag entfernt.`)) return;
+  const handleDeleteFile = (fileToDelete: { name: string, url?: string, orderTitle?: string, customName?: string, thumbnail?: string }) => {
+    setConfirmModal({
+        isOpen: true,
+        title: 'Datei löschen',
+        message: `Möchten Sie die Datei "${fileToDelete.customName || fileToDelete.name}" wirklich löschen? Sie wird auch aus dem Auftrag entfernt.`,
+        type: 'danger',
+        confirmText: 'Löschen',
+        onConfirm: async () => {
+            const order = customerOrders.find(o => o.files && Array.isArray(o.files) && o.files.some(f => f.url === fileToDelete.url));
+            if (!order) return;
 
-    const order = customerOrders.find(o => o.files && Array.isArray(o.files) && o.files.some(f => f.url === fileToDelete.url));
-    if (!order) return;
+            const updatedFiles = order.files.filter(f => f.url !== fileToDelete.url);
+            const updatedOrder = { ...order, files: updatedFiles };
+            setCustomerOrders(prev => prev.map(o => o.id === order.id ? updatedOrder : o));
 
-    const updatedFiles = order.files.filter(f => f.url !== fileToDelete.url);
-    const updatedOrder = { ...order, files: updatedFiles };
-    setCustomerOrders(prev => prev.map(o => o.id === order.id ? updatedOrder : o));
-
-    await updateOrder(order.id, { files: updatedFiles });
-    
-    if (fileToDelete.url) {
-        try {
-            await fetch('/api/upload/delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filePath: fileToDelete.url })
-            });
-        } catch (err) {
-            console.error("Failed to delete file from server", err);
+            await updateOrder(order.id, { files: updatedFiles });
+            
+            if (fileToDelete.url) {
+                try {
+                    await fetch('/api/upload/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filePath: fileToDelete.url })
+                    });
+                } catch (err) {
+                    console.error("Failed to delete file from server", err);
+                }
+            }
+            fetchData();
         }
-    }
-    fetchData();
+    });
   };
   
   const handleDirectUpload = async () => {
@@ -1165,6 +1215,18 @@ export default function CustomerDetails() {
               </div>
           </div>
       )}
+
+      {/* Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+        type={confirmModal.type}
+      />
 
     </div>
   );
