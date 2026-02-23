@@ -152,8 +152,9 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                 const existing = existingProducts.find(ep => ep.shopware_product_id === p.id);
                 
                 if (existing) {
-                    db.prepare('UPDATE customer_products SET name = ?, product_number = ? WHERE id = ?')
-                      .run(p.name, p.productNumber, existing.id);
+                    // User requested NOT to overwrite existing products so local edits are preserved.
+                    // If the user wants to update/reset a product, they should delete it locally and re-sync.
+                    continue;
                 } else {
                     const newId = Math.random().toString(36).substr(2, 9);
                     db.prepare("INSERT INTO customer_products (id, customer_id, name, product_number, source, shopware_product_id) VALUES (?, ?, ?, ?, 'shopware', ?)")
