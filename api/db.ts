@@ -214,6 +214,13 @@ try {
     console.log('Migrating database: Adding supplier_id to customer_products table');
     db.exec('ALTER TABLE customer_products ADD COLUMN supplier_id TEXT');
   }
+
+  const customerProductFileColumns = db.prepare("PRAGMA table_info(customer_product_files)").all() as any[];
+  const hasType = customerProductFileColumns.some(col => col.name === 'type');
+  if (!hasType) {
+    console.log('Migrating database: Adding type to customer_product_files table');
+    db.exec("ALTER TABLE customer_product_files ADD COLUMN type TEXT DEFAULT 'print'");
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }

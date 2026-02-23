@@ -15,6 +15,7 @@ interface Product {
         file_url: string;
         file_name: string;
         thumbnail_url?: string;
+        type?: string;
     }[];
 }
 
@@ -899,7 +900,7 @@ export default function CustomerDetails() {
 
                             <div className="mt-4 pt-4 border-t border-gray-100">
                                 <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-semibold text-gray-500 uppercase">Zugeordnete Druckdaten</span>
+                                    <span className="text-xs font-semibold text-gray-500 uppercase">Dateien & Ansichten</span>
                                     <button 
                                         onClick={() => {
                                             setEditingProduct(product);
@@ -912,43 +913,76 @@ export default function CustomerDetails() {
                                         Datei hinzufügen
                                     </button>
                                 </div>
-                                {product.files && product.files.length > 0 ? (
-                                    <div className="flex flex-wrap gap-3">
-                                        {product.files.map(file => (
-                                            <div key={file.id} className="relative group w-20">
-                                                <div className="h-20 w-20 bg-gray-50 rounded border border-gray-200 overflow-hidden flex items-center justify-center relative">
-                                                    {(file.thumbnail_url || file.file_url) ? (
+
+                                {/* Shopware Images (Views) */}
+                                {product.files && product.files.filter(f => f.type === 'view').length > 0 && (
+                                    <div className="mb-3">
+                                        <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Ansichten / Vorschau</div>
+                                        <div className="flex flex-wrap gap-3">
+                                            {product.files.filter(f => f.type === 'view').map(file => (
+                                                <div key={file.id} className="relative group w-20">
+                                                    <div className="h-20 w-20 bg-gray-50 rounded border border-gray-200 overflow-hidden flex items-center justify-center relative">
                                                         <img 
                                                             src={file.thumbnail_url || file.file_url} 
                                                             className="w-full h-full object-contain" 
-                                                            onError={(e) => {
-                                                                e.currentTarget.style.display = 'none';
-                                                                e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
-                                                            }}
+                                                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                                         />
-                                                    ) : null}
-                                                    
-                                                    <div className={`fallback-icon ${(file.thumbnail_url || file.file_url) ? 'hidden' : ''} flex items-center justify-center w-full h-full absolute inset-0`}>
-                                                        {file.file_name.toLowerCase().endsWith('.pdf') ? (
-                                                            <FileText size={24} className="text-red-500" />
-                                                        ) : (
-                                                            <ImageIcon size={24} className="text-gray-300" />
-                                                        )}
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => handleRemoveFile(file.id)}
+                                                        className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Print Files */}
+                                {product.files && product.files.filter(f => f.type !== 'view').length > 0 && (
+                                    <div className="mb-3">
+                                        <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Druckdaten</div>
+                                        <div className="flex flex-wrap gap-3">
+                                            {product.files.filter(f => f.type !== 'view').map(file => (
+                                                <div key={file.id} className="relative group w-20">
+                                                    <div className="h-20 w-20 bg-gray-50 rounded border border-gray-200 overflow-hidden flex items-center justify-center relative">
+                                                        {(file.thumbnail_url || file.file_url) ? (
+                                                            <img 
+                                                                src={file.thumbnail_url || file.file_url} 
+                                                                className="w-full h-full object-contain" 
+                                                                onError={(e) => {
+                                                                    e.currentTarget.style.display = 'none';
+                                                                    e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
+                                                                }}
+                                                            />
+                                                        ) : null}
+                                                        
+                                                        <div className={`fallback-icon ${(file.thumbnail_url || file.file_url) ? 'hidden' : ''} flex items-center justify-center w-full h-full absolute inset-0`}>
+                                                            {file.file_name.toLowerCase().endsWith('.pdf') ? (
+                                                                <FileText size={24} className="text-red-500" />
+                                                            ) : (
+                                                                <ImageIcon size={24} className="text-gray-300" />
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => handleRemoveFile(file.id)}
+                                                        className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                    <div className="text-[10px] truncate mt-1 text-gray-600" title={file.file_name}>
+                                                        {file.file_name}
                                                     </div>
                                                 </div>
-                                                <button 
-                                                    onClick={() => handleRemoveFile(file.id)}
-                                                    className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                >
-                                                    <X size={12} />
-                                                </button>
-                                                <div className="text-[10px] truncate mt-1 text-gray-600" title={file.file_name}>
-                                                    {file.file_name}
-                                                </div>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
-                                ) : (
+                                )}
+                                
+                                {(!product.files || product.files.length === 0) && (
                                     <p className="text-xs text-gray-400 italic">Keine Dateien zugeordnet</p>
                                 )}
                             </div>

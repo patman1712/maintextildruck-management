@@ -227,7 +227,7 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
 
                     if (p.imageUrl) {
                         const fileId = Math.random().toString(36).substr(2, 9);
-                        db.prepare("INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url) VALUES (?, ?, ?, ?, ?)")
+                        db.prepare("INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type) VALUES (?, ?, ?, ?, ?, 'view')")
                           .run(fileId, newId, p.imageUrl, 'Shopware Bild', p.imageUrl);
                     }
                 }

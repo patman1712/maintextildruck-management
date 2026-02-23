@@ -15,7 +15,8 @@ router.get('/:customerId', (req: Request, res: Response) => {
                 'id', f.id, 
                 'file_url', f.file_url, 
                 'file_name', f.file_name, 
-                'thumbnail_url', f.thumbnail_url
+                'thumbnail_url', f.thumbnail_url,
+                'type', f.type
             )) FROM customer_product_files f WHERE f.product_id = p.id) as files
             FROM customer_products p 
             WHERE p.customer_id = ? 
@@ -137,7 +138,7 @@ router.delete('/:id', (req: Request, res: Response) => {
 // POST assign file to product
 router.post('/:productId/files', (req: Request, res: Response) => {
     const { productId } = req.params;
-    const { fileUrl, fileName, thumbnailUrl } = req.body;
+    const { fileUrl, fileName, thumbnailUrl, type } = req.body;
 
     if (!fileUrl) {
         return res.status(400).json({ success: false, error: 'File URL is required' });
@@ -146,9 +147,9 @@ router.post('/:productId/files', (req: Request, res: Response) => {
     try {
         const id = Math.random().toString(36).substr(2, 9);
         db.prepare(`
-            INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url)
-            VALUES (?, ?, ?, ?, ?)
-        `).run(id, productId, fileUrl, fileName, thumbnailUrl);
+            INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(id, productId, fileUrl, fileName, thumbnailUrl, type || 'print');
 
         res.json({ success: true, message: 'File assigned', id });
     } catch (error: any) {
