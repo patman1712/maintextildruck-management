@@ -480,30 +480,35 @@ router.post('/generate', async (req: Request, res: Response) => {
                 const drawY = pageHeight - item.y - item.h + (paddingPoints / 2);
                 
                 if (item.rotated) {
-                    // Manually apply rotation using PDF operators because drawPage rotation option is unreliable in this version
-                    // Save Graphics State
-                    page.pushOperators(PDFOperator.of('q' as any));
+                    // Use drawPage with rotation option (supported at runtime despite type definition)
+                    // Rotation -90 degrees (90 degrees Counter-Clockwise)
+                    // In PDF-Lib (Clockwise positive): -90 is 90 CCW.
+                    // X-axis (Width) rotates to +Y (Up)
+                    // Y-axis (Height) rotates to -X (Left)
                     
-                    // Translate to Anchor Point (Top-Left of the box)
-                    // The box is at [drawX, drawY] with dimensions [source.height, source.width]
-                    // We want to anchor at the top-left of this box: (drawX, drawY + source.width)
-                    // PDFOperator.of expects args as array of specific types, we can use 'as any' to bypass for numbers
-                    page.pushOperators(PDFOperator.of('cm' as any, [1, 0, 0, 1, drawX, drawY + source.width] as any));
+                    // We want to fill the box:
+                    // X: [drawX, drawX + source.height]
+                    // Y: [drawY, drawY + source.width]
                     
-                    // Rotate -90 degrees (270 degrees)
-                    // -90 deg rotation matrix: [0, -1, 1, 0, 0, 0]
-                    page.pushOperators(PDFOperator.of('cm' as any, [0, -1, 1, 0, 0, 0] as any));
+                    // If we anchor at (X, Y) and draw:
+                    // Width goes Up (Y). Height goes Left (-X).
                     
-                    // Draw page at (0,0) relative to the transformed coordinate system
+                    // So we need to anchor at the Bottom-Right of the box?
+                    // X should be the Right edge: drawX + source.height
+                    // Y should be the Bottom edge: drawY
+                    
+                    // Let's verify:
+                    // Anchor (drawX + source.height, drawY)
+                    // Width (source.width) goes Up -> Y goes from drawY to drawY + source.width. (Correct)
+                    // Height (source.height) goes Left -> X goes from drawX + source.height to drawX. (Correct)
+                    
                     page.drawPage(embeddedPage, {
-                        x: 0,
-                        y: 0,
+                        x: drawX + source.height,
+                        y: drawY,
                         width: source.width,
-                        height: source.height
-                    });
-                    
-                    // Restore Graphics State
-                    page.pushOperators(PDFOperator.of('Q' as any));
+                        height: source.height,
+                        rotation: degrees(-90)
+                    } as any);
                 } else {
                     page.drawPage(embeddedPage, {
                         x: drawX,
