@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import path from 'path';
 import fs from 'fs-extra';
-import { PDFDocument, PDFPage, degrees } from 'pdf-lib';
+import { PDFDocument, PDFPage, degrees, pushGraphicsState, popGraphicsState, translate, rotate } from 'pdf-lib';
 import potpack from 'potpack'; 
 import { UPLOAD_DIR } from './upload.js';
 import { DATA_DIR } from '../db.js';
@@ -480,85 +480,22 @@ router.post('/generate', async (req: Request, res: Response) => {
                 const drawY = pageHeight - item.y - item.h + (paddingPoints / 2);
                 
                 if (item.rotated) {
-                    // Rotate 90 degrees CLOCKWISE around bottom-left origin
-                    // With rotation: degrees(90):
-                    // The coordinate system rotates 90 degrees clockwise.
-                    // X-axis points DOWN. Y-axis points RIGHT.
-                    
-                    // So if we draw at (drawX, drawY) in the page space:
-                    // We need to map this to the rotated space.
-                    
-                    // Actually, simpler logic:
-                    // To place an image at (X, Y) with 90 deg rotation,
-                    // such that its visual bounding box is [X, Y, Height, Width].
-                    
-                    // If we use rotation: 90
-                    // The anchor point (x, y) becomes the TOP-LEFT corner of the image visually?
-                    // No, usually Bottom-Left -> Top-Left.
-                    
-                    // Let's use the transformation:
-                    // x' = x + height
-                    // y' = y
-                    // rotation = 90
-                    // This puts the image in the box [x, x+h] x [y-w, y]?
-                    // No.
-                    
-                    // Let's assume standard behavior:
-                    // rotation: 90 means the image is drawn to the RIGHT and DOWN from anchor?
-                    // Or UP and RIGHT?
-                    
-                    // Let's use the method that definitely works: 
-                    // Move the anchor point to the bottom-right corner of the intended box?
-                    // Or top-left?
-                    
-                    // Intended Box: [drawX, drawY] to [drawX + H, drawY + W]
-                    // (Note: W and H are swapped relative to source)
-                    
-                    // If we use rotation 90:
-                    // We need to set x = drawX, y = drawY + source.width.
-                    // Let's try this. This assumes 90 deg rotation makes the image "lie down" to the right, starting from (x,y) and going down?
-                    // No, 90 deg usually points UP?
-                    
-                    // Let's look at the result image provided by user.
-                    // The error was overlapping.
-                    // My previous code was: x = drawX + source.height, y = drawY, rot = -90.
-                    // -90 is 270.
-                    // This rotates image 270 deg clockwise.
-                    // Top points LEFT.
-                    
-                    // Let's try 90 degrees with y adjustment.
-                    
+                    // Manual rotation using graphics state
+                    page.pushOperators(
+                        pushGraphicsState(),
+                        translate(drawX, drawY + source.width),
+                        rotate(degrees(-90))
+                    );
+
                     page.drawPage(embeddedPage, {
-                        x: drawX,
-                        y: drawY + source.width,
+                        x: 0,
+                        y: 0,
                         width: source.width,
-                        height: source.height,
-                        rotation: degrees(-90)
-                    } as any);
-                    
-                    // Wait, if I use -90 (270):
-                    // Image rotates 270 CW.
-                    // Bottom-Left (Origin) stays.
-                    // Bottom-Right goes UP.
-                    // Top-Left goes RIGHT.
-                    // So image lies on its left side.
-                    // It occupies [x, x+H] and [y, y+W].
-                    // So (x,y) is the Bottom-Left of the bounding box.
-                    // BUT: The image is drawn starting from origin.
-                    // If rotated -90:
-                    // +X (width) goes along -Y axis?
-                    // +Y (height) goes along +X axis?
-                    // So image extends from x to x+H (right) and y to y-W (down).
-                    // So it is below the line.
-                    
-                    // To bring it UP to [y, y+W]:
-                    // We need to shift Y by +W.
-                    // So: y = drawY + source.width.
-                    // x = drawX.
-                    // rotation = -90.
-                    
-                    // This seems correct for a -90 rotation where X becomes Y and Y becomes -X.
-                    // Let's try this combination.
+                        height: source.height
+                    });
+
+                    page.pushOperators(popGraphicsState());
+                } else {
                     page.drawPage(embeddedPage, {
                         x: drawX,
                         y: drawY,
