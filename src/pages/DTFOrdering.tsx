@@ -41,12 +41,12 @@ export default function DTFOrdering() {
   // Extract all available print files
   const availableFiles = orders.flatMap(order => 
     (order.files || [])
-      .filter(f => f.type === 'print')
+      .filter(f => f.type === 'print' || f.type === 'vector') // Allow vector files too if needed, or just print
       .map(f => ({
         id: f.url || Math.random().toString(36), // Use URL as ID or fallback
         url: f.url,
         name: f.customName || f.name,
-        thumbnail: f.thumbnail,
+        thumbnail: f.thumbnail, // Ensure this property exists on file object
         orderId: order.id,
         customerName: order.customerName,
         date: order.createdAt
