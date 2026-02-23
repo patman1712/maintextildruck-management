@@ -480,28 +480,27 @@ router.post('/generate', async (req: Request, res: Response) => {
                 const drawY = pageHeight - item.y - item.h + (paddingPoints / 2);
                 
                 if (item.rotated) {
-                    // Rotation -90 degrees (90 degrees Counter-Clockwise)
-                    // In PDF-Lib (Clockwise positive): -90 is 90 CCW.
-                    // X-axis (Width) rotates to +Y (Up)
-                    // Y-axis (Height) rotates to -X (Left)
+                    // Standard PDF Rotation: 90 degrees Counter-Clockwise (CCW).
+                    // Positive angle is CCW.
                     
-                    // We want to fill the box:
+                    // Rotation 90 degrees CCW:
+                    // X-axis (Source Width) rotates: Right -> Up (+Y)
+                    // Y-axis (Source Height) rotates: Up -> Left (-X)
+                    
+                    // Target Box (Visual):
                     // X: [drawX, drawX + source.height]
                     // Y: [drawY, drawY + source.width]
                     
-                    // If we anchor at (X, Y) and draw with -90 rotation:
-                    // Width goes Up (Y). Height goes Left (-X).
-                    
-                    // So we need to anchor at the Bottom-Right of the box:
-                    // X = drawX + source.height
-                    // Y = drawY
+                    // To fill this box with the rotated vectors:
+                    // We need to extend UP from Bottom (drawY). -> Anchor Y = drawY.
+                    // We need to extend LEFT from Right (drawX + source.height). -> Anchor X = drawX + source.height.
                     
                     page.drawPage(embeddedPage, {
                         x: drawX + source.height,
                         y: drawY,
                         width: source.width,
                         height: source.height,
-                        rotation: degrees(-90)
+                        rotation: degrees(90)
                     } as any);
                 } else {
                     page.drawPage(embeddedPage, {
