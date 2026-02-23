@@ -293,58 +293,132 @@ router.post('/generate', async (req: Request, res: Response) => {
         // Let's use Height Descending to fit tall items first into the fixed height strip.
         itemsToPack.sort((a, b) => b.h - a.h);
 
-        let pages: Item[][] = [];
-        let currentPageItems: Item[] = [];
+        // OPTIMIZATION: Try to pack as tightly as possible to minimize total width.
+        // The current packer (Guillotine Best Short Side Fit) does a good job, 
+        // but sorting by height descending might leave gaps if we have many small items.
+        // We can try to sort by Area Descending or Max Side Descending?
+        // Actually, Height Descending is best for Fixed Height strip packing (FFDH level).
+        // BSSF handles the rest.
         
-        let packer = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
-        let currentPageIndex = 0;
-
-        for (const item of itemsToPack) {
-            if (item.h > PACKER_HEIGHT) {
-                console.warn("Item taller than fixed roll height (rollWidth), skipping");
-                continue;
-            }
-            if (item.w > PACKER_WIDTH) {
-                 console.warn("Item wider than max length (rollLength), skipping");
-                 continue;
-            }
-
-            // Packer fit:
-            // We want to pack Left-to-Right (X) but fill Top-to-Bottom (Y) first.
-            // Our GuillotinePacker sorts freeRects by X (Leftmost).
+        // To further optimize length (width usage):
+        // We can try multiple sort orders and pick the best one?
+        // Sort orders: Height Descending, Width Descending, Area Descending.
+        
+        const sortStrategies = [
+            (a: Item, b: Item) => b.h - a.h, // Height Desc
+            (a: Item, b: Item) => b.w - a.w, // Width Desc
+            (a: Item, b: Item) => (b.w * b.h) - (a.w * a.h), // Area Desc
+            (a: Item, b: Item) => Math.max(b.w, b.h) - Math.max(a.w, a.h) // Max Side Desc
+        ];
+        
+        let bestPages: Item[][] | null = null;
+        let minTotalWidth = Number.MAX_VALUE;
+        
+        // Clone items for simulation
+        const originalItems = [...itemsToPack];
+        
+        for (const strategy of sortStrategies) {
+            const currentItems = [...originalItems].sort(strategy);
             
-            let pos = packer.fit(item.w, item.h);
+            const currentPages: Item[][] = [];
+            let currentPageItems: Item[] = [];
+            let currentPacker = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
+            let pageIdx = 0;
             
-            if (!pos) {
-                // Page full, start new page
-                pages.push(currentPageItems);
-                currentPageItems = [];
-                currentPageIndex++;
-                packer = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
-                pos = packer.fit(item.w, item.h);
-            }
-
-            if (pos) {
-                item.x = pos.x;
-                item.y = pos.y;
-                item.rotated = pos.rotated;
-                item.pageIndex = currentPageIndex;
-                
-                // If rotated, we swap w and h for rendering logic
-                if (pos.rotated) {
-                    const temp = item.w;
-                    item.w = item.h;
-                    item.h = temp;
+            let allFit = true;
+            
+            // Simulation loop
+            // We need to clone items again because fit modifies x, y, etc.
+            const simItems = currentItems.map(i => ({...i}));
+            
+            for (const item of simItems) {
+                if (item.h > PACKER_HEIGHT || item.w > PACKER_WIDTH) {
+                    continue; // Should have been caught before
                 }
                 
-                currentPageItems.push(item);
-            } else {
-                console.error("Item could not fit even in new page!", item);
+                let pos = currentPacker.fit(item.w, item.h);
+                
+                if (!pos) {
+                    currentPages.push(currentPageItems);
+                    currentPageItems = [];
+                    pageIdx++;
+                    currentPacker = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
+                    pos = currentPacker.fit(item.w, item.h);
+                }
+                
+                if (pos) {
+                    item.x = pos.x;
+                    item.y = pos.y;
+                    item.rotated = pos.rotated;
+                    item.pageIndex = pageIdx;
+                    currentPageItems.push(item);
+                } else {
+                    allFit = false;
+                    break; 
+                }
+            }
+            
+            if (allFit) {
+                if (currentPageItems.length > 0) {
+                    currentPages.push(currentPageItems);
+                }
+                
+                // Calculate total width used across all pages (sum of max X on each page? Or just max X of last page if 1 page?)
+                // Actually we want to minimize the max X used on the last page (length of roll).
+                // Assuming we want to fit everything on ONE page (infinite width).
+                // If multiple pages are generated (because PACKER_WIDTH was hit?), we sum widths?
+                // PACKER_WIDTH is effectively infinite. So usually 1 page.
+                
+                let totalWidth = 0;
+                for (const p of currentPages) {
+                    const maxX = p.reduce((max, i) => Math.max(max, (i.x || 0) + i.w), 0);
+                    totalWidth += maxX;
+                }
+                
+                if (totalWidth < minTotalWidth) {
+                    minTotalWidth = totalWidth;
+                    bestPages = currentPages;
+                }
             }
         }
         
-        if (currentPageItems.length > 0) {
-            pages.push(currentPageItems);
+        // Use best result
+        let pages = bestPages || [];
+        
+        // Fallback if simulation failed (shouldn't happen)
+        if (!bestPages) {
+             // ... original logic ...
+             itemsToPack.sort((a, b) => b.h - a.h);
+             // ... (rest of original packing logic) ...
+             // But let's just assume one strategy worked.
+             // If not, we just run the default height desc.
+             
+             pages = [];
+             let currentPageItems: Item[] = [];
+             let packer = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
+             let currentPageIndex = 0;
+             
+             for (const item of itemsToPack) {
+                 // ... check bounds ...
+                 if (item.h > PACKER_HEIGHT || item.w > PACKER_WIDTH) continue;
+
+                 let pos = packer.fit(item.w, item.h);
+                 if (!pos) {
+                     pages.push(currentPageItems);
+                     currentPageItems = [];
+                     currentPageIndex++;
+                     packer = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
+                     pos = packer.fit(item.w, item.h);
+                 }
+                 if (pos) {
+                     item.x = pos.x;
+                     item.y = pos.y;
+                     item.rotated = pos.rotated;
+                     item.pageIndex = currentPageIndex;
+                     currentPageItems.push(item);
+                 }
+             }
+             if (currentPageItems.length > 0) pages.push(currentPageItems);
         }
 
         // 3. Create Output PDF
