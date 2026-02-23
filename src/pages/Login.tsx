@@ -9,6 +9,13 @@ export default function Login() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const login = useAppStore((state) => state.login);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/settings').then(res => res.json()).then(data => {
+      if(data.success && data.settings && data.settings.logo) setLogoUrl(data.settings.logo);
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,9 +42,14 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-red-800 to-red-600">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
         <div className="text-center mb-8">
+          {logoUrl ? (
+             <img src={logoUrl} alt="Logo" className="h-16 mx-auto mb-4 object-contain" />
+          ) : (
+             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600 font-bold text-2xl">M</div>
+          )}
           <h1 className="text-2xl font-bold text-gray-800">Maintextildruck</h1>
           <p className="text-gray-500">Management System</p>
         </div>

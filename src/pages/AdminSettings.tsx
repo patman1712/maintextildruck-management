@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/store";
-import { Shield, Save, RotateCcw, AlertTriangle } from "lucide-react";
+import { Shield, Save, RotateCcw, AlertTriangle, Upload } from "lucide-react";
 
 export default function AdminSettings() {
   const orders = useAppStore((state) => state.orders);
@@ -8,14 +8,41 @@ export default function AdminSettings() {
   const fetchData = useAppStore((state) => state.fetchData);
   const updateOrder = useAppStore((state) => state.updateOrder);
 
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
   useEffect(() => {
     fetchData();
+    // Fetch settings
+    fetch('/api/settings').then(res => res.json()).then(data => {
+        if(data.success && data.settings && data.settings.logo) setLogoUrl(data.settings.logo);
+    });
   }, [fetchData]);
 
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [nextOrderNumber, setNextOrderNumber] = useState(1);
   const [isEditing, setIsEditing] = useState(false);
   const [manualNextNumber, setManualNextNumber] = useState(1);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+    const formData = new FormData();
+    formData.append('logo', file);
+
+    try {
+        const res = await fetch('/api/settings/logo', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.success) {
+            setLogoUrl(data.logoUrl);
+            alert("Logo erfolgreich hochgeladen!");
+            window.location.reload(); 
+        } else {
+            alert("Fehler: " + data.error);
+        }
+    } catch (err) {
+        alert("Fehler beim Upload");
+    }
+  };
 
   // Calculate current max number
   useEffect(() => {
@@ -142,6 +169,29 @@ export default function AdminSettings() {
         <Shield className="mr-2 text-red-600" />
         Admin Einstellungen
       </h1>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2">Logo & Branding</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div>
+                <p className="text-sm text-gray-600 mb-4">
+                    Laden Sie hier Ihr Firmenlogo hoch. Es wird oben rechts auf der Seite und im Login-Bereich angezeigt.
+                    <br/><span className="text-xs text-gray-400">Empfohlen: PNG mit transparentem Hintergrund.</span>
+                </p>
+                <label className="inline-block bg-white border border-gray-300 text-slate-700 px-4 py-2 rounded shadow-sm hover:bg-gray-50 cursor-pointer">
+                    <span className="flex items-center"><Upload size={16} className="mr-2"/> Logo hochladen</span>
+                    <input type="file" className="hidden" accept="image/*" onChange={handleLogoUpload} />
+                </label>
+            </div>
+            <div className="flex justify-center bg-gray-50 p-6 rounded border border-gray-200 h-32 items-center">
+                {logoUrl ? (
+                    <img src={logoUrl} alt="Firmenlogo" className="max-h-full object-contain" />
+                ) : (
+                    <div className="text-gray-400 text-sm italic">Kein Logo vorhanden</div>
+                )}
+            </div>
+        </div>
+      </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2">Auftragsnummern</h2>

@@ -10,6 +10,13 @@ export default function DashboardLayout() {
   const logout = useAppStore((state) => state.logout);
   const navigate = useNavigate();
   const location = useLocation();
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/settings').then(res => res.json()).then(data => {
+      if(data.success && data.settings && data.settings.logo) setLogoUrl(data.settings.logo);
+    });
+  }, []);
 
   // Close mobile menu on route change
   if (mobileMenuOpen) {
@@ -103,6 +110,7 @@ export default function DashboardLayout() {
           </div>
           
           <div className="flex items-center space-x-3 md:space-x-4">
+             {logoUrl && <img src={logoUrl} alt="Logo" className="h-8 md:h-12 object-contain mr-4" />}
              <div className="text-right hidden sm:block">
                 <p className="text-sm font-semibold text-gray-800">{currentUser?.name || 'Benutzer'}</p>
                 <p className="text-xs text-gray-500">{currentUser?.role === 'admin' ? 'Administrator' : 'Mitarbeiter'}</p>
