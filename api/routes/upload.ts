@@ -260,24 +260,36 @@ router.get('/list-pdfs', async (req: Request, res: Response) => {
             .filter(f => f.startsWith('DTF_Job_') && f.endsWith('.pdf'))
             .map(async f => {
                 const stat = await fs.stat(path.join(UPLOAD_DIR, f));
+                const thumbName = `${f}_thumb.png`;
+                const thumbPath = path.join(UPLOAD_DIR, thumbName);
                 
-                // Check if thumbnail exists (convention: filename_thumb.png) - wait, PDF generation doesn't make thumbs yet.
-                // We should generate one on the fly or during generation.
-                // For now, let's check if we can generate one if missing?
-                // Or just rely on generic icon.
+                let hasThumb = await fs.pathExists(thumbPath);
                 
-                // Actually, let's try to find a thumb if we made one.
-                // If not, maybe we can generate one now?
-                // Generating on list-view is slow.
-                // Let's assume no thumbnail for now unless we update the generator.
-                
+                // If missing, try to generate it now
+                if (!hasThumb) {
+                    try {
+                        const inputPath = path.join(UPLOAD_DIR, f);
+                        // Output root for pdftoppm (it appends .png)
+                        const thumbRoot = path.join(UPLOAD_DIR, `${f}_thumb`);
+                        
+                        await execFileAsync('pdftoppm', [
+                            '-png',
+                            '-singlefile',
+                            '-scale-to', '300',
+                            inputPath,
+                            thumbRoot
+                        ]);
+                        hasThumb = await fs.pathExists(thumbPath);
+                    } catch (e) {
+                        console.error('Failed to generate missing thumbnail during list:', f, e);
+                    }
+                }
+
                 return {
                     name: f,
                     url: `/uploads/${f}`,
                     date: stat.mtime.toISOString(),
-                    thumbnail: await fs.pathExists(path.join(UPLOAD_DIR, `${f}_thumb.png`)) 
-                        ? `/uploads/${f}_thumb.png` 
-                        : null
+                    thumbnail: hasThumb ? `/uploads/${thumbName}` : null
                 };
             }));
             
