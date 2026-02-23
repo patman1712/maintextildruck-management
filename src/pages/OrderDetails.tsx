@@ -8,6 +8,7 @@ export default function OrderDetails() {
   const navigate = useNavigate();
   const orders = useAppStore((state) => state.orders);
   const loading = useAppStore((state) => state.loading);
+  const updateOrder = useAppStore((state) => state.updateOrder);
   const deleteOrder = useAppStore((state) => state.deleteOrder);
   const suppliers = useAppStore((state) => state.suppliers);
   const [order, setOrder] = useState(orders.find(o => o.id === id));
@@ -21,6 +22,34 @@ export default function OrderDetails() {
       navigate("/dashboard/orders");
     }
   }, [id, orders, navigate, loading]);
+
+  const handleDeleteFile = async (fileToDelete: { name: string, url?: string, type: string }) => {
+    if (!order) return;
+    if (!confirm(`Möchten Sie die Datei "${fileToDelete.name}" wirklich löschen?`)) return;
+
+    // Remove from local state and store
+    const updatedFiles = order.files.filter(f => f.url !== fileToDelete.url);
+    const updatedOrder = { ...order, files: updatedFiles };
+    
+    // Optimistic update
+    setOrder(updatedOrder);
+    
+    // Update backend (DB)
+    await updateOrder(order.id, { files: updatedFiles });
+
+    // Delete physical file from server
+    if (fileToDelete.url && fileToDelete.url.startsWith('/uploads/')) {
+        try {
+            await fetch('/api/upload/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filePath: fileToDelete.url })
+            });
+        } catch (err) {
+            console.error("Failed to delete file from server", err);
+        }
+    }
+  };
 
   const handleDelete = async () => {
     if (!order) return;
@@ -246,13 +275,18 @@ export default function OrderDetails() {
                 {order.files.filter(f => f.type === 'preview').length > 0 ? (
                   <ul className="space-y-2">
                     {order.files.filter(f => f.type === 'preview').map((file, idx) => (
-                      <li key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-gray-200">
-                        {renderFilePreview(file)}
-                        <button onClick={() => downloadFile(file)} className="text-gray-400 hover:text-red-600" title="Herunterladen">
-                          <Download size={16} />
-                        </button>
-                      </li>
-                    ))}
+                  <li key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-gray-200">
+                    {renderFilePreview(file)}
+                    <div className="flex space-x-1">
+                      <button onClick={() => downloadFile(file)} className="text-gray-400 hover:text-red-600 p-1" title="Herunterladen">
+                        <Download size={16} />
+                      </button>
+                      <button onClick={() => handleDeleteFile({...file, type: 'preview'})} className="text-gray-400 hover:text-red-600 p-1" title="Löschen">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </li>
+                ))}
                   </ul>
                 ) : (
                   <p className="text-xs text-gray-400 italic">Keine Dateien.</p>
@@ -267,13 +301,18 @@ export default function OrderDetails() {
                 {order.files.filter(f => f.type === 'vector').length > 0 ? (
                   <ul className="space-y-2">
                     {order.files.filter(f => f.type === 'vector').map((file, idx) => (
-                      <li key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-blue-100">
-                        {renderFilePreview(file)}
-                        <button onClick={() => downloadFile(file)} className="text-blue-400 hover:text-blue-700" title="Herunterladen">
-                          <Download size={16} />
-                        </button>
-                      </li>
-                    ))}
+                  <li key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-blue-100">
+                    {renderFilePreview(file)}
+                    <div className="flex space-x-1">
+                      <button onClick={() => downloadFile(file)} className="text-blue-400 hover:text-blue-700 p-1" title="Herunterladen">
+                        <Download size={16} />
+                      </button>
+                      <button onClick={() => handleDeleteFile({...file, type: 'vector'})} className="text-blue-400 hover:text-blue-700 p-1" title="Löschen">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </li>
+                ))}
                   </ul>
                 ) : (
                   <p className="text-xs text-blue-400 italic">Keine Dateien.</p>
@@ -288,13 +327,18 @@ export default function OrderDetails() {
                 {order.files.filter(f => f.type === 'print').length > 0 ? (
                   <ul className="space-y-2">
                     {order.files.filter(f => f.type === 'print').map((file, idx) => (
-                      <li key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-red-100">
-                        {renderFilePreview(file)}
-                        <button onClick={() => downloadFile(file)} className="text-red-400 hover:text-red-700" title="Herunterladen">
-                          <Download size={16} />
-                        </button>
-                      </li>
-                    ))}
+                  <li key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-red-100">
+                    {renderFilePreview(file)}
+                    <div className="flex space-x-1">
+                      <button onClick={() => downloadFile(file)} className="text-red-400 hover:text-red-700 p-1" title="Herunterladen">
+                        <Download size={16} />
+                      </button>
+                      <button onClick={() => handleDeleteFile({...file, type: 'print'})} className="text-red-400 hover:text-red-700 p-1" title="Löschen">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </li>
+                ))}
                   </ul>
                 ) : (
                   <p className="text-xs text-red-400 italic">Keine Dateien.</p>

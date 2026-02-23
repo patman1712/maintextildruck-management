@@ -188,17 +188,40 @@ export default function EditOrder() {
 
                 if (data.success && data.files) {
                     if (data.files.preview) {
-                        finalFiles = [...finalFiles, ...data.files.preview.map((f: any) => ({ name: f.originalName, type: 'preview', url: f.path }))];
+                        finalFiles = [...finalFiles, ...data.files.preview.map((f: any) => ({ name: f.originalName, type: 'preview' as const, url: f.path, thumbnail: f.thumbnail }))];
                     }
                     if (data.files.print) {
-                        finalFiles = [...finalFiles, ...data.files.print.map((f: any) => ({ name: f.originalName, type: 'print', url: f.path, thumbnail: f.thumbnail }))];
+                        finalFiles = [...finalFiles, ...data.files.print.map((f: any) => ({ name: f.originalName, type: 'print' as const, url: f.path, thumbnail: f.thumbnail }))];
                     }
                     if (data.files.vector) {
-                        finalFiles = [...finalFiles, ...data.files.vector.map((f: any) => ({ name: f.originalName, type: 'vector', url: f.path }))];
+                        finalFiles = [...finalFiles, ...data.files.vector.map((f: any) => ({ name: f.originalName, type: 'vector' as const, url: f.path, thumbnail: f.thumbnail }))];
                     }
                 }
             } catch (err) {
                 console.error("Upload failed", err);
+            }
+        }
+
+        const order = orders.find(o => o.id === id);
+        
+        // Check for deleted files to cleanup from server
+        if (order && order.files) {
+            const currentFileUrls = finalFiles.map(f => f.url).filter(Boolean);
+            const deletedFiles = order.files.filter(f => f.url && !currentFileUrls.includes(f.url));
+            
+            // Delete removed files from server
+            for (const file of deletedFiles) {
+                if (file.url && file.url.startsWith('/uploads/')) {
+                    try {
+                        await fetch('/api/upload/delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filePath: file.url })
+                        });
+                    } catch (err) {
+                        console.error("Failed to delete orphaned file", err);
+                    }
+                }
             }
         }
 
