@@ -115,41 +115,57 @@ class GuillotinePacker {
     }
 
     splitFreeRect(freeRect: Rect, index: number, w: number, h: number) {
-        // We want to fill Y (Height) first (Column packing).
-        // So we want to preserve vertical space for next items in this column.
-        
-        // Vertical Split:
-        // Rect Right: x+w, y, free.w-w, free.h (Tall strip to right)
-        // Rect Bottom: x, y+h, w, free.h-h (Rest of column below)
-        
-        // Vertical Split is standard for Column packing where Height is fixed and Width is infinite.
-        // It keeps the "Right" rectangle as tall as possible, allowing new columns to be formed easily.
-        
         const usedRect = freeRect;
         this.freeRects.splice(index, 1); 
         
-        // Vertical Split strategy
+        // Dynamic Split Strategy:
+        // If w > h (Wide item), use Horizontal Split to preserve width for bottom free space.
+        // If h >= w (Tall item), use Vertical Split to preserve height for right free space.
         
-        // Add Bottom first (so it's picked first by Left-sort if x is same)
-        // Rect Bottom: (x, y+h, w, usedRect.h - h)
-        if (usedRect.h > h) {
-            this.freeRects.push({
-                x: usedRect.x,
-                y: usedRect.y + h,
-                w: w, // Constrained width
-                h: usedRect.h - h
-            });
-        }
+        const splitHorizontal = w > h;
         
-        // Add Right
-        // Rect Right: (x+w, y, usedRect.w - w, usedRect.h)
-        if (usedRect.w > w) {
-            this.freeRects.push({
-                x: usedRect.x + w,
-                y: usedRect.y,
-                w: usedRect.w - w, // Full remaining width
-                h: usedRect.h // Full height
-            });
+        if (splitHorizontal) {
+            // Horizontal Split
+            // Bottom (Full Width): x, y+h, usedRect.w, usedRect.h-h
+            // Right (Restricted Height): x+w, y, usedRect.w-w, h
+            
+            if (usedRect.h > h) {
+                this.freeRects.push({
+                    x: usedRect.x,
+                    y: usedRect.y + h,
+                    w: usedRect.w, 
+                    h: usedRect.h - h
+                });
+            }
+            if (usedRect.w > w) {
+                this.freeRects.push({
+                    x: usedRect.x + w,
+                    y: usedRect.y,
+                    w: usedRect.w - w,
+                    h: h
+                });
+            }
+        } else {
+            // Vertical Split (Default)
+            // Bottom (Restricted Width): x, y+h, w, usedRect.h-h
+            // Right (Full Height): x+w, y, usedRect.w-w, usedRect.h
+            
+            if (usedRect.h > h) {
+                this.freeRects.push({
+                    x: usedRect.x,
+                    y: usedRect.y + h,
+                    w: w, 
+                    h: usedRect.h - h
+                });
+            }
+            if (usedRect.w > w) {
+                this.freeRects.push({
+                    x: usedRect.x + w,
+                    y: usedRect.y,
+                    w: usedRect.w - w, 
+                    h: usedRect.h
+                });
+            }
         }
     }
 }
