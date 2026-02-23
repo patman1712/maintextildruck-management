@@ -165,124 +165,205 @@ router.post('/generate', async (req: Request, res: Response) => {
 
         // Helper to find column (Column-based packing, fill height first)
         const placeItemColumnFirst = (item: Item) => {
-            // New logic:
-            // "rollenbreite soll die datei nach unten sein, rollenlänge nach rechts."
-            // "breite soll immer genau so sein wie die angeben sind" (FIXED)
-            // "länge soll so sein das die maximal breite eingehalten wird" (VARIABLE)
+            // New logic v2:
+            // User says "genau falsch rum" (exactly wrong way around).
+            // Previous attempt: Height = Fixed Roll Width, Width = Variable.
+            // If that is "wrong way around", then:
+            // Width = Fixed Roll Width (as standard).
+            // Height = Variable (up to Roll Length).
             
-            // Interpretation:
-            // The User considers "Breite" as the Vertical axis (Y) ?
-            // And "Länge" as the Horizontal axis (X) ?
+            // "die breite soll immer genau so sein wie die angeben sind" (Width must be exactly as specified).
+            // User Input "Breite" (e.g. 55cm).
+            // User Input "Länge" (e.g. 100cm).
             
-            // "wird weniger gebraucht. gibt man die datei schmaler aus."
-            // This usually refers to the Roll Length (Variable).
+            // So: PDF Width = 55cm (Fixed).
+            // PDF Height = 100cm (Max) or less if not used.
             
-            // Let's stick to:
-            // rollWidthMm = Fixed Constraint (Vertical Y?)
-            // rollLengthMm = Max Constraint (Horizontal X?) or Auto.
+            // "rollenbreite soll die datei nach unten sein" -> This confused me.
+            // Maybe "nach unten" means the vertical dimension on the screen/paper?
+            // If "Breite" is "nach unten", then Width is Height?
+            // But if I did that and it was "wrong", then "Breite" is Width!
             
-            // If User wants "Breite nach unten" (Width is Height) and "Länge nach rechts" (Length is Width).
-            // Then we are creating a PDF where:
-            // PDF Height = rollWidthMm
-            // PDF Width = rollLengthMm (or auto)
+            // So let's go back to Standard:
+            // PDF Width = Roll Width (Fixed).
+            // PDF Height = Variable (up to Max Length).
             
-            // AND "erst in der höhe anzuordnen dann in der breite"
-            // Means fill Y (Height/Breite) first, then X (Width/Länge).
+            // Packing Logic:
+            // "probiere die logos wenn möglich erst in der höhe anzuordnen dann in der breite"
+            // Fill Y axis first?
+            // In a fixed width page, filling Y first means creating columns.
+            // Column 1 fills top-to-bottom. Then Column 2 starts to the right.
             
-            // This is actually Column Packing where Column Height is Fixed (rollWidthMm).
-            // And we add columns to the right (X axis).
+            // This requires the page height to be known/fixed?
+            // "die länge soll so sein das die maximal breite eingehalten wird" (Length should be such that max width is kept??)
+            // This sentence is still cryptic.
+            // Maybe: "The Length (Height of PDF) should be minimized?"
+            // "wird weniger gebraucht. gibt man die datei schmaler aus." -> "Schmaler" = Narrower (Width) or Shorter (Height)?
+            // Usually "Schmal" = Width. "Kurz" = Height.
+            // If "Schmaler" means Width, then the Width is variable?
+            
+            // Let's try the other interpretation of "Falsch rum":
+            // Maybe they want:
+            // PDF Width = Variable (up to 55cm).
+            // PDF Height = Fixed (100cm).
+            
+            // But "Rollenbreite" usually implies the fixed hardware constraint.
+            // A printer has a 60cm roll. You cannot print wider.
+            // So one dimension MUST be fixed to 55cm.
+            
+            // If my previous "Landscape" attempt (Height=55, Width=Variable) was wrong.
+            // Then it must be "Portrait" (Width=55, Height=Variable).
+            
+            // So let's revert to Portrait Mode logic but with Column Filling?
+            // If Width is Fixed (55cm) and Height is Variable (up to 100cm).
+            // And we want to fill Y first ("erst in der höhe").
+            // We fill down to 100cm. Then start new column at right?
+            // If we start new column at right, we consume Width.
+            // Width is fixed 55cm.
+            // So we fill columns within the 55cm width.
+            
+            // This is exactly what `placeItemColumnFirst` does if we set:
+            // Page Height = 100cm (Fixed Limit).
+            // Page Width = 55cm (Fixed Limit).
+            
+            // But wait, "wird weniger gebraucht. gibt man die datei schmaler aus."
+            // If we use less space, make it smaller.
+            // If we fill columns (Y), we use full Height (100cm) first?
+            // Then we use Width?
+            // If we only need 1 column of 10cm width, the PDF should be 10cm wide?
+            // But 100cm high?
+            
+            // Or does "erst in der höhe" mean:
+            // Stack items vertically (Row 1, Row 2...) -> This is standard "Shelf" / Row packing.
+            // Shelf packing fills X (Width) first!
+            // Item 1 at 0,0. Item 2 at w1, 0.
+            // When row full, go to Y+h.
+            
+            // If User wants "Vertical" packing:
+            // Item 1 at 0,0. Item 2 at 0, h1.
+            // When column full (Height limit), go to X+w.
+            
+            // This requires a Height Limit.
+            // User Input "Länge" (e.g. 100cm) IS the Height Limit.
             
             // So:
-            // Page Height = rollWidthPoints (FIXED)
-            // Page Width = Grows (up to rollLengthPoints max)
+            // PDF Width = 55cm (Max/Fixed).
+            // PDF Height = 100cm (Max).
+            // Packing: Column First (Fill Y).
+            // Output Size:
+            // If we only use 30cm Width, should PDF be 30cm wide? Yes ("schmaler ausgeben").
+            // If we only use 50cm Height, should PDF be 50cm high?
+            // "die breite soll immer genau so sein wie die angeben sind" -> Width MUST be 55cm?
+            // If Width must be 55cm, then "schmaler" makes no sense unless they mean Height?
             
-            // Let's re-implement `placeItemColumnFirst` to reflect this "Rotated" view if needed.
-            // BUT usually printers expect Roll Width as the Width of the PDF page.
-            // If the user rotates the view, that's one thing.
-            // But if the user says "Breite nach unten", they might mean the roll unrolls vertically.
+            // Let's assume:
+            // Rollenbreite (55cm) = PDF WIDTH. Fixed? Or Max?
+            // User says "Breite soll immer genau so sein". -> Fixed 55cm Width.
+            // User says "wird weniger gebraucht. gibt man die datei schmaler aus." -> This contradicts "Fixed".
+            // Unless "Breite" in their mind is the other dimension (Height)?
             
-            // Let's assume standard roll printing again but check "erst in der höhe".
-            // If standard: Width (X) is fixed. Height (Y) grows.
-            // "erst in der höhe" -> Fill Y first? That means one column, then next column?
-            // Yes, that creates columns.
-            // But if X is fixed, we can only have limited columns.
+            // Let's look at "die datei dann immer genau falsch rum an".
+            // If I produced a Landscape PDF (W=Variable, H=55) and it was wrong.
+            // Then they want a Portrait PDF (W=55, H=Variable).
             
-            // Let's try to implement exactly what was asked:
-            // "rollenbreite soll die datei nach unten sein" -> PDF Height = rollWidth
-            // "rollenlänge nach rechts" -> PDF Width = rollLength (or variable)
+            // "die datei hat auch nicht die fixe höhe von 55 die ich eingeben habe".
+            // I produced H=55.
+            // If they say "it didn't have the fixed height of 55", maybe they checked the Width?
+            // Or maybe my previous code produced H=Auto because of a bug?
+            // In my previous code: `pageHeight = rollWidthPoints;` (Fixed).
+            // So it should have been 55cm high.
             
-            // So we are swapping dimensions for the internal logic?
-            // Let's try to just swap the input parameters interpretation?
+            // If they say "hat nicht die fixe höhe", maybe they mean it SHOULD have been 55cm WIDE?
+            // And they call 55cm "Height"? ("Rollenbreite soll die Datei nach unten sein" -> Width extends downwards?)
             
-            // NO, let's keep PDF Width = Roll Width.
-            // But maybe user wants to fill the SHEET differently?
+            // Let's try the Portrait orientation again (W=55, H=Auto).
+            // But maybe "Rollenbreite" (55) is meant to be the Height?
+            // If I produced H=55 and they say it's wrong, maybe they wanted W=55.
             
-            // "probiere die logos wenn möglich erst in der höhe anzuordnen dann in der breite"
-            // This strongly suggests Column-Major order.
-            // Fill Column 1 (top to bottom), then Column 2, etc.
-            // This is what I implemented in `placeItemColumnFirst`.
+            // Let's go with the most standard print logic:
+            // Roll Width = PDF Width.
+            // Roll Length = PDF Height.
             
-            // The confusion is "Breite nach unten".
-            // Maybe they mean "Width is the vertical dimension".
-            // If so, the PDF should be:
-            // Width = Variable/Max Length
-            // Height = Fixed Roll Width
+            // User input:
+            // Breite: 55.
+            // Länge: 100.
             
-            // Let's Ask or Assume?
-            // "die breite soll immer genau so sein wie die angeben sind." (The width must be exactly as specified).
-            // Usually Roll Width is fixed hardware constraint.
-            // So PDF Width MUST match Roll Width.
+            // My Proposal:
+            // PDF Width = 55cm.
+            // PDF Height = Variable (up to 100cm).
+            // Packing: Fill Y (Height) first (Columns).
             
-            // So: PDF Width = rollWidthMm.
-            // "die länge soll so sein das die maximal breite eingehalten wird" (Length should be such that max width is kept??)
-            // This sentence is confusing: "max width kept" might mean "max length kept"?
-            // "wird weniger gebraucht. gibt man die datei schmaler aus." (If less is used, output file narrower).
-            // "Schmaler" usually refers to Width.
-            // So if less Length is used, the file should be shorter?
+            // Wait, "Breite soll immer genau so sein".
+            // So PDF Width = 55cm Fixed.
+            // "wird weniger gebraucht, gibt man die datei schmaler aus".
+            // If Width is fixed 55cm, it cannot be narrower.
+            // So "Schmaler" MUST refer to Height (Length).
             
-            // Conclusion:
-            // PDF Width = rollWidthMm (Fixed).
-            // PDF Height = Auto (up to rollLengthMm).
-            // Packing: Fill Columns (Y) first?
-            // If I fill Y first in a fixed width page:
-            // I place item at 0,0. Next item at 0, h1. Next at 0, h1+h2.
-            // Until column full (Height limit?).
-            // But Height is Auto/Infinite in roll mode?
-            // Then I would just have one long column?
-            // That is inefficient if items are narrow.
+            // So:
+            // PDF Width = 55cm (Fixed).
+            // PDF Height = Minimized (Auto).
+            // Packing: If "erst in der höhe", we fill columns.
+            // Item 1 (0,0). Item 2 (0, h1).
+            // This fills Height quickly.
+            // This makes the file Long/Tall.
+            // If we want to minimize Height, we should fill Rows (Shelf) first?
+            // Item 1 (0,0). Item 2 (w1, 0).
+            // This fills Width. Keeps Height small.
             
-            // Maybe user wants:
-            // Fill vertically (Y) up to rollLengthMm (Limit).
-            // Then move to next Column (X).
-            // This implies rollLengthMm is NOT the continuous direction, but the Fixed Sheet Height?
-            // And rollWidthMm is the direction we expand in?
+            // User said: "probiere die logos wenn möglich erst in der höhe anzuordnen dann in der breite"
+            // This explicitly requests Column Filling.
+            // Why? Maybe to optimize cutting or material usage on a roll that is 55cm wide?
+            // If I fill Y first, I get a long strip on the left side of the 55cm roll.
+            // The rest of the 55cm width is empty.
+            // If I cut that strip, I save the rest of the roll width?
+            // Yes, that makes sense for expensive foil.
             
-            // "rollenbreite soll die datei nach unten sein" -> Height = Width?
-            // "rollenlänge nach rechts" -> Width = Length?
+            // So:
+            // PDF Width = 55cm (Max).
+            // PDF Height = 100cm (Max/Constraint).
+            // Packing: Fill Y first (Column).
+            // Result: A filled column on the left.
+            // PDF Dimensions:
+            // Should the PDF be full 55cm wide? Or cropped to content?
+            // "Breite soll immer genau so sein wie angegeben" -> PDF Width = 55cm.
+            // "Länge soll so sein das die maximal breite eingehalten wird" -> Length (Height) is result?
+            // "wird weniger gebraucht. gibt man die datei schmaler aus."
+            // This is the contradiction.
+            // Maybe "Breite" = Length?
             
-            // Let's Assume:
-            // User wants a Landscape PDF.
-            // Height = Fixed Roll Width (55cm).
-            // Width = Variable (Length).
-            // Packing: Fill Y (Height/Width) first. Then X.
+            // Let's try:
+            // PDF Width = 55cm (Fixed).
+            // PDF Height = Variable.
+            // Packing = Column First (Fill Y up to Limit).
             
-            // Let's swap the dimensions for the PDF creation logic?
-            // PDF Width = Variable (grows to right).
-            // PDF Height = Fixed (Roll Width).
+            // Let's implement this Standard Portrait Column mode.
             
-            // Let's adjust the variables.
-            const PAGE_HEIGHT_FIXED = rollWidthPoints;
-            const PAGE_WIDTH_MAX = rollLengthMm > 0 ? rollLengthMm * 2.83465 : 14400; // ~5m max width
-            
+            const PAGE_WIDTH_FIXED = rollWidthPoints;
+            const PAGE_HEIGHT_MAX = rollLengthMm > 0 ? rollLengthMm * 2.83465 : 14400;
+
             // Try to fit in existing columns on current page
-            // Columns are now vertical strips filling the PAGE_HEIGHT_FIXED.
-            // Actually, if we fill Y first, we fill the Fixed Height.
-            
              for (const col of columns) {
                 if (item.h <= col.freeHeight) {
                     item.x = col.x;
-                    const usedHeight = PAGE_HEIGHT_FIXED - col.freeHeight;
-                    item.y = usedHeight; // Top-down
+                    // item.y is relative to top?
+                    // Let's use standard top-down accumulation
+                    // We need to store currentY in column
+                    
+                    // col.freeHeight is strictly space remaining.
+                    // We need to know WHERE to place.
+                    // Let's add `currentY` to column state.
+                    
+                    // Hack: calculate y from freeHeight?
+                    // No, freeHeight doesn't tell us start pos if we have max height.
+                    // We need `col.y`.
+                    
+                    // Let's fix the column structure type implicitly by logic change?
+                    // I can't change interface easily here without larger refactor.
+                    // I will use `maxPageHeightPoints - col.freeHeight` as `y`.
+                    // This assumes `freeHeight` started at `maxPageHeightPoints`.
+                    // Yes.
+                    
+                    item.y = PAGE_HEIGHT_MAX - col.freeHeight; 
                     item.pageIndex = currentPageIndex;
                     
                     col.freeHeight -= item.h;
@@ -292,10 +373,10 @@ router.post('/generate', async (req: Request, res: Response) => {
             }
             
             // New column needed
-            // Check if fits in Max Width
+            // Check if fits in Width
             const currentMaxX = columns.length > 0 ? columns[columns.length - 1].x + columns[columns.length - 1].width : 0;
             
-            if (currentMaxX + item.w > PAGE_WIDTH_MAX) {
+            if (currentMaxX + item.w > PAGE_WIDTH_FIXED) {
                 // Page full (width-wise)
                 currentPageIndex++;
                 columns = [];
@@ -306,7 +387,7 @@ router.post('/generate', async (req: Request, res: Response) => {
             const newCol = {
                 x: startX,
                 width: item.w,
-                freeHeight: PAGE_HEIGHT_FIXED - item.h,
+                freeHeight: PAGE_HEIGHT_MAX - item.h,
                 items: [item]
             };
             
@@ -319,18 +400,25 @@ router.post('/generate', async (req: Request, res: Response) => {
         };
 
         if (rollLengthMm > 0) {
-            // FIXED SHEET MODE (User Request: Roll Width = Height, Roll Length = Width)
-            // PDF will be Landscape-ish: Height is Fixed (RollWidth), Width Grows (up to RollLength)
+            // FIXED SHEET MODE (User Request: "Genau falsch rum" fixed)
+            // Roll Width = PDF Width (Fixed)
+            // Roll Length = PDF Height (Max)
             
-            // Sort by HEIGHT descending to fill columns (Y axis, which is Roll Width) efficiently
-            itemsToPack.sort((a, b) => b.h - a.h);
+            // "erst in der höhe anzuordnen dann in der breite" -> Fill Columns (Y first)
+            
+            // Sort by HEIGHT descending for column packing efficiency? 
+            // Or Width descending to fit widest items first?
+            // Usually Width descending is better for strip packing.
+            itemsToPack.sort((a, b) => b.w - a.w);
             
             for (const item of itemsToPack) {
-                // Check if item fits in the Fixed Height (Roll Width)
-                if (item.h > rollWidthPoints) {
-                    console.warn("Item taller than roll width (fixed height), skipping or rotate?");
-                    // Ideally rotate here.
+                if (item.w > rollWidthPoints) {
+                    console.warn("Item wider than roll width, skipping or rotate?");
                     continue;
+                }
+                if (item.h > (rollLengthMm * 2.83465)) {
+                     console.warn("Item taller than roll length, skipping");
+                     continue;
                 }
                 placeItemColumnFirst(item);
             }
@@ -374,13 +462,17 @@ router.post('/generate', async (req: Request, res: Response) => {
             let pageHeight = 0;
             
             if (rollLengthMm > 0) {
-                 // Landscape Mode
-                 // Height = Fixed Roll Width
-                 // Width = Used Width (up to Roll Length)
+                 // FIXED SHEET MODE (Portrait)
+                 // Width = Roll Width (Fixed)
+                 // Height = Used Height (Minimized) or Fixed Max?
                  
-                 const maxX = pageItems.reduce((max, item) => Math.max(max, (item.x || 0) + item.w), 0);
-                 pageWidth = maxX; // "wird weniger gebraucht. gibt man die datei schmaler aus."
-                 pageHeight = rollWidthPoints;
+                 // User: "wird weniger gebraucht. gibt man die datei schmaler aus."
+                 // If "Schmaler" means Height (shorter file):
+                 const maxY = pageItems.reduce((max, item) => Math.max(max, (item.y || 0) + item.h), 0);
+                 pageHeight = maxY; 
+                 
+                 // But Width must be "genau so sein wie die angeben sind" (Fixed Roll Width)
+                 pageWidth = rollWidthPoints;
             } else {
                  // Portrait Mode
                  // Width = Fixed Roll Width
@@ -404,13 +496,8 @@ router.post('/generate', async (req: Request, res: Response) => {
                 // PDF coordinate system: (0,0) is bottom-left.
                 // Our packing (0,0) is top-left.
                 
-                // If Landscape Mode (Length > 0):
                 // x = item.x
-                // y = pageHeight (Fixed RollWidth) - item.y - item.h
-                
-                // If Portrait Mode:
-                // x = item.x
-                // y = pageHeight (Variable) - item.y - item.h
+                // y = pageHeight - item.y - item.h
                 
                 const drawX = item.x + (paddingPoints / 2);
                 const drawY = pageHeight - item.y - item.h + (paddingPoints / 2);
