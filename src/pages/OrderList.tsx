@@ -29,6 +29,9 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
     // The "Aktuelle Aufträge" view should only show active orders
     if (effectiveStatusFilter === 'active' && order.status === 'completed') return false;
     
+    // Hide the special "Manual Inventory" order from the list
+    if (order.id === 'inventory-manual') return false;
+    
     return matchesSearch && matchesStatus;
   });
 
