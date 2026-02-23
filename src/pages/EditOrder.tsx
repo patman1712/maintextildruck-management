@@ -83,13 +83,17 @@ export default function EditOrder() {
         if (order.files) {
             order.files.forEach(f => {
                 if (f.type === 'print' && f.url) {
-                    allFiles.push({
-                        name: f.customName || f.name,
-                        url: f.url,
-                        type: 'print',
-                        date: order.createdAt,
-                        orderTitle: order.title
-                    });
+                    // Check for duplicates based on URL
+                    const isDuplicate = allFiles.some(existing => existing.url === f.url);
+                    if (!isDuplicate) {
+                        allFiles.push({
+                            name: f.customName || f.name,
+                            url: f.url,
+                            type: 'print',
+                            date: order.createdAt,
+                            orderTitle: order.title
+                        });
+                    }
                 }
             });
         }
