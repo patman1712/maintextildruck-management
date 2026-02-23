@@ -104,25 +104,25 @@ export default function DashboardLayout() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden w-full">
         {/* Header */}
-        <header className="h-16 bg-white shadow-sm flex items-center justify-between px-4 md:px-6 border-b border-gray-200 shrink-0">
+        <header className="h-16 bg-gradient-to-r from-red-800 to-red-600 shadow-md flex items-center justify-between px-4 md:px-6 border-b border-red-700 shrink-0">
           <div className="flex items-center">
             {/* Mobile Hamburger */}
-            <button onClick={() => setMobileMenuOpen(true)} className="text-gray-600 hover:text-gray-900 focus:outline-none md:hidden mr-4">
+            <button onClick={() => setMobileMenuOpen(true)} className="text-white hover:text-red-100 focus:outline-none md:hidden mr-4">
               <Menu size={24} />
             </button>
             
             {/* Desktop Toggle */}
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-600 hover:text-gray-900 focus:outline-none hidden md:block">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-white hover:text-red-100 focus:outline-none hidden md:block">
               {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           </div>
           
           <div className="flex items-center space-x-3 md:space-x-4">
              <div className="text-right hidden sm:block">
-                <p className="text-sm font-semibold text-gray-800">{currentUser?.name || 'Benutzer'}</p>
-                <p className="text-xs text-gray-500">{currentUser?.role === 'admin' ? 'Administrator' : 'Mitarbeiter'}</p>
+                <p className="text-sm font-semibold text-white">{currentUser?.name || 'Benutzer'}</p>
+                <p className="text-xs text-red-100">{currentUser?.role === 'admin' ? 'Administrator' : 'Mitarbeiter'}</p>
              </div>
-             <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 font-bold border-2 border-red-50 text-sm md:text-base">
+             <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white flex items-center justify-center text-red-700 font-bold border-2 border-red-200 text-sm md:text-base shadow-sm">
                 {currentUser?.name?.charAt(0) || 'U'}
              </div>
           </div>
