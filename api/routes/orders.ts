@@ -31,7 +31,8 @@ router.get('/', (req: Request, res: Response) => {
     approvedBy: row.approved_by,
     approvedAt: row.approved_at,
     rejectionReason: row.rejection_reason,
-    approvalToken: row.approval_token
+    approvalToken: row.approval_token,
+    approvalComment: row.approval_comment
   }));
   
   res.json({ success: true, data: orders });
@@ -230,7 +231,8 @@ router.get('/public/:token', (req: Request, res: Response) => {
       approvalStatus: order.approval_status,
       approvedBy: order.approved_by,
       approvedAt: order.approved_at,
-      rejectionReason: order.rejection_reason
+      rejectionReason: order.rejection_reason,
+      approvalComment: order.approval_comment
     };
 
     // Also fetch items
@@ -251,16 +253,16 @@ router.get('/public/:token', (req: Request, res: Response) => {
 // POST approve order
 router.post('/public/:token/approve', (req: Request, res: Response) => {
   const { token } = req.params;
-  const { name } = req.body;
+  const { name, comment } = req.body;
   
   if (!name) return res.status(400).json({ success: false, error: 'Name required' });
 
   try {
     const result = db.prepare(`
       UPDATE orders 
-      SET approval_status = 'approved', approved_by = ?, approved_at = ?
+      SET approval_status = 'approved', approved_by = ?, approved_at = ?, approval_comment = ?
       WHERE approval_token = ?
-    `).run(name, new Date().toISOString(), token);
+    `).run(name, new Date().toISOString(), comment || '', token);
 
     if (result.changes > 0) {
       res.json({ success: true });

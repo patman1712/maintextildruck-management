@@ -231,6 +231,12 @@ try {
     db.exec('ALTER TABLE orders ADD COLUMN approved_at DATETIME');
     db.exec('ALTER TABLE orders ADD COLUMN rejection_reason TEXT');
   }
+
+  const hasApprovalComment = columns.some(col => col.name === 'approval_comment');
+  if (!hasApprovalComment) {
+    console.log('Migrating database: Adding approval_comment to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN approval_comment TEXT');
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }

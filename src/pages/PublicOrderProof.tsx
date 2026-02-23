@@ -23,6 +23,7 @@ export default function PublicOrderProof() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [approverName, setApproverName] = useState("");
+  const [approverComment, setApproverComment] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -52,7 +53,7 @@ export default function PublicOrderProof() {
       const res = await fetch(`/api/orders/public/${token}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: approverName })
+        body: JSON.stringify({ name: approverName, comment: approverComment })
       });
       if (res.ok) {
         window.location.reload();
@@ -85,7 +86,7 @@ export default function PublicOrderProof() {
   if (error) return <div className="p-8 text-center text-red-600">{error}</div>;
   if (!order) return null;
 
-  const previewFiles = order.files.filter((f: any) => f.type === 'preview' || f.type === 'view' || f.name === 'Shopware Bild');
+  const previewFiles = order.files.filter((f: any) => f.type === 'preview' || f.type === 'view' || f.type === 'print' || f.name === 'Shopware Bild');
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8 font-sans">
@@ -172,7 +173,6 @@ export default function PublicOrderProof() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Artikel</th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Farbe</th>
                     <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Größe</th>
                     <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Anzahl</th>
                   </tr>
@@ -181,7 +181,6 @@ export default function PublicOrderProof() {
                   {items.map((item: any) => (
                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 font-medium text-gray-900">{item.item_name}</td>
-                      <td className="px-6 py-4 text-gray-600">{item.color || '-'}</td>
                       <td className="px-6 py-4 text-gray-600">{item.size}</td>
                       <td className="px-6 py-4 text-right font-bold text-gray-900">{item.quantity}</td>
                     </tr>
@@ -197,7 +196,7 @@ export default function PublicOrderProof() {
               <div className="bg-white p-8 rounded-xl border-2 border-slate-200 shadow-sm text-center">
                 <h3 className="text-2xl font-bold text-slate-800 mb-2">Freigabe erforderlich</h3>
                 <p className="text-gray-600 mb-8 max-w-lg mx-auto">
-                    Bitte prüfen Sie alle Details und Vorschaubilder sorgfältig auf Richtigkeit. 
+                    Bitte prüfen Sie alle Details, insbesondere die <strong>Bestellmengen</strong> und Vorschaubilder, sorgfältig auf Richtigkeit. 
                     Mit Ihrer Bestätigung geben Sie den Auftrag zur Produktion frei.
                 </p>
                 
@@ -210,6 +209,16 @@ export default function PublicOrderProof() {
                       placeholder="Vorname Nachname eingeben..."
                       value={approverName}
                       onChange={e => setApproverName(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="text-left">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Anmerkung / Kommentar (Optional)</label>
+                    <textarea 
+                      className="w-full border-gray-300 rounded-lg p-3 border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow h-24 resize-none"
+                      placeholder="Zusätzliche Hinweise..."
+                      value={approverComment}
+                      onChange={e => setApproverComment(e.target.value)}
                     />
                   </div>
                   
