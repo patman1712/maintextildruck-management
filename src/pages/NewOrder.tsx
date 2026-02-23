@@ -217,6 +217,7 @@ export default function NewOrder() {
                 name: f.originalName, 
                 type: 'print' as const, 
                 url: f.path,
+                thumbnail: f.thumbnail,
                 customName: printFiles[i]?.customName || ""
             }))];
           }
@@ -522,7 +523,7 @@ export default function NewOrder() {
           <div className="md:col-span-2">
             <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex justify-between items-center">
               <span>Fertige Druckdaten DTF</span>
-              <span className="text-xs font-normal text-white bg-red-600 px-2 py-1 rounded">Nur PNG</span>
+              <span className="text-xs font-normal text-white bg-red-600 px-2 py-1 rounded">PNG & PDF</span>
             </h3>
             <div className="border-2 border-dashed border-red-200 bg-red-50/30 rounded-lg p-6 text-center hover:bg-red-50 transition-colors relative">
               <input
@@ -530,11 +531,11 @@ export default function NewOrder() {
                 multiple
                 onChange={(e) => handleFileUpload(e, "print")}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                accept=".png,image/png"
+                accept=".png,image/png,.pdf,application/pdf"
               />
               <Upload className="mx-auto h-8 w-8 text-red-400 mb-2" />
               <p className="text-sm text-red-600 font-medium">DTF-Druckdaten hier hochladen</p>
-              <p className="text-xs text-red-400 mt-1">Nur .png Dateien erlaubt</p>
+              <p className="text-xs text-red-400 mt-1">PNG & PDF Dateien erlaubt (CMYK)</p>
             </div>
             
             {/* Button to load existing files */}

@@ -64,8 +64,20 @@ export default function OrderDetails() {
     }
   };
 
-  const renderFilePreview = (file: { name: string, url?: string }) => {
+  const renderFilePreview = (file: { name: string, url?: string, thumbnail?: string }) => {
     if (!file.url) return <span className="truncate max-w-[150px]">{file.name}</span>;
+    
+    // Check if thumbnail exists
+    if (file.thumbnail) {
+        return (
+          <div className="flex items-center space-x-3">
+            <div className="h-10 w-10 bg-gray-100 rounded overflow-hidden flex-shrink-0 border border-gray-200">
+              <img src={file.thumbnail} alt={file.name} className="h-full w-full object-cover" />
+            </div>
+            <span className="truncate max-w-[120px]">{file.name}</span>
+          </div>
+        );
+    }
     
     // Check if image
     const isImage = file.name.match(/\.(jpg|jpeg|png|gif|webp)$/i);

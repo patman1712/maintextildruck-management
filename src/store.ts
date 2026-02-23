@@ -52,7 +52,7 @@ export interface Order {
   createdAt: string;
   description?: string;
   employees: string[];
-  files: { name: string; type: 'preview' | 'print' | 'vector'; url?: string; file?: File; customName?: string }[];
+  files: { name: string; type: 'preview' | 'print' | 'vector'; url?: string; file?: File; customName?: string; thumbnail?: string }[];
   orderItems?: OrderItem[]; // New field
 }
 

@@ -3,6 +3,10 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs-extra';
 import { DATA_DIR } from '../db.js';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 const router = Router();
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
@@ -26,23 +30,75 @@ router.post('/', upload.fields([
   { name: 'preview', maxCount: 20 },
   { name: 'print', maxCount: 20 },
   { name: 'vector', maxCount: 20 }
-]), (req: Request, res: Response) => {
+]), async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
   const result: any = { preview: [], print: [], vector: [] };
 
   if (files) {
     if (files.preview) {
-      result.preview = files.preview.map(f => ({
-        originalName: Buffer.from(f.originalname, 'latin1').toString('utf8'),
-        filename: f.filename,
-        path: `/uploads/${f.filename}`
+      result.preview = await Promise.all(files.preview.map(async f => {
+        const originalName = Buffer.from(f.originalname, 'latin1').toString('utf8');
+        let thumbnail = undefined;
+
+        if (f.mimetype === 'application/pdf' || f.originalname.toLowerCase().endsWith('.pdf')) {
+            try {
+                const inputPath = path.join(UPLOAD_DIR, f.filename);
+                const thumbName = `${f.filename}_thumb`;
+                const thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
+                
+                await execFileAsync('pdftoppm', [
+                    '-png',
+                    '-singlefile',
+                    '-scale-to', '300',
+                    inputPath,
+                    thumbOutputPath
+                ]);
+                
+                thumbnail = `/uploads/${thumbName}.png`;
+            } catch (e) {
+                console.error('Thumbnail generation failed for preview', e);
+            }
+        }
+
+        return {
+            originalName,
+            filename: f.filename,
+            path: `/uploads/${f.filename}`,
+            thumbnail
+        };
       }));
     }
     if (files.print) {
-      result.print = files.print.map(f => ({
-        originalName: Buffer.from(f.originalname, 'latin1').toString('utf8'),
-        filename: f.filename,
-        path: `/uploads/${f.filename}`
+      result.print = await Promise.all(files.print.map(async f => {
+        const originalName = Buffer.from(f.originalname, 'latin1').toString('utf8');
+        let thumbnail = undefined;
+
+        if (f.mimetype === 'application/pdf' || f.originalname.toLowerCase().endsWith('.pdf')) {
+            try {
+                const inputPath = path.join(UPLOAD_DIR, f.filename);
+                const thumbName = `${f.filename}_thumb`;
+                const thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
+                
+                await execFileAsync('pdftoppm', [
+                    '-png',
+                    '-singlefile',
+                    '-scale-to', '300',
+                    inputPath,
+                    thumbOutputPath
+                ]);
+                
+                thumbnail = `/uploads/${thumbName}.png`;
+            } catch (e) {
+                console.error('Thumbnail generation failed for print', e);
+            }
+        }
+
+        return {
+            originalName,
+            filename: f.filename,
+            path: `/uploads/${f.filename}`,
+            thumbnail
+        };
       }));
     }
     if (files.vector) {

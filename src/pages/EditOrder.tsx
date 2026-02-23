@@ -191,7 +191,7 @@ export default function EditOrder() {
                         finalFiles = [...finalFiles, ...data.files.preview.map((f: any) => ({ name: f.originalName, type: 'preview', url: f.path }))];
                     }
                     if (data.files.print) {
-                        finalFiles = [...finalFiles, ...data.files.print.map((f: any) => ({ name: f.originalName, type: 'print', url: f.path }))];
+                        finalFiles = [...finalFiles, ...data.files.print.map((f: any) => ({ name: f.originalName, type: 'print', url: f.path, thumbnail: f.thumbnail }))];
                     }
                     if (data.files.vector) {
                         finalFiles = [...finalFiles, ...data.files.vector.map((f: any) => ({ name: f.originalName, type: 'vector', url: f.path }))];
@@ -436,10 +436,10 @@ export default function EditOrder() {
                 multiple
                 onChange={(e) => handleFileUpload(e, "print")}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                accept=".png,image/png"
+                accept=".png,image/png,.pdf,application/pdf"
               />
               <Upload className="mx-auto h-8 w-8 text-red-400 mb-2" />
-              <p className="text-sm text-red-600 font-medium">DTF-Druckdaten hinzufügen</p>
+              <p className="text-sm text-red-600 font-medium">DTF-Druckdaten hinzufügen (PNG & PDF)</p>
             </div>
 
             {/* Button to load existing files */}
