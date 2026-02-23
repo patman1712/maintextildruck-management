@@ -4,8 +4,10 @@ import { Printer, Upload, Download, Trash2, FileText, Check, AlertCircle } from 
 
 export default function DTFOrdering() {
   const orders = useAppStore((state) => state.orders);
+  const customers = useAppStore((state) => state.customers);
   const loading = useAppStore((state) => state.loading);
   const fetchData = useAppStore((state) => state.fetchData);
+  const addOrder = useAppStore((state) => state.addOrder);
 
   useEffect(() => {
     fetchData();
@@ -32,6 +34,11 @@ export default function DTFOrdering() {
   // File Picker Modal State
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
+  
+  // Direct Upload State
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadCustomerId, setUploadCustomerId] = useState<string>("");
 
   // Processing State
   const [isGenerating, setIsGenerating] = useState(false);
@@ -53,6 +60,9 @@ export default function DTFOrdering() {
         date: order.createdAt
       }))
   ).filter(f => f.url);
+
+  // Sort files by date (newest first)
+  availableFiles.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   // Group active orders that have print files (for the "Open Orders" list)
   const openOrdersWithFiles = orders
@@ -119,6 +129,85 @@ export default function DTFOrdering() {
         }
         return f;
     }));
+  };
+
+  const handleDirectUpload = async () => {
+    if (!uploadFile || !uploadCustomerId) return;
+    
+    const customer = customers.find(c => c.id === uploadCustomerId);
+    if (!customer) return;
+
+    try {
+        const formData = new FormData();
+        formData.append('print', uploadFile);
+
+        const res = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+
+        if (data.success && data.files && data.files.print && data.files.print.length > 0) {
+            const uploadedFile = data.files.print[0];
+            const fileUrl = uploadedFile.path;
+            const thumbnail = uploadedFile.thumbnail;
+            
+            // Create a "storage" order for this file
+            const newOrder: any = {
+                id: Math.random().toString(36).substr(2, 9),
+                title: "Direkter Dateiupload (DTF)",
+                customerId: customer.id,
+                customerName: customer.name,
+                customerEmail: customer.email,
+                customerPhone: customer.phone,
+                customerAddress: customer.address,
+                deadline: new Date().toISOString().split('T')[0],
+                status: "archived", // Special status for direct uploads
+                steps: { processing: true, produced: true, invoiced: true },
+                createdAt: new Date().toISOString(),
+                description: "Direkt im DTF-Bestellbereich hochgeladen",
+                employees: [],
+                files: [{
+                    name: uploadedFile.originalName,
+                    type: 'print',
+                    url: fileUrl,
+                    thumbnail: thumbnail,
+                    customName: uploadedFile.originalName
+                }]
+            };
+
+            await addOrder(newOrder);
+            
+            // Refresh data
+            await fetchData();
+
+            // Automatically select the uploaded file
+            const fileToAdd = {
+                id: fileUrl,
+                url: fileUrl,
+                name: uploadedFile.originalName,
+                thumbnail: thumbnail,
+                orderId: newOrder.id,
+                customerName: customer.name,
+                date: newOrder.createdAt,
+                quantity: 1,
+                width: 0,
+                height: 0
+            };
+            
+            addFile(fileToAdd);
+            
+            setIsUploading(false);
+            setUploadFile(null);
+            setUploadCustomerId("");
+            
+            // Close picker or stay open? Let's stay open so user can see it or add more.
+            // But we reset upload state.
+        }
+    } catch (error) {
+        console.error("Upload failed:", error);
+        alert("Upload fehlgeschlagen.");
+    }
   };
 
   const handleGenerate = async () => {
@@ -378,21 +467,79 @@ export default function DTFOrdering() {
             <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl h-[80vh] flex flex-col">
                 <div className="p-4 border-b border-gray-200 flex justify-between items-center">
                     <h3 className="text-lg font-bold text-gray-800">Druckdatei auswählen</h3>
-                    <button onClick={() => setShowFilePicker(false)} className="text-gray-500 hover:text-gray-700">
-                        <Trash2 className="rotate-45" size={24} /> {/* Using Trash as close X icon hack or import X */}
-                    </button>
+                    <div className="flex items-center space-x-2">
+                        <button 
+                            onClick={() => setIsUploading(!isUploading)}
+                            className={`flex items-center px-3 py-1.5 rounded text-sm transition-colors ${
+                                isUploading 
+                                    ? 'bg-red-100 text-red-700 font-medium' 
+                                    : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                            }`}
+                        >
+                            <Upload size={16} className="mr-2" />
+                            {isUploading ? 'Abbrechen' : 'Neue Datei hochladen'}
+                        </button>
+                        <button onClick={() => setShowFilePicker(false)} className="text-gray-500 hover:text-gray-700">
+                            <Trash2 className="rotate-45" size={24} />
+                        </button>
+                    </div>
                 </div>
                 
-                <div className="p-4 border-b border-gray-200 bg-gray-50">
-                    <input 
-                        type="text" 
-                        placeholder="Suchen nach Dateiname oder Kunde..." 
-                        className="w-full border border-gray-300 rounded p-2 focus:ring-red-500 focus:border-red-500"
-                        value={pickerSearch}
-                        onChange={(e) => setPickerSearch(e.target.value)}
-                        autoFocus
-                    />
-                </div>
+                {isUploading ? (
+                    <div className="p-4 bg-red-50 border-b border-red-100 animate-in slide-in-from-top-2">
+                        <div className="max-w-xl mx-auto bg-white p-4 rounded shadow-sm border border-red-100">
+                            <h4 className="font-semibold text-gray-800 mb-3">Datei hochladen & Kunde zuweisen</h4>
+                            
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">Kunde auswählen</label>
+                                    <select 
+                                        value={uploadCustomerId}
+                                        onChange={(e) => setUploadCustomerId(e.target.value)}
+                                        className="w-full border border-gray-300 rounded p-2 text-sm focus:ring-red-500 focus:border-red-500"
+                                    >
+                                        <option value="">-- Kunde wählen --</option>
+                                        {customers.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">Datei (PDF oder PNG)</label>
+                                    <input 
+                                        type="file" 
+                                        accept=".pdf,application/pdf,.png,image/png"
+                                        onChange={(e) => setUploadFile(e.target.files ? e.target.files[0] : null)}
+                                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
+                                    />
+                                </div>
+                                
+                                <div className="flex justify-end pt-2">
+                                    <button 
+                                        onClick={handleDirectUpload}
+                                        disabled={!uploadFile || !uploadCustomerId}
+                                        className="bg-red-600 text-white px-4 py-2 rounded text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                                    >
+                                        <Upload size={16} className="mr-2" />
+                                        Hochladen & Hinzufügen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="p-4 border-b border-gray-200 bg-gray-50">
+                        <input 
+                            type="text" 
+                            placeholder="Suchen nach Dateiname oder Kunde..." 
+                            className="w-full border border-gray-300 rounded p-2 focus:ring-red-500 focus:border-red-500"
+                            value={pickerSearch}
+                            onChange={(e) => setPickerSearch(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                )}
 
                 <div className="flex-1 overflow-y-auto p-4">
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
