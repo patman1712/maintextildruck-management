@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs-extra';
-import { DATA_DIR } from '../db.js';
+import db, { DATA_DIR } from '../db.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
@@ -111,6 +111,69 @@ router.post('/', upload.fields([
   }
 
   res.json({ success: true, files: result });
+});
+
+// POST /api/upload/regenerate-thumbnails
+// Helper to fix missing thumbnails for existing PDF files
+router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
+    try {
+        const orders = db.prepare('SELECT id, files FROM orders').all() as { id: string, files: string }[];
+        const ordersCount = orders.length;
+        let totalUpdated = 0;
+
+        for (const order of orders) {
+            let files: any[] = [];
+            try {
+                files = JSON.parse(order.files || '[]');
+            } catch (e) {
+                continue;
+            }
+
+            let orderUpdated = false;
+            for (const file of files) {
+                if (!file.url) continue;
+
+                // Check if PDF and missing thumbnail
+                const isPdf = file.url.toLowerCase().endsWith('.pdf') || (file.name && file.name.toLowerCase().endsWith('.pdf'));
+                
+                if (isPdf && !file.thumbnail) {
+                    const filename = path.basename(file.url);
+                    const inputPath = path.join(UPLOAD_DIR, filename);
+
+                    if (await fs.pathExists(inputPath)) {
+                        try {
+                            const thumbName = `${filename}_thumb`;
+                            const thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
+                            
+                            // Generate thumbnail
+                            await execFileAsync('pdftoppm', [
+                                '-png',
+                                '-singlefile',
+                                '-scale-to', '300',
+                                inputPath,
+                                thumbOutputPath
+                            ]);
+                            
+                            file.thumbnail = `/uploads/${thumbName}.png`;
+                            orderUpdated = true;
+                            totalUpdated++;
+                        } catch (e) {
+                            console.error(`Failed to regenerate thumbnail for ${filename}:`, e);
+                        }
+                    }
+                }
+            }
+
+            if (orderUpdated) {
+                db.prepare('UPDATE orders SET files = ? WHERE id = ?').run(JSON.stringify(files), order.id);
+            }
+        }
+
+        res.json({ success: true, updated: totalUpdated, ordersFound: ordersCount });
+    } catch (error) {
+        console.error('Error regenerating thumbnails:', error);
+        res.status(500).json({ success: false, error: 'Regeneration failed' });
+    }
 });
 
 // POST /api/upload/delete

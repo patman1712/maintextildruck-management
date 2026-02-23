@@ -211,16 +211,24 @@ export default function DTFOrdering() {
                             <p>Noch keine Dateien ausgewählt.</p>
                         </div>
                     ) : (
-                        selectedFiles.map((file, idx) => (
-                            <div key={`${file.url}-${idx}`} className="flex items-center bg-white border border-gray-200 p-2 rounded hover:border-red-200 transition-colors">
-                                <div className="h-12 w-12 bg-gray-100 rounded overflow-hidden shrink-0 border border-gray-100 flex items-center justify-center">
-                                    {file.thumbnail ? (
-                                        <img src={file.thumbnail} alt="" className="h-full w-full object-contain" />
-                                    ) : (
-                                        <FileText className="text-gray-400" />
-                                    )}
-                                </div>
-                                <div className="ml-3 flex-1 min-w-0">
+                        selectedFiles.map((file, idx) => {
+                            // Match logic from CustomerDetails: try thumbnail, else url (for images or browser-supported formats)
+                            const displayThumb = file.thumbnail || file.url;
+                            return (
+                                <div key={`${file.url}-${idx}`} className="flex items-center bg-white border border-gray-200 p-2 rounded hover:border-red-200 transition-colors">
+                                    <div className="h-12 w-12 bg-gray-100 rounded overflow-hidden shrink-0 border border-gray-100 flex items-center justify-center relative">
+                                        {displayThumb ? (
+                                            <img src={displayThumb} alt="" className="h-full w-full object-contain" onError={(e) => {
+                                                e.currentTarget.style.display = 'none';
+                                                e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
+                                            }} />
+                                        ) : null}
+                                        
+                                        <div className={`fallback-icon ${displayThumb ? 'hidden' : ''} flex items-center justify-center absolute inset-0`}>
+                                            <FileText className="text-gray-400" />
+                                        </div>
+                                    </div>
+                                    <div className="ml-3 flex-1 min-w-0">
                                     <p className="text-sm font-medium text-gray-800 truncate" title={file.name}>{file.name}</p>
                                     <p className="text-xs text-gray-500 truncate">{file.customerName}</p>
                                 </div>
@@ -328,6 +336,9 @@ export default function DTFOrdering() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                         {filteredAvailableFiles.map((file, idx) => {
                             const isSelected = selectedFiles.some(f => f.url === file.url);
+                            // Match CustomerDetails logic: try thumbnail, else url.
+                            const displayThumb = file.thumbnail || file.url;
+                            
                             return (
                                 <div 
                                     key={idx} 
@@ -338,11 +349,18 @@ export default function DTFOrdering() {
                                     `}
                                 >
                                     <div className="aspect-square bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden relative">
-                                        {file.thumbnail ? (
-                                            <img src={file.thumbnail} alt="" className="w-full h-full object-contain" />
-                                        ) : (
+                                        {displayThumb ? (
+                                            <img src={displayThumb} alt="" className="w-full h-full object-contain" onError={(e) => {
+                                                e.currentTarget.style.display = 'none';
+                                                e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
+                                            }} />
+                                        ) : null}
+                                        
+                                        {/* Fallback Icon (hidden by default if thumb exists, shown on error) */}
+                                        <div className={`fallback-icon ${displayThumb ? 'hidden' : ''} flex items-center justify-center w-full h-full absolute inset-0`}>
                                             <FileText className="text-gray-300 h-12 w-12" />
-                                        )}
+                                        </div>
+
                                         {isSelected && (
                                             <div className="absolute inset-0 bg-red-500/10 flex items-center justify-center">
                                                 <div className="bg-red-500 text-white rounded-full p-1 shadow-sm">
