@@ -164,6 +164,7 @@ export default function DTFOrdering() {
                             onChange={(e) => setRollWidth(Number(e.target.value))}
                             className="w-full border border-gray-300 rounded p-2 text-sm focus:ring-red-500 focus:border-red-500"
                         />
+                        <span className="text-[10px] text-gray-400">Breite der PDF (nach rechts)</span>
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-gray-500 mb-1">Länge (cm, 0 = Auto)</label>
@@ -173,6 +174,7 @@ export default function DTFOrdering() {
                             onChange={(e) => setRollLength(Number(e.target.value))}
                             className="w-full border border-gray-300 rounded p-2 text-sm focus:ring-red-500 focus:border-red-500"
                         />
+                        <span className="text-[10px] text-gray-400">Höhe der PDF (nach unten)</span>
                     </div>
                     <div>
                         <label className="block text-xs font-medium text-gray-500 mb-1">Abstand (mm)</label>

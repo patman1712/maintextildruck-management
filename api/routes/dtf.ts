@@ -163,21 +163,126 @@ router.post('/generate', async (req: Request, res: Response) => {
             return true;
         };
 
-        // Helper to find column (Column-based packing)
+        // Helper to find column (Column-based packing, fill height first)
         const placeItemColumnFirst = (item: Item) => {
+            // New logic:
+            // "rollenbreite soll die datei nach unten sein, rollenlänge nach rechts."
+            // "breite soll immer genau so sein wie die angeben sind" (FIXED)
+            // "länge soll so sein das die maximal breite eingehalten wird" (VARIABLE)
+            
+            // Interpretation:
+            // The User considers "Breite" as the Vertical axis (Y) ?
+            // And "Länge" as the Horizontal axis (X) ?
+            
+            // "wird weniger gebraucht. gibt man die datei schmaler aus."
+            // This usually refers to the Roll Length (Variable).
+            
+            // Let's stick to:
+            // rollWidthMm = Fixed Constraint (Vertical Y?)
+            // rollLengthMm = Max Constraint (Horizontal X?) or Auto.
+            
+            // If User wants "Breite nach unten" (Width is Height) and "Länge nach rechts" (Length is Width).
+            // Then we are creating a PDF where:
+            // PDF Height = rollWidthMm
+            // PDF Width = rollLengthMm (or auto)
+            
+            // AND "erst in der höhe anzuordnen dann in der breite"
+            // Means fill Y (Height/Breite) first, then X (Width/Länge).
+            
+            // This is actually Column Packing where Column Height is Fixed (rollWidthMm).
+            // And we add columns to the right (X axis).
+            
+            // So:
+            // Page Height = rollWidthPoints (FIXED)
+            // Page Width = Grows (up to rollLengthPoints max)
+            
+            // Let's re-implement `placeItemColumnFirst` to reflect this "Rotated" view if needed.
+            // BUT usually printers expect Roll Width as the Width of the PDF page.
+            // If the user rotates the view, that's one thing.
+            // But if the user says "Breite nach unten", they might mean the roll unrolls vertically.
+            
+            // Let's assume standard roll printing again but check "erst in der höhe".
+            // If standard: Width (X) is fixed. Height (Y) grows.
+            // "erst in der höhe" -> Fill Y first? That means one column, then next column?
+            // Yes, that creates columns.
+            // But if X is fixed, we can only have limited columns.
+            
+            // Let's try to implement exactly what was asked:
+            // "rollenbreite soll die datei nach unten sein" -> PDF Height = rollWidth
+            // "rollenlänge nach rechts" -> PDF Width = rollLength (or variable)
+            
+            // So we are swapping dimensions for the internal logic?
+            // Let's try to just swap the input parameters interpretation?
+            
+            // NO, let's keep PDF Width = Roll Width.
+            // But maybe user wants to fill the SHEET differently?
+            
+            // "probiere die logos wenn möglich erst in der höhe anzuordnen dann in der breite"
+            // This strongly suggests Column-Major order.
+            // Fill Column 1 (top to bottom), then Column 2, etc.
+            // This is what I implemented in `placeItemColumnFirst`.
+            
+            // The confusion is "Breite nach unten".
+            // Maybe they mean "Width is the vertical dimension".
+            // If so, the PDF should be:
+            // Width = Variable/Max Length
+            // Height = Fixed Roll Width
+            
+            // Let's Ask or Assume?
+            // "die breite soll immer genau so sein wie die angeben sind." (The width must be exactly as specified).
+            // Usually Roll Width is fixed hardware constraint.
+            // So PDF Width MUST match Roll Width.
+            
+            // So: PDF Width = rollWidthMm.
+            // "die länge soll so sein das die maximal breite eingehalten wird" (Length should be such that max width is kept??)
+            // This sentence is confusing: "max width kept" might mean "max length kept"?
+            // "wird weniger gebraucht. gibt man die datei schmaler aus." (If less is used, output file narrower).
+            // "Schmaler" usually refers to Width.
+            // So if less Length is used, the file should be shorter?
+            
+            // Conclusion:
+            // PDF Width = rollWidthMm (Fixed).
+            // PDF Height = Auto (up to rollLengthMm).
+            // Packing: Fill Columns (Y) first?
+            // If I fill Y first in a fixed width page:
+            // I place item at 0,0. Next item at 0, h1. Next at 0, h1+h2.
+            // Until column full (Height limit?).
+            // But Height is Auto/Infinite in roll mode?
+            // Then I would just have one long column?
+            // That is inefficient if items are narrow.
+            
+            // Maybe user wants:
+            // Fill vertically (Y) up to rollLengthMm (Limit).
+            // Then move to next Column (X).
+            // This implies rollLengthMm is NOT the continuous direction, but the Fixed Sheet Height?
+            // And rollWidthMm is the direction we expand in?
+            
+            // "rollenbreite soll die datei nach unten sein" -> Height = Width?
+            // "rollenlänge nach rechts" -> Width = Length?
+            
+            // Let's Assume:
+            // User wants a Landscape PDF.
+            // Height = Fixed Roll Width (55cm).
+            // Width = Variable (Length).
+            // Packing: Fill Y (Height/Width) first. Then X.
+            
+            // Let's swap the dimensions for the PDF creation logic?
+            // PDF Width = Variable (grows to right).
+            // PDF Height = Fixed (Roll Width).
+            
+            // Let's adjust the variables.
+            const PAGE_HEIGHT_FIXED = rollWidthPoints;
+            const PAGE_WIDTH_MAX = rollLengthMm > 0 ? rollLengthMm * 2.83465 : 14400; // ~5m max width
+            
             // Try to fit in existing columns on current page
-            for (const col of columns) {
+            // Columns are now vertical strips filling the PAGE_HEIGHT_FIXED.
+            // Actually, if we fill Y first, we fill the Fixed Height.
+            
+             for (const col of columns) {
                 if (item.h <= col.freeHeight) {
                     item.x = col.x;
-                    item.y = maxPageHeightPoints - col.freeHeight; // Top-down filling within column?
-                    // Actually, y should be relative to page top.
-                    // Let's say y starts at 0.
-                    // col.freeHeight starts at maxPageHeightPoints.
-                    // usedHeight = maxPageHeightPoints - col.freeHeight.
-                    // item.y = usedHeight.
-                    
-                    const usedHeight = maxPageHeightPoints - col.freeHeight;
-                    item.y = usedHeight;
+                    const usedHeight = PAGE_HEIGHT_FIXED - col.freeHeight;
+                    item.y = usedHeight; // Top-down
                     item.pageIndex = currentPageIndex;
                     
                     col.freeHeight -= item.h;
@@ -187,12 +292,11 @@ router.post('/generate', async (req: Request, res: Response) => {
             }
             
             // New column needed
-            const colWidth = item.w;
-            
-            // Check if column fits on page width
+            // Check if fits in Max Width
             const currentMaxX = columns.length > 0 ? columns[columns.length - 1].x + columns[columns.length - 1].width : 0;
             
-            if (currentMaxX + colWidth > rollWidthPoints) {
+            if (currentMaxX + item.w > PAGE_WIDTH_MAX) {
+                // Page full (width-wise)
                 currentPageIndex++;
                 columns = [];
             }
@@ -201,8 +305,8 @@ router.post('/generate', async (req: Request, res: Response) => {
             
             const newCol = {
                 x: startX,
-                width: colWidth,
-                freeHeight: maxPageHeightPoints - item.h,
+                width: item.w,
+                freeHeight: PAGE_HEIGHT_FIXED - item.h,
                 items: [item]
             };
             
@@ -215,19 +319,24 @@ router.post('/generate', async (req: Request, res: Response) => {
         };
 
         if (rollLengthMm > 0) {
-            // FIXED SHEET MODE: Use Column-First Packing (fill height first)
-            // Sort by WIDTH descending to pack columns efficiently
-            itemsToPack.sort((a, b) => b.w - a.w);
+            // FIXED SHEET MODE (User Request: Roll Width = Height, Roll Length = Width)
+            // PDF will be Landscape-ish: Height is Fixed (RollWidth), Width Grows (up to RollLength)
+            
+            // Sort by HEIGHT descending to fill columns (Y axis, which is Roll Width) efficiently
+            itemsToPack.sort((a, b) => b.h - a.h);
             
             for (const item of itemsToPack) {
-                if (item.h > maxPageHeightPoints) {
-                    console.warn("Item taller than page height, skipping");
+                // Check if item fits in the Fixed Height (Roll Width)
+                if (item.h > rollWidthPoints) {
+                    console.warn("Item taller than roll width (fixed height), skipping or rotate?");
+                    // Ideally rotate here.
                     continue;
                 }
                 placeItemColumnFirst(item);
             }
         } else {
             // ROLL MODE (Infinite length): Use Row-First Packing (Shelf)
+            // Standard Portrait: Width is Fixed (RollWidth), Height Grows
             // Sort by HEIGHT descending to minimize vertical waste
             itemsToPack.sort((a, b) => b.h - a.h);
             
@@ -261,16 +370,27 @@ router.post('/generate', async (req: Request, res: Response) => {
             const pageItems = pages[pIdx];
             if (!pageItems || pageItems.length === 0) continue;
             
-            // Determine page height
-            // If explicit roll length set, use it. Otherwise use used height.
-            let pageHeight = maxPageHeightPoints;
-            if (rollLengthMm === 0) {
-                // Find max Y + H
-                const maxY = pageItems.reduce((max, item) => Math.max(max, (item.y || 0) + item.h), 0);
-                pageHeight = maxY;
+            let pageWidth = 0;
+            let pageHeight = 0;
+            
+            if (rollLengthMm > 0) {
+                 // Landscape Mode
+                 // Height = Fixed Roll Width
+                 // Width = Used Width (up to Roll Length)
+                 
+                 const maxX = pageItems.reduce((max, item) => Math.max(max, (item.x || 0) + item.w), 0);
+                 pageWidth = maxX; // "wird weniger gebraucht. gibt man die datei schmaler aus."
+                 pageHeight = rollWidthPoints;
+            } else {
+                 // Portrait Mode
+                 // Width = Fixed Roll Width
+                 // Height = Used Height
+                 const maxY = pageItems.reduce((max, item) => Math.max(max, (item.y || 0) + item.h), 0);
+                 pageWidth = rollWidthPoints;
+                 pageHeight = maxY;
             }
 
-            const page = outputPdf.addPage([rollWidthPoints, pageHeight]);
+            const page = outputPdf.addPage([pageWidth, pageHeight]);
             
             for (const item of pageItems) {
                 if (item.sourceIndex === undefined || item.x === undefined || item.y === undefined) continue;
@@ -283,16 +403,17 @@ router.post('/generate', async (req: Request, res: Response) => {
                 // Calculate position
                 // PDF coordinate system: (0,0) is bottom-left.
                 // Our packing (0,0) is top-left.
+                
+                // If Landscape Mode (Length > 0):
                 // x = item.x
-                // y = pageHeight - item.y - item.h
-                // Add half padding offset because item.w/h includes padding
+                // y = pageHeight (Fixed RollWidth) - item.y - item.h
+                
+                // If Portrait Mode:
+                // x = item.x
+                // y = pageHeight (Variable) - item.y - item.h
                 
                 const drawX = item.x + (paddingPoints / 2);
                 const drawY = pageHeight - item.y - item.h + (paddingPoints / 2);
-                
-                // Draw
-                // Note: embeddedPage might need scaling if source width/height differs from what we measured?
-                // We measured source.width/height earlier.
                 
                 page.drawPage(embeddedPage, {
                     x: drawX,
