@@ -114,21 +114,17 @@ router.post('/generate', async (req: Request, res: Response) => {
             return;
         }
 
-        // 2. Perform Bin Packing (Shelf Algorithm)
-        // Sort items by height descending for better packing
-        itemsToPack.sort((a, b) => b.h - a.h);
-
+        // 2. Perform Bin Packing
         let currentPageIndex = 0;
-        let currentY = 0;
         let shelves: { y: number, height: number, freeWidth: number, items: Item[] }[] = [];
+        let columns: { x: number, width: number, freeHeight: number, items: Item[] }[] = [];
         
-        // Helper to find shelf
-        const placeItem = (item: Item) => {
+        // Helper to find shelf (Row-based packing)
+        const placeItemRowFirst = (item: Item) => {
             // Try to fit in existing shelves on current page
             for (const shelf of shelves) {
                 if (item.w <= shelf.freeWidth) {
-                    // Fits!
-                    item.x = rollWidthPoints - shelf.freeWidth; // Left aligned
+                    item.x = rollWidthPoints - shelf.freeWidth; 
                     item.y = shelf.y;
                     item.pageIndex = currentPageIndex;
                     
@@ -139,48 +135,109 @@ router.post('/generate', async (req: Request, res: Response) => {
             }
             
             // New shelf needed
-            // Check if fits on current page vertically
-            // Shelf height will be item height (since sorted by height, first item defines shelf height?)
-            // Actually sorted by height descending means first item is tallest.
-            // But we iterate items by height, so first item creates first shelf with its height.
-            // Subsequent items are shorter or equal.
-            // So shelf height is fixed by the first item placed in it.
-            
             const shelfHeight = item.h;
             
-            if (currentY + shelfHeight > maxPageHeightPoints) {
-                // Page full, new page
+            // Check if shelf fits on page
+            // Calculate current max Y used by shelves
+            const currentMaxY = shelves.length > 0 ? shelves[shelves.length - 1].y + shelves[shelves.length - 1].height : 0;
+            
+            if (currentMaxY + shelfHeight > maxPageHeightPoints) {
                 currentPageIndex++;
-                currentY = 0;
                 shelves = [];
             }
             
-            // Create new shelf
+            const startY = shelves.length > 0 ? shelves[shelves.length - 1].y + shelves[shelves.length - 1].height : 0;
+            
             const newShelf = {
-                y: currentY,
+                y: startY,
                 height: shelfHeight,
                 freeWidth: rollWidthPoints - item.w,
                 items: [item]
             };
             
             item.x = 0;
-            item.y = currentY;
+            item.y = startY;
             item.pageIndex = currentPageIndex;
             
             shelves.push(newShelf);
-            currentY += shelfHeight;
-            
             return true;
         };
 
-        for (const item of itemsToPack) {
-            if (item.w > rollWidthPoints) {
-                console.warn("Item wider than roll width, skipping or rotating?");
-                // Could rotate here if needed. For now skip or clip.
-                // Or force scale?
-                continue;
+        // Helper to find column (Column-based packing)
+        const placeItemColumnFirst = (item: Item) => {
+            // Try to fit in existing columns on current page
+            for (const col of columns) {
+                if (item.h <= col.freeHeight) {
+                    item.x = col.x;
+                    item.y = maxPageHeightPoints - col.freeHeight; // Top-down filling within column?
+                    // Actually, y should be relative to page top.
+                    // Let's say y starts at 0.
+                    // col.freeHeight starts at maxPageHeightPoints.
+                    // usedHeight = maxPageHeightPoints - col.freeHeight.
+                    // item.y = usedHeight.
+                    
+                    const usedHeight = maxPageHeightPoints - col.freeHeight;
+                    item.y = usedHeight;
+                    item.pageIndex = currentPageIndex;
+                    
+                    col.freeHeight -= item.h;
+                    col.items.push(item);
+                    return true;
+                }
             }
-            placeItem(item);
+            
+            // New column needed
+            const colWidth = item.w;
+            
+            // Check if column fits on page width
+            const currentMaxX = columns.length > 0 ? columns[columns.length - 1].x + columns[columns.length - 1].width : 0;
+            
+            if (currentMaxX + colWidth > rollWidthPoints) {
+                currentPageIndex++;
+                columns = [];
+            }
+            
+            const startX = columns.length > 0 ? columns[columns.length - 1].x + columns[columns.length - 1].width : 0;
+            
+            const newCol = {
+                x: startX,
+                width: colWidth,
+                freeHeight: maxPageHeightPoints - item.h,
+                items: [item]
+            };
+            
+            item.x = startX;
+            item.y = 0;
+            item.pageIndex = currentPageIndex;
+            
+            columns.push(newCol);
+            return true;
+        };
+
+        if (rollLengthMm > 0) {
+            // FIXED SHEET MODE: Use Column-First Packing (fill height first)
+            // Sort by WIDTH descending to pack columns efficiently
+            itemsToPack.sort((a, b) => b.w - a.w);
+            
+            for (const item of itemsToPack) {
+                if (item.h > maxPageHeightPoints) {
+                    console.warn("Item taller than page height, skipping");
+                    continue;
+                }
+                placeItemColumnFirst(item);
+            }
+        } else {
+            // ROLL MODE (Infinite length): Use Row-First Packing (Shelf)
+            // Sort by HEIGHT descending to minimize vertical waste
+            itemsToPack.sort((a, b) => b.h - a.h);
+            
+            for (const item of itemsToPack) {
+                if (item.w > rollWidthPoints) {
+                    console.warn("Item wider than roll width, skipping");
+                    continue;
+                }
+                placeItemRowFirst(item);
+            }
         }
 
         // Group by page index
