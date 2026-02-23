@@ -43,27 +43,27 @@ export default function DashboardLayout() {
       <aside
         className={`
           fixed md:static inset-y-0 left-0 z-30
-          bg-white text-slate-800 transition-all duration-300 flex flex-col shadow-xl border-r border-gray-200
+          bg-gradient-to-b from-red-900 to-red-700 text-white transition-all duration-300 flex flex-col shadow-xl border-r border-red-800
           ${mobileMenuOpen ? "translate-x-0 w-64" : "-translate-x-full md:translate-x-0"}
           ${sidebarOpen ? "md:w-64" : "md:w-20"}
         `}
       >
-        <div className="h-16 flex items-center justify-center border-b border-gray-200 bg-white shrink-0">
+        <div className="h-16 flex items-center justify-center border-b border-red-800 bg-red-900/50 shrink-0">
           <div className="flex items-center space-x-2 px-4">
             {(sidebarOpen || mobileMenuOpen) ? (
               logoUrl ? (
                 <img src={logoUrl} alt="Logo" className="h-12 max-w-[180px] object-contain" />
               ) : (
                 <>
-                  <div className="w-8 h-8 rounded-full bg-red-700 flex items-center justify-center text-white font-bold text-sm shadow-md">M</div>
-                  <span className="font-bold tracking-wider text-lg text-slate-800">MAIN<span className="text-red-600 text-xs ml-1">TD</span></span>
+                  <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-red-700 font-bold text-sm shadow-md">M</div>
+                  <span className="font-bold tracking-wider text-lg text-white">MAIN<span className="text-red-200 text-xs ml-1">TD</span></span>
                 </>
               )
             ) : (
               logoUrl ? (
                 <img src={logoUrl} alt="Logo" className="h-10 w-10 object-contain" />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-red-700 flex items-center justify-center text-white font-bold text-xl shadow-md">M</div>
+                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-red-700 font-bold text-xl shadow-md">M</div>
               )
             )}
           </div>
@@ -88,13 +88,13 @@ export default function DashboardLayout() {
           )}
         </nav>
 
-        <div className="p-4 border-t border-gray-200 space-y-2 shrink-0">
-          <Link to="/dashboard/profile" onClick={() => setMobileMenuOpen(false)} className="flex items-center w-full space-x-2 text-slate-500 hover:text-red-600 transition-colors p-2 rounded hover:bg-red-50">
+        <div className="p-4 border-t border-red-800 space-y-2 shrink-0">
+          <Link to="/dashboard/profile" onClick={() => setMobileMenuOpen(false)} className="flex items-center w-full space-x-2 text-red-200 hover:text-white transition-colors p-2 rounded hover:bg-white/10">
              <User size={20} />
              {(sidebarOpen || mobileMenuOpen) && <span>Mein Profil</span>}
           </Link>
 
-          <button onClick={handleLogout} className="flex items-center w-full space-x-2 text-slate-500 hover:text-red-600 transition-colors p-2 rounded hover:bg-red-50">
+          <button onClick={handleLogout} className="flex items-center w-full space-x-2 text-red-200 hover:text-white transition-colors p-2 rounded hover:bg-white/10">
             <LogOut size={20} />
             {(sidebarOpen || mobileMenuOpen) && <span>Abmelden</span>}
           </button>
@@ -147,12 +147,12 @@ function NavItem({ icon, label, to, isOpen, onClick }: { icon: React.ReactNode, 
       onClick={onClick}
       className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group ${
         isActive
-          ? "bg-gradient-to-r from-red-700 to-red-600 text-white shadow-md" 
-          : "text-slate-500 hover:bg-red-50 hover:text-red-700"
+          ? "bg-white text-red-700 font-bold shadow-md" 
+          : "text-red-100 hover:bg-white/10 hover:text-white"
       }`}
     >
-      <span className={`${isActive ? "text-white" : "text-slate-400 group-hover:text-red-700"} min-w-[24px]`}>{icon}</span>
-      {isOpen && <span className={`font-medium whitespace-nowrap ${isActive ? "text-white" : "text-slate-600 group-hover:text-red-700"}`}>{label}</span>}
+      <span className={`${isActive ? "text-red-700" : "text-red-300 group-hover:text-white"} min-w-[24px]`}>{icon}</span>
+      {isOpen && <span className={`font-medium whitespace-nowrap ${isActive ? "text-red-700" : "text-red-100 group-hover:text-white"}`}>{label}</span>}
     </Link>
   );
 }
