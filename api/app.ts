@@ -15,6 +15,7 @@ import authRoutes from './routes/auth.js'
 import orderRoutes from './routes/orders.js'
 import customerRoutes from './routes/customers.js'
 import uploadRoutes, { UPLOAD_DIR } from './routes/upload.js'
+import dtfRoutes from './routes/dtf.js'
 import userRoutes from './routes/users.js'
 import supplierRoutes from './routes/suppliers.js'
 
@@ -38,6 +39,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/customers', customerRoutes)
 app.use('/api/upload', uploadRoutes)
+app.use('/api/dtf', dtfRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/suppliers', supplierRoutes)
 
