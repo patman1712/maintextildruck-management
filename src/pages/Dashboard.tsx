@@ -48,22 +48,22 @@ export default function DashboardLayout() {
           ${sidebarOpen ? "md:w-64" : "md:w-20"}
         `}
       >
-        <div className="h-16 flex items-center justify-center border-b border-red-800 bg-red-900/50 shrink-0">
+        <div className="h-16 flex items-center justify-center border-b border-gray-200 bg-white shrink-0">
           <div className="flex items-center space-x-2 px-4">
             {(sidebarOpen || mobileMenuOpen) ? (
               logoUrl ? (
                 <img src={logoUrl} alt="Logo" className="h-12 max-w-[180px] object-contain" />
               ) : (
                 <>
-                  <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-red-700 font-bold text-sm shadow-md">M</div>
-                  <span className="font-bold tracking-wider text-lg text-white">MAIN<span className="text-red-200 text-xs ml-1">TD</span></span>
+                  <div className="w-8 h-8 rounded-full bg-red-700 flex items-center justify-center text-white font-bold text-sm shadow-md">M</div>
+                  <span className="font-bold tracking-wider text-lg text-slate-800">MAIN<span className="text-red-600 text-xs ml-1">TD</span></span>
                 </>
               )
             ) : (
               logoUrl ? (
                 <img src={logoUrl} alt="Logo" className="h-10 w-10 object-contain" />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-red-700 font-bold text-xl shadow-md">M</div>
+                <div className="w-10 h-10 rounded-full bg-red-700 flex items-center justify-center text-white font-bold text-xl shadow-md">M</div>
               )
             )}
           </div>
