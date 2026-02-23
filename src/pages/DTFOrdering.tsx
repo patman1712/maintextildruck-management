@@ -34,6 +34,7 @@ export default function DTFOrdering() {
   // File Picker Modal State
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
+  const [pickerCustomerFilter, setPickerCustomerFilter] = useState(""); // "" = All, "ARCHIVED" = Archive, "NAME" = Specific Customer
   
   // Direct Upload State
   const [isUploading, setIsUploading] = useState(false);
@@ -57,7 +58,8 @@ export default function DTFOrdering() {
         thumbnail: f.thumbnail,
         orderId: order.id,
         customerName: order.customerName,
-        date: order.createdAt
+        date: order.createdAt,
+        status: order.status
       }))
   ).filter(f => f.url);
 
@@ -97,10 +99,24 @@ export default function DTFOrdering() {
   };
 
   // Filter for picker
-  const filteredAvailableFiles = availableFiles.filter(f => 
-    f.name.toLowerCase().includes(pickerSearch.toLowerCase()) || 
-    f.customerName.toLowerCase().includes(pickerSearch.toLowerCase())
-  );
+  const filteredAvailableFiles = availableFiles.filter(f => {
+    const matchesSearch = 
+        f.name.toLowerCase().includes(pickerSearch.toLowerCase()) || 
+        f.customerName.toLowerCase().includes(pickerSearch.toLowerCase());
+    
+    const matchesCustomer = 
+        pickerCustomerFilter === "" ? true :
+        pickerCustomerFilter === "ARCHIVED" ? f.status === 'archived' :
+        f.customerName === pickerCustomerFilter;
+
+    return matchesSearch && matchesCustomer;
+  });
+
+  // Get unique customers for dropdown
+  const uniqueCustomers = Array.from(new Set(availableFiles
+    .filter(f => f.status !== 'archived') // Don't show archived customers in dropdown unless we want to? Usually archived are "One-Time" or direct uploads.
+    .map(f => f.customerName)
+  )).sort();
 
   const addFile = (file: any) => {
     if (selectedFiles.some(f => f.url === file.url)) {
@@ -536,15 +552,31 @@ export default function DTFOrdering() {
                         </div>
                     </div>
                 ) : (
-                    <div className="p-4 border-b border-gray-200 bg-gray-50">
-                        <input 
-                            type="text" 
-                            placeholder="Suchen nach Dateiname oder Kunde..." 
-                            className="w-full border border-gray-300 rounded p-2 focus:ring-red-500 focus:border-red-500"
-                            value={pickerSearch}
-                            onChange={(e) => setPickerSearch(e.target.value)}
-                            autoFocus
-                        />
+                    <div className="p-4 border-b border-gray-200 bg-gray-50 flex gap-4">
+                        <div className="flex-1">
+                            <input 
+                                type="text" 
+                                placeholder="Suchen nach Dateiname oder Kunde..." 
+                                className="w-full border border-gray-300 rounded p-2 focus:ring-red-500 focus:border-red-500"
+                                value={pickerSearch}
+                                onChange={(e) => setPickerSearch(e.target.value)}
+                                autoFocus
+                            />
+                        </div>
+                        <div className="w-64 shrink-0">
+                            <select
+                                className="w-full border border-gray-300 rounded p-2 focus:ring-red-500 focus:border-red-500"
+                                value={pickerCustomerFilter}
+                                onChange={(e) => setPickerCustomerFilter(e.target.value)}
+                            >
+                                <option value="">Alle Dateien</option>
+                                <option value="ARCHIVED">📂 Archiv / Direkt-Uploads</option>
+                                <option disabled>──────────</option>
+                                {uniqueCustomers.map(c => (
+                                    <option key={c} value={c}>{c}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                 )}
 
