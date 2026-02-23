@@ -55,33 +55,49 @@ class GuillotinePacker {
     }
 
     fit(w: number, h: number): { x: number, y: number, rotated: boolean } | null {
-        // We want to maximize packing efficiency.
-        // We are packing into a fixed height strip.
-        // We want to minimize Width usage.
-        // This is equivalent to packing into a bin with Fixed Height and Minimized Width.
+        // We want to maximize packing efficiency into a Fixed Height, Infinite Width strip.
+        // Primary Goal: Minimize Total Width (Length).
+        // Strategy: "Leftmost First"
+        // We should always place the item in the leftmost available space that fits.
+        // Among spaces with the same X, we can use "Best Short Side Fit" or "Bottom-most".
         
-        // Disabled rotation logic per user request to avoid overlap/placement issues.
-        // Only checking Normal orientation (W x H).
-        
-        let bestScore = Number.MAX_VALUE;
         let bestRectIndex = -1;
-        let bestRotated = false;
+        let bestScore = Number.MAX_VALUE;
+        let bestX = Number.MAX_VALUE;
         
-        // Iterate all free rects to find best fit
+        // Search all free rects
         for (let i = 0; i < this.freeRects.length; i++) {
             const rect = this.freeRects[i];
             
-            // Check Normal (W x H)
+            // Check if fits
             if (w <= rect.w && h <= rect.h) {
-                const leftoverHoriz = Math.abs(rect.w - w);
-                const leftoverVert = Math.abs(rect.h - h);
-                const shortSideFit = Math.min(leftoverHoriz, leftoverVert);
-                const score = shortSideFit;
+                // We want strict Leftmost priority.
+                // If this rect is significantly to the left of our current best, pick it.
+                // "Significantly" = integer coordinates usually.
                 
-                if (score < bestScore) {
-                    bestScore = score;
+                if (rect.x < bestX) {
+                    // Found a new leftmost candidate
+                    bestX = rect.x;
                     bestRectIndex = i;
-                    bestRotated = false;
+                    // Calculate score for tie-breaking later?
+                    // For now, just take it.
+                    // But if there are multiple rects at this X (stacked vertically), we want the best one.
+                    
+                    // Reset best score for this new X
+                    const leftoverHoriz = Math.abs(rect.w - w);
+                    const leftoverVert = Math.abs(rect.h - h);
+                    bestScore = Math.min(leftoverHoriz, leftoverVert);
+                    
+                } else if (rect.x === bestX) {
+                    // Same column. Pick the one that fits best (BSSF).
+                    const leftoverHoriz = Math.abs(rect.w - w);
+                    const leftoverVert = Math.abs(rect.h - h);
+                    const score = Math.min(leftoverHoriz, leftoverVert);
+                    
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestRectIndex = i;
+                    }
                 }
             }
         }
