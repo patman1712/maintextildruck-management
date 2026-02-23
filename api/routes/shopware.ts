@@ -115,14 +115,15 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                 name: p.name,
                 productNumber: p.mainDetail?.number || p.mainDetail?.ordernumber || '',
                 active: p.active,
-                stock: p.mainDetail?.inStock
+                stock: p.mainDetail?.inStock,
+                imageUrl: p.images?.[0]?.link // Shopware 5 often provides 'link' or 'path'
             }));
 
         } else {
             // Shopware 6 Logic
             const token = await getShopware6Token(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
             
-            const response = await fetch(`${baseUrl}/api/product?limit=100`, {
+            const response = await fetch(`${baseUrl}/api/product?limit=100&associations[cover][]`, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json'
@@ -140,7 +141,8 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                 name: p.name,
                 productNumber: p.productNumber,
                 active: p.active,
-                stock: p.stock
+                stock: p.stock,
+                imageUrl: p.cover?.media?.url
             }));
         }
 
@@ -159,6 +161,12 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                     const newId = Math.random().toString(36).substr(2, 9);
                     db.prepare("INSERT INTO customer_products (id, customer_id, name, product_number, source, shopware_product_id) VALUES (?, ?, ?, ?, 'shopware', ?)")
                       .run(newId, customerId, p.name, p.productNumber, p.id);
+
+                    if (p.imageUrl) {
+                        const fileId = Math.random().toString(36).substr(2, 9);
+                        db.prepare("INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url) VALUES (?, ?, ?, ?, ?)")
+                          .run(fileId, newId, p.imageUrl, 'Shopware Bild', p.imageUrl);
+                    }
                 }
             }
         });
