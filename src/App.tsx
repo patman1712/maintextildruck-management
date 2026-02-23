@@ -53,7 +53,7 @@ export default function App() {
           <Route path="employees" element={<Employees />} />
           <Route path="admin" element={<AdminSettings />} />
           <Route path="profile" element={<Profile />} />
-        </Route> path="*" element={<div className="p-8 text-center text-gray-500">Diese Seite ist noch in Arbeit...</div>} />
+          <Route path="*" element={<div className="p-8 text-center text-gray-500">Diese Seite ist noch in Arbeit...</div>} />
         </Route>
       </Routes>
     </Router>
