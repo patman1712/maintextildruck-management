@@ -221,6 +221,16 @@ try {
     console.log('Migrating database: Adding type to customer_product_files table');
     db.exec("ALTER TABLE customer_product_files ADD COLUMN type TEXT DEFAULT 'print'");
   }
+
+  const hasApprovalToken = columns.some(col => col.name === 'approval_token');
+  if (!hasApprovalToken) {
+    console.log('Migrating database: Adding approval columns to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN approval_token TEXT');
+    db.exec("ALTER TABLE orders ADD COLUMN approval_status TEXT DEFAULT 'pending'");
+    db.exec('ALTER TABLE orders ADD COLUMN approved_by TEXT');
+    db.exec('ALTER TABLE orders ADD COLUMN approved_at DATETIME');
+    db.exec('ALTER TABLE orders ADD COLUMN rejection_reason TEXT');
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }

@@ -26,7 +26,12 @@ router.get('/', (req: Request, res: Response) => {
     description: row.description,
     employees: row.employees ? JSON.parse(row.employees) : [],
     files: row.files ? JSON.parse(row.files) : [],
-    created_at: row.created_at
+    created_at: row.created_at,
+    approvalStatus: row.approval_status,
+    approvedBy: row.approved_by,
+    approvedAt: row.approved_at,
+    rejectionReason: row.rejection_reason,
+    approvalToken: row.approval_token
   }));
   
   res.json({ success: true, data: orders });
@@ -265,6 +270,113 @@ router.delete('/:orderId/items/:itemId', (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error deleting order item:', error);
     res.status(500).json({ success: false, error: 'Failed to delete item' });
+  }
+});
+
+// --- Public Digital Proof Routes ---
+
+// POST generate public token
+router.post('/:id/generate-token', (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const existing = db.prepare('SELECT approval_token FROM orders WHERE id = ?').get(id) as any;
+    if (existing && existing.approval_token) {
+      return res.json({ success: true, token: existing.approval_token });
+    }
+
+    const token = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+    db.prepare('UPDATE orders SET approval_token = ? WHERE id = ?').run(token, id);
+    res.json({ success: true, token });
+  } catch (error) {
+    console.error('Error generating token:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate token' });
+  }
+});
+
+// GET public order details
+router.get('/public/:token', (req: Request, res: Response) => {
+  const { token } = req.params;
+  try {
+    const order = db.prepare('SELECT * FROM orders WHERE approval_token = ?').get(token) as any;
+    if (!order) {
+      return res.status(404).json({ success: false, error: 'Order not found or invalid token' });
+    }
+
+    // Parse necessary fields
+    const safeOrder = {
+      id: order.id,
+      title: order.title,
+      orderNumber: order.order_number,
+      customerName: order.customer_name,
+      deadline: order.deadline,
+      description: order.description,
+      files: order.files ? JSON.parse(order.files) : [],
+      approvalStatus: order.approval_status,
+      approvedBy: order.approved_by,
+      approvedAt: order.approved_at,
+      rejectionReason: order.rejection_reason
+    };
+
+    // Also fetch items
+    const items = db.prepare(`
+      SELECT oi.*, s.name as supplier_name 
+      FROM order_items oi
+      LEFT JOIN suppliers s ON oi.supplier_id = s.id
+      WHERE oi.order_id = ?
+    `).all(order.id);
+
+    res.json({ success: true, order: safeOrder, items });
+  } catch (error) {
+    console.error('Error fetching public order:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch order' });
+  }
+});
+
+// POST approve order
+router.post('/public/:token/approve', (req: Request, res: Response) => {
+  const { token } = req.params;
+  const { name } = req.body;
+  
+  if (!name) return res.status(400).json({ success: false, error: 'Name required' });
+
+  try {
+    const result = db.prepare(`
+      UPDATE orders 
+      SET approval_status = 'approved', approved_by = ?, approved_at = ?
+      WHERE approval_token = ?
+    `).run(name, new Date().toISOString(), token);
+
+    if (result.changes > 0) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ success: false, error: 'Order not found' });
+    }
+  } catch (error) {
+    console.error('Error approving order:', error);
+    res.status(500).json({ success: false, error: 'Failed to approve' });
+  }
+});
+
+// POST reject order
+router.post('/public/:token/reject', (req: Request, res: Response) => {
+  const { token } = req.params;
+  const { reason } = req.body;
+
+  try {
+    const result = db.prepare(`
+      UPDATE orders 
+      SET approval_status = 'rejected', rejection_reason = ?, approved_at = NULL, approved_by = NULL 
+      WHERE approval_token = ?
+    `).run(reason || '', token);
+
+    if (result.changes > 0) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ success: false, error: 'Order not found' });
+    }
+  } catch (error) {
+    console.error('Error rejecting order:', error);
+    res.status(500).json({ success: false, error: 'Failed to reject' });
   }
 });
 

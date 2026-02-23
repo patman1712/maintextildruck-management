@@ -16,6 +16,7 @@ import DTFOrdering from "@/pages/DTFOrdering";
 import DTFPdfs from "@/pages/DTFPdfs";
 import FileArchive from "@/pages/FileArchive";
 import AdminSettings from "@/pages/AdminSettings";
+import PublicOrderProof from "@/pages/PublicOrderProof";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
 import { useEffect } from "react";
@@ -32,6 +33,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/proof/:token" element={<PublicOrderProof />} />
         
         <Route path="/dashboard" element={
           <ProtectedRoute>

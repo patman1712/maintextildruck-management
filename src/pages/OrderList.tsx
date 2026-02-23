@@ -1,5 +1,5 @@
 import { useAppStore, Order, OrderSteps } from "@/store";
-import { Folder, Search, Filter, Calendar, User, Eye, Printer, MoreHorizontal, Settings, CheckCircle, FileText, Edit, PenTool, Archive } from "lucide-react";
+import { Folder, Search, Filter, Calendar, User, Eye, Printer, MoreHorizontal, Settings, CheckCircle, FileText, Edit, PenTool, Archive, Share2, XCircle } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -7,9 +7,30 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
   const navigate = useNavigate();
   const orders = useAppStore((state) => state.orders);
   const loading = useAppStore((state) => state.loading);
+  const fetchData = useAppStore((state) => state.fetchData);
   const toggleOrderStep = useAppStore((state) => state.toggleOrderStep);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">(filter || "active");
+
+  const handleShareProof = async (orderId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/api/orders/${orderId}/generate-token`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        const link = `${window.location.origin}/proof/${data.token}`;
+        await navigator.clipboard.writeText(link);
+        alert("Link für digitalen Abzug kopiert:\n" + link);
+        // Refresh orders to show "pending" status if it changed
+        fetchData();
+      } else {
+        alert("Fehler beim Erstellen des Links");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Netzwerkfehler");
+    }
+  };
 
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Aufträge...</div>;
 
@@ -183,25 +204,52 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        order.status === 'active' ? 'bg-green-100 text-green-800' : 
-                        order.status === 'completed' ? 'bg-gray-100 text-gray-800' : 
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {order.status === 'active' ? 'In Bearbeitung' : order.status === 'completed' ? 'Abgeschlossen' : 'Storniert'}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          order.status === 'active' ? 'bg-green-100 text-green-800' : 
+                          order.status === 'completed' ? 'bg-gray-100 text-gray-800' : 
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {order.status === 'active' ? 'In Bearbeitung' : order.status === 'completed' ? 'Abgeschlossen' : 'Storniert'}
+                        </span>
+
+                        {order.approvalStatus === 'approved' && (
+                          <span className="px-2 inline-flex items-center text-xs leading-5 font-semibold rounded-full bg-green-50 text-green-700 border border-green-200">
+                             <CheckCircle size={10} className="mr-1" /> Bestätigt
+                          </span>
+                        )}
+                        {order.approvalStatus === 'rejected' && (
+                          <span className="px-2 inline-flex items-center text-xs leading-5 font-semibold rounded-full bg-red-50 text-red-700 border border-red-200">
+                             <XCircle size={10} className="mr-1" /> Abgelehnt
+                          </span>
+                        )}
+                        {order.approvalStatus === 'pending' && order.approvalToken && (
+                          <span className="px-2 inline-flex items-center text-xs leading-5 font-semibold rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">
+                             Wartet auf Freigabe
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/dashboard/orders/${order.id}/edit`);
-                        }}
-                        className="text-gray-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-full"
-                        title="Auftrag bearbeiten"
-                      >
-                        <Edit size={18} />
-                      </button>
+                      <div className="flex justify-end space-x-1">
+                        <button 
+                          onClick={(e) => handleShareProof(order.id, e)}
+                          className="text-gray-400 hover:text-blue-600 transition-colors p-2 hover:bg-blue-50 rounded-full"
+                          title="Digitalen Abzug teilen"
+                        >
+                          <Share2 size={18} />
+                        </button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/dashboard/orders/${order.id}/edit`);
+                          }}
+                          className="text-gray-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-full"
+                          title="Auftrag bearbeiten"
+                        >
+                          <Edit size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
