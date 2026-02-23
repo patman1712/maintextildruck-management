@@ -243,8 +243,9 @@ export default function DTFOrdering() {
                                     </button>
                                 </div>
                             </div>
-                        ))
-                    )}
+                        );
+                    })
+                )}
                 </div>
             </div>
         </div>
