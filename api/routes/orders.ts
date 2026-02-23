@@ -22,6 +22,7 @@ router.get('/', (req: Request, res: Response) => {
     processing: !!row.processing,
     produced: !!row.produced,
     invoiced: !!row.invoiced,
+    printStatus: row.print_status,
     description: row.description,
     employees: row.employees ? JSON.parse(row.employees) : [],
     files: row.files ? JSON.parse(row.files) : [],
@@ -35,7 +36,7 @@ router.get('/', (req: Request, res: Response) => {
 router.post('/', (req: Request, res: Response) => {
   const { 
     id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, 
-    deadline, status, processing, produced, invoiced, description, employees, files 
+    deadline, status, processing, produced, invoiced, print_status, description, employees, files 
   } = req.body;
 
   console.log('Received order payload:', req.body);
@@ -44,14 +45,15 @@ router.post('/', (req: Request, res: Response) => {
     const stmt = db.prepare(`
       INSERT INTO orders (
         id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address,
-        deadline, status, processing, produced, invoiced, description, employees, files
+        deadline, status, processing, produced, invoiced, print_status, description, employees, files
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
       id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address,
       deadline, status, processing ? 1 : 0, produced ? 1 : 0, invoiced ? 1 : 0, 
+      print_status || 'pending',
       description, JSON.stringify(employees || []), JSON.stringify(files || [])
     );
     
@@ -116,6 +118,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (updates.processing !== undefined) { fields.push('processing = ?'); values.push(updates.processing ? 1 : 0); }
   if (updates.produced !== undefined) { fields.push('produced = ?'); values.push(updates.produced ? 1 : 0); }
   if (updates.invoiced !== undefined) { fields.push('invoiced = ?'); values.push(updates.invoiced ? 1 : 0); }
+  if (updates.print_status !== undefined) { fields.push('print_status = ?'); values.push(updates.print_status); }
   if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
   if (updates.employees !== undefined) { fields.push('employees = ?'); values.push(JSON.stringify(updates.employees)); }
   if (updates.files !== undefined) { fields.push('files = ?'); values.push(JSON.stringify(updates.files)); }

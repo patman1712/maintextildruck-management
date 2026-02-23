@@ -8,6 +8,7 @@ export default function DTFOrdering() {
   const loading = useAppStore((state) => state.loading);
   const fetchData = useAppStore((state) => state.fetchData);
   const addOrder = useAppStore((state) => state.addOrder);
+  const updateOrder = useAppStore((state) => state.updateOrder);
 
   useEffect(() => {
     fetchData();
@@ -80,7 +81,8 @@ export default function DTFOrdering() {
   // Group active orders that have print files (for the "Open Orders" list)
   const openOrdersWithFiles = orders
     .filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'archived')
-    .filter(o => (o.files || []).some(f => f.type === 'print' || f.type === 'vector'));
+    .filter(o => (o.files || []).some(f => f.type === 'print' || f.type === 'vector'))
+    .filter(o => o.printStatus !== 'ordered');
 
   const addOrderFiles = (orderId: string) => {
       const order = orders.find(o => o.id === orderId);
@@ -269,6 +271,27 @@ export default function DTFOrdering() {
             } else if (data.url) {
                 setGeneratedPdfUrls([data.url]);
             }
+            
+            // Ask user if prints were ordered successfully
+            setTimeout(async () => {
+                if (window.confirm("Wurden die Druckdaten erfolgreich bestellt/gedruckt?\n\nWenn Sie mit 'OK' bestätigen, werden die beteiligten Aufträge als 'Gedruckt' markiert und aus der offenen Liste entfernt.")) {
+                    const orderIds = new Set(selectedFiles.map(f => f.orderId));
+                    let updatedCount = 0;
+                    
+                    for (const orderId of Array.from(orderIds)) {
+                        if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
+                            await updateOrder(orderId, { printStatus: 'ordered' });
+                            updatedCount++;
+                        }
+                    }
+                    
+                    if (updatedCount > 0) {
+                        // Refresh data to update the list
+                        fetchData();
+                    }
+                }
+            }, 500);
+
         } else {
             setGenerationError(data.error || "Generierung fehlgeschlagen.");
         }

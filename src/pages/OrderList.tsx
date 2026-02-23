@@ -140,8 +140,8 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
                           </span>
                         )}
                         {order.files.some(f => f.type === 'print') && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-600" title="Druckdaten">
-                            <Printer size={10} className="mr-1" /> {order.files.filter(f => f.type === 'print').length}
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${order.printStatus === 'ordered' ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-600'}`} title={order.printStatus === 'ordered' ? "Druckdaten bestellt" : "Druckdaten offen"}>
+                            {order.printStatus === 'ordered' ? <CheckCircle size={10} className="mr-1" /> : <Printer size={10} className="mr-1" />} {order.files.filter(f => f.type === 'print').length}
                           </span>
                         )}
                         {order.files.some(f => f.type === 'vector') && (

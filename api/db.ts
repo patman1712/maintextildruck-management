@@ -46,6 +46,7 @@ db.exec(`
     processing INTEGER DEFAULT 0,
     produced INTEGER DEFAULT 0,
     invoiced INTEGER DEFAULT 0,
+    print_status TEXT DEFAULT 'pending', -- pending, ordered
     description TEXT,
     employees TEXT, -- stored as JSON string
     files TEXT,     -- stored as JSON string
@@ -125,6 +126,12 @@ try {
   if (!hasOrderNumber) {
     console.log('Migrating database: Adding order_number to orders table');
     db.exec('ALTER TABLE orders ADD COLUMN order_number TEXT');
+  }
+
+  const hasPrintStatus = columns.some(col => col.name === 'print_status');
+  if (!hasPrintStatus) {
+    console.log('Migrating database: Adding print_status to orders table');
+    db.exec("ALTER TABLE orders ADD COLUMN print_status TEXT DEFAULT 'pending'");
   }
 } catch (error) {
   console.error('Migration error:', error);

@@ -50,6 +50,7 @@ export interface Order {
   deadline: string;
   status: 'active' | 'completed' | 'cancelled' | 'archived';
   steps: OrderSteps;
+  printStatus?: 'pending' | 'ordered';
   createdAt: string;
   description?: string;
   employees: string[];
@@ -142,6 +143,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           produced: o.produced,
           invoiced: o.invoiced
         },
+        printStatus: o.printStatus,
         createdAt: o.created_at,
         description: o.description,
         employees: o.employees || [],
@@ -226,6 +228,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         processing: order.steps.processing,
         produced: order.steps.produced,
         invoiced: order.steps.invoiced,
+        print_status: order.printStatus,
         description: order.description,
         employees: order.employees,
         files: order.files
@@ -344,6 +347,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (updatedOrder.customerAddress !== undefined) updatePayload.customer_address = updatedOrder.customerAddress;
       if (updatedOrder.deadline !== undefined) updatePayload.deadline = updatedOrder.deadline;
       if (updatedOrder.status !== undefined) updatePayload.status = updatedOrder.status;
+      if (updatedOrder.printStatus !== undefined) updatePayload.print_status = updatedOrder.printStatus;
       if (updatedOrder.description !== undefined) updatePayload.description = updatedOrder.description;
       if (updatedOrder.employees !== undefined) updatePayload.employees = updatedOrder.employees;
       if (updatedOrder.files !== undefined) updatePayload.files = updatedOrder.files;
