@@ -8,6 +8,7 @@ interface Product {
     name: string;
     product_number: string;
     source: 'shopware' | 'manual';
+    supplier_id?: string;
     files: {
         id: string;
         file_url: string;
@@ -20,6 +21,7 @@ export default function CustomerDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const customers = useAppStore((state) => state.customers);
+  const suppliers = useAppStore((state) => state.suppliers);
   const orders = useAppStore((state) => state.orders);
   const loading = useAppStore((state) => state.loading);
   const fetchData = useAppStore((state) => state.fetchData);
@@ -66,7 +68,7 @@ export default function CustomerDetails() {
   const [showProductModal, setShowMappingModal] = useState(false); // Using this for both edit/create and file assign
   const [productSearch, setProductSearch] = useState('');
   const [fileSearch, setFileSearch] = useState('');
-  const [newManualProduct, setNewManualProduct] = useState({ name: '', productNumber: '' });
+  const [newManualProduct, setNewManualProduct] = useState({ name: '', productNumber: '', supplierId: '' });
   const [assignFileMode, setAssignFileMode] = useState(false);
 
   useEffect(() => {
@@ -137,7 +139,7 @@ export default function CustomerDetails() {
           if (data.success) {
               fetchProducts();
               setShowMappingModal(false);
-              setNewManualProduct({ name: '', productNumber: '' });
+              setNewManualProduct({ name: '', productNumber: '', supplierId: '' });
           }
       } catch (err) {
           console.error(err);
@@ -152,7 +154,8 @@ export default function CustomerDetails() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                   name: editingProduct.name,
-                  productNumber: editingProduct.product_number
+                  productNumber: editingProduct.product_number,
+                  supplierId: editingProduct.supplier_id
               })
           });
           fetchProducts();
@@ -744,7 +747,7 @@ export default function CustomerDetails() {
                     <button 
                         onClick={() => {
                             setEditingProduct(null);
-                            setNewManualProduct({ name: '', productNumber: '' });
+                            setNewManualProduct({ name: '', productNumber: '', supplierId: '' });
                             setShowMappingModal(true);
                             setAssignFileMode(false);
                         }}
@@ -765,7 +768,7 @@ export default function CustomerDetails() {
                                     </div>
                                     <div>
                                         <h4 className="font-bold text-gray-900">{product.name}</h4>
-                                        <div className="flex items-center mt-1 space-x-2">
+                                        <div className="flex items-center mt-1 space-x-2 flex-wrap gap-y-1">
                                             {product.product_number && (
                                                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">
                                                     {product.product_number}
@@ -774,6 +777,12 @@ export default function CustomerDetails() {
                                             <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border ${product.source === 'shopware' ? 'bg-blue-50 text-blue-600 border-blue-100' : 'bg-orange-50 text-orange-600 border-orange-100'}`}>
                                                 {product.source}
                                             </span>
+                                            {product.supplier_id && suppliers.find(s => s.id === product.supplier_id) && (
+                                                <span className="text-xs bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded flex items-center">
+                                                    <Package size={10} className="mr-1" />
+                                                    {suppliers.find(s => s.id === product.supplier_id)?.name}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -1085,6 +1094,23 @@ export default function CustomerDetails() {
                                   className="w-full border border-gray-300 rounded p-2"
                                   placeholder="z.B. SW-1001"
                               />
+                          </div>
+
+                          <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Lieferant / Shop</label>
+                              <select
+                                  value={editingProduct ? (editingProduct.supplier_id || '') : newManualProduct.supplierId}
+                                  onChange={(e) => editingProduct
+                                      ? setEditingProduct({...editingProduct, supplier_id: e.target.value})
+                                      : setNewManualProduct({...newManualProduct, supplierId: e.target.value})
+                                  }
+                                  className="w-full border border-gray-300 rounded p-2"
+                              >
+                                  <option value="">Kein Lieferant ausgewählt</option>
+                                  {suppliers.map(s => (
+                                      <option key={s.id} value={s.id}>{s.name}</option>
+                                  ))}
+                              </select>
                           </div>
                           
                           <div className="pt-4 flex justify-end">

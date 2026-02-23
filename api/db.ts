@@ -207,6 +207,13 @@ try {
         db.exec("ALTER TABLE customers ADD COLUMN shopware_version TEXT DEFAULT '6'");
     }
   }
+
+  const customerProductColumns = db.prepare("PRAGMA table_info(customer_products)").all() as any[];
+  const hasSupplierId = customerProductColumns.some(col => col.name === 'supplier_id');
+  if (!hasSupplierId) {
+    console.log('Migrating database: Adding supplier_id to customer_products table');
+    db.exec('ALTER TABLE customer_products ADD COLUMN supplier_id TEXT');
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }

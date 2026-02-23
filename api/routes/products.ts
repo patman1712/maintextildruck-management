@@ -36,7 +36,7 @@ router.get('/:customerId', (req: Request, res: Response) => {
 // POST create manual product
 router.post('/:customerId', (req: Request, res: Response) => {
     const { customerId } = req.params;
-    const { name, productNumber } = req.body;
+    const { name, productNumber, supplierId } = req.body;
 
     if (!name) {
         return res.status(400).json({ success: false, error: 'Name is required' });
@@ -45,9 +45,9 @@ router.post('/:customerId', (req: Request, res: Response) => {
     try {
         const id = Math.random().toString(36).substr(2, 9);
         db.prepare(`
-            INSERT INTO customer_products (id, customer_id, name, product_number, source)
-            VALUES (?, ?, ?, ?, 'manual')
-        `).run(id, customerId, name, productNumber || '');
+            INSERT INTO customer_products (id, customer_id, name, product_number, source, supplier_id)
+            VALUES (?, ?, ?, ?, 'manual', ?)
+        `).run(id, customerId, name, productNumber || '', supplierId || null);
 
         res.json({ success: true, message: 'Product created', id });
     } catch (error: any) {
@@ -58,14 +58,14 @@ router.post('/:customerId', (req: Request, res: Response) => {
 // PUT update product
 router.put('/:id', (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, productNumber } = req.body;
+    const { name, productNumber, supplierId } = req.body;
 
     try {
         db.prepare(`
             UPDATE customer_products 
-            SET name = ?, product_number = ?
+            SET name = ?, product_number = ?, supplier_id = ?
             WHERE id = ?
-        `).run(name, productNumber, id);
+        `).run(name, productNumber, supplierId || null, id);
 
         res.json({ success: true, message: 'Product updated' });
     } catch (error: any) {
