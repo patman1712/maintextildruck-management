@@ -62,6 +62,11 @@ export interface Order {
   employees: string[];
   files: { name: string; type: 'preview' | 'print' | 'vector'; url?: string; file?: File; customName?: string; thumbnail?: string }[];
   orderItems?: OrderItem[]; // New field
+  approvalStatus?: 'pending' | 'approved' | 'rejected';
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectionReason?: string;
+  approvalToken?: string;
 }
 
 export interface Supplier {
@@ -168,6 +173,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         description: o.description,
         employees: o.employees || [],
         files: o.files || [],
+        approvalStatus: o.approvalStatus,
+        approvedBy: o.approvedBy,
+        approvedAt: o.approvedAt,
+        rejectionReason: o.rejectionReason,
+        approvalToken: o.approvalToken,
         orderItems: (orderItemsData.data || [])
             .filter((i: any) => i.order_id === o.id)
             .map((i: any) => ({
