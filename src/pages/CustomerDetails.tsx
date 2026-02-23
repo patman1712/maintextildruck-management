@@ -84,10 +84,15 @@ export default function CustomerDetails() {
     await updateOrder(order.id, { files: updatedFiles });
   };
 
-  const handleDeleteFile = async (fileToDelete: { name: string, url?: string, orderTitle?: string, customName?: string }) => {
+  const handleDeleteFile = async (fileToDelete: { name: string, url?: string, orderTitle?: string, customName?: string, thumbnail?: string }) => {
     if (!confirm(`Möchten Sie die Datei "${fileToDelete.customName || fileToDelete.name}" wirklich löschen? Sie wird auch aus dem Auftrag entfernt.`)) return;
 
-    const order = customerOrders.find(o => o.files.some(f => f.url === fileToDelete.url));
+    // Find all orders containing this file url (could be multiple due to direct uploads being separate orders but potentially same file if re-used logic exists, though currently unique uploads)
+    // Actually logic above deduplicates for view, but here we need to delete from the specific order it came from.
+    // Since we flatten above, we don't have the orderId easily accessible unless we add it to the map.
+    // Let's find the order again.
+    const order = customerOrders.find(o => o.files && Array.isArray(o.files) && o.files.some(f => f.url === fileToDelete.url));
+    
     if (!order) return;
 
     const updatedFiles = order.files.filter(f => f.url !== fileToDelete.url);
@@ -111,6 +116,9 @@ export default function CustomerDetails() {
             console.error("Failed to delete file from server", err);
         }
     }
+
+    // Refresh data to reflect changes
+    fetchData();
   };
   
   const handleDirectUpload = async () => {
@@ -129,6 +137,7 @@ export default function CustomerDetails() {
         if (data.success && data.files && data.files.print && data.files.print.length > 0) {
             const uploadedFile = data.files.print[0];
             const fileUrl = uploadedFile.path;
+            const thumbnail = uploadedFile.thumbnail;
             
             // Create a "storage" order for this file
             const newOrder: Order = {
@@ -149,6 +158,7 @@ export default function CustomerDetails() {
                     name: uploadedFile.originalName,
                     type: 'print' as const,
                     url: fileUrl,
+                    thumbnail: thumbnail,
                     customName: uploadFileName || uploadedFile.originalName
                 }]
             };
@@ -174,7 +184,7 @@ export default function CustomerDetails() {
   // Extract all print files (DTF) from customer's orders
   // Check if files exist and are arrays before filtering
   const allPrintFiles = customerOrders.flatMap(order => 
-    (order.files || [])
+    (Array.isArray(order.files) ? order.files : [])
       .filter(f => f.type === 'print')
       .map(f => ({ ...f, orderTitle: order.title, orderDate: order.createdAt }))
   );
@@ -375,11 +385,11 @@ export default function CustomerDetails() {
         {isUploading && (
             <div className="bg-red-50 px-8 py-4 border-b border-red-100 animate-in fade-in slide-in-from-top-4">
                 <div className="max-w-md bg-white p-4 rounded-lg shadow-sm border border-red-100">
-                    <h4 className="font-bold text-gray-800 mb-3 text-sm">Neue Druckdatei hochladen</h4>
+                    <h4 className="font-bold text-gray-800 mb-3 text-sm">Neue Druckdatei hochladen (PNG oder PDF)</h4>
                     
                     <input 
                         type="file" 
-                        accept=".png"
+                        accept=".png,image/png,.pdf,application/pdf"
                         onChange={(e) => setUploadFile(e.target.files ? e.target.files[0] : null)}
                         className="block w-full text-sm text-gray-500 mb-3 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
                     />
@@ -424,7 +434,7 @@ export default function CustomerDetails() {
                 <div key={idx} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all group">
                   <div className="flex justify-between items-start mb-2">
                     <div className="bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded uppercase tracking-wide">
-                      DTF / PNG
+                      {file.name.toLowerCase().endsWith('.pdf') ? 'PDF' : 'DTF / PNG'}
                     </div>
                     <div className="flex space-x-1">
                       <button 
@@ -445,7 +455,9 @@ export default function CustomerDetails() {
                   </div>
                   
                   <div className="h-32 bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden border border-gray-100 relative group-hover:bg-gray-50 transition-colors">
-                    {file.url ? (
+                    {file.thumbnail ? (
+                        <img src={file.thumbnail} alt={file.name} className="w-full h-full object-contain" />
+                    ) : file.url ? (
                       <img src={file.url} alt={file.name} className="w-full h-full object-contain" />
                     ) : (
                       <Printer size={32} className="text-gray-300" />

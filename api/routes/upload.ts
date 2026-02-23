@@ -113,5 +113,50 @@ router.post('/', upload.fields([
   res.json({ success: true, files: result });
 });
 
+// POST /api/upload/delete
+// Expects JSON body: { filePath: string }
+// filePath is like "/uploads/filename.ext"
+router.post('/delete', async (req: Request, res: Response) => {
+    try {
+        const { filePath } = req.body;
+        
+        if (!filePath) {
+            res.status(400).json({ success: false, error: 'No file path provided' });
+            return;
+        }
+
+        // Extract filename from path (e.g., /uploads/foo.png -> foo.png)
+        const filename = path.basename(filePath);
+        const fullPath = path.join(UPLOAD_DIR, filename);
+
+        // Security check: ensure the file is within UPLOAD_DIR
+        if (!fullPath.startsWith(UPLOAD_DIR)) {
+            res.status(403).json({ success: false, error: 'Invalid file path' });
+            return;
+        }
+
+        if (await fs.pathExists(fullPath)) {
+            await fs.remove(fullPath);
+            
+            // Also try to remove thumbnail if it exists
+            // Thumbnail convention: filename_thumb.png
+            // Check if this was a PDF (or just check for thumb blindly)
+            const thumbName = `${filename}_thumb.png`;
+            const thumbPath = path.join(UPLOAD_DIR, thumbName);
+            if (await fs.pathExists(thumbPath)) {
+                await fs.remove(thumbPath);
+            }
+            
+            res.json({ success: true });
+        } else {
+            // File not found, but we can consider it "deleted"
+            res.json({ success: true, message: 'File not found, assumed deleted' });
+        }
+    } catch (error) {
+        console.error('Error deleting file:', error);
+        res.status(500).json({ success: false, error: 'Delete failed' });
+    }
+});
+
 export default router;
 export { UPLOAD_DIR };
