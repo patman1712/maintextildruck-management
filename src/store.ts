@@ -67,6 +67,7 @@ export interface Order {
   approvedAt?: string;
   rejectionReason?: string;
   approvalToken?: string;
+  approvalComment?: string;
 }
 
 export interface Supplier {
@@ -178,6 +179,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         approvedAt: o.approvedAt,
         rejectionReason: o.rejectionReason,
         approvalToken: o.approvalToken,
+        approvalComment: o.approvalComment,
         orderItems: (orderItemsData.data || [])
             .filter((i: any) => i.order_id === o.id)
             .map((i: any) => ({
