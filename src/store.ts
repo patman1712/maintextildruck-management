@@ -31,6 +31,7 @@ export interface OrderItem {
   supplierName?: string; // Helper for display
   itemName: string;
   itemNumber?: string;
+  manualOrderNumber?: string; // For manual items that reference a specific order
   color?: string;
   size?: string;
   quantity: number;
@@ -157,6 +158,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                 supplierName: i.supplier_name,
                 itemName: i.item_name,
                 itemNumber: i.item_number,
+                manualOrderNumber: i.manual_order_number,
                 color: i.color,
                 size: i.size,
                 quantity: i.quantity,
@@ -400,6 +402,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             supplier_id: item.supplierId,
             item_name: item.itemName,
             item_number: item.itemNumber,
+            manual_order_number: item.manualOrderNumber,
             color: item.color,
             size: item.size,
             quantity: item.quantity,
@@ -452,6 +455,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (updates.supplierId !== undefined) payload.supplier_id = updates.supplierId;
       if (updates.itemName !== undefined) payload.item_name = updates.itemName;
       if (updates.itemNumber !== undefined) payload.item_number = updates.itemNumber;
+      if (updates.manualOrderNumber !== undefined) payload.manual_order_number = updates.manualOrderNumber;
       if (updates.color !== undefined) payload.color = updates.color;
       if (updates.size !== undefined) payload.size = updates.size;
       if (updates.quantity !== undefined) payload.quantity = updates.quantity;

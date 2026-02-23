@@ -291,7 +291,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const [newItem, setNewItem] = useState({
     supplierId: '',
     itemName: '',
-    itemNumber: '',
+    manualOrderNumber: '',
     color: '',
     size: '',
     quantity: 1,
@@ -306,7 +306,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         setNewItem({
             supplierId: '',
             itemName: '',
-            itemNumber: '',
+            manualOrderNumber: '',
             color: '',
             size: '',
             quantity: 1,
@@ -426,7 +426,11 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         // Special display for Manual Order
         let displayTitle = item.orderTitle;
         if (item.orderId === 'inventory-manual') {
-            displayTitle = 'Lagerbestellung';
+            if (item.manualOrderNumber) {
+                displayTitle = item.manualOrderNumber;
+            } else {
+                displayTitle = 'Lagerbestellung';
+            }
         } else if (item.orderNumber) {
             displayTitle = item.orderNumber;
         }
@@ -698,13 +702,13 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                 />
                             </div>
                             <div className="lg:col-span-2">
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikelnummer (Optional)</label>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Auftragsnummer (Optional)</label>
                                 <input 
                                     type="text" 
                                     className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                    placeholder="z.B. 12345"
-                                    value={newItem.itemNumber}
-                                    onChange={(e) => setNewItem({...newItem, itemNumber: e.target.value})}
+                                    placeholder="z.B. 2026-0012"
+                                    value={newItem.manualOrderNumber}
+                                    onChange={(e) => setNewItem({...newItem, manualOrderNumber: e.target.value})}
                                 />
                             </div>
                             <div className="lg:col-span-2">

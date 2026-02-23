@@ -203,7 +203,7 @@ router.get('/items/all', (req: Request, res: Response) => {
 // POST order item
 router.post('/:orderId/items', (req: Request, res: Response) => {
   const { orderId } = req.params;
-  const { supplier_id, item_name, item_number, color, size, quantity, notes } = req.body;
+  const { supplier_id, item_name, item_number, manual_order_number, color, size, quantity, notes } = req.body;
   
   if (!supplier_id || !item_name) {
     res.status(400).json({ success: false, error: 'Missing required fields' });
@@ -214,9 +214,9 @@ router.post('/:orderId/items', (req: Request, res: Response) => {
     const id = Math.random().toString(36).substr(2, 9);
     
     db.prepare(`
-      INSERT INTO order_items (id, order_id, supplier_id, item_name, item_number, color, size, quantity, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, orderId, supplier_id, item_name, item_number, color, size, quantity || 1, notes);
+      INSERT INTO order_items (id, order_id, supplier_id, item_name, item_number, manual_order_number, color, size, quantity, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, orderId, supplier_id, item_name, item_number, manual_order_number, color, size, quantity || 1, notes);
     
     res.json({ success: true, message: 'Item added', id });
   } catch (error) {
@@ -237,6 +237,7 @@ router.put('/:orderId/items/:itemId', (req: Request, res: Response) => {
     if (updates.supplier_id !== undefined) { fields.push('supplier_id = ?'); values.push(updates.supplier_id); }
     if (updates.item_name !== undefined) { fields.push('item_name = ?'); values.push(updates.item_name); }
     if (updates.item_number !== undefined) { fields.push('item_number = ?'); values.push(updates.item_number); }
+    if (updates.manual_order_number !== undefined) { fields.push('manual_order_number = ?'); values.push(updates.manual_order_number); }
     if (updates.color !== undefined) { fields.push('color = ?'); values.push(updates.color); }
     if (updates.size !== undefined) { fields.push('size = ?'); values.push(updates.size); }
     if (updates.quantity !== undefined) { fields.push('quantity = ?'); values.push(updates.quantity); }

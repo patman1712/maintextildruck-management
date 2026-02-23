@@ -89,6 +89,7 @@ db.exec(`
     supplier_id TEXT NOT NULL,
     item_name TEXT NOT NULL,
     item_number TEXT,     -- Artikelnummer
+    manual_order_number TEXT, -- Optional manual order reference
     color TEXT,
     size TEXT,
     quantity INTEGER NOT NULL DEFAULT 1,
@@ -139,6 +140,12 @@ try {
   if (!hasItemNumber) {
     console.log('Migrating database: Adding item_number to order_items table');
     db.exec('ALTER TABLE order_items ADD COLUMN item_number TEXT');
+  }
+
+  const hasManualOrderNumber = orderItemColumns.some(col => col.name === 'manual_order_number');
+  if (!hasManualOrderNumber) {
+    console.log('Migrating database: Adding manual_order_number to order_items table');
+    db.exec('ALTER TABLE order_items ADD COLUMN manual_order_number TEXT');
   }
 } catch (error) {
   console.error('Migration error:', error);
