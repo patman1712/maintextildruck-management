@@ -13,6 +13,7 @@ interface CustomerProduct {
         file_url: string;
         file_name: string;
         thumbnail_url?: string;
+        type?: string;
     }[];
 }
 
