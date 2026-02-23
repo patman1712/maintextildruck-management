@@ -16,6 +16,14 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
     e.stopPropagation();
     try {
       const res = await fetch(`/api/orders/${orderId}/generate-token`, { method: 'POST' });
+      
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("Share Proof Error:", text);
+        alert(`Fehler (${res.status}): ${text.substring(0, 100)}`);
+        return;
+      }
+
       const data = await res.json();
       if (data.success) {
         const link = `${window.location.origin}/proof/${data.token}`;
@@ -24,11 +32,11 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
         // Refresh orders to show "pending" status if it changed
         fetchData();
       } else {
-        alert("Fehler beim Erstellen des Links");
+        alert("Fehler: " + data.error);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Netzwerkfehler");
+      alert("Netzwerkfehler: " + err.message);
     }
   };
 
