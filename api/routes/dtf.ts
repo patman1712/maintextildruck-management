@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import path from 'path';
 import fs from 'fs-extra';
-import { PDFDocument, PDFPage, degrees } from 'pdf-lib';
+import { PDFDocument, PDFPage, degrees, PDFOperator } from 'pdf-lib';
 import potpack from 'potpack'; 
 import { UPLOAD_DIR } from './upload.js';
 import { DATA_DIR } from '../db.js';
@@ -480,35 +480,29 @@ router.post('/generate', async (req: Request, res: Response) => {
                 const drawY = pageHeight - item.y - item.h + (paddingPoints / 2);
                 
                 if (item.rotated) {
-                    // Manual rotation using graphics state is not supported in this pdf-lib version directly.
-                    // We must rely on `drawPage` options which support rotation (undocumented in types but works).
+                    // Manually apply rotation using PDF operators because drawPage rotation option is unreliable in this version
+                    // Save Graphics State
+                    page.pushOperators(PDFOperator.of('q'));
                     
-                    // Rotation 90 degrees CLOCKWISE:
-                    // Axis X -> -Y (Down)
-                    // Axis Y -> X (Right)
+                    // Translate to Anchor Point (Top-Left of the box)
+                    // The box is at [drawX, drawY] with dimensions [source.height, source.width]
+                    // We want to anchor at the top-left of this box: (drawX, drawY + source.width)
+                    page.pushOperators(PDFOperator.of('cm', [1, 0, 0, 1, drawX, drawY + source.width]));
                     
-                    // We want to fill box [drawX, drawY] to [drawX + source.height, drawY + source.width]
-                    // (Note: source.height is new width, source.width is new height)
+                    // Rotate -90 degrees (270 degrees)
+                    // -90 deg rotation matrix: [0, -1, 1, 0, 0, 0]
+                    page.pushOperators(PDFOperator.of('cm', [0, -1, 1, 0, 0, 0]));
                     
-                    // To fill this box with axes (Down, Right):
-                    // We need anchor at Top-Left: (drawX, drawY + source.width)
-                    // Then draw Width (source.width) Down? NO.
-                    // Source Width is mapped to new X-axis (Down).
-                    // Source Height is mapped to new Y-axis (Right).
-                    
-                    // So we draw source.width Down and source.height Right.
-                    // This matches the box size!
-                    
-                    // So we need anchor at (drawX, drawY + source.width).
-                    // And rotation = 90.
-                    
+                    // Draw page at (0,0) relative to the transformed coordinate system
                     page.drawPage(embeddedPage, {
-                        x: drawX,
-                        y: drawY + source.width,
+                        x: 0,
+                        y: 0,
                         width: source.width,
-                        height: source.height,
-                        rotation: degrees(90)
-                    } as any);
+                        height: source.height
+                    });
+                    
+                    // Restore Graphics State
+                    page.pushOperators(PDFOperator.of('Q'));
                 } else {
                     page.drawPage(embeddedPage, {
                         x: drawX,
