@@ -39,7 +39,6 @@ router.post('/logo', upload.single('logo'), (req: Request, res: Response) => {
   const logoUrl = `/uploads/${req.file.filename}`;
   
   try {
-    // Upsert logo setting
     const existing = db.prepare('SELECT key FROM settings WHERE key = ?').get('logo');
     if (existing) {
       db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(logoUrl, 'logo');
@@ -48,6 +47,27 @@ router.post('/logo', upload.single('logo'), (req: Request, res: Response) => {
     }
     
     res.json({ success: true, logoUrl });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, error: 'Failed to save setting' });
+  }
+});
+
+// POST /api/settings
+router.post('/', (req: Request, res: Response) => {
+  const { key, value } = req.body;
+  if (!key || value === undefined) return res.status(400).json({ success: false, error: 'Missing key/value' });
+
+  try {
+    const strValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    const existing = db.prepare('SELECT key FROM settings WHERE key = ?').get(key);
+    
+    if (existing) {
+      db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(strValue, key);
+    } else {
+      db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run(key, strValue);
+    }
+    res.json({ success: true });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Failed to save setting' });

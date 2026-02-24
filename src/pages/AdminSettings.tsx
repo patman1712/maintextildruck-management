@@ -1,6 +1,19 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/store";
-import { Shield, Save, RotateCcw, AlertTriangle, Upload } from "lucide-react";
+import { Shield, Save, RotateCcw, AlertTriangle, Upload, Eye, EyeOff, LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, Printer, Zap } from "lucide-react";
+
+const MENU_ITEMS = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'orders_new', label: 'Auftrag erfassen', icon: FileText },
+  { id: 'orders', label: 'Aktuelle Aufträge', icon: Folder },
+  { id: 'orders_finished', label: 'Fertige Aufträge', icon: Archive },
+  { id: 'inventory', label: 'Warenbestellung', icon: ShoppingCart },
+  { id: 'dtf', label: 'DTF-Bestellen', icon: Printer },
+  { id: 'dtf_pdfs', label: 'Fertige DTF PDFs', icon: FileText },
+  { id: 'dtf_archive', label: 'Datei-Archiv', icon: Archive },
+  { id: 'vector', label: 'Bildvektor', icon: Zap },
+  { id: 'customers', label: 'Kundendateien', icon: Users },
+];
 
 export default function AdminSettings() {
   const orders = useAppStore((state) => state.orders);
@@ -9,12 +22,20 @@ export default function AdminSettings() {
   const updateOrder = useAppStore((state) => state.updateOrder);
 
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [menuSettings, setMenuSettings] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchData();
     // Fetch settings
     fetch('/api/settings').then(res => res.json()).then(data => {
-        if(data.success && data.settings && data.settings.logo) setLogoUrl(data.settings.logo);
+        if(data.success && data.settings) {
+            if (data.settings.logo) setLogoUrl(data.settings.logo);
+            if (data.settings.menu_config) {
+                try {
+                    setMenuSettings(JSON.parse(data.settings.menu_config));
+                } catch(e) {}
+            }
+        }
     });
   }, [fetchData]);
 
@@ -42,6 +63,18 @@ export default function AdminSettings() {
     } catch (err) {
         alert("Fehler beim Upload");
     }
+  };
+
+  const toggleMenu = async (key: string) => {
+      const isVisible = menuSettings[key] !== false;
+      const updated = { ...menuSettings, [key]: !isVisible };
+      setMenuSettings(updated);
+      
+      await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'menu_config', value: updated })
+      });
   };
 
   // Calculate current max number
@@ -259,6 +292,34 @@ export default function AdminSettings() {
                     </div>
                 )}
             </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2">Menü-Verwaltung</h2>
+        <p className="text-sm text-gray-600 mb-4">
+            Deaktivieren Sie Menüpunkte, die für normale Mitarbeiter ausgeblendet werden sollen.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {MENU_ITEMS.map(item => {
+                const isVisible = menuSettings[item.id] !== false;
+                const Icon = item.icon;
+                return (
+                    <div key={item.id} className={`flex items-center justify-between p-3 rounded border ${isVisible ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-300 opacity-75'}`}>
+                        <div className="flex items-center space-x-3">
+                            <span className="text-gray-500"><Icon size={20} /></span>
+                            <span className={`font-medium ${isVisible ? 'text-gray-800' : 'text-gray-500'}`}>{item.label}</span>
+                        </div>
+                        <button 
+                            onClick={() => toggleMenu(item.id)}
+                            className={`p-2 rounded-full transition-colors ${isVisible ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-200'}`}
+                            title={isVisible ? "Sichtbar" : "Versteckt"}
+                        >
+                            {isVisible ? <Eye size={20} /> : <EyeOff size={20} />}
+                        </button>
+                    </div>
+                );
+            })}
         </div>
       </div>
     </div>

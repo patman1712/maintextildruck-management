@@ -3,6 +3,19 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap } from "lucide-react";
 import { useAppStore } from "@/store";
 
+const MENU_ITEMS = [
+  { id: 'dashboard', label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
+  { id: 'orders_new', label: 'Auftrag erfassen', to: '/dashboard/orders/new', icon: FileText },
+  { id: 'orders', label: 'Aktuelle Aufträge', to: '/dashboard/orders', icon: Folder },
+  { id: 'orders_finished', label: 'Fertige Aufträge', to: '/dashboard/orders/finished', icon: Archive },
+  { id: 'inventory', label: 'Warenbestellung', to: '/dashboard/inventory', icon: ShoppingCart },
+  { id: 'dtf', label: 'DTF-Bestellen', to: '/dashboard/dtf', icon: Printer },
+  { id: 'dtf_pdfs', label: 'Fertige DTF PDFs', to: '/dashboard/dtf/pdfs', icon: FileText },
+  { id: 'dtf_archive', label: 'Datei-Archiv', to: '/dashboard/dtf/archive', icon: Archive },
+  { id: 'vector', label: 'Bildvektor', to: '/dashboard/vector', icon: Zap },
+  { id: 'customers', label: 'Kundendateien', to: '/dashboard/customers', icon: Users },
+];
+
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -11,10 +24,16 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [menuSettings, setMenuSettings] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch('/api/settings').then(res => res.json()).then(data => {
-      if(data.success && data.settings && data.settings.logo) setLogoUrl(data.settings.logo);
+      if(data.success && data.settings) {
+          if (data.settings.logo) setLogoUrl(data.settings.logo);
+          if (data.settings.menu_config) {
+              try { setMenuSettings(JSON.parse(data.settings.menu_config)); } catch(e){}
+          }
+      }
     });
   }, []);
 
@@ -70,16 +89,23 @@ export default function DashboardLayout() {
         </div>
 
         <nav className="flex-1 py-6 space-y-2 px-2 overflow-y-auto">
-          <NavItem icon={<LayoutDashboard />} label="Dashboard" to="/dashboard" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
-          <NavItem icon={<FileText />} label="Auftrag erfassen" to="/dashboard/orders/new" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
-          <NavItem icon={<Folder />} label="Aktuelle Aufträge" to="/dashboard/orders" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
-          <NavItem icon={<Archive />} label="Fertige Aufträge" to="/dashboard/orders/finished" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
-          <NavItem icon={<ShoppingCart />} label="Warenbestellung" to="/dashboard/inventory" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
-          <NavItem icon={<Printer />} label="DTF-Bestellen" to="/dashboard/dtf" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
-          <NavItem icon={<FileText />} label="Fertige DTF PDFs" to="/dashboard/dtf/pdfs" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
-          <NavItem icon={<Archive />} label="Datei-Archiv" to="/dashboard/dtf/archive" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
-          <NavItem icon={<Zap />} label="Bildvektor" to="/dashboard/vector" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
-          <NavItem icon={<Users />} label="Kundendateien" to="/dashboard/customers" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
+          {MENU_ITEMS.map(item => {
+              const isHidden = menuSettings[item.id] === false;
+              // Hide if hidden AND not admin
+              if (isHidden && currentUser?.role !== 'admin') return null;
+              
+              const Icon = item.icon;
+              return (
+                  <NavItem 
+                      key={item.id}
+                      icon={<Icon />} 
+                      label={item.label} 
+                      to={item.to} 
+                      isOpen={sidebarOpen || mobileMenuOpen} 
+                      onClick={() => setMobileMenuOpen(false)} 
+                  />
+              );
+          })}
           
           {currentUser?.role === 'admin' && (
              <>
