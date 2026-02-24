@@ -23,6 +23,7 @@ import productRoutes from './routes/products.js'
 import settingsRoutes from './routes/settings.js'
 import vectorRoutes from './routes/vector.js'
 import faqRoutes from './routes/faqs.js'
+import downloadsRoutes, { DOWNLOADS_DIR } from './routes/downloads.js'
 
 // for esm mode
 const __filename = fileURLToPath(import.meta.url)
@@ -52,9 +53,11 @@ app.use('/api/products', productRoutes)
 app.use('/api/settings', settingsRoutes)
 app.use('/api/vector', vectorRoutes)
 app.use('/api/faqs', faqRoutes)
+app.use('/api/downloads', downloadsRoutes)
 
 // Serve uploads
 app.use('/uploads', express.static(UPLOAD_DIR))
+app.use('/downloads', express.static(DOWNLOADS_DIR))
 
 /**
  * health

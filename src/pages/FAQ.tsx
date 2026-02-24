@@ -1,18 +1,27 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store';
-import { HelpCircle, Plus, Trash2, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { HelpCircle, Plus, Trash2, ChevronDown, ChevronUp, Download, Upload } from 'lucide-react';
 
 export default function FAQ() {
   const currentUser = useAppStore((state) => state.currentUser);
   
+  // FAQ State
   const [faqs, setFaqs] = useState<any[]>([]);
   const [openFaq, setOpenFaq] = useState<string | null>(null);
   const [isAddingFaq, setIsAddingFaq] = useState(false);
   const [newQuestion, setNewQuestion] = useState("");
   const [newAnswer, setNewAnswer] = useState("");
 
+  // Download State
+  const [downloads, setDownloads] = useState<any[]>([]);
+  const [isAddingDownload, setIsAddingDownload] = useState(false);
+  const [downloadTitle, setDownloadTitle] = useState("");
+  const [downloadDesc, setDownloadDesc] = useState("");
+  const [downloadFile, setDownloadFile] = useState<File | null>(null);
+
   useEffect(() => {
     loadFaqs();
+    loadDownloads();
   }, []);
 
   const loadFaqs = () => {
@@ -22,6 +31,15 @@ export default function FAQ() {
         if(d.success) setFaqs(d.data);
       })
       .catch(err => console.error("Failed to load FAQs", err));
+  };
+
+  const loadDownloads = () => {
+    fetch('/api/downloads')
+      .then(r => r.json())
+      .then(d => {
+        if(d.success) setDownloads(d.data);
+      })
+      .catch(err => console.error("Failed to load downloads", err));
   };
 
   const handleAddFaq = async (e: React.FormEvent) => {
@@ -47,6 +65,35 @@ export default function FAQ() {
       if (!confirm("FAQ wirklich löschen?")) return;
       await fetch(`/api/faqs/${id}`, { method: 'DELETE' });
       loadFaqs();
+  };
+
+  const handleAddDownload = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!downloadFile) return;
+      
+      const formData = new FormData();
+      formData.append('title', downloadTitle);
+      formData.append('description', downloadDesc);
+      formData.append('file', downloadFile);
+      
+      try {
+          const res = await fetch('/api/downloads', { method: 'POST', body: formData });
+          if (res.ok) {
+              setDownloadTitle("");
+              setDownloadDesc("");
+              setDownloadFile(null);
+              setIsAddingDownload(false);
+              loadDownloads();
+          }
+      } catch (err) {
+          console.error(err);
+      }
+  };
+
+  const handleDeleteDownload = async (id: string) => {
+      if (!confirm("Download wirklich löschen? Die Datei wird vom Server entfernt.")) return;
+      await fetch(`/api/downloads/${id}`, { method: 'DELETE' });
+      loadDownloads();
   };
 
   if (!currentUser) return null;
@@ -144,26 +191,95 @@ export default function FAQ() {
 
       {/* Downloads Section */}
       <div className="bg-white rounded-lg shadow p-6 mt-8">
-        <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center">
-            <Download size={18} className="mr-2 text-red-600" />
-            Downloads & Ressourcen
-        </h3>
+        <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold text-gray-800 flex items-center">
+                <Download size={18} className="mr-2 text-red-600" />
+                Downloads & Ressourcen
+            </h3>
+            {currentUser.role === 'admin' && (
+                <button 
+                    onClick={() => setIsAddingDownload(!isAddingDownload)}
+                    className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded flex items-center transition-colors"
+                >
+                    <Plus size={14} className="mr-1" />
+                    Datei hinzufügen
+                </button>
+            )}
+        </div>
+
+        {isAddingDownload && (
+            <form onSubmit={handleAddDownload} className="bg-gray-50 p-4 rounded mb-6 border border-gray-200 animate-in slide-in-from-top-2">
+                <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Titel</label>
+                    <input 
+                        type="text" 
+                        className="w-full border rounded p-2 text-sm focus:ring-red-500 focus:border-red-500"
+                        value={downloadTitle}
+                        onChange={(e) => setDownloadTitle(e.target.value)}
+                        placeholder="z.B. DTF Farbprofil"
+                        required
+                    />
+                </div>
+                <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Beschreibung</label>
+                    <input 
+                        type="text" 
+                        className="w-full border rounded p-2 text-sm focus:ring-red-500 focus:border-red-500"
+                        value={downloadDesc}
+                        onChange={(e) => setDownloadDesc(e.target.value)}
+                        placeholder="Kurze Beschreibung..."
+                    />
+                </div>
+                <div className="mb-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Datei</label>
+                    <input 
+                        type="file" 
+                        className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
+                        onChange={(e) => setDownloadFile(e.target.files ? e.target.files[0] : null)}
+                        required
+                    />
+                </div>
+                <div className="flex justify-end space-x-2">
+                    <button type="button" onClick={() => setIsAddingDownload(false)} className="text-gray-500 text-sm px-3 py-1">Abbrechen</button>
+                    <button type="submit" className="bg-red-600 text-white text-sm px-3 py-1 rounded hover:bg-red-700">Hochladen</button>
+                </div>
+            </form>
+        )}
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="border border-gray-200 rounded-lg p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group">
-                <div>
-                    <h4 className="font-medium text-gray-800">DTF Farbprofil (FOGRA39)</h4>
-                    <p className="text-sm text-gray-500 mt-1">Standard ICC Profil für CMYK.</p>
+            {downloads.map(download => (
+                <div key={download.id} className="border border-gray-200 rounded-lg p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group relative">
+                    <div>
+                        <h4 className="font-medium text-gray-800">{download.title}</h4>
+                        {download.description && <p className="text-sm text-gray-500 mt-1">{download.description}</p>}
+                        <p className="text-xs text-gray-400 mt-1 truncate max-w-[200px]" title={download.file_name}>{download.file_name}</p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <a 
+                            href={`/downloads/${download.file_name}`} 
+                            download={download.file_name}
+                            className="bg-gray-100 text-gray-600 p-2 rounded-full group-hover:bg-red-50 group-hover:text-red-600 transition-colors"
+                            title="Herunterladen"
+                        >
+                            <Download size={20} />
+                        </a>
+                        {currentUser.role === 'admin' && (
+                            <button 
+                                onClick={() => handleDeleteDownload(download.id)}
+                                className="text-gray-400 hover:text-red-600 p-1"
+                                title="Löschen"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        )}
+                    </div>
                 </div>
-                <a 
-                    href="/downloads/FOGRA39.icc" 
-                    download="FOGRA39.icc"
-                    className="bg-gray-100 text-gray-600 p-2 rounded-full group-hover:bg-red-50 group-hover:text-red-600 transition-colors"
-                    title="Herunterladen"
-                >
-                    <Download size={20} />
-                </a>
-            </div>
+            ))}
+            {downloads.length === 0 && (
+                <div className="col-span-full text-center py-8 text-gray-500 italic">
+                    Keine Downloads verfügbar.
+                </div>
+            )}
         </div>
       </div>
     </div>
