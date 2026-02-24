@@ -54,6 +54,12 @@ export default function AdminSettings() {
 
     try {
         const res = await fetch('/api/settings/logo', { method: 'POST', body: formData });
+        
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Server Status ${res.status}: ${text.substring(0, 100)}`);
+        }
+
         const data = await res.json();
         if (data.success) {
             setLogoUrl(data.logoUrl);
@@ -62,8 +68,9 @@ export default function AdminSettings() {
         } else {
             alert("Fehler: " + data.error);
         }
-    } catch (err) {
-        alert("Fehler beim Upload");
+    } catch (err: any) {
+        console.error(err);
+        alert("Fehler beim Upload: " + err.message);
     }
   };
 
@@ -75,6 +82,12 @@ export default function AdminSettings() {
 
     try {
         const res = await fetch('/api/settings/favicon', { method: 'POST', body: formData });
+        
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(`Server Status ${res.status}: ${text.substring(0, 100)}`);
+        }
+
         const data = await res.json();
         if (data.success) {
             setFaviconUrl(data.faviconUrl);
@@ -87,8 +100,9 @@ export default function AdminSettings() {
         } else {
             alert("Fehler: " + data.error);
         }
-    } catch (err) {
-        alert("Fehler beim Upload");
+    } catch (err: any) {
+        console.error(err);
+        alert("Fehler beim Upload: " + err.message);
     }
   };
 
