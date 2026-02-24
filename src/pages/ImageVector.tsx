@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Upload, Download, Sliders, Image as ImageIcon, Zap, AlertTriangle, Layers } from "lucide-react";
+import { Upload, Download, Sliders, Image as ImageIcon, Zap, AlertTriangle, Layers, Maximize2, Minimize2, X } from "lucide-react";
 // @ts-ignore
 import ImageTracer from 'imagetracerjs';
 import { jsPDF } from "jspdf";
@@ -11,6 +11,7 @@ export default function ImageVector() {
   const [processing, setProcessing] = useState(false);
   const [sliderPosition, setSliderPosition] = useState(50);
   const [zoom100, setZoom100] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [mode, setMode] = useState<'local' | 'server-bw' | 'server-color'>('local');
   const [options, setOptions] = useState({
     ltres: 0.1,
@@ -278,10 +279,19 @@ export default function ImageVector() {
         </div>
 
         {/* Preview Area */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm border border-gray-200 min-h-[500px] flex flex-col">
+        <div className={`bg-white p-6 rounded-lg shadow-sm border border-gray-200 flex flex-col transition-all duration-300 ${fullscreen ? 'fixed inset-0 z-[100] h-screen w-screen rounded-none' : 'lg:col-span-2 min-h-[500px]'}`}>
             <h2 className="font-semibold text-lg mb-4 flex items-center justify-between text-gray-700">
                 <span>Vorschau & Vergleich</span>
                 <div className="flex items-center space-x-2">
+                    {vectorSvg && (
+                        <button 
+                            onClick={() => setFullscreen(!fullscreen)}
+                            className="p-1.5 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-800 transition-colors mr-2"
+                            title={fullscreen ? "Vollbild beenden" : "Vollbild"}
+                        >
+                             {fullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+                        </button>
+                    )}
                     {vectorSvg && (
                         <button 
                             onClick={() => setZoom100(!zoom100)}
@@ -306,7 +316,7 @@ export default function ImageVector() {
                         <img 
                             src={originalImage} 
                             alt="Original" 
-                            className={`object-contain block bg-white ${zoom100 ? 'max-w-none' : 'max-w-full max-h-[600px]'}`} 
+                            className={`object-contain block bg-white ${zoom100 ? 'max-w-none' : (fullscreen ? 'max-w-full max-h-[calc(100vh-150px)]' : 'max-w-full max-h-[600px]')}`} 
                         />
                         
                         {/* Vector Image (Overlay) - Clipped */}
