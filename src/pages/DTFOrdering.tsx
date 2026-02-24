@@ -677,7 +677,13 @@ export default function DTFOrdering() {
                                                     {!isLoading && products.length === 0 && (
                                                         <p className="text-sm text-gray-500 italic pl-8">Keine Artikel gefunden.</p>
                                                     )}
-                                                    {products.map(product => (
+                                                    {products.map(product => {
+                                                        const printFiles = (product.files || []).filter((f: any) => f.type === 'print');
+                                                        if (printFiles.length === 0) return null; // Skip products without print files? Or show them?
+                                                        // User said "zeige bei den kunden nur druckdaten an".
+                                                        // If I hide the product, it's cleaner.
+                                                        
+                                                        return (
                                                         <div key={product.id} className="ml-6 border-l-2 border-gray-200 pl-4">
                                                             <div className="flex items-center mb-2">
                                                                 <Package size={14} className="text-gray-400 mr-2" />
@@ -686,7 +692,7 @@ export default function DTFOrdering() {
                                                             </div>
                                                             
                                                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
-                                                                {(product.files || []).map((file: any) => (
+                                                                {printFiles.map((file: any) => (
                                                                     <div 
                                                                         key={file.id}
                                                                         onClick={() => addFile({
@@ -713,7 +719,8 @@ export default function DTFOrdering() {
                                                                 ))}
                                                             </div>
                                                         </div>
-                                                    ))}
+                                                    );
+                                                    })}
                                                 </div>
                                             )}
                                         </div>
