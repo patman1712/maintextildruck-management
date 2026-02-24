@@ -106,6 +106,14 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS faqs (
+    id TEXT PRIMARY KEY,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Seed initial admin user if no users exist
