@@ -58,10 +58,24 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
     try {
         const maxColors = parseInt(req.body.colors as string) || 16;
         
-        // 1. Load image & Resize
-        const { data, info } = await sharp(req.file.path)
-            .resize({ width: 800, fit: 'inside' }) 
-            .ensureAlpha()
+        // 1. Load image & Upscale for better tracing quality
+        // Potrace produces smoother curves with higher resolution inputs.
+        let imgPipeline = sharp(req.file.path).ensureAlpha();
+        const metadata = await imgPipeline.metadata();
+        
+        // Upscale if smaller than 2000px width
+        if (metadata.width && metadata.width < 2000) {
+            imgPipeline = imgPipeline.resize({ width: 2000, kernel: 'lanczos3' });
+        } else {
+            // Even if large, resize to max 2500 to prevent OOM
+            imgPipeline = imgPipeline.resize({ width: 2500, fit: 'inside' });
+        }
+
+        // Apply slight median blur to remove noise/artifacts before quantization
+        // This helps create solid color areas instead of pixel noise
+        imgPipeline = imgPipeline.median(3);
+
+        const { data, info } = await imgPipeline
             .raw()
             .toBuffer({ resolveWithObject: true });
 
@@ -69,8 +83,11 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
         const height = info.height;
 
         // 2. Quantize
+        // Use fewer colors for cleaner look if not specified
+        const targetColors = maxColors > 16 ? 16 : maxColors;
+        
         const pointContainer = utils.PointContainer.fromUint8Array(data, width, height);
-        const palette = await buildPalette([pointContainer], { colors: maxColors });
+        const palette = await buildPalette([pointContainer], { colors: targetColors });
         const outContainer = await applyPalette(pointContainer, palette);
         
         // Get unique palette colors used
@@ -82,7 +99,7 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
         
         for (const color of paletteColors) {
             const r = color.r, g = color.g, b = color.b, a = color.a;
-            if (a < 10) continue; // Skip transparent
+            if (a < 50) continue; // Skip transparent (threshold higher)
             
             // Convert to Hex
             const hex = '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
@@ -117,7 +134,26 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
                 
             // Trace
             try {
-                const svgFragment = await trace(pngBuffer, hex);
+                // Params optimized for clean shapes (Logo style)
+                const params = {
+                    threshold: 128,
+                    turdSize: 100, // Despeckle: Ignore areas smaller than 100px (removes noise)
+                    optCurve: true,
+                    optTolerance: 0.4, // Smoother curves
+                    alphaMax: 1.2, // Smoother corners
+                    blackOnWhite: true,
+                    color: hex,
+                    background: 'transparent'
+                };
+                
+                // Use custom trace helper that accepts params
+                const svgFragment = await new Promise<string>((resolve, reject) => {
+                    potrace.trace(pngBuffer, params, (err: any, svg: string) => {
+                        if (err) reject(err);
+                        else resolve(svg);
+                    });
+                });
+
                 const pathMatch = svgFragment.match(/<path[^>]*>/);
                 if (pathMatch) paths.push(pathMatch[0]);
             } catch (e) {
