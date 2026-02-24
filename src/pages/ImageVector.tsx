@@ -10,6 +10,7 @@ export default function ImageVector() {
   const [vectorSvg, setVectorSvg] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [sliderPosition, setSliderPosition] = useState(50);
+  const [mode, setMode] = useState<'local' | 'server'>('local');
   const [options, setOptions] = useState({
     ltres: 0.1,
     qtres: 0.1,
@@ -30,7 +31,12 @@ export default function ImageVector() {
     blurdelta: 20
   });
 
-  const applyPreset = (type: 'logo' | 'photo' | 'bw') => {
+  const applyPreset = (type: 'logo' | 'photo' | 'bw' | 'server-bw') => {
+      if (type === 'server-bw') {
+          setMode('server');
+          return;
+      }
+      setMode('local');
       if (type === 'logo') {
           setOptions(prev => ({ ...prev, numberofcolors: 16, ltres: 1, qtres: 1, pathomit: 8, strokewidth: 1 }));
       } else if (type === 'photo') {
@@ -52,9 +58,33 @@ export default function ImageVector() {
     }
   };
 
-  const vectorizeImage = () => {
+  const vectorizeImage = async () => {
     if (!originalImage) return;
     setProcessing(true);
+
+    if (mode === 'server') {
+        try {
+            const res = await fetch(originalImage);
+            const blob = await res.blob();
+            const formData = new FormData();
+            formData.append('image', blob, 'image.png');
+
+            const apiRes = await fetch('/api/vector/potrace', { method: 'POST', body: formData });
+            const data = await apiRes.json();
+            
+            if (data.success) {
+                setVectorSvg(data.svg);
+            } else {
+                alert("Server Fehler: " + data.error);
+            }
+        } catch (err) {
+            console.error(err);
+            alert("Netzwerkfehler beim Server-Upload");
+        } finally {
+            setProcessing(false);
+        }
+        return;
+    }
 
     setTimeout(() => {
         try {
@@ -145,10 +175,11 @@ export default function ImageVector() {
                 <div className="space-y-6">
                     <div>
                         <label className="block text-xs font-medium text-gray-500 mb-2">Schnell-Einstellungen</label>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-2 gap-2 mb-2">
                             <button onClick={() => applyPreset('logo')} className="px-2 py-2 bg-gray-50 hover:bg-gray-100 text-xs rounded border border-gray-200 text-gray-700 transition-colors">Logo (Einfach)</button>
                             <button onClick={() => applyPreset('photo')} className="px-2 py-2 bg-gray-50 hover:bg-gray-100 text-xs rounded border border-gray-200 text-gray-700 transition-colors">Foto (Detail)</button>
                             <button onClick={() => applyPreset('bw')} className="px-2 py-2 bg-gray-50 hover:bg-gray-100 text-xs rounded border border-gray-200 text-gray-700 transition-colors">Schwarz/Weiß</button>
+                            <button onClick={() => applyPreset('server-bw')} className="px-2 py-2 bg-blue-50 hover:bg-blue-100 text-xs rounded border border-blue-200 text-blue-700 transition-colors font-medium">Profi S/W (Server)</button>
                         </div>
                     </div>
 
