@@ -35,6 +35,7 @@ export default function DashboardHome() {
   
   // 5. Deadlines
   const upcomingDeadlines = [...activeOrders]
+      .filter(o => o.id !== 'inventory-manual') // Exclude dummy order for inventory
       .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
       .slice(0, 5);
 
