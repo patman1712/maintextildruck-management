@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap } from "lucide-react";
+import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle } from "lucide-react";
 import { useAppStore } from "@/store";
 
 const MENU_ITEMS = [
@@ -119,6 +119,11 @@ export default function DashboardLayout() {
           <Link to="/dashboard/profile" onClick={() => setMobileMenuOpen(false)} className="flex items-center w-full space-x-2 text-red-200 hover:text-white transition-colors p-2 rounded hover:bg-white/10">
              <User size={20} />
              {(sidebarOpen || mobileMenuOpen) && <span>Mein Profil</span>}
+          </Link>
+
+          <Link to="/dashboard/faq" onClick={() => setMobileMenuOpen(false)} className="flex items-center w-full space-x-2 text-red-200 hover:text-white transition-colors p-2 rounded hover:bg-white/10">
+             <HelpCircle size={20} />
+             {(sidebarOpen || mobileMenuOpen) && <span>Hilfe & FAQ</span>}
           </Link>
 
           <button onClick={handleLogout} className="flex items-center w-full space-x-2 text-red-200 hover:text-white transition-colors p-2 rounded hover:bg-white/10">

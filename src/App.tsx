@@ -18,6 +18,7 @@ import FileArchive from "@/pages/FileArchive";
 import AdminSettings from "@/pages/AdminSettings";
 import PublicOrderProof from "@/pages/PublicOrderProof";
 import ImageVector from "@/pages/ImageVector";
+import FAQ from "@/pages/FAQ";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
 import { useEffect } from "react";
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="employees" element={<Employees />} />
           <Route path="admin" element={<AdminSettings />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="faq" element={<FAQ />} />
           <Route path="*" element={<div className="p-8 text-center text-gray-500">Diese Seite ist noch in Arbeit...</div>} />
         </Route>
       </Routes>
