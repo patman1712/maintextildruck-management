@@ -136,18 +136,22 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
             const hex = '#' + ((1 << 24) + (layer.r << 16) + (layer.g << 8) + layer.b).toString(16).slice(1).toUpperCase();
             
             // Convert to PNG for Potrace
+            // Apply BLUR + THRESHOLD to smooth jagged quantization edges
             const pngBuffer = await sharp(layer.buffer, { raw: { width, height, channels: 3 } })
+                .toColorspace('b-w') // Grayscale
+                .blur(3) // Blur to smooth out pixel steps
+                .threshold(128) // Cut back to binary (sharp clean edge)
                 .toFormat('png')
                 .toBuffer();
                 
             // Trace
             try {
-                // Params tweaked for accuracy
+                // Params optimized for clean shapes (Logo style)
                 const params = {
                     threshold: 128,
-                    turdSize: 40, // Increased to remove noise (islands)
+                    turdSize: 10, // Keep small details
                     optCurve: true,
-                    optTolerance: 0.4, // Increased smoothing for logos
+                    optTolerance: 0.2, // Faithful tracing
                     alphaMax: 1.0, 
                     blackOnWhite: true,
                     color: hex,
