@@ -96,51 +96,59 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
         
         // 3. Separate Layers & Trace
         let paths: string[] = [];
-        
-        for (const color of paletteColors) {
-            const r = color.r, g = color.g, b = color.b, a = color.a;
-            if (a < 50) continue; // Skip transparent (threshold higher)
+
+        // Create buffers for each palette color (initialized to White)
+        const layers = paletteColors.map(c => ({
+            r: c.r, g: c.g, b: c.b, a: c.a,
+            buffer: Buffer.alloc(width * height * 3).fill(255),
+            hasPixels: false
+        }));
+
+        // Assign every pixel to exactly one layer (closest color)
+        for (let i = 0; i < outPixels.length; i++) {
+            const p = outPixels[i];
             
-            // Convert to Hex
-            const hex = '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
-            
-            // Create mask buffer (RGB)
-            const maskBuffer = Buffer.alloc(width * height * 3);
-            
-            let hasPixels = false;
-            for (let i = 0; i < outPixels.length; i++) {
-                const p = outPixels[i];
-                // Check if this pixel maps to current color
-                if (Math.abs(p.r - r) < 2 && Math.abs(p.g - g) < 2 && Math.abs(p.b - b) < 2) {
-                    // Match: Black (for Potrace to trace)
-                    maskBuffer[i * 3] = 0;
-                    maskBuffer[i * 3 + 1] = 0;
-                    maskBuffer[i * 3 + 2] = 0;
-                    hasPixels = true;
-                } else {
-                    // No match: White
-                    maskBuffer[i * 3] = 255;
-                    maskBuffer[i * 3 + 1] = 255;
-                    maskBuffer[i * 3 + 2] = 255;
+            let minIdx = 0;
+            let minDiff = Infinity;
+
+            for (let j = 0; j < layers.length; j++) {
+                const l = layers[j];
+                const diff = Math.abs(p.r - l.r) + Math.abs(p.g - l.g) + Math.abs(p.b - l.b);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    minIdx = j;
                 }
             }
+
+            // Mark pixel as Black (0) in the chosen layer
+            const offset = i * 3;
+            layers[minIdx].buffer[offset] = 0;
+            layers[minIdx].buffer[offset + 1] = 0;
+            layers[minIdx].buffer[offset + 2] = 0;
+            layers[minIdx].hasPixels = true;
+        }
+        
+        // Trace each layer
+        for (const layer of layers) {
+            if (!layer.hasPixels) continue;
+            if (layer.a < 50) continue; // Skip transparent
             
-            if (!hasPixels) continue;
+            const hex = '#' + ((1 << 24) + (layer.r << 16) + (layer.g << 8) + layer.b).toString(16).slice(1).toUpperCase();
             
             // Convert to PNG for Potrace
-            const pngBuffer = await sharp(maskBuffer, { raw: { width, height, channels: 3 } })
+            const pngBuffer = await sharp(layer.buffer, { raw: { width, height, channels: 3 } })
                 .toFormat('png')
                 .toBuffer();
                 
             // Trace
             try {
-                // Params optimized for clean shapes (Logo style)
+                // Params tweaked for accuracy
                 const params = {
                     threshold: 128,
-                    turdSize: 100, // Despeckle: Ignore areas smaller than 100px (removes noise)
+                    turdSize: 10, // Keep small details
                     optCurve: true,
-                    optTolerance: 0.4, // Smoother curves
-                    alphaMax: 1.2, // Smoother corners
+                    optTolerance: 0.2, // Less smoothing, more faithful to original
+                    alphaMax: 1.0, 
                     blackOnWhite: true,
                     color: hex,
                     background: 'transparent'
