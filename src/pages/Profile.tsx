@@ -23,9 +23,12 @@ export default function Profile() {
   }, []);
 
   const loadFaqs = () => {
-    fetch('/api/faqs').then(r => r.json()).then(d => {
+    fetch('/api/faqs')
+      .then(r => r.json())
+      .then(d => {
         if(d.success) setFaqs(d.data);
-    });
+      })
+      .catch(err => console.error("Failed to load FAQs", err));
   };
 
   const handleAddFaq = async (e: React.FormEvent) => {
