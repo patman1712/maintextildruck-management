@@ -22,6 +22,7 @@ export default function AdminSettings() {
   const updateOrder = useAppStore((state) => state.updateOrder);
 
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [faviconUrl, setFaviconUrl] = useState<string | null>(null);
   const [menuSettings, setMenuSettings] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export default function AdminSettings() {
     fetch('/api/settings').then(res => res.json()).then(data => {
         if(data.success && data.settings) {
             if (data.settings.logo) setLogoUrl(data.settings.logo);
+            if (data.settings.favicon) setFaviconUrl(data.settings.favicon);
             if (data.settings.menu_config) {
                 try {
                     setMenuSettings(JSON.parse(data.settings.menu_config));
@@ -56,6 +58,27 @@ export default function AdminSettings() {
         if (data.success) {
             setLogoUrl(data.logoUrl);
             alert("Logo erfolgreich hochgeladen!");
+            window.location.reload(); 
+        } else {
+            alert("Fehler: " + data.error);
+        }
+    } catch (err) {
+        alert("Fehler beim Upload");
+    }
+  };
+
+  const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+    const formData = new FormData();
+    formData.append('favicon', file);
+
+    try {
+        const res = await fetch('/api/settings/favicon', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.success) {
+            setFaviconUrl(data.faviconUrl);
+            alert("Favicon erfolgreich hochgeladen! Bitte laden Sie die Seite neu.");
             window.location.reload(); 
         } else {
             alert("Fehler: " + data.error);
@@ -205,10 +228,13 @@ export default function AdminSettings() {
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2">Logo & Branding</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+        
+        {/* Main Logo */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center mb-8 border-b pb-8">
             <div>
+                <h3 className="font-medium text-slate-800 mb-2">Firmenlogo (Header & Login)</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                    Laden Sie hier Ihr Firmenlogo hoch. Es wird oben rechts auf der Seite und im Login-Bereich angezeigt.
+                    Wird oben rechts auf der Seite und im Login-Bereich angezeigt.
                     <br/><span className="text-xs text-gray-400">Empfohlen: PNG mit transparentem Hintergrund.</span>
                 </p>
                 <label className="inline-block bg-white border border-gray-300 text-slate-700 px-4 py-2 rounded shadow-sm hover:bg-gray-50 cursor-pointer">
@@ -221,6 +247,30 @@ export default function AdminSettings() {
                     <img src={logoUrl} alt="Firmenlogo" className="max-h-full object-contain" />
                 ) : (
                     <div className="text-gray-400 text-sm italic">Kein Logo vorhanden</div>
+                )}
+            </div>
+        </div>
+
+        {/* Favicon */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div>
+                <h3 className="font-medium text-slate-800 mb-2">Favicon / App Icon (Rund)</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                    Wird im Browser-Tab und als App-Icon auf dem Home-Screen verwendet.
+                    <br/><span className="text-xs text-gray-400">Empfohlen: Rundes PNG, quadratisch zugeschnitten.</span>
+                </p>
+                <label className="inline-block bg-white border border-gray-300 text-slate-700 px-4 py-2 rounded shadow-sm hover:bg-gray-50 cursor-pointer">
+                    <span className="flex items-center"><Upload size={16} className="mr-2"/> Icon hochladen</span>
+                    <input type="file" className="hidden" accept="image/*" onChange={handleFaviconUpload} />
+                </label>
+            </div>
+            <div className="flex justify-center bg-gray-50 p-6 rounded border border-gray-200 h-32 items-center">
+                {faviconUrl ? (
+                    <div className="w-16 h-16 rounded-full overflow-hidden border bg-white shadow-sm">
+                        <img src={faviconUrl} alt="Favicon" className="w-full h-full object-cover" />
+                    </div>
+                ) : (
+                    <div className="text-gray-400 text-sm italic">Kein Icon vorhanden</div>
                 )}
             </div>
         </div>
