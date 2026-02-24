@@ -10,6 +10,7 @@ export default function ImageVector() {
   const [vectorSvg, setVectorSvg] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [sliderPosition, setSliderPosition] = useState(50);
+  const [zoom100, setZoom100] = useState(false);
   const [mode, setMode] = useState<'local' | 'server-bw' | 'server-color'>('local');
   const [options, setOptions] = useState({
     ltres: 0.1,
@@ -76,6 +77,9 @@ export default function ImageVector() {
             
             if (mode === 'server-color') {
                 formData.append('colors', options.numberofcolors.toString());
+                // Map ltres to detail (0-100) for server
+                const detail = Math.max(0, Math.min(100, Math.round(100 - ((options.ltres - 0.1) / 4.9) * 100)));
+                formData.append('detail', detail.toString());
             }
 
             const endpoint = mode === 'server-bw' ? '/api/vector/potrace' : '/api/vector/potrace-color';
@@ -209,7 +213,7 @@ export default function ImageVector() {
 
                     <div>
                         <div className="flex justify-between mb-1">
-                            <label className="block text-xs font-medium text-gray-500">Farben (Anzahl)</label>
+                            <label className="block text-xs font-medium text-gray-500">Farben (Anzahl) (Lokal & Server)</label>
                             <span className="text-xs font-bold text-gray-700">{options.numberofcolors}</span>
                         </div>
                         <input 
@@ -222,7 +226,7 @@ export default function ImageVector() {
                     
                     <div>
                         <div className="flex justify-between mb-1">
-                             <label className="block text-xs font-medium text-gray-500">Detailgenauigkeit</label>
+                             <label className="block text-xs font-medium text-gray-500">Detailgenauigkeit (Lokal & Server)</label>
                              <span className="text-xs font-bold text-gray-700">{options.ltres}</span>
                         </div>
                         <input 
@@ -277,10 +281,20 @@ export default function ImageVector() {
         <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm border border-gray-200 min-h-[500px] flex flex-col">
             <h2 className="font-semibold text-lg mb-4 flex items-center justify-between text-gray-700">
                 <span>Vorschau & Vergleich</span>
-                {vectorSvg && <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded">Schieber bewegen zum Vergleichen</span>}
+                <div className="flex items-center space-x-2">
+                    {vectorSvg && (
+                        <button 
+                            onClick={() => setZoom100(!zoom100)}
+                            className={`text-xs px-2 py-1 rounded border transition-colors ${zoom100 ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-gray-100 border-gray-300 text-gray-600'}`}
+                        >
+                            {zoom100 ? 'Zoom: 100%' : 'Zoom: Fit'}
+                        </button>
+                    )}
+                    {vectorSvg && <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded">Schieber bewegen</span>}
+                </div>
             </h2>
 
-            <div className="flex-1 relative bg-gray-100 rounded-lg overflow-hidden border border-gray-300 flex items-center justify-center select-none p-4">
+            <div className={`flex-1 relative bg-gray-100 rounded-lg overflow-hidden border border-gray-300 flex items-center justify-center select-none p-4 ${zoom100 ? 'overflow-auto block' : ''}`}>
                 {!originalImage ? (
                     <div className="text-center text-gray-400">
                         <ImageIcon size={64} className="mx-auto mb-4 opacity-20" />
@@ -292,7 +306,7 @@ export default function ImageVector() {
                         <img 
                             src={originalImage} 
                             alt="Original" 
-                            className="max-w-full max-h-[600px] object-contain block bg-white" 
+                            className={`object-contain block bg-white ${zoom100 ? 'max-w-none' : 'max-w-full max-h-[600px]'}`} 
                         />
                         
                         {/* Vector Image (Overlay) - Clipped */}

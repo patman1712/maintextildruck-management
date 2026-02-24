@@ -56,24 +56,28 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
     if (!req.file) return res.status(400).json({ success: false, error: 'No file' });
 
     try {
-        const maxColors = parseInt(req.body.colors as string) || 16;
+        const maxColors = parseInt(req.body.colors as string) || 8;
+        const detailLevel = parseInt(req.body.detail as string) || 80; // Default high detail
         
-        // 1. Load image & Upscale for better tracing quality
-        // Potrace produces smoother curves with higher resolution inputs.
+        // Map detail to params
+        // Detail 100 = Min Noise Removal, Max Precision
+        // Detail 0 = Max Noise Removal, Max Smoothing
+        const turdSize = Math.max(2, Math.round((100 - detailLevel) * 2)); // 100->2, 50->100, 0->200
+        const optTolerance = 0.1 + ((100 - detailLevel) / 100) * 0.4; // 100->0.1, 0->0.5
+        const blurAmount = Math.max(0.3, (100 - detailLevel) / 25); // 100->0.3, 0->4
+        
+        // 1. Load image & Upscale
         let imgPipeline = sharp(req.file.path).ensureAlpha();
         const metadata = await imgPipeline.metadata();
         
-        // Upscale if smaller than 2000px width
         if (metadata.width && metadata.width < 2000) {
             imgPipeline = imgPipeline.resize({ width: 2000, kernel: 'lanczos3' });
         } else {
-            // Even if large, resize to max 2500 to prevent OOM
             imgPipeline = imgPipeline.resize({ width: 2500, fit: 'inside' });
         }
 
-        // Apply stronger median blur to remove noise/artifacts before quantization
-        // This helps create solid color areas instead of pixel noise
-        imgPipeline = imgPipeline.median(5);
+        // Pre-blur (Despeckle)
+        imgPipeline = imgPipeline.median(Math.ceil(blurAmount));
 
         const { data, info } = await imgPipeline
             .raw()
@@ -139,7 +143,7 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
             // Apply BLUR + THRESHOLD to smooth jagged quantization edges
             const pngBuffer = await sharp(layer.buffer, { raw: { width, height, channels: 3 } })
                 .toColorspace('b-w') // Grayscale
-                .blur(3) // Blur to smooth out pixel steps
+                .blur(Math.max(1, blurAmount)) // Dynamic blur based on detail level
                 .threshold(128) // Cut back to binary (sharp clean edge)
                 .toFormat('png')
                 .toBuffer();
@@ -149,9 +153,9 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
                 // Params optimized for clean shapes (Logo style)
                 const params = {
                     threshold: 128,
-                    turdSize: 10, // Keep small details
+                    turdSize: turdSize, // Dynamic despeckle
                     optCurve: true,
-                    optTolerance: 0.2, // Faithful tracing
+                    optTolerance: optTolerance, // Dynamic smoothing
                     alphaMax: 1.0, 
                     blackOnWhite: true,
                     color: hex,
