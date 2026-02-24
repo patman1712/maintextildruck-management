@@ -57,7 +57,8 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
 
     try {
         const maxColors = parseInt(req.body.colors as string) || 8;
-        const detailLevel = parseInt(req.body.detail as string) || 80; // Default high detail
+        const detailLevel = parseInt(req.body.detail as string) || 80;
+        const isComic = req.body.comic === 'true';
         
         // Map detail to params
         // Detail 100 = Min Noise Removal, Max Precision
@@ -174,6 +175,44 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
                 if (pathMatch) paths.push(pathMatch[0]);
             } catch (e) {
                 console.error("Layer trace failed", e);
+            }
+        }
+        
+        // If Comic Mode, add crisp black lines on top
+        if (isComic) {
+            try {
+                // Generate Ink Layer (Thresholded Black Lines)
+                // Must match dimensions of color layers exactly!
+                const inkBuffer = await sharp(req.file.path)
+                    .resize({ width: width, height: height, fit: 'fill' }) 
+                    .grayscale()
+                    .threshold(90) // Cutoff for black lines
+                    .toFormat('png')
+                    .toBuffer();
+                
+                // Trace Ink (Black)
+                const params = {
+                    threshold: 128,
+                    turdSize: 2, // Keep tiny dots (stippling)
+                    optCurve: true,
+                    optTolerance: 0.1, // Super precise
+                    alphaMax: 1.0,
+                    blackOnWhite: true,
+                    color: '#000000',
+                    background: 'transparent'
+                };
+                
+                const svgFragment = await new Promise<string>((resolve, reject) => {
+                    potrace.trace(inkBuffer, params, (err: any, svg: string) => {
+                        if (err) reject(err);
+                        else resolve(svg);
+                    });
+                });
+
+                const pathMatch = svgFragment.match(/<path[^>]*>/);
+                if (pathMatch) paths.push(pathMatch[0]);
+            } catch (e) {
+                console.error("Ink layer failed", e);
             }
         }
         

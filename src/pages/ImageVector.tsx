@@ -12,6 +12,7 @@ export default function ImageVector() {
   const [sliderPosition, setSliderPosition] = useState(50);
   const [zoom100, setZoom100] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [comicMode, setComicMode] = useState(false);
   const [mode, setMode] = useState<'local' | 'server-bw' | 'server-color'>('local');
   const [options, setOptions] = useState({
     ltres: 0.1,
@@ -81,6 +82,7 @@ export default function ImageVector() {
                 // Map ltres to detail (0-100) for server
                 const detail = Math.max(0, Math.min(100, Math.round(100 - ((options.ltres - 0.1) / 4.9) * 100)));
                 formData.append('detail', detail.toString());
+                if (comicMode) formData.append('comic', 'true');
             }
 
             const endpoint = mode === 'server-bw' ? '/api/vector/potrace' : '/api/vector/potrace-color';
@@ -223,6 +225,10 @@ export default function ImageVector() {
                             onChange={(e) => setOptions({...options, numberofcolors: parseInt(e.target.value)})}
                             className="w-full accent-red-600"
                         />
+                        <label className="flex items-center space-x-2 text-xs font-medium text-gray-700 mt-2 cursor-pointer select-none">
+                            <input type="checkbox" checked={comicMode} onChange={e => setComicMode(e.target.checked)} className="rounded text-red-600 focus:ring-red-500" />
+                            <span>Comic-Modus (für Illustrationen/Anime)</span>
+                        </label>
                     </div>
                     
                     <div>
