@@ -24,6 +24,7 @@ import settingsRoutes from './routes/settings.js'
 import vectorRoutes from './routes/vector.js'
 import faqRoutes from './routes/faqs.js'
 import downloadsRoutes, { DOWNLOADS_DIR } from './routes/downloads.js'
+import backupRoutes from './routes/backup.js'
 
 // for esm mode
 const __filename = fileURLToPath(import.meta.url)
@@ -54,6 +55,7 @@ app.use('/api/settings', settingsRoutes)
 app.use('/api/vector', vectorRoutes)
 app.use('/api/faqs', faqRoutes)
 app.use('/api/downloads', downloadsRoutes)
+app.use('/api/backup', backupRoutes)
 
 // Serve uploads
 app.use('/uploads', express.static(UPLOAD_DIR))

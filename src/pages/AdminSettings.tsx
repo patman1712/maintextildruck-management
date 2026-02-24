@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/store";
-import { Shield, Save, RotateCcw, AlertTriangle, Upload, Eye, EyeOff, LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, Printer, Zap } from "lucide-react";
+import { Shield, Save, RotateCcw, AlertTriangle, Upload, Eye, EyeOff, LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, Printer, Zap, Database, Download } from "lucide-react";
 
 const MENU_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -102,6 +102,10 @@ export default function AdminSettings() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key: 'menu_config', value: updated })
       });
+  };
+
+  const handleBackup = () => {
+    window.location.href = '/api/backup/download';
   };
 
   // Calculate current max number
@@ -347,6 +351,24 @@ export default function AdminSettings() {
                 )}
             </div>
         </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex items-center">
+            <Database size={20} className="mr-2" />
+            System Backup
+        </h2>
+        <p className="text-sm text-gray-600 mb-4">
+            Erstellen Sie ein vollständiges Backup aller Daten (Datenbank, Uploads, Downloads).
+            Das Archiv kann bei einem Serverwechsel einfach wiederhergestellt werden.
+        </p>
+        <button 
+            onClick={handleBackup}
+            className="bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-900 flex items-center"
+        >
+            <Download size={16} className="mr-2" />
+            Backup herunterladen (.tar.gz)
+        </button>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
