@@ -69,16 +69,33 @@ router.post('/favicon', upload.single('favicon'), async (req: Request, res: Resp
     }
     
     // Auto-update public logos for PWA/Favicon
+    let copyError = null;
     try {
         const publicDir = path.join(process.cwd(), 'public');
-        await fs.copy(req.file.path, path.join(publicDir, 'logo.png')); // Used by index.html
-        await fs.copy(req.file.path, path.join(publicDir, 'apple-touch-icon.png'));
-        await fs.copy(req.file.path, path.join(publicDir, 'favicon.ico'));
-    } catch (e) {
+        
+        // Ensure public dir exists
+        if (!fs.existsSync(publicDir)) {
+            fs.mkdirSync(publicDir, { recursive: true });
+        }
+        
+        // Use req.file.path directly
+        const srcPath = req.file.path;
+        
+        // Copy to logo.png
+        await fs.copy(srcPath, path.join(publicDir, 'logo.png'));
+        
+        // Copy to apple-touch-icon.png
+        await fs.copy(srcPath, path.join(publicDir, 'apple-touch-icon.png'));
+        
+        // Copy to favicon.ico
+        await fs.copy(srcPath, path.join(publicDir, 'favicon.ico'));
+        
+    } catch (e: any) {
         console.error("Failed to update public favicon files", e);
+        copyError = e.message;
     }
     
-    res.json({ success: true, faviconUrl });
+    res.json({ success: true, faviconUrl, warning: copyError ? `Favicon copied but public update failed: ${copyError}` : undefined });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Failed to save favicon' });

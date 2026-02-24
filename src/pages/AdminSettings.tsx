@@ -78,8 +78,12 @@ export default function AdminSettings() {
         const data = await res.json();
         if (data.success) {
             setFaviconUrl(data.faviconUrl);
-            alert("Favicon erfolgreich hochgeladen! Bitte laden Sie die Seite neu.");
-            window.location.reload(); 
+            if (data.warning) {
+                alert("Warnung: " + data.warning);
+            } else {
+                alert("Favicon erfolgreich hochgeladen! Bitte laden Sie die Seite neu.");
+                window.location.reload(); 
+            }
         } else {
             alert("Fehler: " + data.error);
         }
