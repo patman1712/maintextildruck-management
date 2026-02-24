@@ -3,7 +3,7 @@ import multer from 'multer';
 import potrace from 'potrace';
 import fs from 'fs';
 import sharp from 'sharp';
-import * as iq from 'image-q';
+import { buildPalette, applyPalette, utils } from "image-q";
 
 const router = Router();
 const upload = multer({ dest: 'uploads/' });
@@ -61,6 +61,7 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
         // 1. Load image & Resize
         const { data, info } = await sharp(req.file.path)
             .resize({ width: 800, fit: 'inside' }) 
+            .ensureAlpha()
             .raw()
             .toBuffer({ resolveWithObject: true });
 
@@ -68,17 +69,16 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
         const height = info.height;
 
         // 2. Quantize
-        const pointContainer = iq.utils.PointContainer.fromUint8Array(data, width, height);
-        const palette = new iq.palette.NeuQuant(pointContainer, { colors: maxColors });
-        const quantizer = new iq.quality.NearestColor(palette);
-        const outContainer = quantizer.quantize(pointContainer);
+        const pointContainer = utils.PointContainer.fromUint8Array(data, width, height);
+        const palette = await buildPalette([pointContainer], { colors: maxColors });
+        const outContainer = await applyPalette(pointContainer, palette);
         
         // Get unique palette colors used
-        const paletteColors = palette.getPalette().getPointContainer().getPointArray();
+        const paletteColors = palette.getPointContainer().getPointArray();
+        const outPixels = outContainer.getPointArray();
         
         // 3. Separate Layers & Trace
         let paths: string[] = [];
-        const outPixels = outContainer.getPointArray();
         
         for (const color of paletteColors) {
             const r = color.r, g = color.g, b = color.b, a = color.a;
@@ -93,7 +93,7 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
             let hasPixels = false;
             for (let i = 0; i < outPixels.length; i++) {
                 const p = outPixels[i];
-                // Simple distance check or exact match
+                // Check if this pixel maps to current color
                 if (Math.abs(p.r - r) < 2 && Math.abs(p.g - g) < 2 && Math.abs(p.b - b) < 2) {
                     // Match: Black (for Potrace to trace)
                     maskBuffer[i * 3] = 0;
