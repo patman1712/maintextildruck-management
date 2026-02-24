@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store';
-import { HelpCircle, Plus, Trash2, ChevronDown, ChevronUp, Download, Upload } from 'lucide-react';
+import { HelpCircle, Plus, Trash2, ChevronDown, ChevronUp, Download, Upload, Edit2, Save, X } from 'lucide-react';
 
 export default function FAQ() {
   const currentUser = useAppStore((state) => state.currentUser);
@@ -11,6 +11,11 @@ export default function FAQ() {
   const [isAddingFaq, setIsAddingFaq] = useState(false);
   const [newQuestion, setNewQuestion] = useState("");
   const [newAnswer, setNewAnswer] = useState("");
+
+  // FAQ Edit State
+  const [editingFaqId, setEditingFaqId] = useState<string | null>(null);
+  const [editQuestion, setEditQuestion] = useState("");
+  const [editAnswer, setEditAnswer] = useState("");
 
   // Download State
   const [downloads, setDownloads] = useState<any[]>([]);
@@ -65,6 +70,29 @@ export default function FAQ() {
       if (!confirm("FAQ wirklich löschen?")) return;
       await fetch(`/api/faqs/${id}`, { method: 'DELETE' });
       loadFaqs();
+  };
+
+  const startEditFaq = (faq: any) => {
+    setEditingFaqId(faq.id);
+    setEditQuestion(faq.question);
+    setEditAnswer(faq.answer);
+    setOpenFaq(faq.id); 
+  };
+
+  const handleUpdateFaq = async (id: string) => {
+    try {
+        const res = await fetch(`/api/faqs/${id}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ question: editQuestion, answer: editAnswer })
+        });
+        if(res.ok) {
+            setEditingFaqId(null);
+            loadFaqs();
+        }
+    } catch(e) {
+        console.error(e);
+    }
   };
 
   const handleAddDownload = async (e: React.FormEvent) => {
@@ -156,30 +184,76 @@ export default function FAQ() {
             {faqs.length > 0 ? (
                 faqs.map(faq => (
                     <div key={faq.id} className="border border-gray-200 rounded overflow-hidden">
-                        <button 
-                            onClick={() => setOpenFaq(openFaq === faq.id ? null : faq.id)}
-                            className="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 text-left transition-colors"
-                        >
-                            <span className="font-medium text-gray-800">{faq.question}</span>
-                            <div className="flex items-center text-gray-500">
-                                {openFaq === faq.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        {editingFaqId === faq.id ? (
+                            <div className="p-4 bg-blue-50 border-l-4 border-blue-500">
+                                <div className="mb-2">
+                                    <label className="block text-xs font-bold text-blue-700 uppercase mb-1">Frage bearbeiten</label>
+                                    <input 
+                                        className="w-full border border-blue-200 p-2 rounded font-medium text-gray-800 focus:ring-2 focus:ring-blue-500 focus:outline-none" 
+                                        value={editQuestion} 
+                                        onChange={e => setEditQuestion(e.target.value)} 
+                                    />
+                                </div>
+                                <div className="mb-3">
+                                    <label className="block text-xs font-bold text-blue-700 uppercase mb-1">Antwort bearbeiten</label>
+                                    <textarea 
+                                        className="w-full border border-blue-200 p-2 rounded text-sm text-gray-600 focus:ring-2 focus:ring-blue-500 focus:outline-none" 
+                                        rows={4} 
+                                        value={editAnswer} 
+                                        onChange={e => setEditAnswer(e.target.value)} 
+                                    />
+                                </div>
+                                <div className="flex justify-end space-x-2">
+                                    <button 
+                                        onClick={() => setEditingFaqId(null)} 
+                                        className="text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded text-sm flex items-center transition-colors"
+                                    >
+                                        <X size={14} className="mr-1"/> Abbrechen
+                                    </button>
+                                    <button 
+                                        onClick={() => handleUpdateFaq(faq.id)} 
+                                        className="text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded text-sm flex items-center transition-colors shadow-sm"
+                                    >
+                                        <Save size={14} className="mr-1"/> Speichern
+                                    </button>
+                                </div>
                             </div>
-                        </button>
-                        {openFaq === faq.id && (
-                            <div className="p-3 bg-white text-sm text-gray-600 border-t border-gray-200 relative">
-                                <p className="whitespace-pre-wrap">{faq.answer}</p>
-                                {currentUser.role === 'admin' && (
-                                    <div className="absolute top-2 right-2">
-                                        <button 
-                                            onClick={() => handleDeleteFaq(faq.id)}
-                                            className="text-gray-400 hover:text-red-600 p-1"
-                                            title="Löschen"
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
+                        ) : (
+                            <>
+                                <button 
+                                    onClick={() => setOpenFaq(openFaq === faq.id ? null : faq.id)}
+                                    className="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 text-left transition-colors"
+                                >
+                                    <span className="font-medium text-gray-800">{faq.question}</span>
+                                    <div className="flex items-center text-gray-500">
+                                        {openFaq === faq.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                    </div>
+                                </button>
+                                {openFaq === faq.id && (
+                                    <div className="p-3 bg-white text-sm text-gray-600 border-t border-gray-200 relative">
+                                        <p className="whitespace-pre-wrap pr-16">{faq.answer}</p>
+                                        {currentUser.role === 'admin' && (
+                                            <div className="absolute top-2 right-2 flex space-x-1 bg-white/80 p-1 rounded backdrop-blur-sm border border-gray-100 shadow-sm">
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); startEditFaq(faq); }}
+                                                    className="text-gray-400 hover:text-blue-600 p-1.5 rounded hover:bg-blue-50 transition-colors"
+                                                    title="Bearbeiten"
+                                                >
+                                                    <Edit2 size={14} />
+                                                </button>
+                                                <div className="w-px bg-gray-200 my-1"></div>
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteFaq(faq.id); }}
+                                                    className="text-gray-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50 transition-colors"
+                                                    title="Löschen"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
-                            </div>
+                            </>
                         )}
                     </div>
                 ))
