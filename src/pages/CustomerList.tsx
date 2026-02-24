@@ -9,7 +9,7 @@ export default function CustomerList() {
   const fetchData = useAppStore((state) => state.fetchData);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAdding, setIsAdding] = useState(false);
-  const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '', address: '' });
+  const [newCustomer, setNewCustomer] = useState({ name: '', contact_person: '', email: '', phone: '', address: '' });
 
   useEffect(() => {
     fetchData();
@@ -30,7 +30,7 @@ export default function CustomerList() {
         });
         fetchData();
         setIsAdding(false);
-        setNewCustomer({ name: '', email: '', phone: '', address: '' });
+        setNewCustomer({ name: '', contact_person: '', email: '', phone: '', address: '' });
     } catch (err) {
         console.error("Failed to create customer", err);
         alert("Fehler beim Erstellen des Kunden");
@@ -85,13 +85,22 @@ export default function CustomerList() {
                 <form onSubmit={handleCreateCustomer}>
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Vereinsname / Firmenname *</label>
                             <input 
                                 className="w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500"
                                 value={newCustomer.name}
                                 onChange={e => setNewCustomer({...newCustomer, name: e.target.value})}
                                 required
-                                placeholder="Firmenname oder Vor- Nachname"
+                                placeholder="z.B. Sportverein XY"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Ansprechpartner / Team</label>
+                            <input 
+                                className="w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500"
+                                value={newCustomer.contact_person}
+                                onChange={e => setNewCustomer({...newCustomer, contact_person: e.target.value})}
+                                placeholder="z.B. Max Mustermann"
                             />
                         </div>
                         <div>
@@ -160,9 +169,15 @@ export default function CustomerList() {
                 <ArrowRight className="text-gray-300 group-hover:text-red-600 transition-colors" size={20} />
               </div>
               
-              <h3 className="text-lg font-semibold text-gray-900 mb-2 truncate" title={customer.name}>
+              <h3 className="text-lg font-semibold text-gray-900 mb-1 truncate" title={customer.name}>
                 {customer.name}
               </h3>
+              {customer.contact_person && (
+                  <p className="text-sm text-gray-600 mb-2 truncate flex items-center">
+                      <Users size={14} className="mr-2 flex-shrink-0" />
+                      {customer.contact_person}
+                  </p>
+              )}
               
               <div className="space-y-2 text-sm text-gray-500">
                 {customer.email && (

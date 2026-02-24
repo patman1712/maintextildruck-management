@@ -10,6 +10,7 @@ export interface OrderSteps {
 export interface Customer {
   id: string;
   name: string;
+  contact_person?: string;
   email: string;
   phone: string;
   address: string;
@@ -142,6 +143,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const mappedCustomers: Customer[] = (customersData.data || []).map((c: any) => ({
         id: c.id,
         name: c.name,
+        contact_person: c.contact_person,
         email: c.email,
         phone: c.phone,
         address: c.address,
@@ -356,6 +358,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const payload: any = {};
       if (updatedCustomer.name !== undefined) payload.name = updatedCustomer.name;
+      if (updatedCustomer.contact_person !== undefined) payload.contact_person = updatedCustomer.contact_person;
       if (updatedCustomer.email !== undefined) payload.email = updatedCustomer.email;
       if (updatedCustomer.phone !== undefined) payload.phone = updatedCustomer.phone;
       if (updatedCustomer.address !== undefined) payload.address = updatedCustomer.address;
