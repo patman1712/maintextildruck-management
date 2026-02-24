@@ -2,11 +2,34 @@ import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import potrace from 'potrace';
 import fs from 'fs';
+import path from 'path';
 import sharp from 'sharp';
 import { buildPalette, applyPalette, utils } from "image-q";
 
 const router = Router();
 const upload = multer({ dest: 'uploads/' });
+
+// Helper: Cleanup temp files older than 12 hours
+const cleanupTempFiles = () => {
+    const tempDir = path.resolve('uploads');
+    fs.readdir(tempDir, (err, files) => {
+        if (err) return; // Directory might not exist or other error
+        const now = Date.now();
+        const maxAge = 12 * 60 * 60 * 1000; // 12 hours
+
+        files.forEach(file => {
+            const filePath = path.join(tempDir, file);
+            fs.stat(filePath, (err, stats) => {
+                if (err) return;
+                if (now - stats.mtimeMs > maxAge) {
+                    fs.unlink(filePath, (err) => {
+                        if (err) console.error('Failed to delete temp file:', filePath);
+                    });
+                }
+            });
+        });
+    });
+};
 
 // Helper: Promisify potrace
 const trace = (buffer: Buffer, color: string): Promise<string> => {
@@ -30,6 +53,7 @@ const trace = (buffer: Buffer, color: string): Promise<string> => {
 
 // POST /api/vector/potrace (B/W)
 router.post('/potrace', upload.single('image'), (req: Request, res: Response) => {
+  cleanupTempFiles();
   if (!req.file) return res.status(400).json({ success: false, error: 'No file' });
 
   const params = {
@@ -53,6 +77,7 @@ router.post('/potrace', upload.single('image'), (req: Request, res: Response) =>
 
 // POST /api/vector/potrace-color
 router.post('/potrace-color', upload.single('image'), async (req: Request, res: Response) => {
+    cleanupTempFiles();
     if (!req.file) return res.status(400).json({ success: false, error: 'No file' });
 
     try {

@@ -361,6 +361,10 @@ export default function AdminSettings() {
         <p className="text-sm text-gray-600 mb-4">
             Erstellen Sie ein vollständiges Backup aller Daten (Datenbank, Uploads, Downloads).
             Das Archiv kann bei einem Serverwechsel einfach wiederhergestellt werden.
+            <br/><br/>
+            <span className="text-xs italic text-gray-500">
+            Hinweis: Bilder aus Shopware werden als Links gespeichert. Eine lokale Kopie der Shopware-Bilder ist nicht enthalten.
+            </span>
         </p>
         <button 
             onClick={handleBackup}
