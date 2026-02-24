@@ -56,7 +56,7 @@ export interface Order {
   customerPhone?: string;
   customerAddress?: string;
   deadline: string;
-  status: 'active' | 'completed' | 'cancelled' | 'archived';
+  status: 'active' | 'completed' | 'cancelled' | 'archived' | 'manual_invoice';
   steps: OrderSteps;
   printStatus?: 'pending' | 'ordered';
   createdAt: string;
