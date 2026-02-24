@@ -79,6 +79,7 @@ export default function NewOrder() {
   }, [orders]);
 
   const [customerName, setCustomerName] = useState("");
+  const [customerContactPerson, setCustomerContactPerson] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
@@ -123,6 +124,7 @@ export default function NewOrder() {
     const customer = customers.find(c => c.id === customerId);
     if (customer) {
       setCustomerName(customer.name);
+      setCustomerContactPerson(customer.contact_person || "");
       setCustomerEmail(customer.email);
       setCustomerPhone(customer.phone);
       setCustomerAddress(customer.address);
@@ -131,6 +133,7 @@ export default function NewOrder() {
       // But maybe it's better to have a dedicated button for that
     } else {
       setCustomerName("");
+      setCustomerContactPerson("");
       setCustomerEmail("");
       setCustomerPhone("");
       setCustomerAddress("");
@@ -296,6 +299,7 @@ export default function NewOrder() {
         await addCustomer({
             id: newCustomerId,
             name: customerName,
+            contact_person: customerContactPerson,
             email: customerEmail,
             phone: customerPhone,
             address: customerAddress,
@@ -309,6 +313,7 @@ export default function NewOrder() {
       orderNumber: orderNumber, // Include generated number
       customerId: newCustomerId || undefined,
       customerName: customerName || "Unbekannter Kunde",
+      customerContactPerson,
       customerEmail,
       customerPhone,
       customerAddress,
@@ -540,8 +545,8 @@ export default function NewOrder() {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-4 duration-300 bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Firmenname / Voller Name</label>
+            <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Vereinsname / Firmenname</label>
             <div className="relative">
                 <input 
                 type="text" 
@@ -552,6 +557,16 @@ export default function NewOrder() {
                 />
                 <User className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
             </div>
+            </div>
+            <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Ansprechpartner / Team</label>
+            <input 
+                type="text" 
+                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500 border p-2" 
+                placeholder="z.B. Max Mustermann" 
+                value={customerContactPerson}
+                onChange={(e) => setCustomerContactPerson(e.target.value)}
+            />
             </div>
             <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>

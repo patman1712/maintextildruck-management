@@ -51,6 +51,7 @@ export interface Order {
   orderNumber?: string; // New field for formatted order number (e.g. 2024-0001)
   customerId?: string; // Optional for now to support legacy orders
   customerName: string;
+  customerContactPerson?: string;
   customerEmail?: string;
   customerPhone?: string;
   customerAddress?: string;
@@ -161,6 +162,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         orderNumber: o.orderNumber, // Map from backend
         customerId: o.customerId,
         customerName: o.customer_name,
+        customerContactPerson: o.customer_contact_person,
         customerEmail: o.customer_email,
         customerPhone: o.customer_phone,
         customerAddress: o.customer_address,
@@ -255,6 +257,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         order_number: order.orderNumber,
         customer_id: order.customerId,
         customer_name: order.customerName,
+        customer_contact_person: order.customerContactPerson,
         customer_email: order.customerEmail,
         customer_phone: order.customerPhone,
         customer_address: order.customerAddress,
@@ -388,6 +391,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (updatedOrder.orderNumber !== undefined) updatePayload.order_number = updatedOrder.orderNumber;
       if (updatedOrder.customerId !== undefined) updatePayload.customer_id = updatedOrder.customerId;
       if (updatedOrder.customerName !== undefined) updatePayload.customer_name = updatedOrder.customerName;
+      if (updatedOrder.customerContactPerson !== undefined) updatePayload.customer_contact_person = updatedOrder.customerContactPerson;
       if (updatedOrder.customerEmail !== undefined) updatePayload.customer_email = updatedOrder.customerEmail;
       if (updatedOrder.customerPhone !== undefined) updatePayload.customer_phone = updatedOrder.customerPhone;
       if (updatedOrder.customerAddress !== undefined) updatePayload.customer_address = updatedOrder.customerAddress;

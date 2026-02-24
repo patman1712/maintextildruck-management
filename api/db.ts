@@ -33,6 +33,7 @@ db.exec(`
     shopware_version TEXT DEFAULT '6',
     shopware_access_key TEXT,
     shopware_secret_key TEXT,
+    contact_person TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -44,6 +45,7 @@ db.exec(`
     customer_email TEXT,
     customer_phone TEXT,
     customer_address TEXT,
+    customer_contact_person TEXT,
     deadline TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'active',
     order_number TEXT, -- Format: YYYY-XXXX
@@ -188,6 +190,12 @@ try {
     db.exec('ALTER TABLE orders ADD COLUMN customer_id TEXT');
   }
 
+  const hasCustomerContact = columns.some(col => col.name === 'customer_contact_person');
+  if (!hasCustomerContact) {
+    console.log('Migrating database: Adding customer_contact_person to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN customer_contact_person TEXT');
+  }
+
   const hasOrderNumber = columns.some(col => col.name === 'order_number');
   if (!hasOrderNumber) {
     console.log('Migrating database: Adding order_number to orders table');
@@ -228,6 +236,12 @@ try {
         console.log('Migrating database: Adding shopware_version to customers table');
         db.exec("ALTER TABLE customers ADD COLUMN shopware_version TEXT DEFAULT '6'");
     }
+  }
+
+  const hasContactPerson = customerColumns.some(col => col.name === 'contact_person');
+  if (!hasContactPerson) {
+    console.log('Migrating database: Adding contact_person to customers table');
+    db.exec('ALTER TABLE customers ADD COLUMN contact_person TEXT');
   }
 
   const customerProductColumns = db.prepare("PRAGMA table_info(customer_products)").all() as any[];

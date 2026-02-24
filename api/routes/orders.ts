@@ -41,7 +41,7 @@ router.get('/', (req: Request, res: Response) => {
 // POST new order
 router.post('/', (req: Request, res: Response) => {
   const { 
-    id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, 
+    id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person, 
     deadline, status, processing, produced, invoiced, print_status, description, employees, files 
   } = req.body;
 
@@ -50,14 +50,14 @@ router.post('/', (req: Request, res: Response) => {
   try {
     const stmt = db.prepare(`
       INSERT INTO orders (
-        id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address,
+        id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person,
         deadline, status, processing, produced, invoiced, print_status, description, employees, files
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
-      id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address,
+      id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person,
       deadline, status, processing ? 1 : 0, produced ? 1 : 0, invoiced ? 1 : 0, 
       print_status || 'pending',
       description, JSON.stringify(employees || []), JSON.stringify(files || [])
@@ -119,6 +119,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (updates.customer_email !== undefined) { fields.push('customer_email = ?'); values.push(updates.customer_email); }
   if (updates.customer_phone !== undefined) { fields.push('customer_phone = ?'); values.push(updates.customer_phone); }
   if (updates.customer_address !== undefined) { fields.push('customer_address = ?'); values.push(updates.customer_address); }
+  if (updates.customer_contact_person !== undefined) { fields.push('customer_contact_person = ?'); values.push(updates.customer_contact_person); }
   if (updates.deadline !== undefined) { fields.push('deadline = ?'); values.push(updates.deadline); }
   if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
   if (updates.processing !== undefined) { fields.push('processing = ?'); values.push(updates.processing ? 1 : 0); }

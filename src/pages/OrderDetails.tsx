@@ -165,6 +165,7 @@ export default function OrderDetails() {
               <h3 className="text-lg font-semibold text-slate-800 mb-4 border-b pb-2">Kundendaten</h3>
               <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-700 space-y-2">
                 <p><span className="font-medium">Name:</span> {order.customerName}</p>
+                {order.customerContactPerson && <p><span className="font-medium">Ansprechpartner:</span> {order.customerContactPerson}</p>}
                 {order.customerEmail && <p><span className="font-medium">E-Mail:</span> <a href={`mailto:${order.customerEmail}`} className="text-red-600 hover:underline">{order.customerEmail}</a></p>}
                 {order.customerPhone && <p><span className="font-medium">Telefon:</span> {order.customerPhone}</p>}
                 {order.customerAddress && (
