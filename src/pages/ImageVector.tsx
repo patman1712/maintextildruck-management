@@ -38,7 +38,7 @@ export default function ImageVector() {
       }
       if (type === 'server-color') {
           setMode('server-color');
-          setOptions(prev => ({ ...prev, numberofcolors: 16 })); // Default to 16 for server
+          setOptions(prev => ({ ...prev, numberofcolors: 8 })); // Cleaner logos with fewer colors
           return;
       }
       setMode('local');

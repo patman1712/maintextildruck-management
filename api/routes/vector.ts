@@ -71,9 +71,9 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
             imgPipeline = imgPipeline.resize({ width: 2500, fit: 'inside' });
         }
 
-        // Apply slight median blur to remove noise/artifacts before quantization
+        // Apply stronger median blur to remove noise/artifacts before quantization
         // This helps create solid color areas instead of pixel noise
-        imgPipeline = imgPipeline.median(3);
+        imgPipeline = imgPipeline.median(5);
 
         const { data, info } = await imgPipeline
             .raw()
@@ -145,9 +145,9 @@ router.post('/potrace-color', upload.single('image'), async (req: Request, res: 
                 // Params tweaked for accuracy
                 const params = {
                     threshold: 128,
-                    turdSize: 10, // Keep small details
+                    turdSize: 40, // Increased to remove noise (islands)
                     optCurve: true,
-                    optTolerance: 0.2, // Less smoothing, more faithful to original
+                    optTolerance: 0.4, // Increased smoothing for logos
                     alphaMax: 1.0, 
                     blackOnWhite: true,
                     color: hex,
