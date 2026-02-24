@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs-extra';
 import db from '../db.js';
 import { UPLOAD_DIR } from './upload.js';
 
@@ -33,7 +34,7 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 // POST /api/settings/logo
-router.post('/logo', upload.single('logo'), (req: Request, res: Response) => {
+router.post('/logo', upload.single('logo'), async (req: Request, res: Response) => {
   if (!req.file) return res.status(400).json({ success: false, error: 'No file' });
   
   const logoUrl = `/uploads/${req.file.filename}`;
@@ -44,6 +45,15 @@ router.post('/logo', upload.single('logo'), (req: Request, res: Response) => {
       db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(logoUrl, 'logo');
     } else {
       db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('logo', logoUrl);
+    }
+    
+    // Auto-update public logos for PWA/Favicon
+    try {
+        const publicDir = path.join(process.cwd(), 'public');
+        await fs.copy(req.file.path, path.join(publicDir, 'logo.png'));
+        await fs.copy(req.file.path, path.join(publicDir, 'apple-touch-icon.png'));
+    } catch (e) {
+        console.error("Failed to update public logo files", e);
     }
     
     res.json({ success: true, logoUrl });
