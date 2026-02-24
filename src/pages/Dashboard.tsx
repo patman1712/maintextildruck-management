@@ -91,8 +91,8 @@ export default function DashboardLayout() {
         <nav className="flex-1 py-6 space-y-2 px-2 overflow-y-auto">
           {MENU_ITEMS.map(item => {
               const isHidden = menuSettings[item.id] === false;
-              // Hide if hidden AND not admin
-              if (isHidden && currentUser?.role !== 'admin') return null;
+              // Hide if hidden (for everyone, including admin)
+              if (isHidden) return null;
               
               const Icon = item.icon;
               return (
