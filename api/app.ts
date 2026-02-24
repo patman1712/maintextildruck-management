@@ -7,10 +7,12 @@ import express, {
   type Response,
   type NextFunction,
 } from 'express'
+import fs from 'fs'
 import cors from 'cors'
 import path from 'path'
 import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
+import db from './db.js'
 import authRoutes from './routes/auth.js'
 import orderRoutes from './routes/orders.js'
 import customerRoutes from './routes/customers.js'
@@ -81,6 +83,31 @@ app.use('/api/*', (req: Request, res: Response) => {
     error: 'API not found',
   })
 })
+
+// Custom favicon/logo override
+app.get(['/favicon.ico', '/favicon.png', '/apple-touch-icon.png', '/logo.png'], (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const key = req.path === '/logo.png' ? 'logo' : 'favicon';
+        const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as {value: string} | undefined;
+        
+        if (row && row.value) {
+            const relativePath = row.value.replace(/^\/uploads\//, '');
+            const filePath = path.join(UPLOAD_DIR, relativePath);
+            
+            if (fs.existsSync(filePath)) {
+                const ext = path.extname(filePath).toLowerCase();
+                if (ext === '.svg') res.type('image/svg+xml');
+                else if (ext === '.png') res.type('image/png');
+                else if (ext === '.ico') res.type('image/x-icon');
+                
+                return res.sendFile(filePath);
+            }
+        }
+    } catch (e) {
+        console.error("Error serving custom icon:", e);
+    }
+    next();
+});
 
 // Serve static files from the dist directory
 app.use(express.static(path.join(__dirname, '../dist')))
