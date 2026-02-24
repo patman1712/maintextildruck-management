@@ -592,8 +592,8 @@ export default function NewOrder() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Mitarbeiter zuweisen</label>
             <div className="flex flex-wrap gap-2">
-              {users.length > 0 ? (
-                users.map((user) => (
+              {users.filter(u => u.role !== 'admin').length > 0 ? (
+                users.filter(u => u.role !== 'admin').map((user) => (
                   <label key={user.id} className={`inline-flex items-center border rounded-full px-3 py-1 cursor-pointer transition-colors ${selectedEmployees.includes(user.username) ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
                     <input 
                       type="checkbox" 
