@@ -140,37 +140,6 @@ export default function DashboardHome() {
                 )}
             </div>
 
-            {/* ALL ACTIVE ORDERS */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                    <h3 className="font-bold text-lg text-slate-800 flex items-center">
-                        <Folder className="mr-2 text-gray-600" />
-                        Alle Aktiven Aufträge
-                    </h3>
-                    <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs font-bold">{activeOrders.length}</span>
-                </div>
-                {activeOrders.length > 0 ? (
-                    <div className="divide-y divide-gray-100 max-h-[500px] overflow-y-auto">
-                        {activeOrders.map(o => (
-                            <Link key={o.id} to={`/dashboard/orders/${o.id}`} className="block p-4 hover:bg-gray-50 transition-colors">
-                                <div className="flex justify-between items-center">
-                                    <div className="flex items-center space-x-3">
-                                        <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded text-gray-600">{o.orderNumber}</span>
-                                        <span className="font-medium text-slate-800 truncate max-w-[200px] sm:max-w-xs">{o.title}</span>
-                                    </div>
-                                    <div className="flex items-center space-x-4">
-                                        <span className="text-sm text-gray-500 hidden sm:inline">{o.customerName}</span>
-                                        <ArrowRight size={16} className="text-gray-300" />
-                                    </div>
-                                </div>
-                            </Link>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="p-8 text-center text-gray-500">Keine aktiven Aufträge.</div>
-                )}
-            </div>
-
         </div>
 
         {/* RIGHT COLUMN: Deadlines */}
