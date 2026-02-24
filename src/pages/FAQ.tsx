@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAppStore } from '@/store';
-import { HelpCircle, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { HelpCircle, Plus, Trash2, ChevronDown, ChevronUp, Download } from 'lucide-react';
 
 export default function FAQ() {
   const currentUser = useAppStore((state) => state.currentUser);
@@ -139,6 +139,31 @@ export default function FAQ() {
             ) : (
                 <p className="text-gray-500 text-sm italic text-center py-4">Keine FAQs vorhanden.</p>
             )}
+        </div>
+      </div>
+
+      {/* Downloads Section */}
+      <div className="bg-white rounded-lg shadow p-6 mt-8">
+        <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center">
+            <Download size={18} className="mr-2 text-red-600" />
+            Downloads & Ressourcen
+        </h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="border border-gray-200 rounded-lg p-4 flex items-center justify-between hover:bg-gray-50 transition-colors group">
+                <div>
+                    <h4 className="font-medium text-gray-800">DTF Farbprofil (FOGRA39)</h4>
+                    <p className="text-sm text-gray-500 mt-1">Standard ICC Profil für CMYK.</p>
+                </div>
+                <a 
+                    href="/downloads/FOGRA39.icc" 
+                    download="FOGRA39.icc"
+                    className="bg-gray-100 text-gray-600 p-2 rounded-full group-hover:bg-red-50 group-hover:text-red-600 transition-colors"
+                    title="Herunterladen"
+                >
+                    <Download size={20} />
+                </a>
+            </div>
         </div>
       </div>
     </div>
