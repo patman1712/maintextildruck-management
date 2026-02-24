@@ -9,7 +9,12 @@ export default function DashboardHome() {
   const activeOrders = orders.filter(o => o.status === 'active');
   
   // 2. My Orders
-  const myOrders = activeOrders.filter(o => o.employees.includes(currentUser?.id || ''));
+  // Check against ID, username, and name to handle legacy data or different storage formats
+  const myOrders = activeOrders.filter(o => 
+      o.employees.includes(currentUser?.id || '') || 
+      o.employees.includes(currentUser?.username || '') ||
+      o.employees.includes(currentUser?.name || '')
+  );
   
   // 3. Material Needs (Pending Items)
   const pendingItems = orders.flatMap(o => (o.orderItems || []).filter(i => i.status === 'pending'));
