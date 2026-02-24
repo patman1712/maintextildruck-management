@@ -11,14 +11,14 @@ export default function ImageVector() {
   const [processing, setProcessing] = useState(false);
   const [sliderPosition, setSliderPosition] = useState(50);
   const [options, setOptions] = useState({
-    ltres: 1,
-    qtres: 1,
-    pathomit: 8,
+    ltres: 0.1,
+    qtres: 0.1,
+    pathomit: 2,
     colorsampling: 2, // 0: disabled, 1: random, 2: deterministic
-    numberofcolors: 16,
+    numberofcolors: 32,
     mincolorratio: 0,
     colorquantcycles: 3,
-    strokewidth: 1,
+    strokewidth: 0,
     linefilter: false,
     scale: 1,
     roundcoords: 1,
@@ -29,6 +29,16 @@ export default function ImageVector() {
     blurradius: 0,
     blurdelta: 20
   });
+
+  const applyPreset = (type: 'logo' | 'photo' | 'bw') => {
+      if (type === 'logo') {
+          setOptions(prev => ({ ...prev, numberofcolors: 16, ltres: 1, qtres: 1, pathomit: 8, strokewidth: 1 }));
+      } else if (type === 'photo') {
+          setOptions(prev => ({ ...prev, numberofcolors: 64, ltres: 0.1, qtres: 0.1, pathomit: 1, strokewidth: 0 }));
+      } else if (type === 'bw') {
+          setOptions(prev => ({ ...prev, numberofcolors: 2, ltres: 0.5, qtres: 0.5, pathomit: 4, strokewidth: 0 }));
+      }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -133,6 +143,15 @@ export default function ImageVector() {
 
             {originalImage && (
                 <div className="space-y-6">
+                    <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-2">Schnell-Einstellungen</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            <button onClick={() => applyPreset('logo')} className="px-2 py-2 bg-gray-50 hover:bg-gray-100 text-xs rounded border border-gray-200 text-gray-700 transition-colors">Logo (Einfach)</button>
+                            <button onClick={() => applyPreset('photo')} className="px-2 py-2 bg-gray-50 hover:bg-gray-100 text-xs rounded border border-gray-200 text-gray-700 transition-colors">Foto (Detail)</button>
+                            <button onClick={() => applyPreset('bw')} className="px-2 py-2 bg-gray-50 hover:bg-gray-100 text-xs rounded border border-gray-200 text-gray-700 transition-colors">Schwarz/Weiß</button>
+                        </div>
+                    </div>
+
                     <div>
                         <div className="flex justify-between mb-1">
                             <label className="block text-xs font-medium text-gray-500">Farben (Anzahl)</label>
