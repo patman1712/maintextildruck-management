@@ -34,7 +34,7 @@ export default function CustomerDetails() {
 
   // Local state for editing
   const [isEditing, setIsEditing] = useState(false);
-  const [editedCustomer, setEditedCustomer] = useState<{name: string, email: string, phone: string, address: string} | null>(null);
+  const [editedCustomer, setEditedCustomer] = useState<{name: string, contact_person?: string, email: string, phone: string, address: string} | null>(null);
   
   // State for direct upload
   const [isUploading, setIsUploading] = useState(false);
@@ -97,6 +97,7 @@ export default function CustomerDetails() {
       setCustomer(foundCustomer);
       setEditedCustomer({
         name: foundCustomer.name,
+        contact_person: foundCustomer.contact_person,
         email: foundCustomer.email,
         phone: foundCustomer.phone,
         address: foundCustomer.address
@@ -681,6 +682,25 @@ export default function CustomerDetails() {
                 <div>
                 <h3 className="text-lg font-semibold text-slate-800 mb-4 border-b pb-2">Kontaktdaten</h3>
                 <div className="space-y-4">
+                    <div className="flex items-center text-gray-700">
+                    <User className="mr-3 text-gray-400" size={20} />
+                    {isEditing ? (
+                        <input 
+                        type="text" 
+                        value={editedCustomer?.contact_person || ""} 
+                        onChange={(e) => setEditedCustomer(prev => ({...prev!, contact_person: e.target.value}))}
+                        className="border border-gray-300 rounded px-2 py-1 w-full focus:ring-red-500 focus:border-red-500"
+                        placeholder="Ansprechpartner / Team"
+                        />
+                    ) : (
+                        customer.contact_person ? (
+                        <span>{customer.contact_person}</span>
+                        ) : (
+                        <span className="text-gray-400 italic">Kein Ansprechpartner hinterlegt</span>
+                        )
+                    )}
+                    </div>
+
                     <div className="flex items-center text-gray-700">
                     <Mail className="mr-3 text-gray-400" size={20} />
                     {isEditing ? (
