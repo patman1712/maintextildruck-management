@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAppStore, Supplier, OrderItem } from '@/store';
-import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, Send, RotateCcw } from 'lucide-react';
+import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, Send, RotateCcw, Search, User, Package, ChevronDown, ChevronRight } from 'lucide-react';
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState<'orders' | 'completed' | 'suppliers'>('orders');
@@ -281,6 +281,7 @@ function SuppliersTab() {
 function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const orders = useAppStore((state) => state.orders);
   const suppliers = useAppStore((state) => state.suppliers);
+  const customers = useAppStore((state) => state.customers);
   const updateOrderItem = useAppStore((state) => state.updateOrderItem);
   const currentUser = useAppStore((state) => state.currentUser);
   const addOrderItem = useAppStore((state) => state.addOrderItem);
@@ -288,6 +289,43 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
   // Manual Add Item State
   const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [showProductPicker, setShowProductPicker] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
+  const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
+  const [customerProducts, setCustomerProducts] = useState<Record<string, any[]>>({});
+  const [loadingProducts, setLoadingProducts] = useState<Set<string>>(new Set());
+
+  const toggleCustomer = async (customerId: string) => {
+      const newExpanded = new Set(expandedCustomers);
+      if (newExpanded.has(customerId)) {
+          newExpanded.delete(customerId);
+      } else {
+          newExpanded.add(customerId);
+          if (!customerProducts[customerId]) {
+              setLoadingProducts(prev => new Set(prev).add(customerId));
+              try {
+                  const res = await fetch(`/api/products/${customerId}`);
+                  const data = await res.json();
+                  if (data.success) {
+                      setCustomerProducts(prev => ({ ...prev, [customerId]: data.data }));
+                  }
+              } catch(e) { console.error(e); }
+              setLoadingProducts(prev => { const n = new Set(prev); n.delete(customerId); return n; });
+          }
+      }
+      setExpandedCustomers(newExpanded);
+  };
+
+  const handleSelectProduct = (product: any, customer: any) => {
+    setNewItem(prev => ({
+        ...prev,
+        itemName: `${product.name} ${product.product_number ? `(${product.product_number})` : ''}`,
+        supplierId: product.supplier_id || prev.supplierId,
+        manualOrderNumber: prev.manualOrderNumber || customer.name
+    }));
+    setShowProductPicker(false);
+  };
+
   const [newItem, setNewItem] = useState({
     supplierId: '',
     itemName: '',
@@ -681,88 +719,175 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         {/* Modal for manual adding - Always available */}
         {showAddItemModal && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 text-left">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
-                    <div className="flex justify-between items-center mb-4 border-b pb-2">
-                        <h2 className="text-xl font-bold text-gray-800">Manuelle Bestellung hinzufügen</h2>
-                        <button onClick={() => setShowAddItemModal(false)} className="text-gray-400 hover:text-gray-600">
-                            <Plus size={24} className="rotate-45" />
-                        </button>
-                    </div>
-                    
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                            <div className="lg:col-span-3">
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Lieferant / Shop</label>
-                                <select 
-                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                    value={newItem.supplierId}
-                                    onChange={(e) => setNewItem({...newItem, supplierId: e.target.value})}
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl h-[80vh] flex flex-col p-6">
+                    <div className="flex justify-between items-center mb-4 border-b pb-2 shrink-0">
+                        <h2 className="text-xl font-bold text-gray-800">
+                            {showProductPicker ? 'Kunden-Artikel auswählen' : 'Manuelle Bestellung hinzufügen'}
+                        </h2>
+                        <div className="flex items-center">
+                            {showProductPicker && (
+                                <button 
+                                    onClick={() => setShowProductPicker(false)}
+                                    className="mr-4 text-sm text-gray-500 hover:text-gray-700 underline"
                                 >
-                                    <option value="">Bitte wählen...</option>
-                                    {suppliers.map(s => (
-                                        <option key={s.id} value={s.id}>{s.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="lg:col-span-3">
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Auftragsnummer (Optional)</label>
-                                <input 
-                                    type="text" 
-                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                    placeholder="z.B. 2026-0012"
-                                    value={newItem.manualOrderNumber}
-                                    onChange={(e) => setNewItem({...newItem, manualOrderNumber: e.target.value})}
-                                />
-                            </div>
-                            <div className="lg:col-span-2">
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikel Nr./ Artikelname / Farbe</label>
-                                <input 
-                                    type="text" 
-                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                    placeholder="z.B. Premium Hoodie - Navy"
-                                    value={newItem.itemName}
-                                    onChange={(e) => setNewItem({...newItem, itemName: e.target.value})}
-                                />
-                            </div>
-                            <div className="lg:col-span-2">
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Anzahl</label>
-                                <input 
-                                    type="text" 
-                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                    placeholder="z.B. 5x XL, 3x L"
-                                    value={newItem.size}
-                                    onChange={(e) => setNewItem({...newItem, size: e.target.value})}
-                                />
-                            </div>
-                            <div className="lg:col-span-2">
-                                <label className="block text-xs font-medium text-gray-700 mb-1">Notizen (Optional)</label>
-                                <input 
-                                    type="text" 
-                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                    placeholder="..."
-                                    value={newItem.notes}
-                                    onChange={(e) => setNewItem({...newItem, notes: e.target.value})}
-                                />
-                            </div>
+                                    Zurück
+                                </button>
+                            )}
+                            <button onClick={() => setShowAddItemModal(false)} className="text-gray-400 hover:text-gray-600">
+                                <Plus size={24} className="rotate-45" />
+                            </button>
                         </div>
                     </div>
+                    
+                    {showProductPicker ? (
+                        <div className="flex flex-col flex-1 overflow-hidden">
+                             <div className="mb-4 shrink-0">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Kunde oder Artikel suchen..." 
+                                        className="w-full pl-10 border border-gray-300 rounded p-2 focus:ring-red-500 focus:border-red-500"
+                                        value={productSearch}
+                                        onChange={(e) => setProductSearch(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+                             </div>
+                             
+                             <div className="flex-1 overflow-y-auto border rounded bg-gray-50 p-2 space-y-2">
+                                {customers
+                                    .filter(c => c.name.toLowerCase().includes(productSearch.toLowerCase()))
+                                    .map(customer => {
+                                    const isExpanded = expandedCustomers.has(customer.id);
+                                    const isLoading = loadingProducts.has(customer.id);
+                                    const products = customerProducts[customer.id] || [];
+                                    
+                                    return (
+                                        <div key={customer.id} className="bg-white border border-gray-200 rounded overflow-hidden">
+                                            <button 
+                                                onClick={() => toggleCustomer(customer.id)}
+                                                className="w-full flex items-center justify-between p-3 hover:bg-gray-50 text-left"
+                                            >
+                                                <div className="flex items-center">
+                                                    {isExpanded ? <ChevronDown size={18} className="text-gray-400 mr-2" /> : <ChevronRight size={18} className="text-gray-400 mr-2" />}
+                                                    <User size={16} className="text-blue-500 mr-2" />
+                                                    <span className="font-medium text-slate-800">{customer.name}</span>
+                                                </div>
+                                                <span className="text-xs text-gray-400">{isExpanded && isLoading ? 'Lade...' : ''}</span>
+                                            </button>
+                                            
+                                            {isExpanded && (
+                                                <div className="border-t border-gray-100 bg-gray-50 p-2 space-y-1">
+                                                    {!isLoading && products.length === 0 && <p className="text-xs text-gray-500 pl-8 py-2">Keine Artikel gefunden.</p>}
+                                                    {products.map(product => (
+                                                        <button 
+                                                            key={product.id}
+                                                            onClick={() => handleSelectProduct(product, customer)}
+                                                            className="w-full flex items-center p-2 pl-8 hover:bg-red-50 text-left rounded transition-colors group"
+                                                        >
+                                                            <Package size={14} className="text-gray-400 mr-2 group-hover:text-red-500" />
+                                                            <div>
+                                                                <div className="text-sm font-medium text-gray-700 group-hover:text-red-700">{product.name}</div>
+                                                                {product.product_number && <div className="text-xs text-gray-500">{product.product_number}</div>}
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                             </div>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col flex-1 overflow-hidden">
+                            <div className="mb-4 shrink-0">
+                                <button 
+                                    onClick={() => setShowProductPicker(true)}
+                                    className="w-full border-2 border-dashed border-gray-300 rounded-lg p-3 text-gray-500 hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-all flex items-center justify-center font-medium"
+                                >
+                                    <Search size={18} className="mr-2" />
+                                    Artikel aus Kunden-Liste auswählen
+                                </button>
+                            </div>
 
-                    <div className="flex justify-end space-x-3 mt-4">
-                        <button
-                            onClick={() => setShowAddItemModal(false)}
-                            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                        >
-                            Abbrechen
-                        </button>
-                        <button
-                            onClick={handleManualAddItem}
-                            disabled={!newItem.supplierId || !newItem.itemName}
-                            className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                        >
-                            <Plus size={16} className="mr-2" />
-                            Hinzufügen
-                        </button>
-                    </div>
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4 overflow-y-auto flex-1">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                                    <div className="lg:col-span-3">
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Lieferant / Shop</label>
+                                        <select 
+                                            className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                            value={newItem.supplierId}
+                                            onChange={(e) => setNewItem({...newItem, supplierId: e.target.value})}
+                                        >
+                                            <option value="">Bitte wählen...</option>
+                                            {suppliers.map(s => (
+                                                <option key={s.id} value={s.id}>{s.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="lg:col-span-3">
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Auftragsnummer (Optional)</label>
+                                        <input 
+                                            type="text" 
+                                            className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                            placeholder="z.B. 2026-0012"
+                                            value={newItem.manualOrderNumber}
+                                            onChange={(e) => setNewItem({...newItem, manualOrderNumber: e.target.value})}
+                                        />
+                                    </div>
+                                    <div className="lg:col-span-2">
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Artikel Nr./ Artikelname / Farbe</label>
+                                        <input 
+                                            type="text" 
+                                            className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                            placeholder="z.B. Premium Hoodie - Navy"
+                                            value={newItem.itemName}
+                                            onChange={(e) => setNewItem({...newItem, itemName: e.target.value})}
+                                        />
+                                    </div>
+                                    <div className="lg:col-span-2">
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Anzahl</label>
+                                        <input 
+                                            type="text" 
+                                            className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                            placeholder="z.B. 5x XL, 3x L"
+                                            value={newItem.size}
+                                            onChange={(e) => setNewItem({...newItem, size: e.target.value})}
+                                        />
+                                    </div>
+                                    <div className="lg:col-span-2">
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Notizen (Optional)</label>
+                                        <input 
+                                            type="text" 
+                                            className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                            placeholder="..."
+                                            value={newItem.notes}
+                                            onChange={(e) => setNewItem({...newItem, notes: e.target.value})}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end space-x-3 mt-auto shrink-0">
+                                <button
+                                    onClick={() => setShowAddItemModal(false)}
+                                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                                >
+                                    Abbrechen
+                                </button>
+                                <button
+                                    onClick={handleManualAddItem}
+                                    disabled={!newItem.supplierId || !newItem.itemName}
+                                    className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                                >
+                                    <Plus size={16} className="mr-2" />
+                                    Hinzufügen
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         )}
