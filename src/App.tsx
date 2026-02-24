@@ -5,6 +5,7 @@ import DashboardLayout from "@/pages/Dashboard";
 import DashboardHome from "@/pages/DashboardHome";
 import NewOrder from "@/pages/NewOrder";
 import OrderList from "@/pages/OrderList";
+import InvoiceList from "@/pages/InvoiceList";
 import EditOrder from "@/pages/EditOrder";
 import OrderDetails from "@/pages/OrderDetails";
 import CustomerList from "@/pages/CustomerList";
@@ -45,6 +46,7 @@ export default function App() {
           <Route index element={<DashboardHome />} />
           <Route path="orders/new" element={<NewOrder />} />
           <Route path="orders" element={<OrderList />} />
+          <Route path="invoices" element={<InvoiceList />} />
           <Route path="orders/finished" element={<OrderList filter="completed" />} />
           <Route path="orders/:id" element={<OrderDetails />} />
           <Route path="orders/:id/edit" element={<EditOrder />} />

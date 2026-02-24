@@ -20,6 +20,7 @@ const MENU_ITEMS: MenuItem[] = [
     children: [
         { id: 'orders_new', label: 'Auftrag erfassen', to: '/dashboard/orders/new', icon: FileText },
         { id: 'orders', label: 'Aktuelle Aufträge', to: '/dashboard/orders', icon: Folder },
+        { id: 'invoices', label: 'Rechnung schreiben', to: '/dashboard/invoices', icon: FileText },
         { id: 'orders_finished', label: 'Fertige Aufträge', to: '/dashboard/orders/finished', icon: Archive },
     ]
   },
