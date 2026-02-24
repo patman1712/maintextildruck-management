@@ -35,7 +35,7 @@ const MENU_ITEMS: MenuItem[] = [
     ]
   },
   { id: 'vector', label: 'Bildvektor', to: '/dashboard/vector', icon: Zap },
-  { id: 'customers', label: 'Kundendateien', to: '/dashboard/customers', icon: Users },
+  { id: 'customers', label: 'Kunden', to: '/dashboard/customers', icon: Users },
 ];
 
 export default function DashboardLayout() {
