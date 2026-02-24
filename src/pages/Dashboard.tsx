@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer } from "lucide-react";
+import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap } from "lucide-react";
 import { useAppStore } from "@/store";
 
 export default function DashboardLayout() {
@@ -78,6 +78,7 @@ export default function DashboardLayout() {
           <NavItem icon={<Printer />} label="DTF-Bestellen" to="/dashboard/dtf" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
           <NavItem icon={<FileText />} label="Fertige DTF PDFs" to="/dashboard/dtf/pdfs" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
           <NavItem icon={<Archive />} label="Datei-Archiv" to="/dashboard/dtf/archive" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
+          <NavItem icon={<Zap />} label="Bildvektor" to="/dashboard/vector" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
           <NavItem icon={<Users />} label="Kundendateien" to="/dashboard/customers" isOpen={sidebarOpen || mobileMenuOpen} onClick={() => setMobileMenuOpen(false)} />
           
           {currentUser?.role === 'admin' && (

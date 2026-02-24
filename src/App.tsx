@@ -17,6 +17,7 @@ import DTFPdfs from "@/pages/DTFPdfs";
 import FileArchive from "@/pages/FileArchive";
 import AdminSettings from "@/pages/AdminSettings";
 import PublicOrderProof from "@/pages/PublicOrderProof";
+import ImageVector from "@/pages/ImageVector";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
 import { useEffect } from "react";
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="dtf" element={<DTFOrdering />} />
           <Route path="dtf/pdfs" element={<DTFPdfs />} />
           <Route path="dtf/archive" element={<FileArchive />} />
+          <Route path="vector" element={<ImageVector />} />
           <Route path="employees" element={<Employees />} />
           <Route path="admin" element={<AdminSettings />} />
           <Route path="profile" element={<Profile />} />
