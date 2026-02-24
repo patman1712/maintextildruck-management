@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/store";
-import { Printer, Upload, Download, Trash2, FileText, Check, AlertCircle } from "lucide-react";
+import { Printer, Upload, Download, Trash2, FileText, Check, AlertCircle, Package, ChevronDown, ChevronRight, Search, User } from "lucide-react";
 
 export default function DTFOrdering() {
   const orders = useAppStore((state) => state.orders);
@@ -34,11 +34,17 @@ export default function DTFOrdering() {
 
   // File Picker Modal State
   const [showFilePicker, setShowFilePicker] = useState(false);
+  const [pickerTab, setPickerTab] = useState<'files' | 'products' | 'upload'>('files');
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerCustomerFilter, setPickerCustomerFilter] = useState(""); // "" = All, "ARCHIVED" = Archive, "NAME" = Specific Customer
   
+  // Product Tab State
+  const [productSearch, setProductSearch] = useState("");
+  const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
+  const [customerProducts, setCustomerProducts] = useState<Record<string, any[]>>({});
+  const [loadingProducts, setLoadingProducts] = useState<Set<string>>(new Set());
+
   // Direct Upload State
-  const [isUploading, setIsUploading] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadCustomerId, setUploadCustomerId] = useState<string>("");
 
@@ -130,6 +136,28 @@ export default function DTFOrdering() {
     .filter(f => f.status !== 'archived') // Don't show archived customers in dropdown unless we want to? Usually archived are "One-Time" or direct uploads.
     .map(f => f.customerName)
   )).sort();
+
+  const toggleCustomer = async (customerId: string) => {
+      const newExpanded = new Set(expandedCustomers);
+      if (newExpanded.has(customerId)) {
+          newExpanded.delete(customerId);
+      } else {
+          newExpanded.add(customerId);
+          // Fetch if not present
+          if (!customerProducts[customerId]) {
+              setLoadingProducts(prev => new Set(prev).add(customerId));
+              try {
+                  const res = await fetch(`/api/products/${customerId}`);
+                  const data = await res.json();
+                  if (data.success) {
+                      setCustomerProducts(prev => ({ ...prev, [customerId]: data.data }));
+                  }
+              } catch(e) { console.error(e); }
+              setLoadingProducts(prev => { const n = new Set(prev); n.delete(customerId); return n; });
+          }
+      }
+      setExpandedCustomers(newExpanded);
+  };
 
   const addFile = (file: any) => {
     if (selectedFiles.some(f => f.url === file.url)) {
@@ -231,7 +259,7 @@ export default function DTFOrdering() {
             
             addFile(fileToAdd);
             
-            setIsUploading(false);
+            setPickerTab('files');
             setUploadFile(null);
             setUploadCustomerId("");
         }
@@ -529,26 +557,35 @@ export default function DTFOrdering() {
             <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl h-[80vh] flex flex-col">
                 <div className="p-4 border-b border-gray-200 flex justify-between items-center">
                     <h3 className="text-lg font-bold text-gray-800">Druckdatei auswählen</h3>
-                    <div className="flex items-center space-x-2">
-                        <button 
-                            onClick={() => setIsUploading(!isUploading)}
-                            className={`flex items-center px-3 py-1.5 rounded text-sm transition-colors ${
-                                isUploading 
-                                    ? 'bg-red-100 text-red-700 font-medium' 
-                                    : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-                            }`}
-                        >
-                            <Upload size={16} className="mr-2" />
-                            {isUploading ? 'Abbrechen' : 'Neue Datei hochladen'}
-                        </button>
+                    <div className="flex items-center space-x-4">
+                        <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+                            <button 
+                                onClick={() => setPickerTab('files')} 
+                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${pickerTab === 'files' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                Aufträge
+                            </button>
+                            <button 
+                                onClick={() => setPickerTab('products')} 
+                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${pickerTab === 'products' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                Kunden-Artikel
+                            </button>
+                            <button 
+                                onClick={() => setPickerTab('upload')} 
+                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${pickerTab === 'upload' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                Upload
+                            </button>
+                        </div>
                         <button onClick={() => setShowFilePicker(false)} className="text-gray-500 hover:text-gray-700">
                             <Trash2 className="rotate-45" size={24} />
                         </button>
                     </div>
                 </div>
                 
-                {isUploading ? (
-                    <div className="p-4 bg-red-50 border-b border-red-100 animate-in slide-in-from-top-2">
+                {pickerTab === 'upload' ? (
+                    <div className="p-4 bg-red-50 border-b border-red-100 animate-in slide-in-from-top-2 flex-1">
                         <div className="max-w-xl mx-auto bg-white p-4 rounded shadow-sm border border-red-100">
                             <h4 className="font-semibold text-gray-800 mb-3">Datei hochladen & Kunde zuweisen</h4>
                             
@@ -595,7 +632,97 @@ export default function DTFOrdering() {
                             </div>
                         </div>
                     </div>
+                ) : pickerTab === 'products' ? (
+                    <div className="flex flex-col flex-1 overflow-hidden">
+                        <div className="p-4 border-b border-gray-200 bg-gray-50">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                <input 
+                                    type="text" 
+                                    placeholder="Kunde oder Artikel suchen..." 
+                                    className="w-full pl-10 border border-gray-300 rounded p-2 focus:ring-red-500 focus:border-red-500"
+                                    value={productSearch}
+                                    onChange={(e) => setProductSearch(e.target.value)}
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                            {customers
+                                .filter(c => c.name.toLowerCase().includes(productSearch.toLowerCase()))
+                                .map(customer => {
+                                    const isExpanded = expandedCustomers.has(customer.id);
+                                    const isLoading = loadingProducts.has(customer.id);
+                                    const products = customerProducts[customer.id] || [];
+                                    const hasProducts = products.length > 0;
+
+                                    return (
+                                        <div key={customer.id} className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                                            <button 
+                                                onClick={() => toggleCustomer(customer.id)}
+                                                className="w-full flex items-center justify-between p-3 hover:bg-gray-50 text-left"
+                                            >
+                                                <div className="flex items-center">
+                                                    {isExpanded ? <ChevronDown size={18} className="text-gray-400 mr-2" /> : <ChevronRight size={18} className="text-gray-400 mr-2" />}
+                                                    <User size={16} className="text-blue-500 mr-2" />
+                                                    <span className="font-medium text-slate-800">{customer.name}</span>
+                                                </div>
+                                                <span className="text-xs text-gray-400">
+                                                    {isExpanded && isLoading ? 'Lade...' : ''}
+                                                </span>
+                                            </button>
+                                            
+                                            {isExpanded && (
+                                                <div className="border-t border-gray-100 bg-gray-50 p-3 space-y-3">
+                                                    {!isLoading && products.length === 0 && (
+                                                        <p className="text-sm text-gray-500 italic pl-8">Keine Artikel gefunden.</p>
+                                                    )}
+                                                    {products.map(product => (
+                                                        <div key={product.id} className="ml-6 border-l-2 border-gray-200 pl-4">
+                                                            <div className="flex items-center mb-2">
+                                                                <Package size={14} className="text-gray-400 mr-2" />
+                                                                <span className="text-sm font-medium text-gray-700">{product.name}</span>
+                                                                {product.product_number && <span className="ml-2 text-xs bg-gray-200 px-1.5 rounded text-gray-600">{product.product_number}</span>}
+                                                            </div>
+                                                            
+                                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-2">
+                                                                {(product.files || []).map((file: any) => (
+                                                                    <div 
+                                                                        key={file.id}
+                                                                        onClick={() => addFile({
+                                                                            id: file.id,
+                                                                            url: file.file_url,
+                                                                            name: file.file_name || product.name,
+                                                                            thumbnail: file.thumbnail_url,
+                                                                            orderId: `prod-${product.id}`,
+                                                                            customerName: customer.name,
+                                                                            date: product.created_at,
+                                                                            quantity: 1,
+                                                                            width: 0,
+                                                                            height: 0
+                                                                        })}
+                                                                        className="bg-white border border-gray-200 rounded p-2 cursor-pointer hover:border-red-400 hover:shadow-sm transition-all"
+                                                                    >
+                                                                        <div className="aspect-square bg-gray-100 rounded mb-1 flex items-center justify-center overflow-hidden">
+                                                                            {file.thumbnail_url || file.file_url ? (
+                                                                                <img src={file.thumbnail_url || file.file_url} className="w-full h-full object-contain" />
+                                                                            ) : <FileText className="text-gray-300" />}
+                                                                        </div>
+                                                                        <p className="text-[10px] truncate text-gray-600">{file.file_name}</p>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                        </div>
+                    </div>
                 ) : (
+                    <>
                     <div className="p-4 border-b border-gray-200 bg-gray-50 flex gap-4">
                         <div className="flex-1">
                             <input 
@@ -622,61 +749,60 @@ export default function DTFOrdering() {
                             </select>
                         </div>
                     </div>
-                )}
 
-                <div className="flex-1 overflow-y-auto p-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                        {filteredAvailableFiles.map((file, idx) => {
-                            const isSelected = selectedFiles.some(f => f.url === file.url);
-                            // Match CustomerDetails logic: try thumbnail, else url.
-                            const displayThumb = file.thumbnail || file.url;
-                            
-                            return (
-                                <div 
-                                    key={idx} 
-                                    onClick={() => addFile(file)}
-                                    className={`
-                                        cursor-pointer rounded-lg border p-2 relative group hover:shadow-md transition-all
-                                        ${isSelected ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'border-gray-200 bg-white hover:border-red-300'}
-                                    `}
-                                >
-                                    <div className="aspect-square bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden relative">
-                                        {displayThumb ? (
-                                            <img src={displayThumb} alt="" className="w-full h-full object-contain" onError={(e) => {
-                                                e.currentTarget.style.display = 'none';
-                                                e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
-                                            }} />
-                                        ) : null}
-                                        
-                                        {/* Fallback Icon (hidden by default if thumb exists, shown on error) */}
-                                        <div className={`fallback-icon ${displayThumb ? 'hidden' : ''} flex items-center justify-center w-full h-full absolute inset-0`}>
-                                            <FileText className="text-gray-300 h-12 w-12" />
-                                        </div>
+                    <div className="flex-1 overflow-y-auto p-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            {filteredAvailableFiles.map((file, idx) => {
+                                const isSelected = selectedFiles.some(f => f.url === file.url);
+                                const displayThumb = file.thumbnail || file.url;
+                                
+                                return (
+                                    <div 
+                                        key={idx} 
+                                        onClick={() => addFile(file)}
+                                        className={`
+                                            cursor-pointer rounded-lg border p-2 relative group hover:shadow-md transition-all
+                                            ${isSelected ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'border-gray-200 bg-white hover:border-red-300'}
+                                        `}
+                                    >
+                                        <div className="aspect-square bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden relative">
+                                            {displayThumb ? (
+                                                <img src={displayThumb} alt="" className="w-full h-full object-contain" onError={(e) => {
+                                                    e.currentTarget.style.display = 'none';
+                                                    e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
+                                                }} />
+                                            ) : null}
+                                            
+                                            <div className={`fallback-icon ${displayThumb ? 'hidden' : ''} flex items-center justify-center w-full h-full absolute inset-0`}>
+                                                <FileText className="text-gray-300 h-12 w-12" />
+                                            </div>
 
-                                        {isSelected && (
-                                            <div className="absolute inset-0 bg-red-500/10 flex items-center justify-center">
-                                                <div className="bg-red-500 text-white rounded-full p-1 shadow-sm">
-                                                    <Check size={16} />
+                                            {isSelected && (
+                                                <div className="absolute inset-0 bg-red-500/10 flex items-center justify-center">
+                                                    <div className="bg-red-500 text-white rounded-full p-1 shadow-sm">
+                                                        <Check size={16} />
+                                                    </div>
                                                 </div>
+                                            )}
+                                        </div>
+                                        <p className="text-xs font-medium truncate mb-0.5" title={file.name}>{file.name}</p>
+                                        <p className="text-[10px] text-gray-500 truncate">{file.customerName}</p>
+                                        
+                                        {isSelected && (
+                                            <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow">
+                                                {selectedFiles.find(f => f.url === file.url)?.quantity}x
                                             </div>
                                         )}
                                     </div>
-                                    <p className="text-xs font-medium truncate mb-0.5" title={file.name}>{file.name}</p>
-                                    <p className="text-[10px] text-gray-500 truncate">{file.customerName}</p>
-                                    
-                                    {isSelected && (
-                                        <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow">
-                                            {selectedFiles.find(f => f.url === file.url)?.quantity}x
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                                );
+                            })}
+                        </div>
+                        {filteredAvailableFiles.length === 0 && (
+                            <p className="text-center text-gray-500 py-8">Keine Dateien gefunden.</p>
+                        )}
                     </div>
-                    {filteredAvailableFiles.length === 0 && (
-                        <p className="text-center text-gray-500 py-8">Keine Dateien gefunden.</p>
-                    )}
-                </div>
+                    </>
+                )}
 
                 <div className="p-4 border-t border-gray-200 flex justify-end">
                     <button 
