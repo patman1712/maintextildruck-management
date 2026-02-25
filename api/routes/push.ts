@@ -5,19 +5,40 @@ import webpush from 'web-push';
 const router = Router();
 
 // Configure web-push
-const publicVapidKey = process.env.VITE_VAPID_PUBLIC_KEY;
-const privateVapidKey = process.env.VAPID_PRIVATE_KEY;
-const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@example.com';
+// We read env vars inside the request/init to ensure they are loaded
+const getVapidKeys = () => {
+    return {
+        publicKey: process.env.VITE_VAPID_PUBLIC_KEY,
+        privateKey: process.env.VAPID_PRIVATE_KEY,
+        subject: process.env.VAPID_SUBJECT || 'mailto:admin@example.com'
+    };
+};
 
-if (publicVapidKey && privateVapidKey) {
-    webpush.setVapidDetails(vapidSubject, publicVapidKey, privateVapidKey);
-} else {
-    console.warn('VAPID keys not found. Push notifications will not work.');
-}
+const initWebPush = () => {
+    const { publicKey, privateKey, subject } = getVapidKeys();
+    if (publicKey && privateKey) {
+        try {
+            webpush.setVapidDetails(subject, publicKey, privateKey);
+            console.log('WebPush initialized successfully');
+        } catch (e) {
+            console.error('WebPush init failed:', e);
+        }
+    } else {
+        console.warn('VAPID keys not found on init. Push notifications will not work.');
+    }
+};
+
+// Initialize on load
+initWebPush();
 
 // GET VAPID Public Key
 router.get('/public-key', (req: Request, res: Response) => {
-    res.json({ success: true, publicKey: publicVapidKey });
+    const { publicKey } = getVapidKeys();
+    if (!publicKey) {
+        console.error('Public Key requested but not found in env');
+        return res.status(500).json({ success: false, error: 'VAPID Public Key not configured on server' });
+    }
+    res.json({ success: true, publicKey });
 });
 
 // POST Subscribe
@@ -31,6 +52,9 @@ router.post('/subscribe', (req: Request, res: Response) => {
     }
 
     try {
+        const { publicKey, privateKey, subject } = getVapidKeys();
+        if(publicKey && privateKey) webpush.setVapidDetails(subject, publicKey, privateKey);
+        
         // Check if exists
         const exists = db.prepare('SELECT id FROM push_subscriptions WHERE endpoint = ?').get(endpoint);
         
@@ -62,6 +86,9 @@ router.post('/send', async (req: Request, res: Response) => {
     const payload = JSON.stringify({ title, body });
 
     try {
+        const { publicKey, privateKey, subject } = getVapidKeys();
+        if(publicKey && privateKey) webpush.setVapidDetails(subject, publicKey, privateKey);
+        
         let subscriptions: any[] = [];
         if (userId) {
             subscriptions = db.prepare('SELECT * FROM push_subscriptions WHERE user_id = ?').all(userId);
