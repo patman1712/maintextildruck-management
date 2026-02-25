@@ -267,6 +267,23 @@ export default function PreviewGenerator() {
         }
     };
 
+    // --- Template Picker Logic (Customer Previews) ---
+    const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+    const [selectedCustomerForTemplates, setSelectedCustomerForTemplates] = useState("");
+    
+    // Filter previews from products for template usage
+    const customerPreviews = (selectedCustomerForTemplates 
+        ? products.filter(p => p.supplier_id === selectedCustomerForTemplates)
+        : products
+    ).flatMap(p => (p.files || [])
+        .filter(f => f.type === 'preview') // Only preview images
+        .map(f => ({
+            ...f,
+            productName: p.name,
+            customerName: customers.find(c => c.id === p.supplier_id)?.name
+        }))
+    );
+
     return (
         <div className="max-w-7xl mx-auto h-[calc(100vh-100px)] flex flex-col" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
             <div className="flex justify-between items-center mb-4 shrink-0">
@@ -275,6 +292,13 @@ export default function PreviewGenerator() {
                     Vorschau-Generierer
                 </h1>
                 <div className="flex space-x-2">
+                    <button 
+                        onClick={() => setShowTemplatePicker(true)}
+                        className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center hover:bg-gray-50 shadow-sm"
+                    >
+                        <ImageIcon size={18} className="mr-2" />
+                        Kunden-Vorschau als Template
+                    </button>
                     <button 
                         onClick={() => setShowFilePicker(true)}
                         className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-blue-700 shadow-sm"
@@ -472,6 +496,59 @@ export default function PreviewGenerator() {
                     </div>
                 </div>
             </div>
+
+            {/* Template Picker Modal */}
+            {showTemplatePicker && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+                        <div className="p-4 border-b flex justify-between items-center">
+                            <h3 className="font-bold">Kunden-Vorschau als Hintergrund wählen</h3>
+                            <button onClick={() => setShowTemplatePicker(false)}><X size={20} /></button>
+                        </div>
+                        <div className="p-4 border-b">
+                            <select 
+                                className="w-full border border-gray-300 rounded p-2"
+                                value={selectedCustomerForTemplates}
+                                onChange={(e) => setSelectedCustomerForTemplates(e.target.value)}
+                            >
+                                <option value="">Alle Kunden durchsuchen...</option>
+                                {customers.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 grid grid-cols-3 sm:grid-cols-4 gap-4">
+                            {customerPreviews.map((file, idx) => (
+                                <div 
+                                    key={idx} 
+                                    className="border rounded p-2 hover:bg-gray-50 cursor-pointer flex flex-col items-center"
+                                    onClick={() => {
+                                        if (file.file_url || file.url) {
+                                            handleTemplateSelect(file.file_url || file.url || '');
+                                            setShowTemplatePicker(false);
+                                        }
+                                    }}
+                                >
+                                    <div className="h-24 w-24 flex items-center justify-center overflow-hidden bg-gray-100 rounded mb-2">
+                                        {(file.thumbnail_url || file.thumbnail || file.file_url || file.url) ? (
+                                            <img src={file.thumbnail_url || file.thumbnail || file.file_url || file.url} className="max-w-full max-h-full object-contain" />
+                                        ) : (
+                                            <ImageIcon className="text-gray-300" />
+                                        )}
+                                    </div>
+                                    <span className="text-[10px] text-center truncate w-full block font-medium" title={file.file_name || file.name}>{file.file_name || file.name}</span>
+                                    <span className="text-[9px] text-gray-500 text-center truncate w-full block">{file.customerName}</span>
+                                </div>
+                            ))}
+                            {customerPreviews.length === 0 && (
+                                <div className="col-span-full text-center py-8 text-gray-500">
+                                    Keine Vorschaubilder gefunden.
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* File Picker Modal */}
             {showFilePicker && (
