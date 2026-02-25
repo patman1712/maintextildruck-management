@@ -294,8 +294,22 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
   const [customerProducts, setCustomerProducts] = useState<Record<string, any[]>>({});
   const [loadingProducts, setLoadingProducts] = useState<Set<string>>(new Set());
+  const allProducts = useAppStore((state) => state.products) || []; // Use global products for search
+  const [searchResults, setSearchResults] = useState<any[]>([]);
 
-  // Grouped Manual Order State
+  // Effect to handle search across ALL products if term is long enough
+  useEffect(() => {
+      if (productSearch.length > 1) {
+          const lower = productSearch.toLowerCase();
+          const matches = allProducts.filter(p => 
+              p.name.toLowerCase().includes(lower) || 
+              (p.product_number && p.product_number.toLowerCase().includes(lower))
+          );
+          setSearchResults(matches);
+      } else {
+          setSearchResults([]);
+      }
+  }, [productSearch, allProducts]);
   const [manualOrderSettings, setManualOrderSettings] = useState({
       manualOrderNumber: '',
       defaultSupplierId: ''
@@ -1017,50 +1031,134 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                     />
                                 </div>
                                 
-                                <div className="flex-1 overflow-y-auto border rounded bg-gray-50 p-2 space-y-2">
-                                    {customers
-                                        .filter(c => c.name.toLowerCase().includes(productSearch.toLowerCase()))
-                                        .map(customer => {
-                                        const isExpanded = expandedCustomers.has(customer.id);
-                                        const isLoading = loadingProducts.has(customer.id);
-                                        const products = customerProducts[customer.id] || [];
-                                        
-                                        return (
-                                            <div key={customer.id} className="bg-white border border-gray-200 rounded overflow-hidden">
-                                                <button 
-                                                    onClick={() => toggleCustomer(customer.id)}
-                                                    className="w-full flex items-center justify-between p-3 hover:bg-gray-50 text-left"
-                                                >
-                                                    <div className="flex items-center">
-                                                        {isExpanded ? <ChevronDown size={18} className="text-gray-400 mr-2" /> : <ChevronRight size={18} className="text-gray-400 mr-2" />}
-                                                        <User size={16} className="text-blue-500 mr-2" />
-                                                        <span className="font-medium text-slate-800">{customer.name}</span>
-                                                    </div>
-                                                    <span className="text-xs text-gray-400">{isExpanded && isLoading ? 'Lade...' : ''}</span>
-                                                </button>
-                                                
-                                                {isExpanded && (
-                                                    <div className="border-t border-gray-100 bg-gray-50 p-2 space-y-1">
-                                                        {!isLoading && products.length === 0 && <p className="text-xs text-gray-500 pl-8 py-2">Keine Artikel gefunden.</p>}
-                                                        {products.map(product => (
-                                                            <button 
-                                                                key={product.id}
-                                                                onClick={() => handleSelectProduct(product, customer)}
-                                                                className="w-full flex items-center p-2 pl-8 hover:bg-red-50 text-left rounded transition-colors group"
-                                                            >
-                                                                <Package size={14} className="text-gray-400 mr-2 group-hover:text-red-500" />
-                                                                <div>
-                                                                    <div className="text-sm font-medium text-gray-700 group-hover:text-red-700">{product.name}</div>
-                                                                    {product.product_number && <div className="text-xs text-gray-500">{product.product_number}</div>}
+                            <div className="flex-1 overflow-y-auto border rounded bg-gray-50 p-2 space-y-2">
+                                {/* Global Search Results Section */}
+                                {productSearch.length > 1 && (
+                                    <div className="mb-4 border-b pb-2">
+                                        <h4 className="text-xs font-bold text-gray-500 uppercase px-2 mb-2">Suchergebnisse ({searchResults.length})</h4>
+                                        {searchResults.length === 0 ? (
+                                            <p className="text-sm text-gray-400 px-2 italic">Keine Artikel gefunden.</p>
+                                        ) : (
+                                            searchResults.map(product => {
+                                                // Find customer name for this product
+                                                const customer = customers.find(c => c.id === product.supplier_id); // supplier_id links to customer
+                                                return (
+                                                    <button 
+                                                        key={`search-${product.id}`}
+                                                        onClick={() => handleSelectProduct(product, customer || { name: 'Unbekannt' })}
+                                                        className="w-full flex items-center justify-between p-2 hover:bg-red-50 text-left rounded transition-colors group bg-white border border-gray-100 mb-1"
+                                                    >
+                                                        <div className="flex items-center overflow-hidden">
+                                                            <Package size={16} className="text-red-500 mr-2 shrink-0" />
+                                                            <div className="min-w-0">
+                                                                <div className="text-sm font-medium text-gray-800 truncate">{product.name}</div>
+                                                                <div className="text-xs text-gray-500 flex items-center">
+                                                                    {product.product_number && <span className="mr-2 font-mono bg-gray-100 px-1 rounded">{product.product_number}</span>}
+                                                                    <span className="text-blue-500 truncate">{customer?.name}</span>
                                                                 </div>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
+                                                            </div>
+                                                        </div>
+                                                        <Plus size={16} className="text-gray-300 group-hover:text-red-600 shrink-0 ml-2" />
+                                                    </button>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                )}
+
+                                <h4 className="text-xs font-bold text-gray-500 uppercase px-2 mb-2 mt-4">Kunden durchsuchen</h4>
+                                {customers
+                                    .filter(c => {
+                                        // Only show customers that match name IF we are not already showing search results above
+                                        // OR show all if no search
+                                        if (productSearch.length > 1) return false; // Hide customer list when searching globally to avoid duplicate confusion? 
+                                        // Actually user might want to browse.
+                                        // Let's keep name filtering.
+                                        return c.name.toLowerCase().includes(productSearch.toLowerCase());
+                                    })
+                                    .map(customer => {
+                                    const isExpanded = expandedCustomers.has(customer.id) || productSearch.length > 0; // Auto-expand on search
+                                    const isLoading = loadingProducts.has(customer.id);
+                                    let products = customerProducts[customer.id] || [];
+                                    
+                                    // Filter products if searching
+                                    if (productSearch) {
+                                        products = products.filter((p: any) => 
+                                            p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
+                                            (p.product_number && p.product_number.toLowerCase().includes(productSearch.toLowerCase()))
                                         );
-                                    })}
-                                </div>
+                                    }
+                                    
+                                    // If we are searching and this customer has no matching products (but matched by name), show all?
+                                    // Or if matched by product, show only matching.
+                                    // Better UX: Show matching products. If customer matches, show all products? 
+                                    // Let's stick to showing matching products only if search term exists.
+                                    
+                                    // Auto-load products if searching and not loaded
+                                    if (productSearch.length > 0 && !customerProducts[customer.id] && !loadingProducts.has(customer.id)) {
+                                         // We need to trigger load. 
+                                         // Since we can't easily call async in render, we might need a useEffect or just let user expand.
+                                         // But user expects search to work immediately.
+                                         // Let's auto-trigger toggleCustomer logic effectively.
+                                         // React render phase side-effect is bad.
+                                         // Instead, we rely on the user having expanded it OR we change the search logic to backend search.
+                                         // Since we fetch per customer, client-side search across ALL products is hard without fetching all.
+                                         // The store has `products` (allProducts) if we implemented fetching all.
+                                         // Let's check store.ts - we added fetching all products to `products` state!
+                                    }
+
+                                    return (
+                                        <div key={customer.id} className="bg-white border border-gray-200 rounded overflow-hidden">
+                                            <button 
+                                                onClick={() => toggleCustomer(customer.id)}
+                                                className="w-full flex items-center justify-between p-3 hover:bg-gray-50 text-left"
+                                            >
+                                                <div className="flex items-center">
+                                                    {isExpanded ? <ChevronDown size={18} className="text-gray-400 mr-2" /> : <ChevronRight size={18} className="text-gray-400 mr-2" />}
+                                                    <User size={16} className="text-blue-500 mr-2" />
+                                                    <span className="font-medium text-slate-800">{customer.name}</span>
+                                                </div>
+                                                <span className="text-xs text-gray-400">{isExpanded && isLoading ? 'Lade...' : ''}</span>
+                                            </button>
+                                            
+                                            {isExpanded && (
+                                                <div className="border-t border-gray-100 bg-gray-50 p-2 space-y-1">
+                                                    {!isLoading && products.length === 0 && <p className="text-xs text-gray-500 pl-8 py-2">Keine Artikel gefunden.</p>}
+                                                    
+                                                    {/* If we are searching but haven't loaded products yet, show a hint */}
+                                                    {!customerProducts[customer.id] && !isLoading && (
+                                                        <div className="pl-8 py-2">
+                                                            <button 
+                                                                onClick={(e) => { e.stopPropagation(); toggleCustomer(customer.id); }}
+                                                                className="text-xs text-blue-600 hover:underline"
+                                                            >
+                                                                Artikel laden...
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {products.map((product: any) => (
+                                                        <button 
+                                                            key={product.id}
+                                                            onClick={() => handleSelectProduct(product, customer)}
+                                                            className="w-full flex items-center p-2 pl-8 hover:bg-red-50 text-left rounded transition-colors group"
+                                                        >
+                                                            <Package size={14} className="text-gray-400 mr-2 group-hover:text-red-500" />
+                                                            <div>
+                                                                <div className="text-sm font-medium text-gray-700 group-hover:text-red-700">
+                                                                    {product.name} 
+                                                                    {/* Highlight match? */}
+                                                                </div>
+                                                                {product.product_number && <div className="text-xs text-gray-500">{product.product_number}</div>}
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
                             </div>
                         </div>
                     </div>
