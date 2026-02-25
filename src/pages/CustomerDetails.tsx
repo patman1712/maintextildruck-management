@@ -42,7 +42,7 @@ export default function CustomerDetails() {
   const [uploadFileName, setUploadFileName] = useState("");
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'products' | 'shopware'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'previews' | 'products' | 'shopware'>('overview');
   
   const [customer, setCustomer] = useState(customers.find(c => c.id === id));
   const [customerOrders, setCustomerOrders] = useState(
@@ -602,20 +602,30 @@ export default function CustomerDetails() {
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Kundendaten...</div>;
   if (!customer) return null;
 
-  // Extract Print Files
-  const allPrintFiles = customerOrders.flatMap(order => 
+  // Extract Print Files & Preview Files
+  const allOrderFiles = customerOrders.flatMap(order => 
     (Array.isArray(order.files) ? order.files : [])
-      .filter(f => f.type === 'print')
       .map(f => ({ ...f, orderTitle: order.title, orderDate: order.createdAt }))
   );
-  allPrintFiles.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+  
+  const allPrintFiles = allOrderFiles.filter(f => f.type === 'print' || !f.type); // Default to print if undefined
+  const allPreviewFiles = allOrderFiles.filter(f => f.type === 'preview');
+
   const uniqueFilesMap = new Map();
   allPrintFiles.forEach(file => {
     if (file.url && !uniqueFilesMap.has(file.url)) {
         uniqueFilesMap.set(file.url, file);
     }
   });
-  const printFiles = Array.from(uniqueFilesMap.values());
+  const printFiles = Array.from(uniqueFilesMap.values()).sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+
+  const uniquePreviewsMap = new Map();
+  allPreviewFiles.forEach(file => {
+      if (file.url && !uniquePreviewsMap.has(file.url)) {
+          uniquePreviewsMap.set(file.url, file);
+      }
+  });
+  const previewFiles = Array.from(uniquePreviewsMap.values()).sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
 
   const filteredPrintFilesForAssign = printFiles.filter(f => 
       (f.customName || f.name).toLowerCase().includes(fileSearch.toLowerCase())
@@ -700,6 +710,15 @@ export default function CustomerDetails() {
                 <div className="flex items-center">
                     <Printer size={16} className="mr-2" />
                     Druckdaten ({printFiles.length})
+                </div>
+            </button>
+            <button
+                onClick={() => setActiveTab('previews')}
+                className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'previews' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+                <div className="flex items-center">
+                    <ImageIcon size={16} className="mr-2" />
+                    Vorschaubilder ({previewFiles.length})
                 </div>
             </button>
             <button
@@ -932,6 +951,50 @@ export default function CustomerDetails() {
                         <div className="text-center py-12 text-gray-500">
                         <Printer size={48} className="mx-auto text-gray-300 mb-4" />
                         <p>Keine Druckdaten vorhanden.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
+        {/* TAB: PREVIEWS */}
+        {activeTab === 'previews' && (
+            <div className="animate-in fade-in">
+                <div className="px-8 py-4 bg-gray-50 border-b border-gray-100">
+                    <h3 className="text-lg font-semibold text-gray-800">Gespeicherte Vorschaubilder</h3>
+                    <p className="text-sm text-gray-500">Freisteller und Mockups</p>
+                </div>
+                
+                <div className="p-8">
+                    {previewFiles.length > 0 ? (
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                            {previewFiles.map((file, idx) => (
+                                <div key={idx} className="bg-white border border-gray-200 rounded-lg p-2 hover:shadow-md transition-all group">
+                                    <div className="aspect-square bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden border border-gray-100 relative">
+                                        <img 
+                                            src={file.thumbnail || file.url} 
+                                            alt={file.name} 
+                                            className="w-full h-full object-contain"
+                                            onClick={() => window.open(file.url, '_blank')}
+                                        />
+                                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
+                                            <button onClick={() => downloadFile(file)} className="text-white hover:text-red-400 p-1"><Download size={16} /></button>
+                                            <button onClick={() => handleDeleteFile(file)} className="text-white hover:text-red-600 p-1"><Trash2 size={16} /></button>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs font-medium text-gray-700 truncate" title={file.customName || file.name}>
+                                        {file.customName || file.name}
+                                    </p>
+                                    <p className="text-[10px] text-gray-400 mt-1">
+                                        {new Date(file.orderDate).toLocaleDateString()}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-12 text-gray-500">
+                            <ImageIcon size={48} className="mx-auto text-gray-300 mb-4" />
+                            <p>Keine Vorschaubilder vorhanden.</p>
                         </div>
                     )}
                 </div>
