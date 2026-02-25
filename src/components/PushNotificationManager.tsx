@@ -10,6 +10,14 @@ export function PushNotificationManager() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Check for iOS Standalone Mode requirement
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+    
+    if (isIOS && !isStandalone) {
+        setError("Hinweis: Auf dem iPhone müssen Sie diese Webseite erst zum Home-Bildschirm hinzufügen ('Teilen' -> 'Zum Home-Bildschirm'), um Push-Benachrichtigungen aktivieren zu können.");
+    }
+
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       navigator.serviceWorker.ready.then(reg => {
         setRegistration(reg);
@@ -24,45 +32,55 @@ export function PushNotificationManager() {
   }, []);
 
   const subscribeUser = async () => {
-    if (!registration) return;
+    if (!registration) {
+        setError("Service Worker nicht bereit. Bitte laden Sie die Seite neu.");
+        return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/push/public-key');
-      const data = await response.json();
+      // 1. Check Permission
+      let permission = Notification.permission;
+      if (permission === 'default') {
+          permission = await Notification.requestPermission();
+      }
       
+      if (permission !== 'granted') {
+          throw new Error('Benachrichtigungen wurden nicht erlaubt (Status: ' + permission + ').');
+      }
+
+      // 2. Get Public Key
+      const response = await fetch('/api/push/public-key');
+      if (!response.ok) throw new Error('Server-Verbindung fehlgeschlagen');
+      
+      const data = await response.json();
       if (!data.success || !data.publicKey) {
           throw new Error('Public Key could not be retrieved');
       }
 
       const convertedVapidKey = urlBase64ToUint8Array(data.publicKey);
       
+      // 3. Subscribe
       const sub = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: convertedVapidKey
       });
       
-      await fetch('/api/push/subscribe', {
+      // 4. Send to Backend
+      const saveRes = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sub)
       });
+
+      if (!saveRes.ok) throw new Error('Speichern auf Server fehlgeschlagen');
       
       setSubscription(sub);
       setIsSubscribed(true);
       
-      // Test Notification
-      /*
-      await fetch('/api/push/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: 'Willkommen!', body: 'Push-Benachrichtigungen sind nun aktiv.' })
-      });
-      */
-      
     } catch (e: any) {
       console.error('Subscription failed', e);
-      setError('Aktivierung fehlgeschlagen. Bitte prüfen Sie Ihre Browser-Einstellungen.');
+      setError(`Fehler: ${e.message || 'Unbekannter Fehler'}`);
     } finally {
         setLoading(false);
     }
