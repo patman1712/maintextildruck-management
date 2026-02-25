@@ -5,6 +5,36 @@ import path from 'path';
 
 const router = Router();
 
+// GET all products (Global list)
+router.get('/all', (req: Request, res: Response) => {
+    try {
+        const stmt = db.prepare(`
+            SELECT p.*, 
+            (SELECT json_group_array(json_object(
+                'id', f.id, 
+                'file_url', f.file_url, 
+                'file_name', f.file_name, 
+                'thumbnail_url', f.thumbnail_url,
+                'type', f.type
+            )) FROM customer_product_files f WHERE f.product_id = p.id) as files
+            FROM customer_products p 
+            ORDER BY p.created_at DESC
+        `);
+        const products = stmt.all();
+
+        // Parse JSON files field
+        const parsedProducts = products.map((p: any) => ({
+            ...p,
+            files: JSON.parse(p.files || '[]')
+        }));
+
+        res.json({ success: true, data: parsedProducts });
+    } catch (error: any) {
+        console.error('Error fetching all products:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // GET all products for a customer
 router.get('/:customerId', (req: Request, res: Response) => {
     const { customerId } = req.params;

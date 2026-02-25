@@ -85,9 +85,26 @@ export interface Supplier {
   email?: string;
 }
 
+export interface Product {
+  id: string;
+  name: string;
+  product_number?: string;
+  supplier_id?: string; // Often used as customerId link in this app context
+  files: { 
+      file_url?: string; url?: string; 
+      file_name?: string; name?: string;
+      thumbnail_url?: string; thumbnail?: string;
+      customName?: string;
+      type?: 'preview' | 'print';
+      created_at?: string;
+  }[];
+  created_at?: string;
+}
+
 interface AppState {
   orders: Order[];
   customers: Customer[];
+  products: Product[]; // Add products to state
   users: User[];
   suppliers: Supplier[];
   currentUser: User | null;
@@ -131,6 +148,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   customers: [],
   users: [],
   suppliers: [],
+  products: [],
   menuSettings: {},
   logoUrl: null,
   faviconUrl: null,
@@ -174,6 +192,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       
       const suppliersRes = await fetch('/api/suppliers');
       const suppliersData = await suppliersRes.json();
+
+      // Fetch ALL products for preview generator
+      const productsRes = await fetch('/api/products'); // Need to implement this endpoint or fetch per customer?
+      // Actually /api/products returns ALL products if no customer ID is provided? Let's check backend.
+      // If not, we might need a new endpoint or loop customers (bad).
+      // Assuming for now we need to add a way to fetch all products or just fetch them on demand.
+      // Let's try to fetch all products if the endpoint supports it.
+      let allProducts: Product[] = [];
+      try {
+          const prodRes = await fetch('/api/products/all'); // New endpoint suggestion
+          const prodData = await prodRes.json();
+          if (prodData.success) {
+             allProducts = prodData.data;
+          }
+      } catch (e) { console.log('Could not fetch all products', e); }
 
       // Map Customers
       const mappedCustomers: Customer[] = (customersData.data || []).map((c: any) => ({
@@ -250,7 +283,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ 
           customers: mappedCustomers, 
           orders: mappedOrders,
-          suppliers: mappedSuppliers
+          suppliers: mappedSuppliers,
+          products: allProducts
         });
       }
     } catch (error) {

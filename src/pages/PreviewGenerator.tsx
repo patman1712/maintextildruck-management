@@ -106,11 +106,42 @@ export default function PreviewGenerator() {
         setIsDragging(false);
     };
 
+    const [selectedCustomerForFiles, setSelectedCustomerForFiles] = useState("");
+
     // --- File Picker Data ---
-    // Collect all print files from orders
-    const allFiles = orders.flatMap(o => (o.files || []).map(f => ({ ...f, orderTitle: o.title })));
-    // Filter distinct URLs
-    const uniqueFiles = Array.from(new Map(allFiles.map(f => [f.url, f])).values());
+    // Get all orders and products
+    const products = useAppStore((state) => state.products) || [];
+
+    // Filter by customer if selected
+    const availableOrders = selectedCustomerForFiles 
+        ? orders.filter(o => o.customerId === selectedCustomerForFiles)
+        : orders;
+        
+    const availableProducts = selectedCustomerForFiles
+        ? products.filter(p => p.supplier_id === selectedCustomerForFiles)
+        : products;
+
+    // Collect files
+    const orderFiles = availableOrders.flatMap(o => (o.files || []).map(f => ({ 
+        ...f, 
+        source: 'Auftrag: ' + o.title,
+        date: o.createdAt,
+        orderTitle: o.title // Keep for type compatibility
+    })));
+
+    const productFiles = availableProducts.flatMap(p => (p.files || []).map(f => ({
+        ...f,
+        name: f.customName || f.file_name || f.name || p.name,
+        url: f.file_url || f.url,
+        thumbnail: f.thumbnail_url || f.thumbnail,
+        source: 'Produkt: ' + p.name,
+        date: p.created_at || new Date().toISOString(),
+        orderTitle: undefined // Explicitly undefined for type
+    })));
+
+    const combinedFiles = [...orderFiles, ...productFiles] as any[];
+    
+    const uniqueFiles = Array.from(new Map(combinedFiles.map(f => [f.url, f])).values());
     const filteredFiles = uniqueFiles.filter(f => (f.name || '').toLowerCase().includes(fileSearch.toLowerCase()));
 
     // --- Saving Logic ---
@@ -451,9 +482,19 @@ export default function PreviewGenerator() {
                             <button onClick={() => setShowFilePicker(false)}><X size={20} /></button>
                         </div>
                         <div className="p-4 border-b">
+                            <select 
+                                className="w-full border border-gray-300 rounded p-2 mb-2"
+                                value={selectedCustomerForFiles}
+                                onChange={(e) => setSelectedCustomerForFiles(e.target.value)}
+                            >
+                                <option value="">Alle Kunden durchsuchen...</option>
+                                {customers.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
                             <input 
                                 type="text" 
-                                placeholder="Suchen..." 
+                                placeholder="Dateiname suchen..." 
                                 value={fileSearch}
                                 onChange={(e) => setFileSearch(e.target.value)}
                                 className="w-full border border-gray-300 rounded p-2"
@@ -473,7 +514,8 @@ export default function PreviewGenerator() {
                                             <Printer className="text-gray-300" />
                                         )}
                                     </div>
-                                    <span className="text-[10px] text-center truncate w-full block">{file.name}</span>
+                                    <span className="text-[10px] text-center truncate w-full block font-medium" title={file.name}>{file.name}</span>
+                                    <span className="text-[9px] text-gray-500 text-center truncate w-full block">{file.source || file.orderTitle}</span>
                                 </div>
                             ))}
                         </div>
