@@ -403,6 +403,8 @@ export default function DTFOrdering() {
                         fetchData();
                     }
                 }
+                // Clear selection in any case (User requirement: "wieder ein blauer Kasten")
+                setSelectedFiles([]);
             }, 500);
 
         } else {
@@ -490,25 +492,37 @@ export default function DTFOrdering() {
                         Offene Aufträge mit Druckdaten
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto">
-                        {openOrdersWithFiles.map(order => (
-                            <div key={order.id} className="border border-blue-100 bg-blue-50 p-3 rounded-md flex justify-between items-center">
+                        {openOrdersWithFiles.map(order => {
+                            const isSelected = selectedFiles.some(f => f.orderId === order.id);
+                            return (
+                            <div key={order.id} className={`border p-3 rounded-md flex justify-between items-center transition-colors ${isSelected ? 'border-yellow-200 bg-yellow-50' : 'border-blue-100 bg-blue-50'}`}>
                                 <div className="min-w-0 flex-1 mr-2">
-                                    <p className="font-medium text-blue-900 truncate text-sm" title={order.title}>
-                                        {order.orderNumber && <span className="text-blue-400 mr-1 font-mono text-xs">{order.orderNumber}</span>}
+                                    <p className={`font-medium truncate text-sm ${isSelected ? 'text-yellow-900' : 'text-blue-900'}`} title={order.title}>
+                                        {order.orderNumber && <span className={`${isSelected ? 'text-yellow-600' : 'text-blue-400'} mr-1 font-mono text-xs`}>{order.orderNumber}</span>}
                                         {order.title}
                                     </p>
-                                    <p className="text-xs text-blue-700 truncate">{order.customerName}</p>
-                                    <p className="text-[10px] text-blue-500">{new Date(order.createdAt).toLocaleDateString('de-DE')}</p>
+                                    <p className={`text-xs truncate ${isSelected ? 'text-yellow-700' : 'text-blue-700'}`}>{order.customerName}</p>
+                                    <p className={`text-[10px] ${isSelected ? 'text-yellow-600' : 'text-blue-500'}`}>{new Date(order.createdAt).toLocaleDateString('de-DE')}</p>
                                 </div>
                                 <button 
-                                    onClick={() => addOrderFiles(order.id)}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1.5 rounded shrink-0 flex items-center"
+                                    onClick={() => !isSelected && addOrderFiles(order.id)}
+                                    disabled={isSelected}
+                                    className={`${isSelected ? 'bg-yellow-500 cursor-default opacity-80' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs px-2 py-1.5 rounded shrink-0 flex items-center transition-all`}
                                 >
-                                    <Check size={12} className="mr-1" />
-                                    Übernehmen
+                                    {isSelected ? (
+                                        <>
+                                            <Check size={12} className="mr-1" />
+                                            In Auswahl
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Check size={12} className="mr-1" />
+                                            Übernehmen
+                                        </>
+                                    )}
                                 </button>
                             </div>
-                        ))}
+                        )})}
                     </div>
                 </div>
             )}
