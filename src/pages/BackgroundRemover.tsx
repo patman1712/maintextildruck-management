@@ -19,12 +19,6 @@ export default function BackgroundRemover() {
     const updateOrder = useAppStore((state) => state.updateOrder);
     const orders = useAppStore((state) => state.orders);
 
-    useEffect(() => {
-        if (!window.crossOriginIsolated) {
-            console.warn("SharedArrayBuffer is not available. imgly might fail.");
-        }
-    }, []);
-
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
@@ -42,13 +36,8 @@ export default function BackgroundRemover() {
         setProgress("Starte...");
         
         try {
-            if (!window.crossOriginIsolated) {
-                 alert("Hinweis: Der Server läuft nicht im 'Secure Context' (fehlende Header oder kein HTTPS). Die KI-Berechnung wird wahrscheinlich fehlschlagen oder sehr langsam sein.");
-            }
-
             // Using imgly with config
             const blob = await removeBackground(originalImage, {
-                publicPath: "https://cdn.jsdelivr.net/npm/@imgly/background-removal-data@1.7.0/dist/",
                 progress: (key: string, current: number, total: number) => {
                     const percent = Math.round((current / total) * 100);
                     setProgress(`${key}: ${percent}%`);
