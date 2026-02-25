@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle, ChevronDown, ChevronRight, Image as ImageIcon } from "lucide-react";
 import { useAppStore } from "@/store";
 
 interface MenuItem {
@@ -33,6 +33,7 @@ const MENU_ITEMS: MenuItem[] = [
         { id: 'dtf', label: 'DTF-Bestellen', to: '/dashboard/dtf', icon: Printer },
         { id: 'dtf_pdfs', label: 'Fertige DTF PDFs', to: '/dashboard/dtf/pdfs', icon: FileText },
         { id: 'dtf_archive', label: 'Datei-Archiv', to: '/dashboard/dtf/archive', icon: Archive },
+        { id: 'dtf_remove_bg', label: 'Freisteller', to: '/dashboard/dtf/remove-bg', icon: ImageIcon },
     ]
   },
   { id: 'vector', label: 'Bildvektor', to: '/dashboard/vector', icon: Zap },
@@ -46,19 +47,13 @@ export default function DashboardLayout() {
   const logout = useAppStore((state) => state.logout);
   const navigate = useNavigate();
   const location = useLocation();
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [menuSettings, setMenuSettings] = useState<Record<string, boolean>>({});
+  const menuSettings = useAppStore((state) => state.menuSettings);
+  const logoUrl = useAppStore((state) => state.logoUrl);
+  const fetchSettings = useAppStore((state) => state.fetchSettings);
 
   useEffect(() => {
-    fetch('/api/settings').then(res => res.json()).then(data => {
-      if(data.success && data.settings) {
-          if (data.settings.logo) setLogoUrl(data.settings.logo);
-          if (data.settings.menu_config) {
-              try { setMenuSettings(JSON.parse(data.settings.menu_config)); } catch(e){}
-          }
-      }
-    });
-  }, []);
+    fetchSettings();
+  }, [fetchSettings]);
 
   // Close mobile menu on route change
   if (mobileMenuOpen) {

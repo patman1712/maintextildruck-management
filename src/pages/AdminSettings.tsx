@@ -21,25 +21,13 @@ export default function AdminSettings() {
   const loading = useAppStore((state) => state.loading);
   const fetchData = useAppStore((state) => state.fetchData);
   const updateOrder = useAppStore((state) => state.updateOrder);
-
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [faviconUrl, setFaviconUrl] = useState<string | null>(null);
-  const [menuSettings, setMenuSettings] = useState<Record<string, boolean>>({});
+  const menuSettings = useAppStore((state) => state.menuSettings);
+  const updateMenuSettings = useAppStore((state) => state.updateMenuSettings);
+  const logoUrl = useAppStore((state) => state.logoUrl);
+  const faviconUrl = useAppStore((state) => state.faviconUrl);
 
   useEffect(() => {
     fetchData();
-    // Fetch settings
-    fetch('/api/settings').then(res => res.json()).then(data => {
-        if(data.success && data.settings) {
-            if (data.settings.logo) setLogoUrl(data.settings.logo);
-            if (data.settings.favicon) setFaviconUrl(data.settings.favicon);
-            if (data.settings.menu_config) {
-                try {
-                    setMenuSettings(JSON.parse(data.settings.menu_config));
-                } catch(e) {}
-            }
-        }
-    });
   }, [fetchData]);
 
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
@@ -63,7 +51,6 @@ export default function AdminSettings() {
 
         const data = await res.json();
         if (data.success) {
-            setLogoUrl(data.logoUrl);
             alert("Logo erfolgreich hochgeladen!");
             window.location.reload(); 
         } else {
@@ -91,7 +78,6 @@ export default function AdminSettings() {
 
         const data = await res.json();
         if (data.success) {
-            setFaviconUrl(data.faviconUrl);
             if (data.warning) {
                 alert("Warnung: " + data.warning);
             } else {
@@ -110,13 +96,7 @@ export default function AdminSettings() {
   const toggleMenu = async (key: string) => {
       const isVisible = menuSettings[key] !== false;
       const updated = { ...menuSettings, [key]: !isVisible };
-      setMenuSettings(updated);
-      
-      await fetch('/api/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key: 'menu_config', value: updated })
-      });
+      await updateMenuSettings(updated);
   };
 
   const handleBackup = () => {

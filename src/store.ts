@@ -92,8 +92,13 @@ interface AppState {
   suppliers: Supplier[];
   currentUser: User | null;
   loading: boolean;
+  menuSettings: Record<string, boolean>;
+  logoUrl: string | null;
+  faviconUrl: string | null;
   
   fetchData: () => Promise<void>;
+  fetchSettings: () => Promise<void>;
+  updateMenuSettings: (settings: Record<string, boolean>) => Promise<void>;
   fetchUsers: () => Promise<void>;
   
   login: (user: User) => void;
@@ -126,8 +131,34 @@ export const useAppStore = create<AppState>((set, get) => ({
   customers: [],
   users: [],
   suppliers: [],
+  menuSettings: {},
+  logoUrl: null,
+  faviconUrl: null,
   currentUser: JSON.parse(localStorage.getItem('currentUser') || 'null'),
   loading: false,
+
+  fetchSettings: async () => {
+    try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        if(data.success && data.settings) {
+            set({ 
+                logoUrl: data.settings.logo || null,
+                faviconUrl: data.settings.favicon || null,
+                menuSettings: data.settings.menu_config ? JSON.parse(data.settings.menu_config) : {}
+            });
+        }
+    } catch(e) { console.error(e); }
+  },
+
+  updateMenuSettings: async (settings) => {
+      set({ menuSettings: settings });
+      await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'menu_config', value: settings })
+      });
+  },
 
   fetchData: async () => {
     set({ loading: true });
