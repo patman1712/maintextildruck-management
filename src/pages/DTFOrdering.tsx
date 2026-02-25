@@ -66,7 +66,8 @@ export default function DTFOrdering() {
         orderId: order.id,
         customerName: order.customerName,
         date: order.createdAt,
-        status: order.status
+        status: order.status,
+        reference: f.reference
       }))
   ).filter(f => f.url);
 
@@ -405,14 +406,27 @@ export default function DTFOrdering() {
                         Offene Aufträge mit Druckdaten
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto">
-                        {openOrdersWithFiles.map(order => (
+                        {openOrdersWithFiles.map(order => {
+                            // Extract unique references from files in this order (from manual inventory adds)
+                            const references = Array.from(new Set(
+                                (order.files || [])
+                                    .filter((f: any) => f.reference)
+                                    .map((f: any) => f.reference)
+                            ));
+                            
+                            const displayTitle = references.length > 0 
+                                ? references.join(', ') 
+                                : order.title;
+
+                            return (
                             <div key={order.id} className="border border-blue-100 bg-blue-50 p-3 rounded-md flex justify-between items-center">
                                 <div className="min-w-0 flex-1 mr-2">
-                                    <p className="font-medium text-blue-900 truncate text-sm" title={order.title}>
-                                        {order.orderNumber && <span className="text-blue-400 mr-1 font-mono text-xs">{order.orderNumber}</span>}
-                                        {order.title}
+                                    <p className="font-medium text-blue-900 truncate text-sm" title={displayTitle}>
+                                        {references.length === 0 && order.orderNumber && <span className="text-blue-400 mr-1 font-mono text-xs">{order.orderNumber}</span>}
+                                        {displayTitle}
                                     </p>
                                     <p className="text-xs text-blue-700 truncate">{order.customerName}</p>
+                                    {references.length > 0 && <p className="text-[10px] text-blue-400 italic mt-0.5">{order.title}</p>}
                                     <p className="text-[10px] text-blue-500">{new Date(order.createdAt).toLocaleDateString('de-DE')}</p>
                                 </div>
                                 <button 
@@ -423,7 +437,7 @@ export default function DTFOrdering() {
                                     Übernehmen
                                 </button>
                             </div>
-                        ))}
+                        )})}
                     </div>
                 </div>
             )}
@@ -792,7 +806,10 @@ export default function DTFOrdering() {
                                                 </div>
                                             )}
                                         </div>
-                                        <p className="text-xs font-medium truncate mb-0.5" title={file.name}>{file.name}</p>
+                                        <p className="text-xs font-medium truncate mb-0.5" title={file.name}>
+                                            {file.reference && <span className="bg-blue-100 text-blue-800 text-[10px] px-1 rounded mr-1">{file.reference}</span>}
+                                            {file.name}
+                                        </p>
                                         <p className="text-[10px] text-gray-500 truncate">{file.customerName}</p>
                                         
                                         {isSelected && (
