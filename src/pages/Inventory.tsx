@@ -283,6 +283,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const suppliers = useAppStore((state) => state.suppliers);
   const customers = useAppStore((state) => state.customers);
   const updateOrderItem = useAppStore((state) => state.updateOrderItem);
+  const updateOrder = useAppStore((state) => state.updateOrder);
   const currentUser = useAppStore((state) => state.currentUser);
   const addOrderItem = useAppStore((state) => state.addOrderItem);
   const ensureManualOrder = useAppStore((state) => state.ensureManualOrder);
@@ -317,14 +318,15 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   };
 
   const handleSelectProduct = (product: any, customer: any) => {
-    setNewItem(prev => ({
-        ...prev,
-        itemName: `${product.name} ${product.product_number ? `(${product.product_number})` : ''}`,
-        supplierId: product.supplier_id || prev.supplierId,
-        manualOrderNumber: prev.manualOrderNumber || customer.name
-    }));
-    setShowProductPicker(false);
-  };
+        setNewItem(prev => ({
+            ...prev,
+            itemName: `${product.name} ${product.product_number ? `(${product.product_number})` : ''}`,
+            supplierId: product.supplier_id || prev.supplierId,
+            manualOrderNumber: prev.manualOrderNumber || customer.name,
+            files: product.files || []
+        }));
+        setShowProductPicker(false);
+    };
 
   const [newItem, setNewItem] = useState({
     supplierId: '',
@@ -333,22 +335,50 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     color: '',
     size: '',
     quantity: 1,
-    notes: ''
+    notes: '',
+    files: [] as any[]
   });
 
   const handleManualAddItem = async () => {
     if (newItem.supplierId && newItem.itemName) {
         const manualOrderId = await ensureManualOrder();
         await addOrderItem(manualOrderId, newItem);
+
+        // Add files to order if present (from product picker)
+        if (newItem.files && newItem.files.length > 0) {
+             const order = orders.find(o => o.id === manualOrderId);
+             if (order) {
+                 const existingFiles = order.files || [];
+                 const printFiles = newItem.files.filter((f: any) => f.type === 'print' || f.type === 'vector');
+                 
+                 const newOrderFiles = printFiles.map((f: any) => ({
+                     name: f.file_name || 'Unbenannt',
+                     type: f.type,
+                     url: f.file_url,
+                     thumbnail: f.thumbnail_url,
+                     customName: f.file_name
+                 }));
+
+                 const urls = new Set(existingFiles.map(f => f.url));
+                 const filesToAdd = newOrderFiles.filter((f: any) => !urls.has(f.url));
+                 
+                 if (filesToAdd.length > 0) {
+                     await updateOrder(manualOrderId, {
+                         files: [...existingFiles, ...filesToAdd]
+                     });
+                 }
+             }
+        }
         
         setNewItem({
-            supplierId: '',
+            supplierId: newItem.supplierId,
             itemName: '',
-            manualOrderNumber: '',
+            manualOrderNumber: newItem.manualOrderNumber,
             color: '',
             size: '',
             quantity: 1,
-            notes: ''
+            notes: '',
+            files: []
         });
         setShowAddItemModal(false);
     }
