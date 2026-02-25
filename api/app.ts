@@ -5,20 +5,46 @@
 import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import fs from 'fs'
 
 // for esm mode
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// load env BEFORE ANY IMPORTS
-dotenv.config({ path: path.join(__dirname, '../.env') })
+// load env BEFORE ANY IMPORTS with multiple fallbacks
+const envPaths = [
+    path.join(__dirname, '../.env'), // From api/ folder
+    path.join(__dirname, '.env'),    // In api/ folder
+    path.join(process.cwd(), '.env'), // Current working directory
+    path.join(process.cwd(), '../.env') // Parent of CWD
+];
+
+let envLoaded = false;
+for (const p of envPaths) {
+    if (fs.existsSync(p)) {
+        dotenv.config({ path: p });
+        console.log(`[ENV] Loaded from: ${p}`);
+        envLoaded = true;
+        break;
+    }
+}
+
+if (!envLoaded) {
+    console.warn('[ENV] No .env file found in checked locations:', envPaths);
+} else {
+    // Double check key
+    if (!process.env.VITE_VAPID_PUBLIC_KEY) {
+        console.error('[ENV] .env file loaded but VITE_VAPID_PUBLIC_KEY is missing!');
+    } else {
+        console.log('[ENV] VITE_VAPID_PUBLIC_KEY is present.');
+    }
+}
 
 import express, {
   type Request,
   type Response,
   type NextFunction,
 } from 'express'
-import fs from 'fs'
 import cors from 'cors'
 import db from './db.js'
 import authRoutes from './routes/auth.js'
