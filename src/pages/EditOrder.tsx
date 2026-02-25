@@ -83,6 +83,99 @@ export default function EditOrder() {
   const [availableFiles, setAvailableFiles] = useState<{name: string, url: string, type: 'print' | 'vector', date: string, orderTitle: string}[]>([]);
   const [selectedExistingFiles, setSelectedExistingFiles] = useState<string[]>([]); // URLs
 
+  // --- Preview Logic ---
+  const [showPreviewSelector, setShowPreviewSelector] = useState(false);
+  const [availablePreviews, setAvailablePreviews] = useState<{name: string, url: string, date: string, source: string}[]>([]);
+  const [selectedExistingPreviews, setSelectedExistingPreviews] = useState<string[]>([]);
+
+  const loadCustomerPreviews = async () => {
+    const customer = customers.find(c => c.name === customerName);
+    const customerId = customer?.id;
+    
+    if (!customerId) {
+        alert("Bitte wählen Sie zuerst einen Kunden aus.");
+        return;
+    }
+      
+    const allPreviews: {name: string, url: string, date: string, source: string}[] = [];
+    const seenUrls = new Set<string>();
+
+    // 1. Get previews from existing Orders
+    const allOrders = useAppStore.getState().orders;
+    const customerOrders = allOrders
+        .filter(o => o.customerId === customerId)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    customerOrders.forEach(order => {
+        if (order.files) {
+            order.files.forEach(f => {
+                if (f.type === 'preview' && f.url) {
+                    if (!seenUrls.has(f.url)) {
+                        seenUrls.add(f.url);
+                        allPreviews.push({
+                            name: f.customName || f.name,
+                            url: f.url,
+                            date: order.createdAt,
+                            source: `Auftrag: ${order.title}`
+                        });
+                    }
+                }
+            });
+        }
+    });
+
+    // 2. Get previews from Products (Freisteller results)
+    try {
+        const res = await fetch(`/api/products/${customerId}`);
+        const data = await res.json();
+        if (data.success && data.data) {
+            data.data.forEach((product: any) => {
+                if (product.files) {
+                    product.files.forEach((f: any) => {
+                        if (f.type === 'preview' && (f.file_url || f.url)) {
+                            const url = f.file_url || f.url;
+                            if (!seenUrls.has(url)) {
+                                seenUrls.add(url);
+                                allPreviews.push({
+                                    name: f.customName || f.file_name || f.name || product.name,
+                                    url: url,
+                                    date: product.created_at || new Date().toISOString(),
+                                    source: `Produkt: ${product.name}`
+                                });
+                            }
+                        }
+                    });
+                }
+            });
+        }
+    } catch (err) {
+        console.error(err);
+    }
+
+    setAvailablePreviews(allPreviews);
+    setSearchTerm("");
+    setShowPreviewSelector(true);
+  };
+
+  const addSelectedPreviews = () => {
+    const filesToAdd = availablePreviews.filter(f => selectedExistingPreviews.includes(f.url));
+    
+    const newPreviews = filesToAdd.map(f => ({
+        name: f.name,
+        type: 'preview' as const,
+        url: f.url
+    }));
+    
+    // Filter duplicates
+    const currentUrls = files.map(f => f.url);
+    const uniqueNew = newPreviews.filter(f => !currentUrls.includes(f.url));
+
+    setFiles([...files, ...uniqueNew]);
+    setShowPreviewSelector(false);
+    setSelectedExistingPreviews([]);
+  };
+
+
   const loadCustomerFiles = () => {
     // Find customer ID based on name if not available directly (EditOrder stores customerName)
     // Ideally we should have customerId in Order but for now we might need to look it up or filter by name
@@ -501,6 +594,21 @@ export default function EditOrder() {
               <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
               <p className="text-sm text-gray-600">Dateien hinzufügen</p>
             </div>
+            
+            {/* Button to load existing previews */}
+            {customerName && (
+                <div className="mt-2 text-right">
+                    <button 
+                        type="button"
+                        onClick={loadCustomerPreviews}
+                        className="text-xs text-gray-600 hover:text-gray-800 underline font-medium flex items-center justify-end ml-auto"
+                    >
+                        <FileText size={14} className="mr-1" />
+                        Kunden-Vorschaubilder laden
+                    </button>
+                </div>
+            )}
+
             {previewFiles.length > 0 && (
               <div className="mt-4 grid grid-cols-3 gap-2">
                 {previewFiles.map((file, idx) => (
@@ -764,6 +872,89 @@ export default function EditOrder() {
             Änderungen speichern
           </button>
         </div>
+
+      {/* Preview Selector Modal */}
+      {showPreviewSelector && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+                <div className="p-4 border-b flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-gray-800">Vorschaubild aus Kundenarchiv wählen</h3>
+                    <button onClick={() => setShowPreviewSelector(false)} className="text-gray-500 hover:text-gray-700">
+                        <X size={20} />
+                    </button>
+                </div>
+                
+                <div className="p-4 overflow-y-auto flex-1">
+                    <div className="mb-4">
+                        <input 
+                            type="text" 
+                            placeholder="Suchen..." 
+                            className="w-full border p-2 rounded text-sm focus:ring-red-500 focus:border-red-500"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                    
+                    {availablePreviews.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">
+                            {searchTerm ? "Keine passenden Dateien gefunden." : "Keine Vorschaubilder gefunden."}
+                        </p>
+                    ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            {availablePreviews
+                                .filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .map((file, idx) => (
+                                <div 
+                                    key={idx} 
+                                    className={`border rounded p-3 cursor-pointer transition-all relative ${
+                                        selectedExistingPreviews.includes(file.url) 
+                                        ? 'border-red-500 bg-red-50 ring-1 ring-red-500' 
+                                        : 'border-gray-200 hover:border-red-300'
+                                    }`}
+                                    onClick={() => {
+                                        if (selectedExistingPreviews.includes(file.url)) {
+                                            setSelectedExistingPreviews(selectedExistingPreviews.filter(u => u !== file.url));
+                                        } else {
+                                            setSelectedExistingPreviews([...selectedExistingPreviews, file.url]);
+                                        }
+                                    }}
+                                >
+                                    <div className="h-24 bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden">
+                                        <img src={file.url} alt={file.name} className="w-full h-full object-contain" />
+                                    </div>
+                                    <p className="text-xs font-medium truncate" title={file.name}>{file.name}</p>
+                                    <p className="text-[10px] text-gray-500 truncate">{new Date(file.date).toLocaleDateString()} - {file.source}</p>
+                                    
+                                    {selectedExistingPreviews.includes(file.url) && (
+                                        <div className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-0.5">
+                                            <div className="w-3 h-3 flex items-center justify-center text-[10px]">✓</div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                
+                <div className="p-4 border-t bg-gray-50 flex justify-end space-x-3">
+                    <button 
+                        onClick={() => setShowPreviewSelector(false)}
+                        className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                    >
+                        Abbrechen
+                    </button>
+                    <button 
+                        onClick={addSelectedPreviews}
+                        disabled={selectedExistingPreviews.length === 0}
+                        className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Ausgewählte hinzufügen ({selectedExistingPreviews.length})
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* File Selector Modal */}
       {showFileSelector && (
