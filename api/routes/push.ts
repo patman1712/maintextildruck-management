@@ -32,11 +32,42 @@ const initWebPush = () => {
 initWebPush();
 
 // GET VAPID Public Key
-router.get('/public-key', (req: Request, res: Response) => {
-    const { publicKey } = getVapidKeys();
+router.get('/public-key', async (req: Request, res: Response) => {
+    let { publicKey } = getVapidKeys();
+    
+    // DEBUGGING: Log detailed environment info
     if (!publicKey) {
-        console.error('Public Key requested but not found in env');
-        return res.status(500).json({ success: false, error: 'VAPID Public Key not configured on server' });
+        console.error('--- PUSH DEBUG ERROR ---');
+        console.error('Current CWD:', process.cwd());
+        console.error('VITE_VAPID_PUBLIC_KEY:', process.env.VITE_VAPID_PUBLIC_KEY);
+        console.error('VAPID_PRIVATE_KEY:', process.env.VAPID_PRIVATE_KEY ? '*****' : 'undefined');
+        console.error('Environment Keys:', Object.keys(process.env).filter(k => k.includes('VAPID')));
+        
+        // Try to reload dotenv explicitly here as a fallback
+        try {
+            const path = await import('path');
+            const dotenv = await import('dotenv');
+            const envPath = path.default.join(process.cwd(), '.env');
+            console.log('Attempting emergency reload from:', envPath);
+            dotenv.default.config({ path: envPath });
+            console.log('Reloaded VITE_VAPID_PUBLIC_KEY:', process.env.VITE_VAPID_PUBLIC_KEY);
+            
+            // Retry getting key
+            if (process.env.VITE_VAPID_PUBLIC_KEY) {
+                 return res.json({ success: true, publicKey: process.env.VITE_VAPID_PUBLIC_KEY });
+            }
+        } catch(e) {
+            console.error('Emergency reload failed:', e);
+        }
+
+        return res.status(500).json({ 
+            success: false, 
+            error: 'VAPID Public Key not configured on server',
+            debug: {
+                cwd: process.cwd(),
+                hasKey: !!process.env.VITE_VAPID_PUBLIC_KEY
+            }
+        });
     }
     res.json({ success: true, publicKey });
 });
