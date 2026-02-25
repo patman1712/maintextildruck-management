@@ -15,6 +15,10 @@ export default defineConfig({
     tsconfigPaths(),
   ],
   server: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp",
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
@@ -32,6 +36,11 @@ export default defineConfig({
           });
         },
       }
+    }
+  },
+  build: {
+    rollupOptions: {
+      external: ['@imgly/background-removal']
     }
   }
 })
