@@ -115,10 +115,10 @@ export default function CustomerDetails() {
   }, [id, customers, orders, navigate, loading]);
 
   useEffect(() => {
-      if (activeTab === 'products' && customer) {
+      if (customer) {
           fetchProducts();
       }
-  }, [activeTab, customer]);
+  }, [customer]);
 
   const handleSaveCustomer = async () => {
     if (!editedCustomer || !customer) return;
