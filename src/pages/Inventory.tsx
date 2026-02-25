@@ -363,16 +363,14 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                          reference: newItem.manualOrderNumber // Use the manual order number from input
                      }));
 
-                     const urls = new Set(existingFiles.map(f => f.url));
-                 const filesToAdd = newOrderFiles.filter((f: any) => !urls.has(f.url));
-                 
-                 if (filesToAdd.length > 0) {
-                     await updateOrder(manualOrderId, {
-                         files: [...existingFiles, ...filesToAdd]
-                     });
+                     // Always add files, even if URL exists, because they might belong to a different manual reference/order
+                     if (newOrderFiles.length > 0) {
+                         await updateOrder(manualOrderId, {
+                             files: [...existingFiles, ...newOrderFiles]
+                         });
+                     }
                  }
-             }
-        }
+            }
         
         setNewItem({
             supplierId: newItem.supplierId,
