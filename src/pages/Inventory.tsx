@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAppStore, Supplier, OrderItem } from '@/store';
 import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, RotateCcw, Search, User, Package, ChevronDown, ChevronRight, Save, X } from 'lucide-react';
 
