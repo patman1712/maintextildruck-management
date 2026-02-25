@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/store";
-import { Shield, Save, RotateCcw, AlertTriangle, Upload, Eye, EyeOff, LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, Printer, Zap, Database, Download } from "lucide-react";
+import { Shield, Save, RotateCcw, AlertTriangle, Upload, Eye, EyeOff, LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, Printer, Zap, Database, Download, Image as ImageIcon } from "lucide-react";
 
 const MENU_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -11,6 +11,7 @@ const MENU_ITEMS = [
   { id: 'dtf', label: 'DTF-Bestellen', icon: Printer },
   { id: 'dtf_pdfs', label: 'Fertige DTF PDFs', icon: FileText },
   { id: 'dtf_archive', label: 'Datei-Archiv', icon: Archive },
+  { id: 'dtf_remove_bg', label: 'Freisteller', icon: ImageIcon },
   { id: 'vector', label: 'Bildvektor', icon: Zap },
   { id: 'customers', label: 'Kundendateien', icon: Users },
 ];
