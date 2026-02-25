@@ -221,6 +221,7 @@ try {
     db.exec('ALTER TABLE order_items ADD COLUMN manual_order_number TEXT');
   }
 
+  console.log('Checking database schema for missing columns...');
   const customerColumns = db.prepare("PRAGMA table_info(customers)").all() as any[];
   const hasShopwareUrl = customerColumns.some(col => col.name === 'shopware_url');
   if (!hasShopwareUrl) {

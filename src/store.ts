@@ -370,13 +370,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (updatedCustomer.shopwareAccessKey !== undefined) payload.shopware_access_key = updatedCustomer.shopwareAccessKey;
       if (updatedCustomer.shopwareSecretKey !== undefined) payload.shopware_secret_key = updatedCustomer.shopwareSecretKey;
 
-      await fetch(`/api/customers/${id}`, {
+      const res = await fetch(`/api/customers/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      
+      if (!res.ok) {
+          // Revert optimistic update if failed
+          get().fetchData(); 
+          throw new Error('Update failed');
+      }
+      
+      // Refresh data to ensure consistency
+      get().fetchData();
     } catch (error) {
       console.error('Error updating customer:', error);
+      // Ensure we are in sync
+      get().fetchData();
     }
   },
 
