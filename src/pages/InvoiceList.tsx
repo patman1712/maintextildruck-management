@@ -11,9 +11,30 @@ export default function InvoiceList() {
   const loading = useAppStore((state) => state.loading);
   const fetchData = useAppStore((state) => state.fetchData);
   const toggleOrderStep = useAppStore((state) => state.toggleOrderStep);
+  const updateOrder = useAppStore((state) => state.updateOrder);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [newInvoice, setNewInvoice] = useState({ title: '', customerId: '', customerName: '', address: '', description: '' });
+
+  const resetForm = () => {
+      setNewInvoice({ title: '', customerId: '', customerName: '', address: '', description: '' });
+      setEditingId(null);
+      setIsAdding(false);
+  };
+
+  const handleEditManualInvoice = (e: React.MouseEvent, order: Order) => {
+      e.stopPropagation();
+      setNewInvoice({
+          title: order.title,
+          customerId: order.customerId || '',
+          customerName: order.customerName,
+          address: order.customerAddress || '',
+          description: order.description || ''
+      });
+      setEditingId(order.id);
+      setIsAdding(true);
+  };
 
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Aufträge...</div>;
 
@@ -60,25 +81,36 @@ export default function InvoiceList() {
       e.preventDefault();
       if (!newInvoice.title || !newInvoice.customerName) return;
 
-      const order: Order = {
-          id: Math.random().toString(36).substr(2, 9),
-          title: newInvoice.title,
-          status: 'manual_invoice',
-          customerId: newInvoice.customerId || undefined,
-          customerName: newInvoice.customerName,
-          customerAddress: newInvoice.address,
-          description: newInvoice.description,
-          createdAt: new Date().toISOString(),
-          deadline: new Date().toISOString().split('T')[0], // Today
-          steps: { processing: true, produced: true, invoiced: false },
-          employees: [],
-          files: []
-      };
+      if (editingId) {
+          // Update existing
+          await updateOrder(editingId, {
+              title: newInvoice.title,
+              customerId: newInvoice.customerId || undefined,
+              customerName: newInvoice.customerName,
+              customerAddress: newInvoice.address,
+              description: newInvoice.description
+          });
+      } else {
+          // Create new
+          const order: Order = {
+              id: Math.random().toString(36).substr(2, 9),
+              title: newInvoice.title,
+              status: 'manual_invoice',
+              customerId: newInvoice.customerId || undefined,
+              customerName: newInvoice.customerName,
+              customerAddress: newInvoice.address,
+              description: newInvoice.description,
+              createdAt: new Date().toISOString(),
+              deadline: new Date().toISOString().split('T')[0], // Today
+              steps: { processing: true, produced: true, invoiced: false },
+              employees: [],
+              files: []
+          };
+          await addOrder(order);
+      }
 
-      await addOrder(order);
       fetchData();
-      setIsAdding(false);
-      setNewInvoice({ title: '', customerId: '', customerName: '', address: '', description: '' });
+      resetForm();
   };
 
   return (
@@ -130,8 +162,10 @@ export default function InvoiceList() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-lg p-6 w-full max-w-lg shadow-xl">
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-slate-800">Manuelle Rechnung erfassen</h2>
-                    <button onClick={() => setIsAdding(false)} className="text-gray-400 hover:text-gray-600">
+                    <h2 className="text-xl font-bold text-slate-800">
+                        {editingId ? 'Manuelle Rechnung bearbeiten' : 'Manuelle Rechnung erfassen'}
+                    </h2>
+                    <button onClick={resetForm} className="text-gray-400 hover:text-gray-600">
                         <X size={20} />
                     </button>
                 </div>
@@ -198,7 +232,7 @@ export default function InvoiceList() {
                     <div className="flex justify-end gap-2 mt-6">
                         <button 
                             type="button" 
-                            onClick={() => setIsAdding(false)}
+                            onClick={resetForm}
                             className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md"
                         >
                             Abbrechen
@@ -254,7 +288,16 @@ export default function InvoiceList() {
                             Produziert & Bereit
                         </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex justify-end gap-2">
+                        {order.status === 'manual_invoice' && (
+                            <button
+                                onClick={(e) => handleEditManualInvoice(e, order)}
+                                className="bg-gray-100 text-gray-600 px-3 py-2 rounded hover:bg-gray-200 inline-flex items-center transition-colors shadow-sm"
+                                title="Bearbeiten"
+                            >
+                                <Edit size={16} />
+                            </button>
+                        )}
                         <button
                             onClick={(e) => handleMarkInvoiced(e, order.id)}
                             className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 inline-flex items-center transition-colors shadow-sm"
