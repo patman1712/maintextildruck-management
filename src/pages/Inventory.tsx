@@ -337,19 +337,25 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   };
 
   const handleSelectProduct = (product: any, customer: any) => {
-        const newItem = {
-            _tempId: Math.random().toString(),
+        // Populate form instead of adding directly
+        setCurrentItem(prev => ({
+            ...prev,
             supplierId: product.supplier_id || manualOrderSettings.defaultSupplierId,
-            itemName: product.name,
-            itemNumber: product.product_number || '',
+            // Merge Name and Number into the single visible field
+            itemName: `${product.name} ${product.product_number || ''}`.trim(),
+            itemNumber: '', // Clear hidden field so we rely on the editable itemName
             color: '',
             size: '',
             quantity: 1,
             notes: '',
-            files: product.files || [],
-            manualOrderNumber: manualOrderSettings.manualOrderNumber || customer.name
-        };
-        setPendingItems(prev => [...prev, newItem]);
+            files: product.files || []
+        }));
+        
+        // Auto-set order number to customer name if empty
+        if (!manualOrderSettings.manualOrderNumber) {
+             setManualOrderSettings(prev => ({ ...prev, manualOrderNumber: customer.name }));
+        }
+        
         setShowProductPicker(false);
     };
 
@@ -993,7 +999,6 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                 <div key={item._tempId || idx} className="bg-white p-3 rounded border border-gray-200 shadow-sm flex justify-between items-start text-sm hover:bg-gray-50">
                                                     <div>
                                                         <div className="font-bold text-gray-800 flex items-center">
-                                                            <span className="bg-gray-100 px-1.5 py-0.5 rounded mr-2 text-xs">{item.quantity}x</span>
                                                             {item.itemName}
                                                         </div>
                                                         <div className="text-gray-600 text-xs mt-1 flex flex-wrap gap-2">
