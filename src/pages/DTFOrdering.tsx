@@ -86,12 +86,75 @@ export default function DTFOrdering() {
   }
 
   // Group active orders that have print files (for the "Open Orders" list)
-  const openOrdersWithFiles = orders
+  // 1. Regular Orders
+  const regularOrders = orders
+    .filter(o => o.id !== 'inventory-manual')
     .filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'archived')
     .filter(o => (o.files || []).some(f => f.type === 'print' || f.type === 'vector'))
     .filter(o => o.printStatus !== 'ordered');
 
+  // 2. Manual Inventory Groups (Virtual Orders)
+  const manualGroups: any[] = [];
+  const manualOrder = orders.find(o => o.id === 'inventory-manual');
+  
+  if (manualOrder) {
+      const filesByRef: Record<string, any[]> = {};
+      (manualOrder.files || []).forEach(f => {
+          if (f.type === 'print' || f.type === 'vector') {
+              const ref = f.reference || 'Unbekannt';
+              if (!filesByRef[ref]) filesByRef[ref] = [];
+              filesByRef[ref].push(f);
+          }
+      });
+
+      Object.entries(filesByRef).forEach(([ref, files]) => {
+          manualGroups.push({
+              id: `manual-group-${ref}`,
+              title: ref === 'Unbekannt' ? 'Manuelle Lagerbestellung (Ohne Ref)' : ref,
+              orderNumber: 'MANUELL',
+              customerName: 'Lager / Manuell', // Use a distinct name
+              createdAt: manualOrder.createdAt,
+              files: files,
+              printStatus: 'pending', // Assume pending
+              isVirtual: true
+          });
+      });
+  }
+
+  const openOrdersWithFiles = [...regularOrders, ...manualGroups];
+
   const addOrderFiles = (orderId: string) => {
+      // Check for virtual order (Manual Inventory Groups)
+      if (orderId.startsWith('manual-group-')) {
+          const ref = orderId.replace('manual-group-', '');
+          const manualOrder = orders.find(o => o.id === 'inventory-manual');
+          if (!manualOrder) return;
+          
+          const filesToAdd = (manualOrder.files || [])
+             .filter(f => {
+                 const fileRef = f.reference || 'Unbekannt';
+                 return fileRef === ref && (f.type === 'print' || f.type === 'vector');
+             })
+             .map(f => ({
+                id: f.url || Math.random().toString(36),
+                url: f.url,
+                name: f.customName || f.name,
+                thumbnail: f.thumbnail,
+                orderId: manualOrder.id, // Keep original ID for tracking
+                customerName: 'Lager / Manuell',
+                date: manualOrder.createdAt,
+                quantity: 1,
+                width: 0,
+                height: 0,
+                reference: f.reference
+            }));
+          
+          filesToAdd.forEach(file => {
+              addFile(file);
+          });
+          return;
+      }
+
       const order = orders.find(o => o.id === orderId);
       if (!order) return;
       
@@ -406,27 +469,14 @@ export default function DTFOrdering() {
                         Offene Aufträge mit Druckdaten
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto">
-                        {openOrdersWithFiles.map(order => {
-                            // Extract unique references from files in this order (from manual inventory adds)
-                            const references = Array.from(new Set(
-                                (order.files || [])
-                                    .filter((f: any) => f.reference)
-                                    .map((f: any) => f.reference)
-                            ));
-                            
-                            const displayTitle = references.length > 0 
-                                ? references.join(', ') 
-                                : order.title;
-
-                            return (
+                        {openOrdersWithFiles.map(order => (
                             <div key={order.id} className="border border-blue-100 bg-blue-50 p-3 rounded-md flex justify-between items-center">
                                 <div className="min-w-0 flex-1 mr-2">
-                                    <p className="font-medium text-blue-900 truncate text-sm" title={displayTitle}>
-                                        {references.length === 0 && order.orderNumber && <span className="text-blue-400 mr-1 font-mono text-xs">{order.orderNumber}</span>}
-                                        {displayTitle}
+                                    <p className="font-medium text-blue-900 truncate text-sm" title={order.title}>
+                                        {order.orderNumber && <span className="text-blue-400 mr-1 font-mono text-xs">{order.orderNumber}</span>}
+                                        {order.title}
                                     </p>
                                     <p className="text-xs text-blue-700 truncate">{order.customerName}</p>
-                                    {references.length > 0 && <p className="text-[10px] text-blue-400 italic mt-0.5">{order.title}</p>}
                                     <p className="text-[10px] text-blue-500">{new Date(order.createdAt).toLocaleDateString('de-DE')}</p>
                                 </div>
                                 <button 
@@ -437,7 +487,7 @@ export default function DTFOrdering() {
                                     Übernehmen
                                 </button>
                             </div>
-                        )})}
+                        ))}
                     </div>
                 </div>
             )}
