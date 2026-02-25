@@ -48,6 +48,7 @@ export default function BackgroundRemover() {
 
             // Using imgly with config
             const blob = await removeBackground(originalImage, {
+                publicPath: "https://cdn.jsdelivr.net/npm/@imgly/background-removal-data@1.7.0/dist/",
                 progress: (key: string, current: number, total: number) => {
                     const percent = Math.round((current / total) * 100);
                     setProgress(`${key}: ${percent}%`);
