@@ -400,37 +400,6 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     }
   };
 
-  if (supplierIds.length === 0) {
-    return (
-        <div className="max-w-4xl mx-auto">
-            {!showCompleted && (
-                <div className="flex justify-end mb-4">
-                    <button 
-                        onClick={() => setShowAddItemModal(true)}
-                        className="bg-red-600 text-white px-4 py-2 rounded-lg inline-flex items-center hover:bg-red-700 transition-colors text-sm shadow-sm"
-                    >
-                        <Plus size={16} className="mr-2" />
-                        Ware manuell hinzufügen
-                    </button>
-                </div>
-            )}
-
-            <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
-                <ShoppingCart size={48} className="mx-auto mb-3 text-gray-300" />
-                <h3 className="text-lg font-medium text-gray-900">
-                    {showCompleted ? 'Keine erledigten Bestellungen' : 'Keine offenen Bestellungen'}
-                </h3>
-                <p className="text-gray-500 mt-1 mb-4">
-                    {showCompleted 
-                        ? 'Erledigte Bestellungen erscheinen hier.' 
-                        : 'Fügen Sie benötigte Ware in den Aufträgen hinzu oder nutzen Sie den Button oben.'}
-                </p>
-            </div>
-            {/* Modal was here in if-block, but we want it available always */}
-        </div>
-    );
-  }
-
   const toggleOrderSelectionForSupplier = (supplierId: string, orderId: string) => {
     setSelectedOrders(prev => {
         const current = prev[supplierId] || [];
@@ -517,6 +486,34 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   };
 
   return (
+    <>
+    {supplierIds.length === 0 ? (
+        <div className="max-w-4xl mx-auto">
+            {!showCompleted && (
+                <div className="flex justify-end mb-4">
+                    <button 
+                        onClick={() => setShowAddItemModal(true)}
+                        className="bg-red-600 text-white px-4 py-2 rounded-lg inline-flex items-center hover:bg-red-700 transition-colors text-sm shadow-sm"
+                    >
+                        <Plus size={16} className="mr-2" />
+                        Ware manuell hinzufügen
+                    </button>
+                </div>
+            )}
+
+            <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
+                <ShoppingCart size={48} className="mx-auto mb-3 text-gray-300" />
+                <h3 className="text-lg font-medium text-gray-900">
+                    {showCompleted ? 'Keine erledigten Bestellungen' : 'Keine offenen Bestellungen'}
+                </h3>
+                <p className="text-gray-500 mt-1 mb-4">
+                    {showCompleted 
+                        ? 'Erledigte Bestellungen erscheinen hier.' 
+                        : 'Fügen Sie benötigte Ware in den Aufträgen hinzu oder nutzen Sie den Button oben.'}
+                </p>
+            </div>
+        </div>
+    ) : (
     <div className="space-y-8">
         {!showCompleted && (
             <div className="flex justify-end">
@@ -715,6 +712,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                 </div>
             );
         })}
+    </div>
+    )}
 
         {/* Modal for manual adding - Always available */}
         {showAddItemModal && (
@@ -816,16 +815,22 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
                                     <div className="lg:col-span-3">
                                         <label className="block text-xs font-medium text-gray-700 mb-1">Lieferant / Shop</label>
-                                        <select 
-                                            className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                            value={newItem.supplierId}
-                                            onChange={(e) => setNewItem({...newItem, supplierId: e.target.value})}
-                                        >
-                                            <option value="">Bitte wählen...</option>
-                                            {suppliers.map(s => (
-                                                <option key={s.id} value={s.id}>{s.name}</option>
-                                            ))}
-                                        </select>
+                                        {suppliers.length > 0 ? (
+                                            <select 
+                                                className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                                value={newItem.supplierId}
+                                                onChange={(e) => setNewItem({...newItem, supplierId: e.target.value})}
+                                            >
+                                                <option value="">Bitte wählen...</option>
+                                                {suppliers.map(s => (
+                                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <div className="text-sm text-amber-600 border border-amber-200 bg-amber-50 p-2 rounded">
+                                                Bitte erst Lieferanten im Tab "Lieferanten" anlegen.
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="lg:col-span-3">
                                         <label className="block text-xs font-medium text-gray-700 mb-1">Auftragsnummer (Optional)</label>
@@ -891,6 +896,6 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                 </div>
             </div>
         )}
-    </div>
+    </>
   );
 }
