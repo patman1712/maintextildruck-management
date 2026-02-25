@@ -619,21 +619,38 @@ export default function CustomerDetails() {
   });
   const printFiles = Array.from(uniqueFilesMap.values()).sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
 
+  const freistellerProducts = products.filter(p => p.product_number === 'FREISTELLER');
+  const freistellerFiles = freistellerProducts.flatMap(p => p.files.map(f => ({
+      ...f,
+      name: p.name, // Use product name as file name context
+      customName: p.name,
+      orderDate: new Date().toISOString() // Or use creation date if available in Product
+  })));
+  
+  const allPreviewFilesCombined = [...allPreviewFiles, ...freistellerFiles];
+
   const uniquePreviewsMap = new Map();
-  allPreviewFiles.forEach(file => {
-      if (file.url && !uniquePreviewsMap.has(file.url)) {
-          uniquePreviewsMap.set(file.url, file);
+  allPreviewFilesCombined.forEach(file => {
+      // Handle both OrderFile (url) and ProductFile (file_url) structures
+      const key = (file as any).file_url || (file as any).url;
+      if (key && !uniquePreviewsMap.has(key)) {
+          uniquePreviewsMap.set(key, file);
       }
   });
-  const previewFiles = Array.from(uniquePreviewsMap.values()).sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+  const previewFiles = Array.from(uniquePreviewsMap.values()).sort((a, b) => {
+      const dateA = a.orderDate ? new Date(a.orderDate).getTime() : 0;
+      const dateB = b.orderDate ? new Date(b.orderDate).getTime() : 0;
+      return dateB - dateA;
+  });
 
   const filteredPrintFilesForAssign = printFiles.filter(f => 
       (f.customName || f.name).toLowerCase().includes(fileSearch.toLowerCase())
   );
 
   const filteredProducts = products.filter(p => 
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
-      (p.product_number && p.product_number.toLowerCase().includes(productSearch.toLowerCase()))
+      (p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
+      (p.product_number && p.product_number.toLowerCase().includes(productSearch.toLowerCase()))) &&
+      p.product_number !== 'FREISTELLER' // Filter out Freisteller dummy products from the main list
   );
 
   return (
@@ -972,10 +989,10 @@ export default function CustomerDetails() {
                                 <div key={idx} className="bg-white border border-gray-200 rounded-lg p-2 hover:shadow-md transition-all group">
                                     <div className="aspect-square bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden border border-gray-100 relative">
                                         <img 
-                                            src={file.thumbnail || file.url} 
+                                            src={file.thumbnail_url || file.thumbnail || file.file_url || file.url} 
                                             alt={file.name} 
                                             className="w-full h-full object-contain"
-                                            onClick={() => window.open(file.url, '_blank')}
+                                            onClick={() => window.open(file.file_url || file.url, '_blank')}
                                         />
                                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
                                             <button onClick={() => downloadFile(file)} className="text-white hover:text-red-400 p-1"><Download size={16} /></button>
@@ -986,7 +1003,7 @@ export default function CustomerDetails() {
                                         {file.customName || file.name}
                                     </p>
                                     <p className="text-[10px] text-gray-400 mt-1">
-                                        {new Date(file.orderDate).toLocaleDateString()}
+                                        {file.orderDate ? new Date(file.orderDate).toLocaleDateString() : 'Datum unbekannt'}
                                     </p>
                                 </div>
                             ))}
