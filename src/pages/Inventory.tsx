@@ -733,12 +733,16 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                         {orderGroup.items.map(item => (
                                             <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between text-sm bg-white p-2 rounded border border-gray-100 gap-2">
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center flex-wrap">
-                                                        <span className="font-bold mr-2 whitespace-nowrap">{item.quantity > 1 ? `${item.quantity}x` : ''}</span>
-                                                        <span className="font-medium mr-2 break-words">{item.itemName}</span>
-                                                        <span className="text-gray-500 text-xs whitespace-nowrap">({item.size})</span>
+                                                    <div className="font-medium text-gray-900 break-words">
+                                                        {item.itemName}
+                                                        {item.itemNumber && <span className="text-gray-500 ml-2 text-xs">#{item.itemNumber}</span>}
                                                     </div>
-                                                    {item.color && <div className="text-xs text-gray-500 mt-0.5">Farbe: {item.color}</div>}
+                                                    <div className="text-sm mt-0.5 flex flex-wrap gap-2 items-center">
+                                                         <span className="font-bold bg-gray-100 px-1.5 rounded text-gray-800">
+                                                            {item.quantity > 1 ? `${item.quantity}x ` : ''}{item.size}
+                                                         </span>
+                                                         {item.color && <span className="text-gray-600">Farbe: {item.color}</span>}
+                                                    </div>
                                                     {item.notes && <div className="text-xs text-gray-400 italic mt-0.5 break-words">{item.notes}</div>}
                                                 </div>
                                                 
