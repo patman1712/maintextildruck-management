@@ -494,25 +494,49 @@ export default function CustomerDetails() {
     setConfirmModal({
         isOpen: true,
         title: 'Datei löschen',
-        message: `Möchten Sie die Datei "${fileToDelete.customName || fileToDelete.name}" wirklich löschen? Sie wird auch aus dem Auftrag entfernt.`,
+        message: `Möchten Sie die Datei "${fileToDelete.customName || fileToDelete.name}" wirklich löschen? Sie wird vollständig vom Server und aus der Datenbank entfernt.`,
         type: 'danger',
         confirmText: 'Löschen',
         onConfirm: async () => {
+            // Check if it's an order file
             const order = customerOrders.find(o => o.files && Array.isArray(o.files) && o.files.some(f => f.url === fileToDelete.url));
-            if (!order) return;
-
-            const updatedFiles = order.files.filter(f => f.url !== fileToDelete.url);
-            const updatedOrder = { ...order, files: updatedFiles };
-            setCustomerOrders(prev => prev.map(o => o.id === order.id ? updatedOrder : o));
-
-            await updateOrder(order.id, { files: updatedFiles });
             
-            if (fileToDelete.url) {
+            if (order) {
+                const updatedFiles = order.files.filter(f => f.url !== fileToDelete.url);
+                const updatedOrder = { ...order, files: updatedFiles };
+                setCustomerOrders(prev => prev.map(o => o.id === order.id ? updatedOrder : o));
+
+                await updateOrder(order.id, { files: updatedFiles });
+            } 
+            // Check if it's a product file (e.g. Freisteller)
+            else {
+                // Find product containing this file
+                // We need to match by url or file_url
+                const product = products.find(p => p.files && p.files.some(f => (f.file_url === fileToDelete.url || f.file_url === (fileToDelete as any).file_url)));
+                
+                if (product) {
+                    const fileInProduct = product.files.find(f => (f.file_url === fileToDelete.url || f.file_url === (fileToDelete as any).file_url));
+                    if (fileInProduct) {
+                         try {
+                            await fetch(`/api/products/${product.id}/files/${fileInProduct.id}`, {
+                                method: 'DELETE'
+                            });
+                            fetchProducts();
+                        } catch (err) {
+                            console.error("Failed to delete product file association", err);
+                        }
+                    }
+                }
+            }
+            
+            // Physical delete from server
+            const urlToDelete = fileToDelete.url || (fileToDelete as any).file_url;
+            if (urlToDelete) {
                 try {
                     await fetch('/api/upload/delete', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ filePath: fileToDelete.url })
+                        body: JSON.stringify({ filePath: urlToDelete })
                     });
                 } catch (err) {
                     console.error("Failed to delete file from server", err);
