@@ -61,7 +61,6 @@ import vectorRoutes from './routes/vector.js'
 import faqRoutes from './routes/faqs.js'
 import downloadsRoutes, { DOWNLOADS_DIR } from './routes/downloads.js'
 import backupRoutes from './routes/backup.js'
-import pushRoutes from './routes/push.js'
 
 
 const app: express.Application = express()
@@ -87,7 +86,6 @@ app.use('/api/vector', vectorRoutes)
 app.use('/api/faqs', faqRoutes)
 app.use('/api/downloads', downloadsRoutes)
 app.use('/api/backup', backupRoutes)
-app.use('/api/push', pushRoutes)
 
 // Serve uploads
 app.use('/uploads', express.static(UPLOAD_DIR))

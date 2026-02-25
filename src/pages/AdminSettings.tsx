@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/store";
-import { Shield, Save, RotateCcw, AlertTriangle, Upload, Eye, EyeOff, LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, Printer, Zap, Database, Download, Image as ImageIcon, Bell } from "lucide-react";
-import { PushNotificationManager } from "@/components/PushNotificationManager";
+import { Shield, Save, RotateCcw, AlertTriangle, Upload, Eye, EyeOff, LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, Printer, Zap, Database, Download, Image as ImageIcon } from "lucide-react";
 
 const MENU_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -347,17 +346,6 @@ export default function AdminSettings() {
                 )}
             </div>
         </div>
-      </div>
-
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex items-center">
-            <Bell size={20} className="mr-2" />
-            Push-Benachrichtigungen
-        </h2>
-        <p className="text-sm text-gray-600 mb-4">
-            Aktivieren Sie Push-Benachrichtigungen für dieses Gerät, um Updates zu erhalten.
-        </p>
-        <PushNotificationManager />
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
