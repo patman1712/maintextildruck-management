@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/store";
-import { Archive, Download, Trash2, FileText, Search, User } from "lucide-react";
+import { Archive, Download, Trash2, FileText, Search, User, Printer, Image as ImageIcon } from "lucide-react";
 
 export default function FileArchive() {
   const orders = useAppStore((state) => state.orders);
@@ -9,6 +9,7 @@ export default function FileArchive() {
   const updateOrder = useAppStore((state) => state.updateOrder);
 
   const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState<'all' | 'print' | 'preview'>('all');
 
   useEffect(() => {
     fetchData();
@@ -46,9 +47,10 @@ export default function FileArchive() {
   }
 
   const filteredFiles = allFiles.filter(f => 
-    (f.name && f.name.toLowerCase().includes(search.toLowerCase())) ||
+    ((f.name && f.name.toLowerCase().includes(search.toLowerCase())) ||
     (f.customName && f.customName.toLowerCase().includes(search.toLowerCase())) ||
-    (f.customerName && f.customerName.toLowerCase().includes(search.toLowerCase()))
+    (f.customerName && f.customerName.toLowerCase().includes(search.toLowerCase()))) &&
+    (filterType === 'all' || f.type === filterType)
   );
 
   const handleDeleteFile = async (fileToDelete: any) => {
@@ -81,20 +83,48 @@ export default function FileArchive() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-slate-800 flex items-center">
-          <Archive className="mr-3 text-red-600" />
-          Datei-Archiv (Direkt-Uploads)
-        </h1>
-        <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-            <input 
-                type="text" 
-                placeholder="Suchen..." 
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 w-full"
-            />
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        <div>
+            <h1 className="text-2xl font-bold text-slate-800 flex items-center">
+            <Archive className="mr-3 text-red-600" />
+            Datei-Archiv (Direkt-Uploads)
+            </h1>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+            <div className="flex bg-gray-100 p-1 rounded-lg mr-2">
+                <button 
+                    onClick={() => setFilterType('all')}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${filterType === 'all' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    Alle
+                </button>
+                <button 
+                    onClick={() => setFilterType('print')}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors flex items-center ${filterType === 'print' ? 'bg-white shadow-sm text-red-600' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    <Printer size={14} className="mr-1" />
+                    Druck
+                </button>
+                <button 
+                    onClick={() => setFilterType('preview')}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors flex items-center ${filterType === 'preview' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                    <ImageIcon size={14} className="mr-1" />
+                    Vorschau
+                </button>
+            </div>
+
+            <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+                <input 
+                    type="text" 
+                    placeholder="Suchen..." 
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 w-full"
+                />
+            </div>
         </div>
       </div>
 
@@ -111,6 +141,13 @@ export default function FileArchive() {
                 {filteredFiles.map((file, idx) => (
                     <div key={`${file.url}-${idx}`} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all group relative">
                         <div className="aspect-square bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden border border-gray-100 relative">
+                            {/* Type Indicator */}
+                            <div className={`absolute top-2 right-2 px-2 py-0.5 rounded text-[10px] font-bold shadow-sm ${
+                                file.type === 'print' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                            }`}>
+                                {file.type === 'print' ? 'DRUCK' : 'VORSCHAU'}
+                            </div>
+
                             {(file.thumbnail || file.url) ? (
                                 <img 
                                     src={file.thumbnail || file.url} 

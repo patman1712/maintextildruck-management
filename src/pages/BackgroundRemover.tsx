@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Upload, Image as ImageIcon, Loader2, Save, User, Archive } from 'lucide-react';
+import { Upload, Image as ImageIcon, Loader2, Save, User, Archive, Printer } from 'lucide-react';
 import { removeBackground } from "@imgly/background-removal";
 import { jsPDF } from "jspdf";
 import { useAppStore } from "@/store";
@@ -12,8 +12,10 @@ export default function BackgroundRemover() {
     const [isSaving, setIsSaving] = useState(false);
     const [selectedCustomer, setSelectedCustomer] = useState("");
     const [saveMode, setSaveMode] = useState<'archive' | 'customer'>('archive');
+    const [customTitle, setCustomTitle] = useState("");
+    const [fileType, setFileType] = useState<'print' | 'preview'>('preview'); // Default to preview
     const [progress, setProgress] = useState<string>("");
-    
+
     const customers = useAppStore((state) => state.customers);
     const addOrder = useAppStore((state) => state.addOrder);
     const updateOrder = useAppStore((state) => state.updateOrder);
@@ -26,6 +28,7 @@ export default function BackgroundRemover() {
             setOriginalImage(url);
             setProcessedImage(null);
             setProcessedBlob(null);
+            setCustomTitle(file.name.split('.')[0] + ' (Freigestellt)');
             setProgress("");
         }
     };
@@ -61,7 +64,7 @@ export default function BackgroundRemover() {
 
         try {
             let fileToUpload = processedBlob;
-            let filename = `freisteller-${Date.now()}.png`;
+            let filename = `${customTitle || 'freisteller'}-${Date.now()}.png`;
 
             if (asPdf) {
                 // Convert to PDF
@@ -84,7 +87,7 @@ export default function BackgroundRemover() {
                 pdf.addImage(processedImage!, 'PNG', 0, 0, w, h);
                 const pdfBlob = pdf.output('blob');
                 fileToUpload = pdfBlob;
-                filename = `freisteller-${Date.now()}.pdf`;
+                filename = `${customTitle || 'freisteller'}-${Date.now()}.pdf`;
             }
 
             // Upload File
@@ -110,7 +113,7 @@ export default function BackgroundRemover() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        name: filename,
+                        name: customTitle || filename,
                         productNumber: 'FREISTELLER'
                     })
                 });
@@ -124,8 +127,9 @@ export default function BackgroundRemover() {
                     body: JSON.stringify({
                         fileUrl: fileUrl,
                         fileName: filename,
+                        customName: customTitle,
                         thumbnailUrl: thumbUrl,
-                        type: 'print'
+                        type: fileType // 'preview' or 'print'
                     })
                 });
                 
@@ -153,10 +157,10 @@ export default function BackgroundRemover() {
 
                 const newFile = {
                     name: filename,
-                    type: 'print' as const,
+                    type: fileType,
                     url: fileUrl,
                     thumbnail: thumbUrl,
-                    customName: filename
+                    customName: customTitle || filename
                 };
 
                 const existingFiles = archiveOrder?.files || [];
@@ -236,34 +240,77 @@ export default function BackgroundRemover() {
 
                     {processedImage && (
                         <div className="mt-4 space-y-4">
-                            <div className="flex gap-4 p-4 bg-gray-50 rounded-lg">
-                                <div className="flex-1">
-                                    <label className="block text-sm font-medium mb-2">Speichern als:</label>
-                                    <div className="flex gap-4">
-                                        <label className="flex items-center">
-                                            <input 
-                                                type="radio" 
-                                                name="saveMode" 
-                                                value="archive" 
-                                                checked={saveMode === 'archive'} 
-                                                onChange={() => setSaveMode('archive')}
-                                                className="mr-2"
-                                            />
-                                            <Archive size={16} className="mr-1" />
-                                            Nur Archiv
-                                        </label>
-                                        <label className="flex items-center">
-                                            <input 
-                                                type="radio" 
-                                                name="saveMode" 
-                                                value="customer" 
-                                                checked={saveMode === 'customer'} 
-                                                onChange={() => setSaveMode('customer')}
-                                                className="mr-2"
-                                            />
-                                            <User size={16} className="mr-1" />
-                                            Kunde zuordnen
-                                        </label>
+                            <div className="flex gap-4 p-4 bg-gray-50 rounded-lg flex-col">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Titel / Dateiname</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border rounded p-2"
+                                        value={customTitle}
+                                        onChange={(e) => setCustomTitle(e.target.value)}
+                                        placeholder="z.B. Hoodie Freigestellt"
+                                    />
+                                </div>
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-2">Speichern als:</label>
+                                        <div className="flex flex-col gap-2">
+                                            <label className="flex items-center">
+                                                <input 
+                                                    type="radio" 
+                                                    name="saveMode" 
+                                                    value="archive" 
+                                                    checked={saveMode === 'archive'} 
+                                                    onChange={() => setSaveMode('archive')}
+                                                    className="mr-2"
+                                                />
+                                                <Archive size={16} className="mr-1" />
+                                                Nur Archiv
+                                            </label>
+                                            <label className="flex items-center">
+                                                <input 
+                                                    type="radio" 
+                                                    name="saveMode" 
+                                                    value="customer" 
+                                                    checked={saveMode === 'customer'} 
+                                                    onChange={() => setSaveMode('customer')}
+                                                    className="mr-2"
+                                                />
+                                                <User size={16} className="mr-1" />
+                                                Kunde zuordnen
+                                            </label>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-sm font-medium mb-2">Datei-Typ:</label>
+                                        <div className="flex flex-col gap-2">
+                                            <label className="flex items-center">
+                                                <input 
+                                                    type="radio" 
+                                                    name="fileType" 
+                                                    value="preview" 
+                                                    checked={fileType === 'preview'} 
+                                                    onChange={() => setFileType('preview')}
+                                                    className="mr-2"
+                                                />
+                                                <ImageIcon size={16} className="mr-1 text-blue-500" />
+                                                Vorschau (Ansichtsbild)
+                                            </label>
+                                            <label className="flex items-center">
+                                                <input 
+                                                    type="radio" 
+                                                    name="fileType" 
+                                                    value="print" 
+                                                    checked={fileType === 'print'} 
+                                                    onChange={() => setFileType('print')}
+                                                    className="mr-2"
+                                                />
+                                                <Printer size={16} className="mr-1 text-red-500" />
+                                                Druckdaten
+                                            </label>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
