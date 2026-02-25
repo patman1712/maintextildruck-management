@@ -3,6 +3,7 @@ import { useAppStore } from '@/store';
 import { Image as ImageIcon, Save, Upload, Plus, Move, Trash2, ZoomIn, RotateCw, X, Download, Printer, Shirt } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from "jspdf";
+import { PREVIEW_TEMPLATES } from "@/utils/preview-templates";
 
 interface CanvasElement {
     id: string;
@@ -16,14 +17,7 @@ interface CanvasElement {
     scale: number;
 }
 
-const TEMPLATES = [
-    { id: 'tshirt', name: 'T-Shirt', url: 'https://placehold.co/800x1000/eeeeee/333333?text=T-Shirt+Template' },
-    { id: 'hoodie', name: 'Hoodie', url: 'https://placehold.co/800x1000/eeeeee/333333?text=Hoodie+Template' },
-    { id: 'jacket', name: 'Sweat Jacke', url: 'https://placehold.co/800x1000/eeeeee/333333?text=Sweat+Jacke+Template' },
-    { id: 'jersey', name: 'Trikot', url: 'https://placehold.co/800x1000/eeeeee/333333?text=Trikot+Template' },
-    { id: 'pants', name: 'Hose', url: 'https://placehold.co/800x1000/eeeeee/333333?text=Hose+Template' },
-    { id: 'shorts', name: 'Kurze Hose', url: 'https://placehold.co/800x1000/eeeeee/333333?text=Shorts+Template' },
-];
+const TEMPLATES = PREVIEW_TEMPLATES;
 
 export default function PreviewGenerator() {
     const [template, setTemplate] = useState<string | null>(null);
