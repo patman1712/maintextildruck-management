@@ -65,6 +65,7 @@ export interface Order {
   files: { name: string; type: 'preview' | 'print' | 'vector'; url?: string; file?: File; customName?: string;
   thumbnail?: string;
   reference?: string;
+  status?: 'pending' | 'ordered';
 }[];
   orderItems?: OrderItem[]; // New field
   approvalStatus?: 'pending' | 'approved' | 'rejected';

@@ -100,12 +100,13 @@ export default function DTFOrdering() {
   if (manualOrder) {
       const filesByRef: Record<string, any[]> = {};
       (manualOrder.files || []).forEach(f => {
-          if (f.type === 'print' || f.type === 'vector') {
-              const ref = f.reference || 'Unbekannt';
-              if (!filesByRef[ref]) filesByRef[ref] = [];
-              filesByRef[ref].push(f);
-          }
-      });
+           // Filter out ordered files
+           if ((f.type === 'print' || f.type === 'vector') && f.status !== 'ordered') {
+               const ref = f.reference || 'Unbekannt';
+               if (!filesByRef[ref]) filesByRef[ref] = [];
+               filesByRef[ref].push(f);
+           }
+       });
 
       Object.entries(filesByRef).forEach(([ref, files]) => {
           manualGroups.push({
@@ -370,11 +371,31 @@ export default function DTFOrdering() {
                     const orderIds = new Set(selectedFiles.map(f => f.orderId));
                     let updatedCount = 0;
                     
+                    const manualOrder = orders.find(o => o.id === 'inventory-manual');
+                    let manualFilesChanged = false;
+                    let manualFiles = manualOrder?.files ? [...manualOrder.files] : [];
+
                     for (const orderId of Array.from(orderIds)) {
-                        if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
+                        if (orderId.startsWith('manual-group-')) {
+                            // Update status for files in this manual group
+                            const ref = orderId.replace('manual-group-', '');
+                            manualFiles = manualFiles.map(f => {
+                                const fRef = f.reference || 'Unbekannt';
+                                if (fRef === ref && (f.type === 'print' || f.type === 'vector')) {
+                                    manualFilesChanged = true;
+                                    return { ...f, status: 'ordered' as const };
+                                }
+                                return f;
+                            });
+                        } else if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
                             await updateOrder(orderId, { printStatus: 'ordered' });
                             updatedCount++;
                         }
+                    }
+
+                    if (manualFilesChanged && manualOrder) {
+                        await updateOrder(manualOrder.id, { files: manualFiles });
+                        updatedCount++;
                     }
                     
                     if (updatedCount > 0) {
