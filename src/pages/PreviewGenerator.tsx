@@ -41,6 +41,13 @@ export default function PreviewGenerator() {
     const [customTitle, setCustomTitle] = useState("");
     const [saveMode, setSaveMode] = useState<'archive' | 'customer'>('archive');
     const [selectedCustomer, setSelectedCustomer] = useState("");
+    const [assignToOrder, setAssignToOrder] = useState(false);
+    const [selectedOrderId, setSelectedOrderId] = useState("");
+
+    useEffect(() => {
+        setAssignToOrder(false);
+        setSelectedOrderId("");
+    }, [selectedCustomer]);
 
     // --- Canvas Logic ---
 
@@ -252,7 +259,25 @@ export default function PreviewGenerator() {
                     })
                 });
                 
-                alert("Erfolgreich als Vorschau beim Kunden gespeichert!");
+                // Assign to Order if selected
+                if (assignToOrder && selectedOrderId) {
+                     const order = orders.find(o => o.id === selectedOrderId);
+                     if (order) {
+                        const newFile = {
+                            name: filename,
+                            type: 'preview' as const,
+                            url: fileUrl,
+                            thumbnail: thumbUrl,
+                            customName: customTitle || filename
+                        };
+                        const existingFiles = order.files || [];
+                        await updateOrder(selectedOrderId, {
+                            files: [...existingFiles, newFile]
+                        });
+                     }
+                }
+
+                alert("Erfolgreich als Vorschau beim Kunden gespeichert!" + (assignToOrder && selectedOrderId ? " Und dem Auftrag zugewiesen." : ""));
             } else {
                 // Archive
                 const archiveId = 'preview-archive';
@@ -499,16 +524,50 @@ export default function PreviewGenerator() {
                         </div>
 
                         {saveMode === 'customer' && (
-                            <select 
-                                className="w-full border rounded p-2 text-sm"
-                                value={selectedCustomer}
-                                onChange={(e) => setSelectedCustomer(e.target.value)}
-                            >
-                                <option value="">Kunde wählen...</option>
-                                {customers.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
+                            <>
+                                <select 
+                                    className="w-full border rounded p-2 text-sm"
+                                    value={selectedCustomer}
+                                    onChange={(e) => setSelectedCustomer(e.target.value)}
+                                >
+                                    <option value="">Kunde wählen...</option>
+                                    {customers.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+
+                                {selectedCustomer && orders.filter(o => o.customerId === selectedCustomer && o.status === 'active').length > 0 && (
+                                    <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
+                                        <label className="flex items-center text-xs font-medium text-gray-700 mb-2 cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                className="mr-2"
+                                                checked={assignToOrder}
+                                                onChange={(e) => setAssignToOrder(e.target.checked)}
+                                            />
+                                            Auch einem offenen Auftrag zuweisen?
+                                        </label>
+                                        
+                                        {assignToOrder && (
+                                            <select 
+                                                className="w-full border rounded p-1.5 text-xs"
+                                                value={selectedOrderId}
+                                                onChange={(e) => setSelectedOrderId(e.target.value)}
+                                            >
+                                                <option value="">Auftrag wählen...</option>
+                                                {orders
+                                                    .filter(o => o.customerId === selectedCustomer && o.status === 'active')
+                                                    .map(o => (
+                                                        <option key={o.id} value={o.id}>
+                                                            #{o.orderNumber || o.id.substr(0,8)} - {o.title}
+                                                        </option>
+                                                    ))
+                                                }
+                                            </select>
+                                        )}
+                                    </div>
+                                )}
+                            </>
                         )}
 
                         <div className="border-t pt-4 space-y-2">
