@@ -51,7 +51,10 @@ export function PushNotificationManager() {
 
       // 2. Get Public Key
       const response = await fetch('/api/push/public-key');
-      if (!response.ok) throw new Error('Server-Verbindung fehlgeschlagen');
+      if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Server-Fehler (${response.status}): ${errorText.substring(0, 50)}`);
+      }
       
       const data = await response.json();
       if (!data.success || !data.publicKey) {
