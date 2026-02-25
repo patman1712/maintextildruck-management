@@ -320,7 +320,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const handleSelectProduct = (product: any, customer: any) => {
         setNewItem(prev => ({
             ...prev,
-            itemName: `${product.name} ${product.product_number ? `(${product.product_number})` : ''}`,
+            itemName: product.name,
+            itemNumber: product.product_number || '',
             supplierId: product.supplier_id || prev.supplierId,
             manualOrderNumber: prev.manualOrderNumber || customer.name,
             files: product.files || []
@@ -331,6 +332,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const [newItem, setNewItem] = useState({
     supplierId: '',
     itemName: '',
+    itemNumber: '',
     manualOrderNumber: '',
     color: '',
     size: '',
@@ -375,6 +377,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         setNewItem({
             supplierId: newItem.supplierId,
             itemName: '',
+            itemNumber: '',
             manualOrderNumber: newItem.manualOrderNumber,
             color: '',
             size: '',
@@ -489,8 +492,9 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         body += `(${orderTitle})\n`;
         itemsByOrder[orderTitle].forEach(item => {
             const quantityPrefix = item.quantity > 1 ? `${item.quantity}x ` : '';
-            const itemNumberStr = item.itemNumber ? ` (${item.itemNumber})` : '';
-            body += `${quantityPrefix}${item.itemName}${itemNumberStr} | ${item.size} ${item.color ? `| ${item.color}` : ''}\n`;
+            // Use itemNumber if available, otherwise fallback to itemName
+            const identifier = item.itemNumber ? item.itemNumber : item.itemName;
+            body += `${quantityPrefix}${identifier} | ${item.size} ${item.color ? `| ${item.color}` : ''}\n`;
         });
         body += `\n`;
     });
