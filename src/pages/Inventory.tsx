@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAppStore, Supplier, OrderItem } from '@/store';
-import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, Send, RotateCcw, Search, User, Package, ChevronDown, ChevronRight, Save } from 'lucide-react';
+import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, RotateCcw, Search, User, Package, ChevronDown, ChevronRight, Save, X } from 'lucide-react';
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState<'orders' | 'completed' | 'suppliers'>('orders');
@@ -54,7 +54,6 @@ export default function Inventory() {
 }
 
 function SuppliersTab() {
-  // ... existing SuppliersTab code ...
   const suppliers = useAppStore((state) => state.suppliers);
   const addSupplier = useAppStore((state) => state.addSupplier);
   const updateSupplier = useAppStore((state) => state.updateSupplier);
@@ -567,8 +566,6 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
     // Use a slight delay to ensure the mail client has triggered before showing the modal
     setTimeout(() => {
-        // We use window.confirm here. In a real app, a custom modal is better, 
-        // but confirm blocks execution which is what we want here to wait for user feedback.
         if (window.confirm("Haben Sie die E-Mail erfolgreich versendet?\n\nKlicken Sie auf 'OK', um die Artikel als 'Bestellt' zu markieren.\nKlicken Sie auf 'Abbrechen', wenn Sie die Mail doch nicht gesendet haben.")) {
             // Process updates sequentially to avoid race conditions
             (async () => {
@@ -812,33 +809,199 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     </div>
     )}
 
-        {/* Modal for manual adding - Always available */}
+        {/* Modal for manual adding - VERTICAL LAYOUT */}
         {showAddItemModal && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 text-left">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col p-6">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl h-[90vh] flex flex-col p-6">
                     <div className="flex justify-between items-center mb-4 border-b pb-2 shrink-0">
                         <h2 className="text-xl font-bold text-gray-800">
-                            {showProductPicker ? 'Kunden-Artikel auswählen' : 'Manuelle Bestellung hinzufügen'}
+                            Manuelle Bestellung hinzufügen
                         </h2>
-                        <div className="flex items-center">
-                            {showProductPicker && (
-                                <button 
-                                    onClick={() => setShowProductPicker(false)}
-                                    className="mr-4 text-sm text-gray-500 hover:text-gray-700 underline"
+                        <button onClick={() => setShowAddItemModal(false)} className="text-gray-400 hover:text-gray-600">
+                            <Plus size={24} className="rotate-45" />
+                        </button>
+                    </div>
+                    
+                    <div className="flex flex-col flex-1 overflow-hidden gap-6 overflow-y-auto">
+                        {/* 1. Header Settings */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200 shrink-0">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Standard Lieferant (für alle Positionen)</label>
+                                <select 
+                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                    value={manualOrderSettings.defaultSupplierId}
+                                    onChange={(e) => setManualOrderSettings({...manualOrderSettings, defaultSupplierId: e.target.value})}
                                 >
-                                    Zurück
+                                    <option value="">Bitte wählen...</option>
+                                    {suppliers.map(s => (
+                                        <option key={s.id} value={s.id}>{s.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">Auftragsnummer / Referenz (für alle Positionen)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                    placeholder="z.B. 2026-0012"
+                                    value={manualOrderSettings.manualOrderNumber}
+                                    onChange={(e) => setManualOrderSettings({...manualOrderSettings, manualOrderNumber: e.target.value})}
+                                />
+                            </div>
+                        </div>
+
+                        {/* 2. New Position Form */}
+                        <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm shrink-0">
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="font-semibold text-gray-700">Neue Position</h3>
+                                <button 
+                                    onClick={() => setShowProductPicker(true)}
+                                    className="text-xs text-red-600 hover:text-red-800 underline font-medium flex items-center"
+                                >
+                                    <Package size={14} className="mr-1" />
+                                    Aus Kundenartikel wählen
                                 </button>
-                            )}
-                            <button onClick={() => setShowAddItemModal(false)} className="text-gray-400 hover:text-gray-600">
-                                <Plus size={24} className="rotate-45" />
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                                <div className="md:col-span-5">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Artikelname / Art.-Nr. / Farbe</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                        value={currentItem.itemName}
+                                        onChange={(e) => setCurrentItem({...currentItem, itemName: e.target.value})}
+                                        placeholder="z.B. Hoodie 12345 Navy"
+                                        autoFocus
+                                    />
+                                </div>
+                                
+                                <div className="md:col-span-3">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Anzahl</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                        value={currentItem.size}
+                                        onChange={(e) => setCurrentItem({...currentItem, size: e.target.value})}
+                                        placeholder="z.B. 5x XL"
+                                    />
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Notiz</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                        value={currentItem.notes}
+                                        onChange={(e) => setCurrentItem({...currentItem, notes: e.target.value})}
+                                        placeholder="Optional"
+                                    />
+                                </div>
+
+                                <div className="md:col-span-2 flex items-end">
+                                    <button
+                                        onClick={addCurrentItemToPending}
+                                        disabled={!currentItem.itemName}
+                                        className="w-full bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-900 disabled:opacity-50 text-sm flex items-center justify-center h-[38px]"
+                                    >
+                                        <Plus size={16} className="mr-2" />
+                                        Hinzufügen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 3. Pending Items List */}
+                        <div className="flex-1 overflow-hidden border rounded-lg flex flex-col min-h-[200px]">
+                            <div className="bg-gray-50 p-2 border-b font-medium text-sm text-gray-700 flex justify-between items-center">
+                                <span>Geplante Positionen ({pendingItems.length})</span>
+                                {pendingItems.length > 0 && (
+                                    <button onClick={() => setPendingItems([])} className="text-xs text-red-600 hover:underline">
+                                        Alle löschen
+                                    </button>
+                                )}
+                            </div>
+                            
+                            <div className="overflow-y-auto flex-1 bg-white">
+                                {pendingItems.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-gray-400 p-8">
+                                        <ShoppingCart size={32} className="mb-2 opacity-50" />
+                                        <p className="text-sm text-center">Noch keine Positionen.</p>
+                                    </div>
+                                ) : (
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50 sticky top-0">
+                                            <tr>
+                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Artikel / Farbe</th>
+                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Größe / Anzahl</th>
+                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lieferant</th>
+                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notiz</th>
+                                                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aktion</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {pendingItems.map((item, idx) => (
+                                                <tr key={item._tempId || idx} className="hover:bg-gray-50">
+                                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                                                        {item.itemName}
+                                                        {item.itemNumber && <span className="ml-2 text-xs text-gray-400">#{item.itemNumber}</span>}
+                                                    </td>
+                                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 font-bold">
+                                                        {item.quantity > 1 ? `${item.quantity}x ` : ''}{item.size}
+                                                    </td>
+                                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                                                        {suppliers.find(s => s.id === item.supplierId)?.name || 'Standard'}
+                                                    </td>
+                                                    <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 italic">{item.notes}</td>
+                                                    <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
+                                                        <button 
+                                                            onClick={() => removePendingItem(item._tempId)}
+                                                            className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="flex justify-end space-x-3 shrink-0 pt-4 border-t mt-auto">
+                            <button
+                                onClick={() => setShowAddItemModal(false)}
+                                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                            >
+                                Abbrechen
+                            </button>
+                            <button
+                                onClick={handleSaveAll}
+                                disabled={pendingItems.length === 0}
+                                className="bg-red-600 text-white px-6 py-2 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center font-medium shadow-sm"
+                            >
+                                <Save className="mr-2" size={18} />
+                                {pendingItems.length} Positionen speichern
                             </button>
                         </div>
                     </div>
-                    
-                    {showProductPicker ? (
-                        <div className="flex flex-col flex-1 overflow-hidden">
-                             <div className="mb-4 shrink-0">
-                                <div className="relative">
+                </div>
+
+                {/* PRODUCT PICKER MODAL (Overlay) */}
+                {showProductPicker && (
+                    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+                        <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl h-[80vh] flex flex-col">
+                            <div className="p-4 border-b flex justify-between items-center">
+                                <h3 className="text-lg font-bold text-gray-800">Kunden-Artikel auswählen</h3>
+                                <button onClick={() => setShowProductPicker(false)} className="text-gray-500 hover:text-gray-700">
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            
+                            <div className="flex flex-col flex-1 overflow-hidden p-4">
+                                <div className="mb-4 shrink-0 relative">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                                     <input 
                                         type="text" 
@@ -849,200 +1012,55 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                         autoFocus
                                     />
                                 </div>
-                             </div>
-                             
-                             <div className="flex-1 overflow-y-auto border rounded bg-gray-50 p-2 space-y-2">
-                                {customers
-                                    .filter(c => c.name.toLowerCase().includes(productSearch.toLowerCase()))
-                                    .map(customer => {
-                                    const isExpanded = expandedCustomers.has(customer.id);
-                                    const isLoading = loadingProducts.has(customer.id);
-                                    const products = customerProducts[customer.id] || [];
-                                    
-                                    return (
-                                        <div key={customer.id} className="bg-white border border-gray-200 rounded overflow-hidden">
-                                            <button 
-                                                onClick={() => toggleCustomer(customer.id)}
-                                                className="w-full flex items-center justify-between p-3 hover:bg-gray-50 text-left"
-                                            >
-                                                <div className="flex items-center">
-                                                    {isExpanded ? <ChevronDown size={18} className="text-gray-400 mr-2" /> : <ChevronRight size={18} className="text-gray-400 mr-2" />}
-                                                    <User size={16} className="text-blue-500 mr-2" />
-                                                    <span className="font-medium text-slate-800">{customer.name}</span>
-                                                </div>
-                                                <span className="text-xs text-gray-400">{isExpanded && isLoading ? 'Lade...' : ''}</span>
-                                            </button>
-                                            
-                                            {isExpanded && (
-                                                <div className="border-t border-gray-100 bg-gray-50 p-2 space-y-1">
-                                                    {!isLoading && products.length === 0 && <p className="text-xs text-gray-500 pl-8 py-2">Keine Artikel gefunden.</p>}
-                                                    {products.map(product => (
-                                                        <button 
-                                                            key={product.id}
-                                                            onClick={() => handleSelectProduct(product, customer)}
-                                                            className="w-full flex items-center p-2 pl-8 hover:bg-red-50 text-left rounded transition-colors group"
-                                                        >
-                                                            <Package size={14} className="text-gray-400 mr-2 group-hover:text-red-500" />
-                                                            <div>
-                                                                <div className="text-sm font-medium text-gray-700 group-hover:text-red-700">{product.name}</div>
-                                                                {product.product_number && <div className="text-xs text-gray-500">{product.product_number}</div>}
-                                                            </div>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                             </div>
-                        </div>
-                    ) : (
-                        <div className="flex flex-col flex-1 overflow-hidden gap-6">
-                            {/* Header Settings */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200 shrink-0">
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Standard Lieferant (für alle Positionen)</label>
-                                    <select 
-                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                        value={manualOrderSettings.defaultSupplierId}
-                                        onChange={(e) => setManualOrderSettings({...manualOrderSettings, defaultSupplierId: e.target.value})}
-                                    >
-                                        <option value="">Bitte wählen...</option>
-                                        {suppliers.map(s => (
-                                            <option key={s.id} value={s.id}>{s.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Auftragsnummer / Referenz (für alle Positionen)</label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                        placeholder="z.B. 2026-0012"
-                                        value={manualOrderSettings.manualOrderNumber}
-                                        onChange={(e) => setManualOrderSettings({...manualOrderSettings, manualOrderNumber: e.target.value})}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex-1 flex flex-col lg:flex-row gap-6 overflow-hidden min-h-0">
-                                {/* Left: Add New Item Form */}
-                                <div className="lg:w-1/3 flex flex-col gap-4 overflow-y-auto pr-2 shrink-0">
-                                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-                                        <h3 className="font-semibold text-gray-700 mb-3">Neue Position</h3>
+                                
+                                <div className="flex-1 overflow-y-auto border rounded bg-gray-50 p-2 space-y-2">
+                                    {customers
+                                        .filter(c => c.name.toLowerCase().includes(productSearch.toLowerCase()))
+                                        .map(customer => {
+                                        const isExpanded = expandedCustomers.has(customer.id);
+                                        const isLoading = loadingProducts.has(customer.id);
+                                        const products = customerProducts[customer.id] || [];
                                         
-                                        <button 
-                                            onClick={() => setShowProductPicker(true)}
-                                            className="w-full border-2 border-dashed border-gray-300 rounded-lg p-3 text-gray-500 hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-all flex items-center justify-center font-medium text-sm mb-4"
-                                        >
-                                            <Search size={16} className="mr-2" />
-                                            Aus Kunden-Liste wählen
-                                        </button>
-
-                                        <div className="border-t border-gray-200 mb-4"></div>
-
-                                        <div className="space-y-3">
-                                            {/* Simplified Fields */}
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikelname / Art.-Nr. / Farbe</label>
-                                                <input 
-                                                    type="text" 
-                                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                                    value={currentItem.itemName}
-                                                    onChange={(e) => setCurrentItem({...currentItem, itemName: e.target.value})}
-                                                    placeholder="z.B. Hoodie 12345 Navy"
-                                                    autoFocus
-                                                />
-                                            </div>
-                                            
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Anzahl</label>
-                                                <input 
-                                                    type="text" 
-                                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                                    value={currentItem.size}
-                                                    onChange={(e) => setCurrentItem({...currentItem, size: e.target.value})}
-                                                    placeholder="z.B. 5x XL"
-                                                />
-                                            </div>
-
-                                            <button
-                                                onClick={addCurrentItemToPending}
-                                                disabled={!currentItem.itemName}
-                                                className="w-full bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-900 disabled:opacity-50 mt-2 text-sm flex items-center justify-center"
-                                            >
-                                                <Plus size={16} className="mr-2" />
-                                                Zur Liste hinzufügen
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Right: Pending Items List */}
-                                <div className="lg:w-2/3 flex flex-col bg-gray-50 rounded-lg border border-gray-200 overflow-hidden min-h-0">
-                                    <div className="p-3 bg-gray-100 border-b border-gray-200 font-semibold text-gray-700 flex justify-between items-center shrink-0">
-                                        <span>Geplante Positionen ({pendingItems.length})</span>
-                                        {pendingItems.length > 0 && (
-                                            <button onClick={() => setPendingItems([])} className="text-xs text-red-600 hover:underline">
-                                                Alle löschen
-                                            </button>
-                                        )}
-                                    </div>
-                                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                                        {pendingItems.length === 0 ? (
-                                            <div className="h-full flex flex-col items-center justify-center text-gray-400 py-10">
-                                                <ShoppingCart size={32} className="mb-2 opacity-50" />
-                                                <p className="text-sm text-center">Noch keine Positionen.<br/>Fügen Sie Artikel links hinzu.</p>
-                                            </div>
-                                        ) : (
-                                            pendingItems.map((item, idx) => (
-                                                <div key={item._tempId || idx} className="bg-white p-3 rounded border border-gray-200 shadow-sm flex justify-between items-start text-sm hover:bg-gray-50">
-                                                    <div>
-                                                        <div className="font-bold text-gray-800 flex items-center">
-                                                            {item.itemName}
-                                                        </div>
-                                                        <div className="text-gray-600 text-xs mt-1 flex flex-wrap gap-2">
-                                                            {item.itemNumber && <span className="bg-gray-100 px-1 rounded">#{item.itemNumber}</span>}
-                                                            {item.size && <span>Gr: {item.size}</span>}
-                                                            {item.color && <span>{item.color}</span>}
-                                                        </div>
-                                                        <div className="text-gray-400 text-xs mt-1 italic">
-                                                            Lieferant: {suppliers.find(s => s.id === (item.supplierId || manualOrderSettings.defaultSupplierId))?.name || 'Standard'}
-                                                        </div>
+                                        return (
+                                            <div key={customer.id} className="bg-white border border-gray-200 rounded overflow-hidden">
+                                                <button 
+                                                    onClick={() => toggleCustomer(customer.id)}
+                                                    className="w-full flex items-center justify-between p-3 hover:bg-gray-50 text-left"
+                                                >
+                                                    <div className="flex items-center">
+                                                        {isExpanded ? <ChevronDown size={18} className="text-gray-400 mr-2" /> : <ChevronRight size={18} className="text-gray-400 mr-2" />}
+                                                        <User size={16} className="text-blue-500 mr-2" />
+                                                        <span className="font-medium text-slate-800">{customer.name}</span>
                                                     </div>
-                                                    <button 
-                                                        onClick={() => removePendingItem(item._tempId)}
-                                                        className="text-gray-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50"
-                                                        title="Entfernen"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
+                                                    <span className="text-xs text-gray-400">{isExpanded && isLoading ? 'Lade...' : ''}</span>
+                                                </button>
+                                                
+                                                {isExpanded && (
+                                                    <div className="border-t border-gray-100 bg-gray-50 p-2 space-y-1">
+                                                        {!isLoading && products.length === 0 && <p className="text-xs text-gray-500 pl-8 py-2">Keine Artikel gefunden.</p>}
+                                                        {products.map(product => (
+                                                            <button 
+                                                                key={product.id}
+                                                                onClick={() => handleSelectProduct(product, customer)}
+                                                                className="w-full flex items-center p-2 pl-8 hover:bg-red-50 text-left rounded transition-colors group"
+                                                            >
+                                                                <Package size={14} className="text-gray-400 mr-2 group-hover:text-red-500" />
+                                                                <div>
+                                                                    <div className="text-sm font-medium text-gray-700 group-hover:text-red-700">{product.name}</div>
+                                                                    {product.product_number && <div className="text-xs text-gray-500">{product.product_number}</div>}
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            </div>
-
-                            <div className="flex justify-end space-x-3 shrink-0 pt-4 border-t mt-auto">
-                                <button
-                                    onClick={() => setShowAddItemModal(false)}
-                                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                                >
-                                    Abbrechen
-                                </button>
-                                <button
-                                    onClick={handleSaveAll}
-                                    disabled={pendingItems.length === 0}
-                                    className="bg-red-600 text-white px-6 py-2 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center font-medium shadow-sm"
-                                >
-                                    <Save className="mr-2" size={18} />
-                                    {pendingItems.length} Positionen speichern
-                                </button>
                             </div>
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
         )}
     </>
