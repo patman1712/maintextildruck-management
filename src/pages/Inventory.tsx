@@ -355,7 +355,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                      const printFiles = newItem.files.filter((f: any) => f.type === 'print' || f.type === 'vector');
                      
                      // Temporary Debug
-                     // alert(`Debug: Found ${printFiles.length} print files. Adding to order...`);
+                     alert(`DEBUG: Selected Item has ${printFiles.length} print files. (Raw: ${newItem.files?.length})`);
                      
                      const newOrderFiles = printFiles.map((f: any) => ({
                          name: f.file_name || f.name || 'Unbenannt',
