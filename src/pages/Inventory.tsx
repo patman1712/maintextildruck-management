@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useAppStore, Supplier, OrderItem } from '@/store';
-import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, Send, RotateCcw, Search, User, Package, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, Send, RotateCcw, Search, User, Package, ChevronDown, ChevronRight, Save } from 'lucide-react';
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState<'orders' | 'completed' | 'suppliers'>('orders');
@@ -296,6 +296,25 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const [customerProducts, setCustomerProducts] = useState<Record<string, any[]>>({});
   const [loadingProducts, setLoadingProducts] = useState<Set<string>>(new Set());
 
+  // Grouped Manual Order State
+  const [manualOrderSettings, setManualOrderSettings] = useState({
+      manualOrderNumber: '',
+      defaultSupplierId: ''
+  });
+  
+  const [pendingItems, setPendingItems] = useState<any[]>([]);
+  
+  const [currentItem, setCurrentItem] = useState({
+      supplierId: '',
+      itemName: '',
+      itemNumber: '',
+      color: '',
+      size: '',
+      quantity: 1,
+      notes: '',
+      files: [] as any[]
+  });
+
   const toggleCustomer = async (customerId: string) => {
       const newExpanded = new Set(expandedCustomers);
       if (newExpanded.has(customerId)) {
@@ -318,54 +337,87 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   };
 
   const handleSelectProduct = (product: any, customer: any) => {
-        setNewItem(prev => ({
-            ...prev,
+        const newItem = {
+            _tempId: Math.random().toString(),
+            supplierId: product.supplier_id || manualOrderSettings.defaultSupplierId,
             itemName: product.name,
             itemNumber: product.product_number || '',
-            supplierId: product.supplier_id || prev.supplierId,
-            manualOrderNumber: prev.manualOrderNumber || customer.name,
-            files: product.files || []
-        }));
+            color: '',
+            size: '',
+            quantity: 1,
+            notes: '',
+            files: product.files || [],
+            manualOrderNumber: manualOrderSettings.manualOrderNumber || customer.name
+        };
+        setPendingItems(prev => [...prev, newItem]);
         setShowProductPicker(false);
     };
 
-  const [newItem, setNewItem] = useState({
-    supplierId: '',
-    itemName: '',
-    itemNumber: '',
-    manualOrderNumber: '',
-    color: '',
-    size: '',
-    quantity: 1,
-    notes: '',
-    files: [] as any[]
-  });
+  const addCurrentItemToPending = () => {
+      if (!currentItem.itemName) return;
+      setPendingItems(prev => [...prev, {
+          ...currentItem,
+          _tempId: Math.random().toString(),
+          supplierId: currentItem.supplierId || manualOrderSettings.defaultSupplierId,
+          manualOrderNumber: manualOrderSettings.manualOrderNumber
+      }]);
+      // Reset current item but keep supplier context if desired? 
+      // User might want to add multiple items from same supplier
+      setCurrentItem(prev => ({
+          ...prev,
+          itemName: '',
+          itemNumber: '',
+          color: '',
+          size: '',
+          quantity: 1,
+          notes: '',
+          files: []
+      }));
+  };
 
-  const handleManualAddItem = async () => {
-    if (newItem.supplierId && newItem.itemName) {
-        const manualOrderId = await ensureManualOrder();
-        await addOrderItem(manualOrderId, newItem);
+  const removePendingItem = (tempId: string) => {
+      setPendingItems(prev => prev.filter(i => i._tempId !== tempId));
+  };
 
-        // Add files to order if present (from product picker)
-         if (newItem.files && newItem.files.length > 0) {
-              // Fetch latest orders from store to ensure we have the newly created manual order if applicable
+  const handleSaveAll = async () => {
+    if (pendingItems.length === 0) return;
+    
+    const manualOrderId = await ensureManualOrder();
+    
+    for (const item of pendingItems) {
+        const finalOrderNumber = manualOrderSettings.manualOrderNumber || item.manualOrderNumber;
+        
+        const itemPayload = {
+            supplierId: item.supplierId || manualOrderSettings.defaultSupplierId,
+            itemName: item.itemName,
+            itemNumber: item.itemNumber,
+            manualOrderNumber: finalOrderNumber,
+            color: item.color,
+            size: item.size,
+            quantity: item.quantity,
+            notes: item.notes,
+            files: item.files
+        };
+        
+        await addOrderItem(manualOrderId, itemPayload);
+
+         if (itemPayload.files && itemPayload.files.length > 0) {
               const latestOrders = useAppStore.getState().orders;
               const order = latestOrders.find(o => o.id === manualOrderId);
               
               if (order) {
                  const existingFiles = order.files || [];
-                     const printFiles = newItem.files.filter((f: any) => f.type === 'print' || f.type === 'vector');
+                     const printFiles = itemPayload.files.filter((f: any) => f.type === 'print' || f.type === 'vector');
                      
                      const newOrderFiles = printFiles.map((f: any) => ({
                          name: f.file_name || f.name || 'Unbenannt',
                          type: f.type,
-                         url: f.file_url || f.url || f.path, // Support different property names
+                         url: f.file_url || f.url || f.path, 
                          thumbnail: f.thumbnail_url || f.thumbnail,
                          customName: f.file_name || f.customName,
-                         reference: newItem.manualOrderNumber // Use the manual order number from input
+                         reference: finalOrderNumber 
                      }));
 
-                     // Always add files, even if URL exists, because they might belong to a different manual reference/order
                      if (newOrderFiles.length > 0) {
                          await updateOrder(manualOrderId, {
                              files: [...existingFiles, ...newOrderFiles]
@@ -373,20 +425,11 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                      }
                  }
             }
-        
-        setNewItem({
-            supplierId: newItem.supplierId,
-            itemName: '',
-            itemNumber: '',
-            manualOrderNumber: newItem.manualOrderNumber,
-            color: '',
-            size: '',
-            quantity: 1,
-            notes: '',
-            files: []
-        });
-        setShowAddItemModal(false);
     }
+    
+    setPendingItems([]);
+    setManualOrderSettings({ manualOrderNumber: '', defaultSupplierId: '' });
+    setShowAddItemModal(false);
   };
 
   // Group items by Supplier -> then list items with order info
@@ -836,82 +879,173 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                              </div>
                         </div>
                     ) : (
-                        <div className="flex flex-col flex-1 overflow-hidden">
-                            <div className="mb-4 shrink-0">
-                                <button 
-                                    onClick={() => setShowProductPicker(true)}
-                                    className="w-full border-2 border-dashed border-gray-300 rounded-lg p-3 text-gray-500 hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-all flex items-center justify-center font-medium"
-                                >
-                                    <Search size={18} className="mr-2" />
-                                    Artikel aus Kunden-Liste auswählen
-                                </button>
+                        <div className="flex flex-col flex-1 overflow-hidden gap-6">
+                            {/* Header Settings */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200 shrink-0">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Standard Lieferant (für alle Positionen)</label>
+                                    <select 
+                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                        value={manualOrderSettings.defaultSupplierId}
+                                        onChange={(e) => setManualOrderSettings({...manualOrderSettings, defaultSupplierId: e.target.value})}
+                                    >
+                                        <option value="">Bitte wählen...</option>
+                                        {suppliers.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Auftragsnummer / Referenz (für alle Positionen)</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                        placeholder="z.B. 2026-0012"
+                                        value={manualOrderSettings.manualOrderNumber}
+                                        onChange={(e) => setManualOrderSettings({...manualOrderSettings, manualOrderNumber: e.target.value})}
+                                    />
+                                </div>
                             </div>
 
-                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4 overflow-y-auto flex-1">
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                                    <div className="lg:col-span-3">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Lieferant / Shop</label>
-                                        {suppliers.length > 0 ? (
-                                            <select 
-                                                className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                                value={newItem.supplierId}
-                                                onChange={(e) => setNewItem({...newItem, supplierId: e.target.value})}
-                                            >
-                                                <option value="">Bitte wählen...</option>
-                                                {suppliers.map(s => (
-                                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                                ))}
-                                            </select>
-                                        ) : (
-                                            <div className="text-sm text-amber-600 border border-amber-200 bg-amber-50 p-2 rounded">
-                                                Bitte erst Lieferanten im Tab "Lieferanten" anlegen.
+                            <div className="flex-1 flex flex-col lg:flex-row gap-6 overflow-hidden min-h-0">
+                                {/* Left: Add New Item Form */}
+                                <div className="lg:w-1/3 flex flex-col gap-4 overflow-y-auto pr-2 shrink-0">
+                                    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                                        <h3 className="font-semibold text-gray-700 mb-3">Neue Position</h3>
+                                        
+                                        <button 
+                                            onClick={() => setShowProductPicker(true)}
+                                            className="w-full border-2 border-dashed border-gray-300 rounded-lg p-3 text-gray-500 hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-all flex items-center justify-center font-medium text-sm mb-4"
+                                        >
+                                            <Search size={16} className="mr-2" />
+                                            Aus Kunden-Liste wählen
+                                        </button>
+
+                                        <div className="border-t border-gray-200 mb-4"></div>
+
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Lieferant (Override)</label>
+                                                <select 
+                                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                                    value={currentItem.supplierId}
+                                                    onChange={(e) => setCurrentItem({...currentItem, supplierId: e.target.value})}
+                                                >
+                                                    <option value="">Wie Standard ({suppliers.find(s => s.id === manualOrderSettings.defaultSupplierId)?.name || '-'})</option>
+                                                    {suppliers.map(s => (
+                                                        <option key={s.id} value={s.id}>{s.name}</option>
+                                                    ))}
+                                                </select>
                                             </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikelname</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                                    value={currentItem.itemName}
+                                                    onChange={(e) => setCurrentItem({...currentItem, itemName: e.target.value})}
+                                                    placeholder="z.B. Hoodie"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikelnummer</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                                    value={currentItem.itemNumber}
+                                                    onChange={(e) => setCurrentItem({...currentItem, itemNumber: e.target.value})}
+                                                    placeholder="Optional"
+                                                />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <div className="flex-1">
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Größe</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                                        value={currentItem.size}
+                                                        onChange={(e) => setCurrentItem({...currentItem, size: e.target.value})}
+                                                    />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Menge</label>
+                                                    <input 
+                                                        type="number" 
+                                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                                        value={currentItem.quantity}
+                                                        onChange={(e) => setCurrentItem({...currentItem, quantity: parseInt(e.target.value) || 1})}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Farbe</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                                    value={currentItem.color}
+                                                    onChange={(e) => setCurrentItem({...currentItem, color: e.target.value})}
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={addCurrentItemToPending}
+                                                disabled={!currentItem.itemName}
+                                                className="w-full bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-900 disabled:opacity-50 mt-2 text-sm flex items-center justify-center"
+                                            >
+                                                <Plus size={16} className="mr-2" />
+                                                Zur Liste hinzufügen
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Right: Pending Items List */}
+                                <div className="lg:w-2/3 flex flex-col bg-gray-50 rounded-lg border border-gray-200 overflow-hidden min-h-0">
+                                    <div className="p-3 bg-gray-100 border-b border-gray-200 font-semibold text-gray-700 flex justify-between items-center shrink-0">
+                                        <span>Geplante Positionen ({pendingItems.length})</span>
+                                        {pendingItems.length > 0 && (
+                                            <button onClick={() => setPendingItems([])} className="text-xs text-red-600 hover:underline">
+                                                Alle löschen
+                                            </button>
                                         )}
                                     </div>
-                                    <div className="lg:col-span-3">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Auftragsnummer (Optional)</label>
-                                        <input 
-                                            type="text" 
-                                            className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                            placeholder="z.B. 2026-0012"
-                                            value={newItem.manualOrderNumber}
-                                            onChange={(e) => setNewItem({...newItem, manualOrderNumber: e.target.value})}
-                                        />
-                                    </div>
-                                    <div className="lg:col-span-2">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Artikel Nr./ Artikelname / Farbe</label>
-                                        <input 
-                                            type="text" 
-                                            className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                            placeholder="z.B. Premium Hoodie - Navy"
-                                            value={newItem.itemName}
-                                            onChange={(e) => setNewItem({...newItem, itemName: e.target.value})}
-                                        />
-                                    </div>
-                                    <div className="lg:col-span-2">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Anzahl</label>
-                                        <input 
-                                            type="text" 
-                                            className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                            placeholder="z.B. 5x XL, 3x L"
-                                            value={newItem.size}
-                                            onChange={(e) => setNewItem({...newItem, size: e.target.value})}
-                                        />
-                                    </div>
-                                    <div className="lg:col-span-2">
-                                        <label className="block text-xs font-medium text-gray-700 mb-1">Notizen (Optional)</label>
-                                        <input 
-                                            type="text" 
-                                            className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                            placeholder="..."
-                                            value={newItem.notes}
-                                            onChange={(e) => setNewItem({...newItem, notes: e.target.value})}
-                                        />
+                                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                                        {pendingItems.length === 0 ? (
+                                            <div className="h-full flex flex-col items-center justify-center text-gray-400 py-10">
+                                                <ShoppingCart size={32} className="mb-2 opacity-50" />
+                                                <p className="text-sm text-center">Noch keine Positionen.<br/>Fügen Sie Artikel links hinzu.</p>
+                                            </div>
+                                        ) : (
+                                            pendingItems.map((item, idx) => (
+                                                <div key={item._tempId || idx} className="bg-white p-3 rounded border border-gray-200 shadow-sm flex justify-between items-start text-sm hover:bg-gray-50">
+                                                    <div>
+                                                        <div className="font-bold text-gray-800 flex items-center">
+                                                            <span className="bg-gray-100 px-1.5 py-0.5 rounded mr-2 text-xs">{item.quantity}x</span>
+                                                            {item.itemName}
+                                                        </div>
+                                                        <div className="text-gray-600 text-xs mt-1 flex flex-wrap gap-2">
+                                                            {item.itemNumber && <span className="bg-gray-100 px-1 rounded">#{item.itemNumber}</span>}
+                                                            {item.size && <span>Gr: {item.size}</span>}
+                                                            {item.color && <span>{item.color}</span>}
+                                                        </div>
+                                                        <div className="text-gray-400 text-xs mt-1 italic">
+                                                            Lieferant: {suppliers.find(s => s.id === (item.supplierId || manualOrderSettings.defaultSupplierId))?.name || 'Standard'}
+                                                        </div>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => removePendingItem(item._tempId)}
+                                                        className="text-gray-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50"
+                                                        title="Entfernen"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            ))
+                                        )}
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="flex justify-end space-x-3 mt-auto shrink-0">
+                            <div className="flex justify-end space-x-3 shrink-0 pt-4 border-t mt-auto">
                                 <button
                                     onClick={() => setShowAddItemModal(false)}
                                     className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
@@ -919,12 +1053,12 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                     Abbrechen
                                 </button>
                                 <button
-                                    onClick={handleManualAddItem}
-                                    disabled={!newItem.supplierId || !newItem.itemName}
-                                    className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                                    onClick={handleSaveAll}
+                                    disabled={pendingItems.length === 0}
+                                    className="bg-red-600 text-white px-6 py-2 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center font-medium shadow-sm"
                                 >
-                                    <Plus size={16} className="mr-2" />
-                                    Hinzufügen
+                                    <Save className="mr-2" size={18} />
+                                    {pendingItems.length} Positionen speichern
                                 </button>
                             </div>
                         </div>
