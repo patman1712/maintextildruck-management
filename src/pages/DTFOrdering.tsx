@@ -225,27 +225,31 @@ export default function DTFOrdering() {
   };
 
   const addFile = (file: any) => {
-    if (selectedFiles.some(f => f.url === file.url)) {
-        // Increment quantity if already selected
-        setSelectedFiles(prev => prev.map(f => f.url === file.url ? { ...f, quantity: f.quantity + 1 } : f));
+    // Only increment if same file AND same order
+    const existingIndex = selectedFiles.findIndex(f => f.url === file.url && f.orderId === file.orderId);
+    
+    if (existingIndex >= 0) {
+        // Increment quantity
+        setSelectedFiles(prev => prev.map((f, idx) => idx === existingIndex ? { ...f, quantity: f.quantity + 1 } : f));
     } else {
-        // Add new
+        // Add new with unique ID for selection tracking
         setSelectedFiles(prev => [...prev, {
             ...file,
+            id: Math.random().toString(36).substr(2, 9), // Overwrite ID with unique selection ID
             quantity: 1,
-            width: 0, // Will be detected by backend or needs input? Ideally backend detects it.
+            width: 0,
             height: 0
         }]);
     }
   };
 
-  const removeFile = (url: string) => {
-    setSelectedFiles(prev => prev.filter(f => f.url !== url));
+  const removeFile = (id: string) => {
+    setSelectedFiles(prev => prev.filter(f => f.id !== id));
   };
 
-  const updateQuantity = (url: string, delta: number) => {
+  const updateQuantity = (id: string, delta: number) => {
     setSelectedFiles(prev => prev.map(f => {
-        if (f.url === url) {
+        if (f.id === id) {
             const newQty = Math.max(1, f.quantity + delta);
             return { ...f, quantity: newQty };
         }
@@ -550,11 +554,11 @@ export default function DTFOrdering() {
                             <p>Noch keine Dateien ausgewählt.</p>
                         </div>
                     ) : (
-                        selectedFiles.map((file, idx) => {
+                        selectedFiles.map((file) => {
                             // Match logic from CustomerDetails: try thumbnail, else url (for images or browser-supported formats)
                             const displayThumb = file.thumbnail || file.url;
                             return (
-                                <div key={`${file.url}-${idx}`} className="flex items-center bg-white border border-gray-200 p-2 rounded hover:border-red-200 transition-colors">
+                                <div key={file.id} className="flex items-center bg-white border border-gray-200 p-2 rounded hover:border-red-200 transition-colors">
                                     <div className="h-12 w-12 bg-gray-100 rounded overflow-hidden shrink-0 border border-gray-100 flex items-center justify-center relative">
                                         {displayThumb ? (
                                             <img src={displayThumb} alt="" className="h-full w-full object-contain" onError={(e) => {
@@ -573,11 +577,11 @@ export default function DTFOrdering() {
                                 </div>
                                 <div className="flex items-center space-x-3 ml-2">
                                     <div className="flex items-center border border-gray-300 rounded">
-                                        <button onClick={() => updateQuantity(file.url, -1)} className="px-2 py-1 hover:bg-gray-100 text-gray-600">-</button>
+                                        <button onClick={() => updateQuantity(file.id, -1)} className="px-2 py-1 hover:bg-gray-100 text-gray-600">-</button>
                                         <span className="px-2 text-sm font-medium w-8 text-center">{file.quantity}</span>
-                                        <button onClick={() => updateQuantity(file.url, 1)} className="px-2 py-1 hover:bg-gray-100 text-gray-600">+</button>
+                                        <button onClick={() => updateQuantity(file.id, 1)} className="px-2 py-1 hover:bg-gray-100 text-gray-600">+</button>
                                     </div>
-                                    <button onClick={() => removeFile(file.url)} className="text-gray-400 hover:text-red-600 p-1">
+                                    <button onClick={() => removeFile(file.id)} className="text-gray-400 hover:text-red-600 p-1">
                                         <Trash2 size={18} />
                                     </button>
                                 </div>
