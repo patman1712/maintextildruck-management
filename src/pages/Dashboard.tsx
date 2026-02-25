@@ -33,7 +33,7 @@ const MENU_ITEMS: MenuItem[] = [
         { id: 'dtf', label: 'DTF-Bestellen', to: '/dashboard/dtf', icon: Printer },
         { id: 'dtf_pdfs', label: 'Fertige DTF PDFs', to: '/dashboard/dtf/pdfs', icon: FileText },
         { id: 'dtf_archive', label: 'Datei-Archiv', to: '/dashboard/dtf/archive', icon: Archive },
-        { id: 'dtf_remove_bg', label: 'Freisteller', to: '/dashboard/dtf/remove-bg', icon: ImageIcon },
+        { id: 'dtf_remove_bg', label: 'Freisteller', to: '/dashboard/freisteller', icon: ImageIcon },
     ]
   },
   { id: 'vector', label: 'Bildvektor', to: '/dashboard/vector', icon: Zap },

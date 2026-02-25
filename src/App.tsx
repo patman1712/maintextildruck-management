@@ -16,6 +16,7 @@ import Inventory from "@/pages/Inventory";
 import DTFOrdering from "@/pages/DTFOrdering";
 import DTFPdfs from "@/pages/DTFPdfs";
 import FileArchive from "@/pages/FileArchive";
+import BackgroundRemover from "@/pages/BackgroundRemover";
 import AdminSettings from "@/pages/AdminSettings";
 import PublicOrderProof from "@/pages/PublicOrderProof";
 import ImageVector from "@/pages/ImageVector";
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="dtf" element={<DTFOrdering />} />
           <Route path="dtf/pdfs" element={<DTFPdfs />} />
           <Route path="dtf/archive" element={<FileArchive />} />
+          <Route path="freisteller" element={<BackgroundRemover />} />
           <Route path="vector" element={<ImageVector />} />
           <Route path="employees" element={<Employees />} />
           <Route path="admin" element={<AdminSettings />} />
