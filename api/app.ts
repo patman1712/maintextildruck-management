@@ -10,8 +10,15 @@ import path from 'path'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// load env
+// load env BEFORE ANY IMPORTS
 dotenv.config({ path: path.join(__dirname, '../.env') })
+
+// Debug
+console.log('ENV Loading Check:', {
+    hasPublicKey: !!process.env.VITE_VAPID_PUBLIC_KEY,
+    publicKeyLength: process.env.VITE_VAPID_PUBLIC_KEY?.length,
+    envPath: path.join(__dirname, '../.env')
+});
 
 import express, {
   type Request,
