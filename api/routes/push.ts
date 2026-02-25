@@ -16,16 +16,16 @@ const getVapidKeys = () => {
 
 const initWebPush = () => {
     const { publicKey, privateKey, subject } = getVapidKeys();
+    // Only init if we actually have keys
     if (publicKey && privateKey) {
         try {
             webpush.setVapidDetails(subject, publicKey, privateKey);
-            console.log('WebPush initialized successfully');
         } catch (e) {
             console.error('WebPush init failed:', e);
         }
-    } else {
-        console.warn('VAPID keys not found on init. Push notifications will not work.');
     }
+    // We do NOT warn here anymore because it might be too early. 
+    // We warn on request.
 };
 
 // Initialize on load
