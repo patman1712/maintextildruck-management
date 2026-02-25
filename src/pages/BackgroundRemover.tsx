@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Upload, Image as ImageIcon, Loader2, Save, User, Archive } from 'lucide-react';
 import { removeBackground } from "@imgly/background-removal";
 import { jsPDF } from "jspdf";
@@ -12,11 +12,18 @@ export default function BackgroundRemover() {
     const [isSaving, setIsSaving] = useState(false);
     const [selectedCustomer, setSelectedCustomer] = useState("");
     const [saveMode, setSaveMode] = useState<'archive' | 'customer'>('archive');
+    const [progress, setProgress] = useState<string>("");
     
     const customers = useAppStore((state) => state.customers);
     const addOrder = useAppStore((state) => state.addOrder);
     const updateOrder = useAppStore((state) => state.updateOrder);
     const orders = useAppStore((state) => state.orders);
+
+    useEffect(() => {
+        if (!window.crossOriginIsolated) {
+            console.warn("SharedArrayBuffer is not available. imgly might fail.");
+        }
+    }, []);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -25,21 +32,34 @@ export default function BackgroundRemover() {
             setOriginalImage(url);
             setProcessedImage(null);
             setProcessedBlob(null);
+            setProgress("");
         }
     };
 
     const handleRemoveBackground = async () => {
         if (!originalImage) return;
         setIsProcessing(true);
+        setProgress("Starte...");
+        
         try {
-            // Using imgly
-            const blob = await removeBackground(originalImage);
+            if (!window.crossOriginIsolated) {
+                 alert("Hinweis: Der Server läuft nicht im 'Secure Context' (fehlende Header oder kein HTTPS). Die KI-Berechnung wird wahrscheinlich fehlschlagen oder sehr langsam sein.");
+            }
+
+            // Using imgly with config
+            const blob = await removeBackground(originalImage, {
+                progress: (key: string, current: number, total: number) => {
+                    const percent = Math.round((current / total) * 100);
+                    setProgress(`${key}: ${percent}%`);
+                },
+                debug: true
+            });
             const url = URL.createObjectURL(blob);
             setProcessedImage(url);
             setProcessedBlob(blob);
-        } catch (error) {
+        } catch (error: any) {
             console.error("Background removal failed:", error);
-            alert("Fehler beim Entfernen des Hintergrunds.");
+            alert(`Fehler beim Entfernen des Hintergrunds: ${error.message || error}`);
         } finally {
             setIsProcessing(false);
         }
@@ -205,7 +225,7 @@ export default function BackgroundRemover() {
                             }`}
                         >
                             {isProcessing ? <Loader2 className="animate-spin mr-2" /> : <ImageIcon className="mr-2" />}
-                            Hintergrund entfernen
+                            {isProcessing ? `Verarbeite... ${progress}` : 'Hintergrund entfernen'}
                         </button>
                     </div>
                 </div>
