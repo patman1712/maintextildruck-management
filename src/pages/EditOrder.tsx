@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Upload, X, User, Calendar, FileText, ArrowLeft, ShoppingCart, Trash2, Plus, Package } from "lucide-react";
+import { Upload, X, User, Calendar, FileText, ArrowLeft, ShoppingCart, Trash2, Plus, Package, Shield } from "lucide-react";
 import { useAppStore, Order } from "@/store";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -63,7 +63,7 @@ export default function EditOrder() {
   }, [fetchUsers]);
 
   const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
-  const [files, setFiles] = useState<{ name: string; type: 'preview' | 'print' | 'vector'; url?: string; file?: File; thumbnail?: string }[]>([]);
+  const [files, setFiles] = useState<{ name: string; type: 'preview' | 'print' | 'vector' | 'internal'; url?: string; file?: File; thumbnail?: string }[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   // Form States
@@ -262,7 +262,7 @@ export default function EditOrder() {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "preview" | "print" | "vector") => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "preview" | "print" | "vector" | "internal") => {
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files).map(f => ({ name: f.name, type, file: f }));
       setFiles([...files, ...newFiles]);
@@ -310,6 +310,9 @@ export default function EditOrder() {
                     }
                     if (data.files.vector) {
                         finalFiles = [...finalFiles, ...data.files.vector.map((f: any) => ({ name: f.originalName, type: 'vector' as const, url: f.path, thumbnail: f.thumbnail }))];
+                    }
+                    if (data.files.internal) {
+                        finalFiles = [...finalFiles, ...data.files.internal.map((f: any) => ({ name: f.originalName, type: 'internal' as const, url: f.path, thumbnail: f.thumbnail }))];
                     }
                 }
             } catch (err) {
@@ -360,6 +363,7 @@ export default function EditOrder() {
   const previewFiles = files.filter(f => f.type === 'preview');
   const printFiles = files.filter(f => f.type === 'print');
   const vectorFiles = files.filter(f => f.type === 'vector');
+  const internalFiles = files.filter(f => f.type === 'internal');
 
   // --- Customer Product Logic ---
   const [showProductSelector, setShowProductSelector] = useState(false);
@@ -659,6 +663,38 @@ export default function EditOrder() {
                   <li key={idx} className="flex justify-between items-center text-sm bg-blue-50 p-2 rounded border border-blue-100 text-blue-800">
                     <span className="truncate max-w-[200px] font-medium">{file.name}</span>
                     <button type="button" onClick={() => removeFile(files.indexOf(file))} className="text-blue-400 hover:text-blue-700">
+                      <X size={16} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Internal Files */}
+          <div>
+            <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex justify-between items-center">
+              <span>Interne Bilder</span>
+              <span className="text-xs font-normal text-amber-800 bg-amber-100 px-2 py-1 rounded">Nur Intern</span>
+            </h3>
+            <div className="border-2 border-dashed border-amber-200 bg-amber-50/30 rounded-lg p-6 text-center hover:bg-amber-50 transition-colors relative">
+              <input
+                type="file"
+                multiple
+                onChange={(e) => handleFileUpload(e, "internal")}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                accept="image/*"
+              />
+              <Shield className="mx-auto h-8 w-8 text-amber-400 mb-2" />
+              <p className="text-sm text-amber-600 font-medium">Interne Bilder hochladen</p>
+              <p className="text-xs text-amber-400 mt-1">Werden bei Auftragsende gelöscht</p>
+            </div>
+            {internalFiles.length > 0 && (
+              <ul className="mt-4 space-y-2">
+                {internalFiles.map((file, idx) => (
+                  <li key={idx} className="flex justify-between items-center text-sm bg-amber-50 p-2 rounded border border-amber-100 text-amber-800">
+                    <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                    <button type="button" onClick={() => removeFile(files.indexOf(file))} className="text-amber-400 hover:text-amber-700">
                       <X size={16} />
                     </button>
                   </li>

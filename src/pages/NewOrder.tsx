@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Upload, Plus, X, User, Calendar, FileText, ShoppingCart, Trash2, Package } from "lucide-react";
+import { Upload, Plus, X, User, Calendar, FileText, ShoppingCart, Trash2, Package, Shield } from "lucide-react";
 import { useAppStore, Order } from "@/store";
 import { useNavigate } from "react-router-dom";
 
@@ -122,6 +122,7 @@ export default function NewOrder() {
   };
   const [printFiles, setPrintFiles] = useState<{file: File, customName?: string}[]>([]);
   const [vectorFiles, setVectorFiles] = useState<File[]>([]);
+  const [internalFiles, setInternalFiles] = useState<File[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
@@ -293,26 +294,30 @@ export default function NewOrder() {
 
   const [existingFilesToAttach, setExistingFilesToAttach] = useState<{name: string, url: string, type: 'print'}[]>([]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "preview" | "print" | "vector") => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "preview" | "print" | "vector" | "internal") => {
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files);
       if (type === "preview") {
         setFiles([...files, ...newFiles]);
       } else if (type === "print") {
         setPrintFiles([...printFiles, ...newFiles.map(f => ({ file: f, customName: "" }))]);
-      } else {
+      } else if (type === "vector") {
         setVectorFiles([...vectorFiles, ...newFiles]);
+      } else if (type === "internal") {
+        setInternalFiles([...internalFiles, ...newFiles]);
       }
     }
   };
 
-  const removeFile = (index: number, type: "preview" | "print" | "vector") => {
+  const removeFile = (index: number, type: "preview" | "print" | "vector" | "internal") => {
     if (type === "preview") {
       setFiles(files.filter((_, i) => i !== index));
     } else if (type === "print") {
       setPrintFiles(printFiles.filter((_, i) => i !== index));
-    } else {
+    } else if (type === "vector") {
       setVectorFiles(vectorFiles.filter((_, i) => i !== index));
+    } else if (type === "internal") {
+      setInternalFiles(internalFiles.filter((_, i) => i !== index));
     }
   };
 
@@ -336,15 +341,16 @@ export default function NewOrder() {
     files.forEach(f => formData.append('preview', f));
     printFiles.forEach(f => formData.append('print', f.file));
     vectorFiles.forEach(f => formData.append('vector', f));
+    internalFiles.forEach(f => formData.append('internal', f));
 
-    let uploadedFiles: { name: string; type: 'preview' | 'print' | 'vector'; url?: string; customName?: string }[] = [];
+    let uploadedFiles: { name: string; type: 'preview' | 'print' | 'vector' | 'internal'; url?: string; customName?: string }[] = [];
     
     // Add existing attached files first
     uploadedFiles = [...uploadedFiles, ...existingFilesToAttach, ...existingPreviewFiles];
 
     try {
       // Only fetch if there are files
-      if (files.length > 0 || printFiles.length > 0 || vectorFiles.length > 0) {
+      if (files.length > 0 || printFiles.length > 0 || vectorFiles.length > 0 || internalFiles.length > 0) {
         const res = await fetch('/api/upload', {
           method: 'POST',
           body: formData
@@ -368,6 +374,9 @@ export default function NewOrder() {
           }
           if (data.files.vector) {
             uploadedFiles = [...uploadedFiles, ...data.files.vector.map((f: any) => ({ name: f.originalName, type: 'vector' as const, url: f.path }))];
+          }
+          if (data.files.internal) {
+            uploadedFiles = [...uploadedFiles, ...data.files.internal.map((f: any) => ({ name: f.originalName, type: 'internal' as const, url: f.path }))];
           }
         }
       }
@@ -809,6 +818,38 @@ export default function NewOrder() {
                   <li key={idx} className="flex justify-between items-center text-sm bg-blue-50 p-2 rounded border border-blue-100 text-blue-800">
                     <span className="truncate max-w-[200px] font-medium">{file.name}</span>
                     <button type="button" onClick={() => removeFile(idx, "vector")} className="text-blue-400 hover:text-blue-700">
+                      <X size={16} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Internal Files */}
+          <div>
+            <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex justify-between items-center">
+              <span>Interne Bilder</span>
+              <span className="text-xs font-normal text-amber-800 bg-amber-100 px-2 py-1 rounded">Nur Intern</span>
+            </h3>
+            <div className="border-2 border-dashed border-amber-200 bg-amber-50/30 rounded-lg p-6 text-center hover:bg-amber-50 transition-colors relative">
+              <input
+                type="file"
+                multiple
+                onChange={(e) => handleFileUpload(e, "internal")}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                accept="image/*"
+              />
+              <Shield className="mx-auto h-8 w-8 text-amber-400 mb-2" />
+              <p className="text-sm text-amber-600 font-medium">Interne Bilder hochladen</p>
+              <p className="text-xs text-amber-400 mt-1">Werden bei Auftragsende gelöscht</p>
+            </div>
+            {internalFiles.length > 0 && (
+              <ul className="mt-4 space-y-2">
+                {internalFiles.map((file, idx) => (
+                  <li key={idx} className="flex justify-between items-center text-sm bg-amber-50 p-2 rounded border border-amber-100 text-amber-800">
+                    <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                    <button type="button" onClick={() => removeFile(idx, "internal")} className="text-amber-400 hover:text-amber-700">
                       <X size={16} />
                     </button>
                   </li>
