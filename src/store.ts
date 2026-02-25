@@ -89,14 +89,15 @@ export interface Product {
   id: string;
   name: string;
   product_number?: string;
+  customer_id?: string; // Add customer_id link
   supplier_id?: string; // Often used as customerId link in this app context
   files: { 
-      file_url?: string; url?: string; 
-      file_name?: string; name?: string;
-      thumbnail_url?: string; thumbnail?: string;
-      customName?: string;
-      type?: 'preview' | 'print' | 'vector' | 'internal';
-      created_at?: string;
+    file_url?: string; url?: string; 
+    file_name?: string; name?: string;
+    thumbnail_url?: string; thumbnail?: string;
+    customName?: string;
+    type?: 'preview' | 'print' | 'vector' | 'internal';
+    created_at?: string;
   }[];
   created_at?: string;
 }

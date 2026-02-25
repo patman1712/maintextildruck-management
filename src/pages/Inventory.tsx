@@ -1041,7 +1041,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                         ) : (
                                             searchResults.map(product => {
                                                 // Find customer name for this product
-                                                const customer = customers.find(c => c.id === product.supplier_id); // supplier_id links to customer
+                                                const customer = customers.find(c => c.id === (product.customer_id || product.supplier_id)); 
                                                 return (
                                                     <button 
                                                         key={`search-${product.id}`}
@@ -1067,16 +1067,25 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                 )}
 
                                 <h4 className="text-xs font-bold text-gray-500 uppercase px-2 mb-2 mt-4">Kunden durchsuchen</h4>
-                                {customers
-                                    .filter(c => {
-                                        // Only show customers that match name IF we are not already showing search results above
-                                        // OR show all if no search
-                                        if (productSearch.length > 1) return false; // Hide customer list when searching globally to avoid duplicate confusion? 
-                                        // Actually user might want to browse.
-                                        // Let's keep name filtering.
-                                        return c.name.toLowerCase().includes(productSearch.toLowerCase());
-                                    })
-                                    .map(customer => {
+                                 {customers
+                                     .filter(c => {
+                                         if (!productSearch) return true;
+                                         const searchLower = productSearch.toLowerCase();
+                                         
+                                         // 1. Match customer name
+                                         if (c.name.toLowerCase().includes(searchLower)) return true;
+                                         
+                                         // 2. Match product fields for this customer in global products list
+                                         // Check if ANY product belonging to this customer matches the search term
+                                         const hasMatchingProduct = allProducts.some(p => 
+                                             (p.customer_id === c.id || p.supplier_id === c.id) && (
+                                                 p.name.toLowerCase().includes(searchLower) || 
+                                                 (p.product_number && p.product_number.toLowerCase().includes(searchLower))
+                                             )
+                                         );
+                                         return hasMatchingProduct;
+                                     })
+                                     .map(customer => {
                                     const isExpanded = expandedCustomers.has(customer.id) || productSearch.length > 0; // Auto-expand on search
                                     const isLoading = loadingProducts.has(customer.id);
                                     let products = customerProducts[customer.id] || [];
