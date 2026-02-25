@@ -47,6 +47,7 @@ export default function DTFOrdering() {
   // Direct Upload State
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadCustomerId, setUploadCustomerId] = useState<string>("");
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // Processing State
   const [isGenerating, setIsGenerating] = useState(false);
@@ -369,47 +370,7 @@ export default function DTFOrdering() {
                 setGeneratedPdfUrls([data.url]);
             }
             
-            // Ask user if prints were ordered successfully
-            setTimeout(async () => {
-                if (window.confirm("Wurden die Druckdaten erfolgreich bestellt/gedruckt?\n\nWenn Sie mit 'OK' bestätigen, werden die beteiligten Aufträge als 'Gedruckt' markiert und aus der offenen Liste entfernt.")) {
-                    const orderIds = new Set(selectedFiles.map(f => f.orderId));
-                    let updatedCount = 0;
-                    
-                    const manualOrder = orders.find(o => o.id === 'inventory-manual');
-                    let manualFilesChanged = false;
-                    let manualFiles = manualOrder?.files ? [...manualOrder.files] : [];
-
-                    for (const orderId of Array.from(orderIds)) {
-                        if (orderId.startsWith('manual-group-')) {
-                            // Update status for files in this manual group
-                            const ref = orderId.replace('manual-group-', '');
-                            manualFiles = manualFiles.map(f => {
-                                const fRef = f.reference || 'Unbekannt';
-                                if (fRef === ref && (f.type === 'print' || f.type === 'vector')) {
-                                    manualFilesChanged = true;
-                                    return { ...f, status: 'ordered' as const };
-                                }
-                                return f;
-                            });
-                        } else if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
-                            await updateOrder(orderId, { printStatus: 'ordered' });
-                            updatedCount++;
-                        }
-                    }
-
-                    if (manualFilesChanged && manualOrder) {
-                        await updateOrder(manualOrder.id, { files: manualFiles });
-                        updatedCount++;
-                    }
-                    
-                    if (updatedCount > 0) {
-                        // Refresh data to update the list
-                        fetchData();
-                    }
-                }
-                // Clear selection in any case (User requirement: "wieder ein blauer Kasten")
-                setSelectedFiles([]);
-            }, 500);
+            setShowSuccessModal(true);
 
         } else {
             setGenerationError(data.error || "Generierung fehlgeschlagen.");
@@ -422,6 +383,52 @@ export default function DTFOrdering() {
     }
   };
 
+    const handleConfirmSuccess = async () => {
+        const orderIds = new Set(selectedFiles.map(f => f.orderId));
+        let updatedCount = 0;
+        
+        const manualOrder = orders.find(o => o.id === 'inventory-manual');
+        let manualFilesChanged = false;
+        let manualFiles = manualOrder?.files ? [...manualOrder.files] : [];
+
+        for (const orderId of Array.from(orderIds)) {
+            if (orderId.startsWith('manual-group-')) {
+                // Update status for files in this manual group
+                const ref = orderId.replace('manual-group-', '');
+                manualFiles = manualFiles.map(f => {
+                    const fRef = f.reference || 'Unbekannt';
+                    if (fRef === ref && (f.type === 'print' || f.type === 'vector')) {
+                        manualFilesChanged = true;
+                        return { ...f, status: 'ordered' as const };
+                    }
+                    return f;
+                });
+            } else if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
+                await updateOrder(orderId, { printStatus: 'ordered' });
+                updatedCount++;
+            }
+        }
+
+        if (manualFilesChanged && manualOrder) {
+            await updateOrder(manualOrder.id, { files: manualFiles });
+            updatedCount++;
+        }
+        
+        if (updatedCount > 0) {
+            fetchData();
+        }
+        
+        setSelectedFiles([]);
+        setGeneratedPdfUrls([]);
+        setShowSuccessModal(false);
+    };
+
+    const handleCancelSuccess = () => {
+        setSelectedFiles([]);
+        setGeneratedPdfUrls([]);
+        setShowSuccessModal(false);
+    };
+
   return (
     <div className="max-w-7xl mx-auto h-[calc(100vh-100px)] flex flex-col">
       <div className="flex justify-between items-center mb-6 shrink-0">
@@ -430,17 +437,7 @@ export default function DTFOrdering() {
           DTF-Bestellung vorbereiten
         </h1>
         <div className="flex gap-2">
-            {generatedPdfUrls.map((url, idx) => (
-                <a 
-                    key={idx}
-                    href={url} 
-                    download={`DTF_Print_Job_Part${idx + 1}.pdf`}
-                    className="bg-green-600 text-white px-4 py-2 rounded-md shadow hover:bg-green-700 flex items-center animate-in fade-in zoom-in"
-                >
-                    <Download className="mr-2" size={18} />
-                    {generatedPdfUrls.length > 1 ? `PDF ${idx + 1} herunterladen` : 'Fertiges PDF herunterladen'}
-                </a>
-            ))}
+            {/* Download links are now in the success modal */}
         </div>
       </div>
 
@@ -926,6 +923,60 @@ export default function DTFOrdering() {
                     </button>
                 </div>
             </div>
+        </div>
+      )}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 m-4 relative animate-in zoom-in-95">
+            <button 
+                onClick={handleCancelSuccess}
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+                <Trash2 size={20} />
+            </button>
+            
+            <div className="text-center mb-8">
+              <div className="bg-green-100 text-green-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Check size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">PDF erfolgreich generiert</h3>
+              <p className="text-sm text-gray-500">Bitte laden Sie die PDF herunter und prüfen Sie diese.</p>
+            </div>
+
+            <div className="flex flex-col gap-3 mb-8">
+              {generatedPdfUrls.map((url, idx) => (
+                <a 
+                  key={idx}
+                  href={url} 
+                  download={`DTF_Print_Job_Part${idx + 1}.pdf`}
+                  className="bg-green-600 text-white px-4 py-3 rounded-lg shadow hover:bg-green-700 flex items-center justify-center font-medium transition-colors"
+                >
+                  <Download className="mr-2" size={20} />
+                  {generatedPdfUrls.length > 1 ? `PDF ${idx + 1} herunterladen` : 'PDF herunterladen'}
+                </a>
+              ))}
+            </div>
+
+            <div className="border-t border-gray-100 pt-6">
+              <p className="text-sm font-medium text-gray-700 mb-4 text-center">
+                Wurden die Daten geprüft und gedruckt?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCancelSuccess}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium transition-colors"
+                >
+                  Nein, abbrechen
+                </button>
+                <button
+                  onClick={handleConfirmSuccess}
+                  className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 text-sm font-medium transition-colors"
+                >
+                  Ja, abschließen
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
