@@ -81,20 +81,19 @@ export default function PreviewGenerator() {
         if (selectedId === id) setSelectedId(null);
     };
 
-    // Drag Logic
-    const handleMouseDown = (e: React.MouseEvent, id: string) => {
-        e.stopPropagation();
+    // Drag Logic (Mouse & Touch)
+    const handleStart = (clientX: number, clientY: number, id: string) => {
         setSelectedId(id);
         setIsDragging(true);
-        setDragStart({ x: e.clientX, y: e.clientY });
+        setDragStart({ x: clientX, y: clientY });
         const el = elements.find(el => el.id === id);
         if (el) setElementStart({ x: el.x, y: el.y });
     };
 
-    const handleMouseMove = (e: React.MouseEvent) => {
+    const handleMove = (clientX: number, clientY: number) => {
         if (isDragging && selectedId) {
-            const dx = e.clientX - dragStart.x;
-            const dy = e.clientY - dragStart.y;
+            const dx = clientX - dragStart.x;
+            const dy = clientY - dragStart.y;
             updateElement(selectedId, {
                 x: elementStart.x + dx,
                 y: elementStart.y + dy
@@ -102,8 +101,38 @@ export default function PreviewGenerator() {
         }
     };
 
-    const handleMouseUp = () => {
+    const handleEnd = () => {
         setIsDragging(false);
+    };
+
+    // Mouse Events
+    const handleMouseDown = (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        handleStart(e.clientX, e.clientY, id);
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        handleMove(e.clientX, e.clientY);
+    };
+
+    const handleMouseUp = () => {
+        handleEnd();
+    };
+
+    // Touch Events
+    const handleTouchStart = (e: React.TouchEvent, id: string) => {
+        e.stopPropagation();
+        const touch = e.touches[0];
+        handleStart(touch.clientX, touch.clientY, id);
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        const touch = e.touches[0];
+        handleMove(touch.clientX, touch.clientY);
+    };
+
+    const handleTouchEnd = () => {
+        handleEnd();
     };
 
     const [selectedCustomerForFiles, setSelectedCustomerForFiles] = useState("");
@@ -285,7 +314,13 @@ export default function PreviewGenerator() {
     );
 
     return (
-        <div className="max-w-7xl mx-auto h-[calc(100vh-100px)] flex flex-col" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}>
+        <div 
+            className="max-w-7xl mx-auto h-[calc(100vh-100px)] flex flex-col" 
+            onMouseMove={handleMouseMove} 
+            onMouseUp={handleMouseUp}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+        >
             <div className="flex justify-between items-center mb-4 shrink-0">
                 <h1 className="text-2xl font-bold text-slate-800 flex items-center">
                     <Shirt className="mr-3 text-red-600" />
@@ -399,6 +434,7 @@ export default function PreviewGenerator() {
                                 <div
                                     key={el.id}
                                     onMouseDown={(e) => handleMouseDown(e, el.id)}
+                                    onTouchStart={(e) => handleTouchStart(e, el.id)}
                                     className={`absolute cursor-move group ${selectedId === el.id ? 'ring-2 ring-blue-500' : ''}`}
                                     style={{
                                         left: el.x,
@@ -483,14 +519,6 @@ export default function PreviewGenerator() {
                             >
                                 <Save size={16} className="mr-2" />
                                 Als PNG speichern
-                            </button>
-                            <button 
-                                onClick={() => handleSave('pdf')}
-                                disabled={isSaving || (saveMode === 'customer' && !selectedCustomer) || !template}
-                                className="w-full bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-50 disabled:opacity-50 flex items-center justify-center text-sm"
-                            >
-                                <Download size={16} className="mr-2" />
-                                Als PDF speichern
                             </button>
                         </div>
                     </div>
