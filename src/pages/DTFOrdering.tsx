@@ -140,10 +140,10 @@ export default function DTFOrdering() {
                 id: f.url || Math.random().toString(36),
                 url: f.url,
                 name: f.customName || f.name,
-                thumbnail: f.thumbnail,
-                orderId: manualOrder.id, // Keep original ID for tracking
-                customerName: 'Lager / Manuell',
-                date: manualOrder.createdAt,
+                 thumbnail: f.thumbnail,
+                 orderId: `manual-group-${ref}`, // Use Virtual ID for tracking status update
+                 customerName: 'Lager / Manuell',
+                 date: manualOrder.createdAt,
                 quantity: 1,
                 width: 0,
                 height: 0,
