@@ -4,6 +4,7 @@ import { Archive, Download, Trash2, FileText, Search, User, Printer, Image as Im
 
 export default function FileArchive() {
   const orders = useAppStore((state) => state.orders);
+  const products = useAppStore((state) => state.products) || [];
   const loading = useAppStore((state) => state.loading);
   const fetchData = useAppStore((state) => state.fetchData);
   const updateOrder = useAppStore((state) => state.updateOrder);
@@ -22,7 +23,7 @@ export default function FileArchive() {
   
   const archivedOrders = orders.filter(o => o.status === 'archived');
   
-  const allFilesRaw = archivedOrders.flatMap(order => 
+  const allOrderFiles = archivedOrders.flatMap(order => 
     (order.files || []).map(f => ({
         ...f,
         orderId: order.id,
@@ -31,6 +32,24 @@ export default function FileArchive() {
         createdAt: order.createdAt
     }))
   ).filter(f => f.url);
+
+  // Get preview files from Products (Freisteller)
+  const freistellerProducts = products.filter(p => p.product_number === 'FREISTELLER' || (p.files && p.files.some(f => f.type === 'preview')));
+  const productFiles = freistellerProducts.flatMap(p => 
+      (p.files || []).filter(f => f.type === 'preview').map(f => ({
+          name: f.file_name,
+          type: 'preview' as const,
+          url: f.file_url,
+          thumbnail: f.thumbnail_url,
+          customName: f.file_name, // Map to same structure
+          orderId: `prod-${p.id}`,
+          orderTitle: `Produkt: ${p.name}`,
+          customerName: useAppStore.getState().customers.find(c => c.id === p.supplier_id)?.name || "Unbekannt", // supplier_id is used as customer_id for products
+          createdAt: p.created_at || new Date().toISOString()
+      }))
+  );
+
+  const allFilesRaw = [...allOrderFiles, ...productFiles];
 
   // Deduplicate files by URL
   // Keep the most recent one (since sorted later by createdAt, let's sort first)
