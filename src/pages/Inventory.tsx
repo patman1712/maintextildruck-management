@@ -352,14 +352,17 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
               
               if (order) {
                  const existingFiles = order.files || [];
-                 const printFiles = newItem.files.filter((f: any) => f.type === 'print' || f.type === 'vector');
-                 
-                 const newOrderFiles = printFiles.map((f: any) => ({
-                     name: f.file_name || 'Unbenannt',
-                     type: f.type,
-                     url: f.file_url,
-                         thumbnail: f.thumbnail_url,
-                         customName: f.file_name,
+                     const printFiles = newItem.files.filter((f: any) => f.type === 'print' || f.type === 'vector');
+                     
+                     // Temporary Debug
+                     // alert(`Debug: Found ${printFiles.length} print files. Adding to order...`);
+                     
+                     const newOrderFiles = printFiles.map((f: any) => ({
+                         name: f.file_name || f.name || 'Unbenannt',
+                         type: f.type,
+                         url: f.file_url || f.url || f.path, // Support different property names
+                         thumbnail: f.thumbnail_url || f.thumbnail,
+                         customName: f.file_name || f.customName,
                          reference: newItem.manualOrderNumber // Use the manual order number from input
                      }));
 
