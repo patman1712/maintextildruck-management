@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle, ChevronDown, ChevronRight, Image as ImageIcon } from "lucide-react";
+import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle, ChevronDown, ChevronRight, Image as ImageIcon, Shirt } from "lucide-react";
 import { useAppStore } from "@/store";
 
 interface MenuItem {
@@ -34,6 +34,7 @@ const MENU_ITEMS: MenuItem[] = [
         { id: 'dtf_pdfs', label: 'Fertige DTF PDFs', to: '/dashboard/dtf/pdfs', icon: FileText },
         { id: 'dtf_archive', label: 'Datei-Archiv', to: '/dashboard/dtf/archive', icon: Archive },
         { id: 'dtf_remove_bg', label: 'Freisteller', to: '/dashboard/freisteller', icon: ImageIcon },
+        { id: 'preview_generator', label: 'Vorschau-Generator', to: '/dashboard/preview-generator', icon: Shirt },
     ]
   },
   { id: 'vector', label: 'Bildvektor', to: '/dashboard/vector', icon: Zap },
