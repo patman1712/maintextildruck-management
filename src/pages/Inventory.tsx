@@ -797,7 +797,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         {/* Modal for manual adding - Always available */}
         {showAddItemModal && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 text-left">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl h-[80vh] flex flex-col p-6">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col p-6">
                     <div className="flex justify-between items-center mb-4 border-b pb-2 shrink-0">
                         <h2 className="text-xl font-bold text-gray-800">
                             {showProductPicker ? 'Kunden-Artikel auswählen' : 'Manuelle Bestellung hinzufügen'}
@@ -924,39 +924,19 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                         <div className="border-t border-gray-200 mb-4"></div>
 
                                         <div className="space-y-3">
+                                            {/* Simplified Fields */}
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Lieferant (Override)</label>
-                                                <select 
-                                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                                    value={currentItem.supplierId}
-                                                    onChange={(e) => setCurrentItem({...currentItem, supplierId: e.target.value})}
-                                                >
-                                                    <option value="">Wie Standard ({suppliers.find(s => s.id === manualOrderSettings.defaultSupplierId)?.name || '-'})</option>
-                                                    {suppliers.map(s => (
-                                                        <option key={s.id} value={s.id}>{s.name}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikelname</label>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikelname / Art.-Nr. / Farbe</label>
                                                 <input 
                                                     type="text" 
                                                     className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
                                                     value={currentItem.itemName}
                                                     onChange={(e) => setCurrentItem({...currentItem, itemName: e.target.value})}
-                                                    placeholder="z.B. Hoodie"
+                                                    placeholder="z.B. Hoodie 12345 Navy"
+                                                    autoFocus
                                                 />
                                             </div>
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Artikelnummer</label>
-                                                <input 
-                                                    type="text" 
-                                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                                    value={currentItem.itemNumber}
-                                                    onChange={(e) => setCurrentItem({...currentItem, itemNumber: e.target.value})}
-                                                    placeholder="Optional"
-                                                />
-                                            </div>
+                                            
                                             <div className="flex gap-2">
                                                 <div className="flex-1">
                                                     <label className="block text-xs font-medium text-gray-700 mb-1">Größe</label>
@@ -965,10 +945,11 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                         className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
                                                         value={currentItem.size}
                                                         onChange={(e) => setCurrentItem({...currentItem, size: e.target.value})}
+                                                        placeholder="XL"
                                                     />
                                                 </div>
-                                                <div className="flex-1">
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Menge</label>
+                                                <div className="w-24">
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Anzahl</label>
                                                     <input 
                                                         type="number" 
                                                         className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
@@ -977,15 +958,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                     />
                                                 </div>
                                             </div>
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Farbe</label>
-                                                <input 
-                                                    type="text" 
-                                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                                    value={currentItem.color}
-                                                    onChange={(e) => setCurrentItem({...currentItem, color: e.target.value})}
-                                                />
-                                            </div>
+
                                             <button
                                                 onClick={addCurrentItemToPending}
                                                 disabled={!currentItem.itemName}
