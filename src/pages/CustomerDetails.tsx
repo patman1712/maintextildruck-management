@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore, Order } from "@/store";
-import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon, Copy } from "lucide-react";
 import ConfirmationModal from "@/components/ConfirmationModal";
 
 interface Product {
@@ -200,6 +200,57 @@ export default function CustomerDetails() {
               }
           }
       });
+  };
+
+  const handleDuplicateProduct = async (product: Product) => {
+      if (!customer) return;
+      
+      if (!confirm(`Möchten Sie den Artikel "${product.name}" wirklich duplizieren?`)) return;
+
+      const newName = `${product.name} (Kopie)`;
+      const newProductNumber = product.product_number ? `${product.product_number}-kopie` : '';
+
+      try {
+          // 1. Create the product (Source will be 'manual' by default in backend)
+          const res = await fetch(`/api/products/${customer.id}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  name: newName,
+                  productNumber: newProductNumber,
+                  supplierId: product.supplier_id
+              })
+          });
+          const data = await res.json();
+          
+          if (data.success && data.id) {
+             const newProductId = data.id;
+             
+             // 2. Associate files
+             if (product.files && product.files.length > 0) {
+                 for (const file of product.files) {
+                     await fetch(`/api/products/${newProductId}/files`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            fileUrl: file.file_url,
+                            fileName: file.file_name,
+                            thumbnailUrl: file.thumbnail_url,
+                            type: file.type
+                        })
+                     });
+                 }
+             }
+             
+             // alert('Produkt erfolgreich dupliziert.');
+             fetchProducts();
+          } else {
+              alert('Fehler beim Erstellen des Duplikats: ' + (data.error || 'Unbekannter Fehler'));
+          }
+      } catch (err) {
+          console.error(err);
+          alert('Netzwerkfehler beim Duplizieren.');
+      }
   };
 
   const handleDeleteAllProducts = () => {
@@ -975,6 +1026,13 @@ export default function CustomerDetails() {
                                         title="Bearbeiten"
                                     >
                                         <Edit size={18} />
+                                    </button>
+                                    <button 
+                                        onClick={() => handleDuplicateProduct(product)}
+                                        className="text-gray-400 hover:text-green-600 p-1"
+                                        title="Duplizieren"
+                                    >
+                                        <Copy size={18} />
                                     </button>
                                     <button 
                                         onClick={() => handleDeleteProduct(product.id)}
