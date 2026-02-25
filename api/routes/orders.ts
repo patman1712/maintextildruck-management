@@ -102,6 +102,8 @@ router.post('/', (req: Request, res: Response) => {
 router.put('/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   const updates = req.body;
+  console.log(`PUT /orders/${id} updates:`, Object.keys(updates));
+  if (updates.files) console.log(`PUT /orders/${id} files count:`, updates.files.length);
   
   const existing = db.prepare('SELECT * FROM orders WHERE id = ?').get(id) as any;
   if (!existing) {
