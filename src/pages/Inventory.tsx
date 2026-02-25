@@ -355,14 +355,26 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
   const addCurrentItemToPending = () => {
       if (!currentItem.itemName) return;
+      
+      // Parse Quantity from Size string (e.g. "5x XL" -> qty: 5, size: "XL")
+      let parsedQty = 1;
+      let parsedSize = currentItem.size;
+      
+      const qtyMatch = currentItem.size.match(/^(\d+)\s*[xX\s]\s*(.*)$/);
+      if (qtyMatch) {
+          parsedQty = parseInt(qtyMatch[1]);
+          parsedSize = qtyMatch[2] || 'Universal'; // If size is empty after extracting qty
+      }
+
       setPendingItems(prev => [...prev, {
           ...currentItem,
           _tempId: Math.random().toString(),
           supplierId: currentItem.supplierId || manualOrderSettings.defaultSupplierId,
-          manualOrderNumber: manualOrderSettings.manualOrderNumber
+          manualOrderNumber: manualOrderSettings.manualOrderNumber,
+          quantity: parsedQty,
+          size: parsedSize
       }]);
-      // Reset current item but keep supplier context if desired? 
-      // User might want to add multiple items from same supplier
+      // Reset current item
       setCurrentItem(prev => ({
           ...prev,
           itemName: '',
@@ -937,26 +949,15 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                 />
                                             </div>
                                             
-                                            <div className="flex gap-2">
-                                                <div className="flex-1">
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Größe</label>
-                                                    <input 
-                                                        type="text" 
-                                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                                        value={currentItem.size}
-                                                        onChange={(e) => setCurrentItem({...currentItem, size: e.target.value})}
-                                                        placeholder="XL"
-                                                    />
-                                                </div>
-                                                <div className="w-24">
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Anzahl</label>
-                                                    <input 
-                                                        type="number" 
-                                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
-                                                        value={currentItem.quantity}
-                                                        onChange={(e) => setCurrentItem({...currentItem, quantity: parseInt(e.target.value) || 1})}
-                                                    />
-                                                </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Anzahl</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                                    value={currentItem.size}
+                                                    onChange={(e) => setCurrentItem({...currentItem, size: e.target.value})}
+                                                    placeholder="z.B. 5x XL"
+                                                />
                                             </div>
 
                                             <button
