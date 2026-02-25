@@ -32,10 +32,17 @@ const MENU_ITEMS: MenuItem[] = [
     children: [
         { id: 'dtf', label: 'DTF-Bestellen', to: '/dashboard/dtf', icon: Printer },
         { id: 'dtf_pdfs', label: 'Fertige DTF', to: '/dashboard/dtf/pdfs', icon: FileText },
-        { id: 'dtf_archive', label: 'Datei-Archiv', to: '/dashboard/dtf/archive', icon: Archive },
+        { id: 'vector', label: 'Bildvektor', to: '/dashboard/vector', icon: Zap },
+    ]
+  },
+  {
+    id: 'graphics_group',
+    label: 'Grafik',
+    icon: ImageIcon,
+    children: [
         { id: 'dtf_remove_bg', label: 'Freisteller', to: '/dashboard/freisteller', icon: ImageIcon },
         { id: 'preview_generator', label: 'Vorschau-Generator', to: '/dashboard/preview-generator', icon: Shirt },
-        { id: 'vector', label: 'Bildvektor', to: '/dashboard/vector', icon: Zap },
+        { id: 'dtf_archive', label: 'Datei-Archiv', to: '/dashboard/dtf/archive', icon: Archive },
     ]
   },
   { id: 'customers', label: 'Kunden', to: '/dashboard/customers', icon: Users },
