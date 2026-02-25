@@ -342,7 +342,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
             supplierId: product.supplier_id || manualOrderSettings.defaultSupplierId,
             // Merge Name and Number into the single visible field
             itemName: `${product.name} ${product.product_number || ''}`.trim(),
-            itemNumber: '', // Clear hidden field so we rely on the editable itemName
+            itemNumber: product.product_number || '', // Keep itemNumber for email reference
             color: '',
             size: '',
             quantity: 1,
@@ -551,10 +551,10 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     Object.keys(itemsByOrder).forEach(orderTitle => {
         body += `(${orderTitle})\n`;
         itemsByOrder[orderTitle].forEach(item => {
-            const quantityPrefix = item.quantity > 1 ? `${item.quantity}x ` : '';
+            const sizeDisplay = item.quantity > 1 ? `${item.quantity}x ${item.size}` : item.size;
             // Use itemNumber if available, otherwise fallback to itemName
             const identifier = item.itemNumber ? item.itemNumber : item.itemName;
-            body += `${quantityPrefix}${identifier} | ${item.size} ${item.color ? `| ${item.color}` : ''}\n`;
+            body += `${identifier} | ${sizeDisplay} ${item.color ? `| ${item.color}` : ''}\n`;
         });
         body += `\n`;
     });
