@@ -345,9 +345,12 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         await addOrderItem(manualOrderId, newItem);
 
         // Add files to order if present (from product picker)
-        if (newItem.files && newItem.files.length > 0) {
-             const order = orders.find(o => o.id === manualOrderId);
-             if (order) {
+         if (newItem.files && newItem.files.length > 0) {
+              // Fetch latest orders from store to ensure we have the newly created manual order if applicable
+              const latestOrders = useAppStore.getState().orders;
+              const order = latestOrders.find(o => o.id === manualOrderId);
+              
+              if (order) {
                  const existingFiles = order.files || [];
                  const printFiles = newItem.files.filter((f: any) => f.type === 'print' || f.type === 'vector');
                  
