@@ -744,7 +744,7 @@ export default function CustomerDetails() {
             >
                 <div className="flex items-center">
                     <Package size={16} className="mr-2" />
-                    Artikel ({products.length})
+                    Artikel ({filteredProducts.length})
                 </div>
             </button>
             <button
