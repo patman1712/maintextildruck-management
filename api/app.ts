@@ -2,6 +2,17 @@
  * This is a API server
  */
 
+import dotenv from 'dotenv'
+import { fileURLToPath } from 'url'
+import path from 'path'
+
+// for esm mode
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// load env
+dotenv.config({ path: path.join(__dirname, '../.env') })
+
 import express, {
   type Request,
   type Response,
@@ -9,9 +20,6 @@ import express, {
 } from 'express'
 import fs from 'fs'
 import cors from 'cors'
-import path from 'path'
-import dotenv from 'dotenv'
-import { fileURLToPath } from 'url'
 import db from './db.js'
 import authRoutes from './routes/auth.js'
 import orderRoutes from './routes/orders.js'
@@ -29,12 +37,6 @@ import downloadsRoutes, { DOWNLOADS_DIR } from './routes/downloads.js'
 import backupRoutes from './routes/backup.js'
 import pushRoutes from './routes/push.js'
 
-// for esm mode
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
-// load env
-dotenv.config()
 
 const app: express.Application = express()
 
