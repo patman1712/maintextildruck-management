@@ -355,11 +355,12 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                      name: f.file_name || 'Unbenannt',
                      type: f.type,
                      url: f.file_url,
-                     thumbnail: f.thumbnail_url,
-                     customName: f.file_name
-                 }));
+                         thumbnail: f.thumbnail_url,
+                         customName: f.file_name,
+                         reference: newItem.manualOrderNumber // Use the manual order number from input
+                     }));
 
-                 const urls = new Set(existingFiles.map(f => f.url));
+                     const urls = new Set(existingFiles.map(f => f.url));
                  const filesToAdd = newOrderFiles.filter((f: any) => !urls.has(f.url));
                  
                  if (filesToAdd.length > 0) {

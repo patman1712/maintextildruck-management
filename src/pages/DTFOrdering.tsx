@@ -110,12 +110,12 @@ export default function DTFOrdering() {
       Object.entries(filesByRef).forEach(([ref, files]) => {
           manualGroups.push({
               id: `manual-group-${ref}`,
-              title: ref === 'Unbekannt' ? 'Manuelle Lagerbestellung (Ohne Ref)' : ref,
-              orderNumber: 'MANUELL',
-              customerName: 'Lager / Manuell', // Use a distinct name
+              title: ref === 'Unbekannt' ? 'Ohne Auftragsnummer' : ref,
+              orderNumber: '', // Hide MANUELL badge to keep it clean
+              customerName: 'Manuelle Lagerbestellung', 
               createdAt: manualOrder.createdAt,
               files: files,
-              printStatus: 'pending', // Assume pending
+              printStatus: 'pending', 
               isVirtual: true
           });
       });
