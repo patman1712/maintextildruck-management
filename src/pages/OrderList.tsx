@@ -68,6 +68,9 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
     
     // Hide the special "Manual Inventory" order from the list
     if (order.id === 'inventory-manual') return false;
+
+    // Hide manual invoices from Order List (they appear in Invoice List)
+    if (order.status === 'manual_invoice') return false;
     
     return matchesSearch && matchesStatus;
   });
