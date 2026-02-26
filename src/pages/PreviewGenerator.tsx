@@ -176,7 +176,7 @@ export default function PreviewGenerator() {
     })));
 
     const combinedFiles = [...orderFiles, ...productFiles]
-        .filter(f => f.type === 'print' || f.type === 'vector');
+        .filter(f => (f.type === 'print' || f.type === 'vector') && (f.name || '').toLowerCase().endsWith('.pdf'));
     
     const uniqueFiles = Array.from(new Map(combinedFiles.map(f => [f.url, f])).values());
     const filteredFiles = uniqueFiles.filter(f => (f.name || '').toLowerCase().includes(fileSearch.toLowerCase()));
@@ -670,7 +670,10 @@ export default function PreviewGenerator() {
                                 <div 
                                     key={idx} 
                                     className="border rounded p-2 hover:bg-gray-50 cursor-pointer flex flex-col items-center"
-                                    onClick={() => addImageElement(file.url || file.thumbnail || '')}
+                                    onClick={() => {
+                                        const isPdf = (file.name || '').toLowerCase().endsWith('.pdf');
+                                        addImageElement(isPdf ? (file.thumbnail || '') : (file.url || file.thumbnail || ''));
+                                    }}
                                 >
                                     <div className="h-20 w-20 flex items-center justify-center overflow-hidden bg-gray-100 rounded mb-2">
                                         {(file.thumbnail || file.url) ? (
