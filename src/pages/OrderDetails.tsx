@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/store";
-import { ArrowLeft, Calendar, User, FileText, Download, Eye, Printer, PenTool, Trash2, ShoppingCart, ExternalLink } from "lucide-react";
+import { ArrowLeft, Calendar, User, FileText, Download, Eye, Printer, PenTool, Trash2, ShoppingCart, ExternalLink, Shield } from "lucide-react";
 import OrderPrintView from "@/components/OrderPrintView";
 
 export default function OrderDetails() {
@@ -278,7 +278,7 @@ export default function OrderDetails() {
           <div>
             <h3 className="text-lg font-semibold text-slate-800 mb-4 border-b pb-2">Dateien</h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {/* Preview Files */}
               <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
                 <h4 className="font-medium text-gray-700 mb-3 flex items-center">
@@ -354,6 +354,32 @@ export default function OrderDetails() {
                   </ul>
                 ) : (
                   <p className="text-xs text-red-400 italic">Keine Dateien.</p>
+                )}
+              </div>
+
+              {/* Internal Files */}
+              <div className="bg-amber-50 rounded-lg p-4 border border-amber-100">
+                <h4 className="font-medium text-amber-800 mb-3 flex items-center">
+                  <Shield size={16} className="mr-2 text-amber-600" /> Interne Dateien
+                </h4>
+                {order.files.filter(f => f.type === 'internal').length > 0 ? (
+                  <ul className="space-y-2">
+                    {order.files.filter(f => f.type === 'internal').map((file, idx) => (
+                  <li key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-amber-100">
+                    {renderFilePreview(file)}
+                    <div className="flex space-x-1">
+                      <button onClick={() => downloadFile(file)} className="text-amber-400 hover:text-amber-700 p-1" title="Herunterladen">
+                        <Download size={16} />
+                      </button>
+                      <button onClick={() => handleDeleteFile({...file, type: 'internal'})} className="text-amber-400 hover:text-amber-700 p-1" title="Löschen">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-amber-400 italic">Keine internen Dateien.</p>
                 )}
               </div>
             </div>
