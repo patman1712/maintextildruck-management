@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle, ChevronDown, ChevronRight, Image as ImageIcon, Shirt } from "lucide-react";
+import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle, ChevronDown, ChevronRight, Image as ImageIcon, Shirt, RefreshCw } from "lucide-react";
 import { useAppStore } from "@/store";
 
 interface MenuItem {
@@ -184,6 +184,13 @@ export default function DashboardLayout() {
           </div>
           
           <div className="flex items-center space-x-3 md:space-x-4">
+             <button 
+                onClick={() => window.location.reload()} 
+                className="p-2 text-white hover:bg-white/10 rounded-full transition-colors hidden sm:block"
+                title="Seite neu laden"
+             >
+                <RefreshCw size={20} />
+             </button>
              <div className="text-right hidden sm:block">
                 <p className="text-sm font-semibold text-white">{currentUser?.name || 'Benutzer'}</p>
                 <p className="text-xs text-red-100">{currentUser?.role === 'admin' ? 'Administrator' : 'Mitarbeiter'}</p>
