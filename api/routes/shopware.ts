@@ -186,24 +186,34 @@ async function getShopware5Orders(baseUrl: string, username: string, apiKey: str
          const json = await response.json();
          
          // Manually filter in JS
-         // Status 0 (Open) and PaymentStatus 12 (Completely Paid)
-         if (json.data && Array.isArray(json.data)) {
-             json.data = json.data.filter((o: any) => {
-                 // Check status (can be string or int)
-                 const statusMatch = String(o.status) === '0';
-                 
-                 // Check payment status (can be nested object or direct id)
-                 // Usually o.paymentStatus is an object { id: 12, ... } or o.paymentStatusId is 12
-                 let paymentMatch = false;
-                 if (o.paymentStatusId) {
-                     paymentMatch = String(o.paymentStatusId) === '12';
-                 } else if (o.paymentStatus && o.paymentStatus.id) {
-                     paymentMatch = String(o.paymentStatus.id) === '12';
-                 }
-                 
-                 return statusMatch && paymentMatch;
-             });
-         }
+          // Status 0 (Open) and PaymentStatus 12 (Completely Paid)
+          if (json.data && Array.isArray(json.data)) {
+              // DEBUG: Log the first few orders to check their status values
+              console.log('--- SW5 DEBUG: Fallback Orders ---');
+              json.data.slice(0, 5).forEach((o: any) => {
+                  console.log(`Order ${o.number}: Status=${o.status} (${typeof o.status}), Payment=${o.paymentStatusId} (${typeof o.paymentStatusId}) / ${o.paymentStatus?.id}`);
+              });
+              console.log('-----------------------------------');
+
+              json.data = json.data.filter((o: any) => {
+                  // Check status (can be string or int)
+                  // Some SW5 versions use -1 for cancelled, 0 for open, 1 for in_process, etc.
+                  // But sometimes '0' comes as string.
+                  const statusMatch = String(o.status) === '0';
+                  
+                  // Check payment status (can be nested object or direct id)
+                  // Usually o.paymentStatus is an object { id: 12, ... } or o.paymentStatusId is 12
+                  // 12 = Completely Paid
+                  let paymentMatch = false;
+                  if (o.paymentStatusId !== undefined && o.paymentStatusId !== null) {
+                      paymentMatch = String(o.paymentStatusId) === '12';
+                  } else if (o.paymentStatus && o.paymentStatus.id) {
+                      paymentMatch = String(o.paymentStatus.id) === '12';
+                  }
+                  
+                  return statusMatch && paymentMatch;
+              });
+          }
          
          data = json;
     }
