@@ -109,7 +109,13 @@ router.post('/', upload.fields([
 // POST /api/upload/regenerate-thumbnails
 // Helper to fix missing thumbnails for existing PDF files
 router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
-    console.log('Starting thumbnail regeneration...');
+    // Check for force/debug params in query or body
+    const force = req.body.force === true || req.query.force === 'true';
+    const debug = req.body.debug === true || req.query.debug === 'true';
+    const debugLogs: any[] = [];
+    
+    console.log(`Starting thumbnail regeneration (force: ${force}, debug: ${debug})...`);
+    
     try {
         const orders = db.prepare('SELECT id, files FROM orders').all() as { id: string, files: string }[];
         const ordersCount = orders.length;
@@ -122,12 +128,8 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
             try {
                 files = JSON.parse(order.files || '[]');
             } catch (e) {
+                if (debug) debugLogs.push({ orderId: order.id, error: 'JSON Parse Error' });
                 continue;
-            }
-            
-            // LOGGING: Check file structure for first few orders
-            if (totalUpdated === 0 && files.length > 0) {
-                 console.log(`DEBUG: Order ${order.id} files sample:`, JSON.stringify(files[0], null, 2));
             }
 
             let orderUpdated = false;
@@ -140,31 +142,37 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                 const filename = path.basename(fileUrl);
                 
                 // FORCE PATH:
-                // If we are on Railway (or any server where UPLOAD_DIR is absolute), we must be careful.
-                // fileUrl might be "/uploads/foo.png".
-                // UPLOAD_DIR might be "/app/data/uploads".
-                // path.join(UPLOAD_DIR, filename) -> "/app/data/uploads/foo.png". This is correct.
-                
-                // BUT: Check if filename is actually found.
-                // Let's try to look for it directly.
                 const inputPath = path.join(UPLOAD_DIR, filename);
 
                 // Determine file type
                 const isPdf = filename.toLowerCase().endsWith('.pdf') || (file.name && file.name.toLowerCase().endsWith('.pdf'));
                 const isImage = filename.match(/\.(jpg|jpeg|png|webp)$/i) || (file.name && file.name.match(/\.(jpg|jpeg|png|webp)$/i));
                 
-                // FORCE REGENERATE if it's an image and doesn't have a thumbnail (or has a dummy one)
-                // Also check if file exists
-                // CHANGE: We removed the check "!file.thumbnail" to force re-check of existence for debugging?
-                // No, user says "0 updated".
-                // Let's assume thumbnails are missing.
-                const needsThumb = (isPdf || isImage) && (!file.thumbnail || file.thumbnail === "");
-                
                 if (isPdf || isImage) {
-                    // console.log(`Checking ${filename}... Needs thumb? ${needsThumb}`);
-                    
-                    if (await fs.pathExists(inputPath)) {
-                         if (needsThumb) {
+                     const fileExists = await fs.pathExists(inputPath);
+                     const currentThumb = file.thumbnail || "";
+                     
+                     // We consider a thumbnail valid if it exists and looks like a thumbnail path
+                     // But if 'force' is true, we ignore this.
+                     const hasThumb = currentThumb && currentThumb !== "";
+                     
+                     // Debug logging for this file
+                     if (debug) {
+                         debugLogs.push({
+                             type: 'order_file',
+                             orderId: order.id,
+                             filename,
+                             inputPath,
+                             exists: fileExists,
+                             isPdf,
+                             isImage,
+                             currentThumb,
+                             hasThumb,
+                             willRegenerate: (force || !hasThumb) && fileExists
+                         });
+                     }
+                     
+                     if (fileExists && (force || !hasThumb)) {
                             try {
                                 console.log(`Generating thumbnail for ${filename}...`);
                                 const thumbName = `${filename}_thumb`;
@@ -199,11 +207,11 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                                 
                                 orderUpdated = true;
                                 totalUpdated++;
-                            } catch (e) {
+                            } catch (e: any) {
                                 console.error(`Failed to regenerate thumbnail for ${filename}:`, e);
+                                if (debug) debugLogs.push({ filename, error: 'Generation Failed', details: e.message });
                             }
-                        }
-                    } else {
+                    } else if (!fileExists && (force || !hasThumb)) {
                         console.log(`File not found on disk: ${inputPath} (UPLOAD_DIR: ${UPLOAD_DIR})`);
                     }
                 }
@@ -229,9 +237,25 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
             const isPdf = filename.toLowerCase().endsWith('.pdf') || (file.file_name && file.file_name.toLowerCase().endsWith('.pdf'));
             const isImage = filename.match(/\.(jpg|jpeg|png|webp)$/i) || (file.file_name && file.file_name.match(/\.(jpg|jpeg|png|webp)$/i));
             
-            // Check if missing thumbnail
-            if ((isPdf || isImage) && !file.thumbnail_url) {
-                    if (await fs.pathExists(inputPath)) {
+            if (isPdf || isImage) {
+                const fileExists = await fs.pathExists(inputPath);
+                const currentThumb = file.thumbnail_url || "";
+                const hasThumb = currentThumb && currentThumb !== "";
+                
+                if (debug) {
+                     debugLogs.push({
+                         type: 'product_file',
+                         fileId: file.id,
+                         filename,
+                         inputPath,
+                         exists: fileExists,
+                         currentThumb,
+                         hasThumb,
+                         willRegenerate: (force || !hasThumb) && fileExists
+                     });
+                }
+                
+                if (fileExists && (force || !hasThumb)) {
                     try {
                         console.log(`Generating product thumbnail for ${filename}...`);
                         const thumbName = `${filename}_thumb`;
@@ -261,20 +285,26 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                         // Update the record
                         db.prepare('UPDATE customer_product_files SET thumbnail_url = ? WHERE id = ?').run(thumbUrl, file.id);
                         productsUpdated++;
-                    } catch (e) {
+                    } catch (e: any) {
                         console.error(`Failed to regenerate product thumbnail for ${filename}:`, e);
+                         if (debug) debugLogs.push({ filename, error: 'Product Generation Failed', details: e.message });
                     }
-                    } else {
-                         console.log(`Product file not found on disk: ${inputPath}`);
-                    }
+                }
             }
         }
         
         console.log(`Finished. Orders updated: ${totalUpdated}, Products updated: ${productsUpdated}`);
-        res.json({ success: true, updated: totalUpdated, productsUpdated, ordersFound: ordersCount });
+        
+        res.json({ 
+            success: true, 
+            updated: totalUpdated, 
+            productsUpdated, 
+            ordersFound: ordersCount,
+            logs: debug ? debugLogs : undefined
+        });
     } catch (error: any) {
         console.error('Error regenerating thumbnails:', error);
-        res.status(500).json({ success: false, error: error.message || 'Regeneration failed' });
+        res.status(500).json({ success: false, error: error.message || 'Regeneration failed', logs: debug ? debugLogs : undefined });
     }
 });
 
