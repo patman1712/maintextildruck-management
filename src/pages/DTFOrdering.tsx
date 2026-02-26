@@ -68,7 +68,8 @@ export default function DTFOrdering() {
         customerName: order.customerName,
         date: order.createdAt,
         status: order.status,
-        reference: f.reference
+        reference: f.reference,
+        quantity: f.quantity || 1
       }))
   ).filter(f => f.url);
 
@@ -150,7 +151,7 @@ export default function DTFOrdering() {
                  orderId: `manual-group-${ref}`, // Use Virtual ID for tracking status update
                  customerName: 'Lager / Manuell',
                  date: manualOrder.createdAt,
-                quantity: 1,
+                quantity: f.quantity || 1,
                 width: 0,
                 height: 0,
                 reference: f.reference
@@ -175,7 +176,7 @@ export default function DTFOrdering() {
             orderId: order.id,
             customerName: order.customerName,
             date: order.createdAt,
-            quantity: 1, // Default quantity
+            quantity: f.quantity || 1, // Use stored quantity or default to 1
             width: 0,
             height: 0
         }));
@@ -235,14 +236,17 @@ export default function DTFOrdering() {
     const existingIndex = selectedFiles.findIndex(f => f.url === file.url && f.orderId === file.orderId);
     
     if (existingIndex >= 0) {
-        // Increment quantity
-        setSelectedFiles(prev => prev.map((f, idx) => idx === existingIndex ? { ...f, quantity: f.quantity + 1 } : f));
+        // Increment quantity? No, if we add from "Open Orders", we usually want to set the quantity to the order quantity.
+        // But if user clicks "Add" multiple times from a list...
+        // If the incoming file has a specific quantity (from order), we should probably add that.
+        // Let's just add the incoming quantity to existing.
+        setSelectedFiles(prev => prev.map((f, idx) => idx === existingIndex ? { ...f, quantity: f.quantity + (file.quantity || 1) } : f));
     } else {
         // Add new with unique ID for selection tracking
         setSelectedFiles(prev => [...prev, {
             ...file,
             id: Math.random().toString(36).substr(2, 9), // Overwrite ID with unique selection ID
-            quantity: 1,
+            quantity: file.quantity || 1,
             width: 0,
             height: 0
         }]);
@@ -830,7 +834,7 @@ export default function DTFOrdering() {
                                                                             orderId: `prod-${product.id}`,
                                                                             customerName: customer.name,
                                                                             date: product.created_at,
-                                                                            quantity: 1,
+                                                                            quantity: file.quantity || 1,
                                                                             width: 0,
                                                                             height: 0
                                                                         })}
