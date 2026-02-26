@@ -135,11 +135,13 @@ async function getShopware5Orders(baseUrl: string, username: string, apiKey: str
     // However, some servers might struggle with manual URL construction.
     // Let's use URLSearchParams to handle encoding correctly.
     
+    let data;
+
     try {
         const params = new URLSearchParams();
         params.append('filter[0][property]', 'status');
         params.append('filter[0][value]', '0');
-        params.append('filter[1][property]', 'paymentStatus');
+        params.append('filter[1][property]', 'paymentStatusId'); // Try paymentStatusId instead of paymentStatus
         params.append('filter[1][value]', '12');
         params.append('limit', '50');
 
@@ -151,34 +153,87 @@ async function getShopware5Orders(baseUrl: string, username: string, apiKey: str
         });
 
         if (!response.ok) {
-            throw new Error(`Shopware 5 Order Fetch failed: ${response.statusText}`);
+             const errorText = await response.text();
+             console.warn(`Shopware 5 Filtered Fetch failed (${response.status}): ${errorText.substring(0, 200)}`);
+             throw new Error(response.statusText);
         }
 
-        const data = await response.json();
+        const json = await response.json();
+        data = json;
+
+    } catch (filterError) {
+        console.log('Shopware 5 filtered fetch failed, trying fallback (fetch latest + client side filter)...');
         
-        // We need full details (line items) for each order
-        if (data.data && data.data.length > 0) {
-            const detailedOrders = await Promise.all(data.data.map(async (order: any) => {
-                const detailRes = await fetch(`${url}/api/orders/${order.id}`, {
-                    headers: {
-                        'Authorization': `Basic ${authString}`,
-                        'Accept': 'application/json'
-                    }
-                });
-                if (detailRes.ok) {
-                    const detailData = await detailRes.json();
-                    return detailData.data;
-                }
-                return order;
-            }));
-            return detailedOrders;
-        }
+        // Fallback: Fetch latest 50 orders sorted by orderTime DESC
+        // Note: Shopware 5 uses 'orderTime' for sorting usually
+        const params = new URLSearchParams();
+        params.append('sort[0][property]', 'orderTime');
+        params.append('sort[0][direction]', 'DESC');
+        params.append('limit', '50');
         
-        return [];
-    } catch (error) {
-        console.error('Shopware 5 Order Fetch Error:', error);
-        throw error;
+        const response = await fetch(`${url}/api/orders?${params.toString()}`, {
+             headers: {
+                 'Authorization': `Basic ${authString}`,
+                 'Accept': 'application/json'
+             }
+         });
+
+         if (!response.ok) {
+             const errorText = await response.text();
+             throw new Error(`Shopware 5 Fallback Fetch failed (${response.status}): ${errorText.substring(0, 200)}`);
+         }
+         
+         const json = await response.json();
+         
+         // Manually filter in JS
+         // Status 0 (Open) and PaymentStatus 12 (Completely Paid)
+         if (json.data && Array.isArray(json.data)) {
+             json.data = json.data.filter((o: any) => {
+                 // Check status (can be string or int)
+                 const statusMatch = String(o.status) === '0';
+                 
+                 // Check payment status (can be nested object or direct id)
+                 // Usually o.paymentStatus is an object { id: 12, ... } or o.paymentStatusId is 12
+                 let paymentMatch = false;
+                 if (o.paymentStatusId) {
+                     paymentMatch = String(o.paymentStatusId) === '12';
+                 } else if (o.paymentStatus && o.paymentStatus.id) {
+                     paymentMatch = String(o.paymentStatus.id) === '12';
+                 }
+                 
+                 return statusMatch && paymentMatch;
+             });
+         }
+         
+         data = json;
     }
+
+    // Process data
+    if (!data.success && !Array.isArray(data.data)) {
+             throw new Error('Invalid Shopware 5 response format');
+    }
+
+    const orders = data.data || [];
+    
+    // We need full details (line items) for each order
+    if (orders.length > 0) {
+        const detailedOrders = await Promise.all(orders.map(async (order: any) => {
+            const detailRes = await fetch(`${url}/api/orders/${order.id}`, {
+                headers: {
+                    'Authorization': `Basic ${authString}`,
+                    'Accept': 'application/json'
+                }
+            });
+            if (detailRes.ok) {
+                const detailData = await detailRes.json();
+                return detailData.data;
+            }
+            return order;
+        }));
+        return detailedOrders;
+    }
+    
+    return [];
 }
 
 async function getShopware5ArticleDetails(baseUrl: string, username: string, apiKey: string, articleId: number | string) {
