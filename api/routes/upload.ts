@@ -128,24 +128,37 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
 
                 // Check if PDF and missing thumbnail
                 const isPdf = file.url.toLowerCase().endsWith('.pdf') || (file.name && file.name.toLowerCase().endsWith('.pdf'));
+                const isImage = file.url.match(/\.(jpg|jpeg|png|webp)$/i) || (file.name && file.name.match(/\.(jpg|jpeg|png|webp)$/i));
                 
-                if (isPdf && !file.thumbnail) {
+                if ((isPdf || isImage) && !file.thumbnail) {
                     const filename = path.basename(file.url);
                     const inputPath = path.join(UPLOAD_DIR, filename);
 
                     if (await fs.pathExists(inputPath)) {
                         try {
                             const thumbName = `${filename}_thumb`;
-                            const thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
+                            let thumbOutputPath = "";
                             
-                            // Generate thumbnail
-                            await execFileAsync('pdftoppm', [
-                                '-png',
-                                '-singlefile',
-                                '-scale-to', '300',
-                                inputPath,
-                                thumbOutputPath
-                            ]);
+                            if (isPdf) {
+                                thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
+                                // Generate thumbnail for PDF
+                                await execFileAsync('pdftoppm', [
+                                    '-png',
+                                    '-singlefile',
+                                    '-scale-to', '300',
+                                    inputPath,
+                                    thumbOutputPath
+                                ]);
+                            } else {
+                                // Generate thumbnail for Image
+                                thumbOutputPath = path.join(UPLOAD_DIR, `${thumbName}.png`);
+                                await sharp(inputPath)
+                                    .resize(300, 300, {
+                                        fit: 'contain',
+                                        background: { r: 255, g: 255, b: 255, alpha: 0 }
+                                    })
+                                    .toFile(thumbOutputPath);
+                            }
                             
                             file.thumbnail = `/uploads/${thumbName}.png`;
                             orderUpdated = true;
@@ -161,8 +174,74 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                 db.prepare('UPDATE orders SET files = ? WHERE id = ?').run(JSON.stringify(files), order.id);
             }
         }
+        
+        // Also regenerate for products
+        const products = db.prepare('SELECT id, files FROM products').all() as { id: string, files: string }[];
+        let productsUpdated = 0;
+        
+        for (const product of products) {
+            let files: any[] = [];
+            try {
+                files = JSON.parse(product.files || '[]');
+            } catch (e) { continue; }
+            
+            let productUpdated = false;
+            
+            for (const file of files) {
+                // Products use file_url or url
+                const fileUrl = file.file_url || file.url;
+                if (!fileUrl) continue;
+                
+                const isPdf = fileUrl.toLowerCase().endsWith('.pdf') || (file.file_name && file.file_name.toLowerCase().endsWith('.pdf'));
+                const isImage = fileUrl.match(/\.(jpg|jpeg|png|webp)$/i) || (file.file_name && file.file_name.match(/\.(jpg|jpeg|png|webp)$/i));
+                
+                if ((isPdf || isImage) && (!file.thumbnail && !file.thumbnail_url)) {
+                     const filename = path.basename(fileUrl);
+                     const inputPath = path.join(UPLOAD_DIR, filename);
+                     
+                     if (await fs.pathExists(inputPath)) {
+                        try {
+                            const thumbName = `${filename}_thumb`;
+                            let thumbOutputPath = "";
+                            
+                            if (isPdf) {
+                                thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
+                                await execFileAsync('pdftoppm', [
+                                    '-png',
+                                    '-singlefile',
+                                    '-scale-to', '300',
+                                    inputPath,
+                                    thumbOutputPath
+                                ]);
+                            } else {
+                                thumbOutputPath = path.join(UPLOAD_DIR, `${thumbName}.png`);
+                                await sharp(inputPath)
+                                    .resize(300, 300, {
+                                        fit: 'contain',
+                                        background: { r: 255, g: 255, b: 255, alpha: 0 }
+                                    })
+                                    .toFile(thumbOutputPath);
+                            }
+                            
+                            // Update both fields for compatibility
+                            const thumbUrl = `/uploads/${thumbName}.png`;
+                            file.thumbnail = thumbUrl;
+                            file.thumbnail_url = thumbUrl;
+                            productUpdated = true;
+                            productsUpdated++;
+                        } catch (e) {
+                            console.error(`Failed to regenerate product thumbnail for ${filename}:`, e);
+                        }
+                     }
+                }
+            }
+            
+            if (productUpdated) {
+                db.prepare('UPDATE products SET files = ? WHERE id = ?').run(JSON.stringify(files), product.id);
+            }
+        }
 
-        res.json({ success: true, updated: totalUpdated, ordersFound: ordersCount });
+        res.json({ success: true, updated: totalUpdated, productsUpdated, ordersFound: ordersCount });
     } catch (error) {
         console.error('Error regenerating thumbnails:', error);
         res.status(500).json({ success: false, error: 'Regeneration failed' });
