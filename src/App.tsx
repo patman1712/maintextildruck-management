@@ -24,13 +24,49 @@ import ImageVector from "@/pages/ImageVector";
 import FAQ from "@/pages/FAQ";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export default function App() {
   const fetchData = useAppStore((state) => state.fetchData);
+  const initialLoadTime = useRef(Date.now());
+  const versionCheckInterval = useRef<any>(null);
 
   useEffect(() => {
     fetchData();
+
+    // Version Check Function
+    const checkVersion = async () => {
+        try {
+            const res = await fetch('/api/health');
+            const data = await res.json();
+            
+            if (data.success && data.startTime) {
+                const serverStartTime = data.startTime;
+                
+                // Logic: If the server started significantly later than this page loaded,
+                // it means a redeployment happened.
+                // We add a 60s buffer to avoid reload loops if client/server times are slightly off or during the deployment window itself.
+                if (serverStartTime > (initialLoadTime.current + 60000)) {
+                    console.log("New version detected. Reloading...");
+                    if (confirm("Ein neues Update wurde installiert. Die Seite muss neu geladen werden, um die Änderungen zu sehen.")) {
+                         window.location.reload();
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Version check failed", e);
+        }
+    };
+
+    // Check every 2 minutes
+    const intervalId = setInterval(checkVersion, 2 * 60 * 1000);
+    
+    // Also check shortly after load (e.g. 10s) to catch if we loaded a cached old version
+    setTimeout(checkVersion, 10000);
+
+    return () => {
+        clearInterval(intervalId);
+    };
   }, [fetchData]);
 
   return (

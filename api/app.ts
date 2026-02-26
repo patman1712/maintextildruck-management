@@ -93,6 +93,8 @@ app.use('/api/admin', adminRoutes)
 app.use('/uploads', express.static(UPLOAD_DIR))
 app.use('/downloads', express.static(DOWNLOADS_DIR))
 
+const START_TIME = Date.now();
+
 /**
  * health
  */
@@ -102,6 +104,7 @@ app.use(
     res.status(200).json({
       success: true,
       message: 'ok',
+      startTime: START_TIME
     })
   },
 )
