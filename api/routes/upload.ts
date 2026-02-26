@@ -138,6 +138,15 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
 
                 // Extract filename properly: handle both /uploads/filename and just filename
                 const filename = path.basename(fileUrl);
+                
+                // FORCE PATH:
+                // If we are on Railway (or any server where UPLOAD_DIR is absolute), we must be careful.
+                // fileUrl might be "/uploads/foo.png".
+                // UPLOAD_DIR might be "/app/data/uploads".
+                // path.join(UPLOAD_DIR, filename) -> "/app/data/uploads/foo.png". This is correct.
+                
+                // BUT: Check if filename is actually found.
+                // Let's try to look for it directly.
                 const inputPath = path.join(UPLOAD_DIR, filename);
 
                 // Determine file type
@@ -146,49 +155,56 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                 
                 // FORCE REGENERATE if it's an image and doesn't have a thumbnail (or has a dummy one)
                 // Also check if file exists
-                const needsThumb = (isPdf || isImage) && !file.thumbnail;
+                // CHANGE: We removed the check "!file.thumbnail" to force re-check of existence for debugging?
+                // No, user says "0 updated".
+                // Let's assume thumbnails are missing.
+                const needsThumb = (isPdf || isImage) && (!file.thumbnail || file.thumbnail === "");
                 
-                if (needsThumb) {
+                if (isPdf || isImage) {
+                    // console.log(`Checking ${filename}... Needs thumb? ${needsThumb}`);
+                    
                     if (await fs.pathExists(inputPath)) {
-                        try {
-                            console.log(`Generating thumbnail for ${filename}...`);
-                            const thumbName = `${filename}_thumb`;
-                            let thumbOutputPath = "";
-                            
-                            if (isPdf) {
-                                thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
-                                // Generate thumbnail for PDF
-                                await execFileAsync('pdftoppm', [
-                                    '-png',
-                                    '-singlefile',
-                                    '-scale-to', '300',
-                                    inputPath,
-                                    thumbOutputPath
-                                ]);
-                            } else {
-                                // Generate thumbnail for Image
-                                thumbOutputPath = path.join(UPLOAD_DIR, `${thumbName}.png`);
-                                await sharp(inputPath)
-                                    .resize(300, 300, {
-                                        fit: 'contain',
-                                        background: { r: 255, g: 255, b: 255, alpha: 0 }
-                                    })
-                                    .toFile(thumbOutputPath);
+                         if (needsThumb) {
+                            try {
+                                console.log(`Generating thumbnail for ${filename}...`);
+                                const thumbName = `${filename}_thumb`;
+                                let thumbOutputPath = "";
+                                
+                                if (isPdf) {
+                                    thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
+                                    // Generate thumbnail for PDF
+                                    await execFileAsync('pdftoppm', [
+                                        '-png',
+                                        '-singlefile',
+                                        '-scale-to', '300',
+                                        inputPath,
+                                        thumbOutputPath
+                                    ]);
+                                } else {
+                                    // Generate thumbnail for Image
+                                    thumbOutputPath = path.join(UPLOAD_DIR, `${thumbName}.png`);
+                                    await sharp(inputPath)
+                                        .resize(300, 300, {
+                                            fit: 'contain',
+                                            background: { r: 255, g: 255, b: 255, alpha: 0 }
+                                        })
+                                        .toFile(thumbOutputPath);
+                                }
+                                
+                                const thumbUrl = `/uploads/${thumbName}.png`;
+                                file.thumbnail = thumbUrl;
+                                
+                                // Also update legacy thumbnail_url if present
+                                if (file.thumbnail_url !== undefined) file.thumbnail_url = thumbUrl;
+                                
+                                orderUpdated = true;
+                                totalUpdated++;
+                            } catch (e) {
+                                console.error(`Failed to regenerate thumbnail for ${filename}:`, e);
                             }
-                            
-                            const thumbUrl = `/uploads/${thumbName}.png`;
-                            file.thumbnail = thumbUrl;
-                            
-                            // Also update legacy thumbnail_url if present
-                            if (file.thumbnail_url !== undefined) file.thumbnail_url = thumbUrl;
-                            
-                            orderUpdated = true;
-                            totalUpdated++;
-                        } catch (e) {
-                            console.error(`Failed to regenerate thumbnail for ${filename}:`, e);
                         }
                     } else {
-                        console.log(`File not found on disk: ${inputPath}`);
+                        console.log(`File not found on disk: ${inputPath} (UPLOAD_DIR: ${UPLOAD_DIR})`);
                     }
                 }
             }
