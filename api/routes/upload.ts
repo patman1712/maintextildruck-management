@@ -5,6 +5,7 @@ import fs from 'fs-extra';
 import db, { DATA_DIR } from '../db.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import sharp from 'sharp';
 
 const execFileAsync = promisify(execFile);
 
@@ -19,11 +20,59 @@ const storage = multer.diskStorage({
   filename: function (req, file, cb) {
     // Decode original name to avoid encoding issues
     const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-    cb(null, originalName);
+    // Sanitize filename to avoid filesystem issues
+    const safeName = originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const timestamp = Date.now();
+    cb(null, `${timestamp}_${safeName}`);
   }
 });
 
 const upload = multer({ storage: storage });
+
+// Helper to generate thumbnails
+const generateThumbnail = async (file: Express.Multer.File) => {
+    const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    let thumbnail = undefined;
+    const inputPath = path.join(UPLOAD_DIR, file.filename);
+    const thumbName = `${file.filename}_thumb`; // Base name for thumb
+    
+    try {
+        if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
+            const thumbOutputPath = path.join(UPLOAD_DIR, thumbName); // pdftoppm adds extension automatically if we don't be careful, but with -singlefile it uses the root name
+            
+            await execFileAsync('pdftoppm', [
+                '-png',
+                '-singlefile',
+                '-scale-to', '300',
+                inputPath,
+                thumbOutputPath
+            ]);
+            
+            thumbnail = `/uploads/${thumbName}.png`;
+        } else if (file.mimetype.startsWith('image/')) {
+            // Use sharp for images
+            const thumbOutputPath = path.join(UPLOAD_DIR, `${thumbName}.png`); // Explicit png extension
+            
+            await sharp(inputPath)
+                .resize(300, 300, {
+                    fit: 'contain',
+                    background: { r: 255, g: 255, b: 255, alpha: 0 }
+                })
+                .toFile(thumbOutputPath);
+                
+            thumbnail = `/uploads/${thumbName}.png`;
+        }
+    } catch (e) {
+        console.error('Thumbnail generation failed:', e);
+    }
+
+    return {
+        originalName,
+        filename: file.filename,
+        path: `/uploads/${file.filename}`,
+        thumbnail
+    };
+};
 
 // POST /api/upload
 router.post('/', upload.fields([
@@ -37,70 +86,10 @@ router.post('/', upload.fields([
 
   if (files) {
     if (files.preview) {
-      result.preview = await Promise.all(files.preview.map(async f => {
-        const originalName = Buffer.from(f.originalname, 'latin1').toString('utf8');
-        let thumbnail = undefined;
-
-        if (f.mimetype === 'application/pdf' || f.originalname.toLowerCase().endsWith('.pdf')) {
-            try {
-                const inputPath = path.join(UPLOAD_DIR, f.filename);
-                const thumbName = `${f.filename}_thumb`;
-                const thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
-                
-                await execFileAsync('pdftoppm', [
-                    '-png',
-                    '-singlefile',
-                    '-scale-to', '300',
-                    inputPath,
-                    thumbOutputPath
-                ]);
-                
-                thumbnail = `/uploads/${thumbName}.png`;
-            } catch (e) {
-                console.error('Thumbnail generation failed for preview', e);
-            }
-        }
-
-        return {
-            originalName,
-            filename: f.filename,
-            path: `/uploads/${f.filename}`,
-            thumbnail
-        };
-      }));
+      result.preview = await Promise.all(files.preview.map(generateThumbnail));
     }
     if (files.print) {
-      result.print = await Promise.all(files.print.map(async f => {
-        const originalName = Buffer.from(f.originalname, 'latin1').toString('utf8');
-        let thumbnail = undefined;
-
-        if (f.mimetype === 'application/pdf' || f.originalname.toLowerCase().endsWith('.pdf')) {
-            try {
-                const inputPath = path.join(UPLOAD_DIR, f.filename);
-                const thumbName = `${f.filename}_thumb`;
-                const thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
-                
-                await execFileAsync('pdftoppm', [
-                    '-png',
-                    '-singlefile',
-                    '-scale-to', '300',
-                    inputPath,
-                    thumbOutputPath
-                ]);
-                
-                thumbnail = `/uploads/${thumbName}.png`;
-            } catch (e) {
-                console.error('Thumbnail generation failed for print', e);
-            }
-        }
-
-        return {
-            originalName,
-            filename: f.filename,
-            path: `/uploads/${f.filename}`,
-            thumbnail
-        };
-      }));
+      result.print = await Promise.all(files.print.map(generateThumbnail));
     }
     if (files.vector) {
       result.vector = files.vector.map(f => ({
@@ -110,11 +99,7 @@ router.post('/', upload.fields([
       }));
     }
     if (files.internal) {
-      result.internal = files.internal.map(f => ({
-        originalName: Buffer.from(f.originalname, 'latin1').toString('utf8'),
-        filename: f.filename,
-        path: `/uploads/${f.filename}`
-      }));
+      result.internal = await Promise.all(files.internal.map(generateThumbnail));
     }
   }
 
