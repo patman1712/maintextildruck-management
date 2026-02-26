@@ -131,9 +131,19 @@ async function getShopware5Orders(baseUrl: string, username: string, apiKey: str
     const url = baseUrl.replace(/\/$/, '');
     const authString = Buffer.from(`${username}:${apiKey}`).toString('base64');
     
-    // Filter: Status 0 (Open) AND PaymentStatus 12 (Completely Paid)
+    // Shopware 5 REST API requires proper encoding for filter arrays in query params.
+    // However, some servers might struggle with manual URL construction.
+    // Let's use URLSearchParams to handle encoding correctly.
+    
     try {
-        const response = await fetch(`${url}/api/orders?filter[0][property]=status&filter[0][value]=0&filter[1][property]=paymentStatus&filter[1][value]=12&limit=50`, {
+        const params = new URLSearchParams();
+        params.append('filter[0][property]', 'status');
+        params.append('filter[0][value]', '0');
+        params.append('filter[1][property]', 'paymentStatus');
+        params.append('filter[1][value]', '12');
+        params.append('limit', '50');
+
+        const response = await fetch(`${url}/api/orders?${params.toString()}`, {
             headers: {
                 'Authorization': `Basic ${authString}`,
                 'Accept': 'application/json'
