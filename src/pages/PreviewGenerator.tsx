@@ -175,7 +175,8 @@ export default function PreviewGenerator() {
         orderTitle: undefined // Explicitly undefined for type
     })));
 
-    const combinedFiles = [...orderFiles, ...productFiles] as any[];
+    const combinedFiles = [...orderFiles, ...productFiles]
+        .filter(f => f.type === 'print' || f.type === 'vector');
     
     const uniqueFiles = Array.from(new Map(combinedFiles.map(f => [f.url, f])).values());
     const filteredFiles = uniqueFiles.filter(f => (f.name || '').toLowerCase().includes(fileSearch.toLowerCase()));
