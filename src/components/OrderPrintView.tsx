@@ -37,9 +37,9 @@ export default function OrderPrintView({ order }: OrderPrintViewProps) {
   };
 
   return (
-    <div className="hidden print:block p-8 font-sans text-slate-900 bg-white">
+    <div className="hidden print:block font-sans text-slate-900 bg-white w-full h-full absolute top-0 left-0 z-50">
       {/* Header */}
-      <div className="flex justify-between items-start mb-8 border-b-2 border-slate-800 pb-6">
+      <div className="flex justify-between items-start mb-8 border-b-2 border-slate-800 pb-6 print:mt-8 print:mx-8">
         <div>
           {logoUrl ? (
             <img src={logoUrl} alt="Logo" className="h-16 object-contain mb-4" />
@@ -57,6 +57,7 @@ export default function OrderPrintView({ order }: OrderPrintViewProps) {
         </div>
       </div>
 
+      <div className="print:mx-8">
       {/* Info Grid */}
       <div className="grid grid-cols-2 gap-12 mb-8">
         {/* Customer */}
@@ -201,6 +202,7 @@ export default function OrderPrintView({ order }: OrderPrintViewProps) {
       <div className="mt-12 pt-6 border-t border-slate-200 text-center text-xs text-slate-400 flex justify-between">
         <span>Gedruckt am: {new Date().toLocaleString('de-DE')}</span>
         <span>Seite 1 von 1</span>
+      </div>
       </div>
     </div>
   );
