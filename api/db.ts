@@ -289,6 +289,12 @@ try {
     console.log('Migrating database: Adding approval_comment to orders table');
     db.exec('ALTER TABLE orders ADD COLUMN approval_comment TEXT');
   }
+
+  const hasShopwareOrderId = columns.some(col => col.name === 'shopware_order_id');
+  if (!hasShopwareOrderId) {
+    console.log('Migrating database: Adding shopware_order_id to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN shopware_order_id TEXT');
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }

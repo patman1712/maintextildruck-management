@@ -1,5 +1,5 @@
 import { useAppStore, Order, OrderSteps } from "@/store";
-import { Folder, Search, Filter, Calendar, User, Eye, Printer, MoreHorizontal, Settings, CheckCircle, FileText, Edit, PenTool, Archive, Share2, XCircle, Info, RefreshCw, X } from "lucide-react";
+import { Folder, Search, Filter, Calendar, User, Eye, Printer, MoreHorizontal, Settings, CheckCircle, FileText, Edit, PenTool, Archive, Share2, XCircle, Info, RefreshCw, X, DownloadCloud } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -12,6 +12,25 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">(filter || "active");
   const [approvalInfoOrder, setApprovalInfoOrder] = useState<Order | null>(null);
+
+  const handleShopwareSync = async () => {
+    if (!confirm('Möchten Sie jetzt Bestellungen aus Shopware abrufen? Nur bezahlte und offene Bestellungen werden importiert.')) return;
+    
+    try {
+        const res = await fetch('/api/shopware/sync-orders', { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.success) {
+            alert(`Synchronisation erfolgreich!\n${data.count} Bestellungen importiert.\n${data.errors?.length > 0 ? `Fehler: ${JSON.stringify(data.errors)}` : ''}`);
+            fetchData(); // Refresh list
+        } else {
+            alert('Fehler: ' + data.error);
+        }
+    } catch (err) {
+        alert('Netzwerkfehler beim Synchronisieren');
+        console.error(err);
+    }
+  };
 
   const handleShareProof = async (orderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -99,6 +118,14 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
         </h1>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-center">
+          <button 
+            onClick={handleShopwareSync}
+            className="p-2 border border-gray-300 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
+            title="Shopware Bestellungen synchronisieren"
+          >
+            <DownloadCloud size={20} />
+          </button>
+
           <button 
             onClick={() => fetchData()}
             className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
