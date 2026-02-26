@@ -858,7 +858,7 @@ export default function DTFOrdering() {
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                             {filteredAvailableFiles.map((file, idx) => {
                                 const isSelected = selectedFiles.some(f => f.url === file.url);
                                 const displayThumb = file.thumbnail || file.url;
@@ -868,11 +868,11 @@ export default function DTFOrdering() {
                                         key={idx} 
                                         onClick={() => addFile(file)}
                                         className={`
-                                            cursor-pointer rounded-lg border p-2 relative group hover:shadow-md transition-all
+                                            cursor-pointer rounded-lg border p-3 relative group hover:shadow-md transition-all flex flex-col
                                             ${isSelected ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'border-gray-200 bg-white hover:border-red-300'}
                                         `}
                                     >
-                                        <div className="aspect-square bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden relative">
+                                        <div className="aspect-square bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden relative shrink-0">
                                             {displayThumb ? (
                                                 <img src={displayThumb} alt="" className="w-full h-full object-contain" onError={(e) => {
                                                     e.currentTarget.style.display = 'none';
@@ -892,11 +892,13 @@ export default function DTFOrdering() {
                                                 </div>
                                             )}
                                         </div>
-                                        <p className="text-xs font-medium truncate mb-0.5" title={file.name}>
-                                            {file.reference && <span className="bg-blue-100 text-blue-800 text-[10px] px-1 rounded mr-1">{file.reference}</span>}
-                                            {file.name}
-                                        </p>
-                                        <p className="text-[10px] text-gray-500 truncate">{file.customerName}</p>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-medium text-gray-900 break-words line-clamp-2 mb-1" title={file.name}>
+                                                {file.reference && <span className="bg-blue-100 text-blue-800 text-[10px] px-1 rounded mr-1 inline-block mb-0.5">{file.reference}</span>}
+                                                {file.name}
+                                            </p>
+                                            <p className="text-xs text-gray-500 truncate">{file.customerName}</p>
+                                        </div>
                                         
                                         {isSelected && (
                                             <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow">
