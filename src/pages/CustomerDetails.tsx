@@ -391,17 +391,36 @@ export default function CustomerDetails() {
   };
 
   const handleRemoveFile = async (fileId: string) => {
-      if (!editingProduct) return;
-      try {
-          await fetch(`/api/products/${editingProduct.id}/files/${fileId}`, {
-              method: 'DELETE'
+      // Find the file first to check its URL
+      const fileToRemove = editingProduct?.files.find(f => f.id === fileId);
+      
+      const confirmDelete = async () => {
+          if (!editingProduct) return;
+          try {
+              await fetch(`/api/products/${editingProduct.id}/files/${fileId}`, {
+                  method: 'DELETE'
+              });
+              
+              const updatedFiles = editingProduct.files.filter(f => f.id !== fileId);
+              setEditingProduct({ ...editingProduct, files: updatedFiles });
+              fetchProducts();
+          } catch (err) {
+              console.error(err);
+          }
+      };
+
+      if (fileToRemove) {
+          setConfirmModal({
+              isOpen: true,
+              title: 'Datei entfernen',
+              message: `Möchten Sie die Datei "${fileToRemove.file_name}" von diesem Artikel entfernen?`,
+              confirmText: 'Entfernen',
+              type: 'danger',
+              onConfirm: confirmDelete
           });
-          
-          const updatedFiles = editingProduct.files.filter(f => f.id !== fileId);
-          setEditingProduct({ ...editingProduct, files: updatedFiles });
-          fetchProducts();
-      } catch (err) {
-          console.error(err);
+      } else {
+          // Fallback if file not found locally
+          confirmDelete();
       }
   };
 
