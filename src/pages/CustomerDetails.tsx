@@ -1322,13 +1322,13 @@ export default function CustomerDetails() {
                                                         <X size={12} />
                                                     </button>
                                                     <div className="text-[10px] truncate mt-1 text-gray-600 flex justify-between items-center" title={file.file_name}>
-                                                        <span className="truncate max-w-[80px]">{file.file_name}</span>
-                                                        <div className="flex items-center bg-gray-100 rounded px-1 ml-1">
-                                                            <span className="text-[9px] text-gray-500 mr-1">x</span>
+                                                        <span className="truncate max-w-[70px]">{file.file_name}</span>
+                                                        <div className="flex items-center bg-white border border-red-200 rounded px-1 ml-1 shadow-sm" title="Anzahl der Drucke pro Artikel">
+                                                            <span className="text-[9px] text-red-500 font-bold mr-1">x</span>
                                                             <input 
                                                                 type="number" 
                                                                 min="1"
-                                                                className="w-6 h-4 text-[10px] bg-transparent text-center focus:outline-none p-0 border-none"
+                                                                className="w-8 h-5 text-[10px] font-bold text-center focus:outline-none p-0 border-none bg-transparent"
                                                                 value={file.quantity || 1}
                                                                 onClick={(e) => e.stopPropagation()}
                                                                 onChange={(e) => {
