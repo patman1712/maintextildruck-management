@@ -391,6 +391,14 @@ export default function EditOrder() {
         setFileQuantities(newQuantities);
     }
   }, [productSizeInput, selectedProduct]);
+
+  // Update manual item quantity based on size input
+  useEffect(() => {
+    const qty = parseQuantity(newItem.size);
+    if (qty !== newItem.quantity && newItem.size) {
+        setNewItem(prev => ({ ...prev, quantity: qty }));
+    }
+  }, [newItem.size]);
   
   const loadCustomerProducts = async () => {
       // Try to find customer ID
@@ -822,8 +830,8 @@ export default function EditOrder() {
           </h3>
           
           <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mb-4">
-                <div className="lg:col-span-2">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
+                <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-gray-700 mb-1">Lieferant / Shop</label>
                     <select 
                         className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
@@ -836,7 +844,7 @@ export default function EditOrder() {
                         ))}
                     </select>
                 </div>
-                <div className="lg:col-span-2">
+                <div className="md:col-span-4">
                     <label className="block text-xs font-medium text-gray-700 mb-1">Artikelname / Art.-Nr. / Farbe</label>
                     <input 
                         type="text" 
@@ -846,8 +854,8 @@ export default function EditOrder() {
                         onChange={(e) => setNewItem({...newItem, itemName: e.target.value})}
                     />
                 </div>
-                <div className="lg:col-span-1">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Anzahl</label>
+                <div className="md:col-span-3">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Beschreibung</label>
                     <input 
                         type="text" 
                         className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
@@ -856,7 +864,17 @@ export default function EditOrder() {
                         onChange={(e) => setNewItem({...newItem, size: e.target.value})}
                     />
                 </div>
-                <div className="lg:col-span-1">
+                <div className="md:col-span-1">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Anzahl</label>
+                    <input 
+                        type="number" 
+                        min="1"
+                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2 font-bold text-center"
+                        value={newItem.quantity}
+                        onChange={(e) => setNewItem({...newItem, quantity: parseInt(e.target.value) || 1})}
+                    />
+                </div>
+                <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-gray-700 mb-1">Notizen (Optional)</label>
                     <input 
                         type="text" 
@@ -866,7 +884,7 @@ export default function EditOrder() {
                         onChange={(e) => setNewItem({...newItem, notes: e.target.value})}
                     />
                 </div>
-                <div className="flex items-end justify-end">
+                <div className="md:col-span-12 flex items-end justify-end">
                     <button 
                         type="button"
                         onClick={handleAddItem}

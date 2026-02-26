@@ -372,26 +372,45 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         setShowProductPicker(false);
     };
 
+  const parseQuantity = (input: string): number => {
+      // Try to find patterns like "5x", "5 x", "5X"
+      const matches = input.match(/(\d+)\s*[xX]/g);
+      if (matches) {
+          let total = 0;
+          matches.forEach(m => {
+              const num = parseInt(m.match(/\d+/)?.[0] || "0");
+              total += num;
+          });
+          return total > 0 ? total : 1;
+      }
+      
+      // If no "x" pattern, try to parse the whole string as a number
+      const simpleNum = parseInt(input);
+      if (!isNaN(simpleNum) && String(simpleNum) === input.trim()) {
+          return simpleNum;
+      }
+      
+      return 1;
+  };
+
+  // Update manual item quantity based on size input
+  useEffect(() => {
+    const qty = parseQuantity(currentItem.size);
+    if (qty !== currentItem.quantity && currentItem.size) {
+        setCurrentItem(prev => ({ ...prev, quantity: qty }));
+    }
+  }, [currentItem.size]);
+
   const addCurrentItemToPending = () => {
       if (!currentItem.itemName) return;
       
-      // Parse Quantity from Size string (e.g. "5x XL" -> qty: 5, size: "XL")
-      let parsedQty = 1;
-      let parsedSize = currentItem.size;
-      
-      const qtyMatch = currentItem.size.match(/^(\d+)\s*[xX\s]\s*(.*)$/);
-      if (qtyMatch) {
-          parsedQty = parseInt(qtyMatch[1]);
-          parsedSize = qtyMatch[2] || 'Universal'; // If size is empty after extracting qty
-      }
-
       setPendingItems(prev => [...prev, {
           ...currentItem,
           _tempId: Math.random().toString(),
           supplierId: currentItem.supplierId || manualOrderSettings.defaultSupplierId,
           manualOrderNumber: manualOrderSettings.manualOrderNumber,
-          quantity: parsedQty,
-          size: parsedSize
+          quantity: currentItem.quantity, // Use the calculated/manual quantity
+          size: currentItem.size
       }]);
       // Reset current item
       setCurrentItem(prev => ({
@@ -894,14 +913,25 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                     />
                                 </div>
                                 
-                                <div className="md:col-span-3">
-                                    <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Anzahl</label>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Beschr.</label>
                                     <input 
                                         type="text" 
                                         className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
                                         value={currentItem.size}
                                         onChange={(e) => setCurrentItem({...currentItem, size: e.target.value})}
                                         placeholder="z.B. 5x XL"
+                                    />
+                                </div>
+
+                                <div className="md:col-span-1">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Anzahl</label>
+                                    <input 
+                                        type="number" 
+                                        min="1"
+                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2 font-bold text-center"
+                                        value={currentItem.quantity}
+                                        onChange={(e) => setCurrentItem({...currentItem, quantity: parseInt(e.target.value) || 1})}
                                     />
                                 </div>
 
