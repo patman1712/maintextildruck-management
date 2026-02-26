@@ -29,10 +29,11 @@ const upload = multer({ storage: storage });
 router.post('/', upload.fields([
   { name: 'preview', maxCount: 20 },
   { name: 'print', maxCount: 20 },
-  { name: 'vector', maxCount: 20 }
+  { name: 'vector', maxCount: 20 },
+  { name: 'internal', maxCount: 20 }
 ]), async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-  const result: any = { preview: [], print: [], vector: [] };
+  const result: any = { preview: [], print: [], vector: [], internal: [] };
 
   if (files) {
     if (files.preview) {
@@ -103,6 +104,13 @@ router.post('/', upload.fields([
     }
     if (files.vector) {
       result.vector = files.vector.map(f => ({
+        originalName: Buffer.from(f.originalname, 'latin1').toString('utf8'),
+        filename: f.filename,
+        path: `/uploads/${f.filename}`
+      }));
+    }
+    if (files.internal) {
+      result.internal = files.internal.map(f => ({
         originalName: Buffer.from(f.originalname, 'latin1').toString('utf8'),
         filename: f.filename,
         path: `/uploads/${f.filename}`
