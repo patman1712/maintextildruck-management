@@ -465,7 +465,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                          url: f.file_url || f.url || f.path, 
                          thumbnail: f.thumbnail_url || f.thumbnail,
                          customName: f.file_name || f.customName,
-                         reference: finalOrderNumber 
+                         reference: finalOrderNumber,
+                         quantity: (f.quantity || 1) * (item.quantity || 1)
                      }));
 
                      if (newOrderFiles.length > 0) {
@@ -772,7 +773,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                     </div>
                                                     <div className="text-sm mt-0.5 flex flex-wrap gap-2 items-center">
                                                          <span className="font-bold bg-gray-100 px-1.5 rounded text-gray-800">
-                                                            {item.quantity > 1 ? `${item.quantity}x ` : ''}{item.size}
+                                                            {/* Hide prefix if size string already contains quantity multipliers like "3x XL" */}
+                                                            {item.quantity > 1 && !/(\d+)\s*[xX]/.test(item.size) ? `${item.quantity}x ` : ''}{item.size}
                                                          </span>
                                                          {item.color && <span className="text-gray-600">Farbe: {item.color}</span>}
                                                     </div>
@@ -995,7 +997,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                         {item.itemNumber && <span className="ml-2 text-xs text-gray-400">#{item.itemNumber}</span>}
                                                     </td>
                                                     <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 font-bold">
-                                                        {item.quantity > 1 ? `${item.quantity}x ` : ''}{item.size}
+                                                        {item.quantity > 1 && !/(\d+)\s*[xX]/.test(item.size) ? `${item.quantity}x ` : ''}{item.size}
                                                     </td>
                                                     <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
                                                         {suppliers.find(s => s.id === item.supplierId)?.name || 'Standard'}

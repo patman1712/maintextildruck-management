@@ -264,7 +264,9 @@ export default function OrderDetails() {
                                         {item.color && <div className="text-xs text-gray-500">Farbe: {item.color}</div>}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        <div className="font-bold">{item.quantity > 1 ? `${item.quantity}x` : ''}</div>
+                                        <div className="font-bold">
+                                            {item.quantity > 1 && !/(\d+)\s*[xX]/.test(item.size) ? `${item.quantity}x` : ''}
+                                        </div>
                                         <div className="text-gray-500">{item.size}</div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

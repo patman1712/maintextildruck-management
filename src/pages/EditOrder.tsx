@@ -915,7 +915,9 @@ export default function EditOrder() {
                         {orderItems.map((item) => (
                             <tr key={item.id}>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{item.itemName}</td>
-                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 font-bold">{item.quantity > 1 ? `${item.quantity}x ` : ''}{item.size}</td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 font-bold">
+                                    {item.quantity > 1 && !/(\d+)\s*[xX]/.test(item.size) ? `${item.quantity}x ` : ''}{item.size}
+                                </td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{item.supplierName || 'Unbekannt'}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 italic">{item.notes}</td>
                                 <td className="px-4 py-2 whitespace-nowrap">
