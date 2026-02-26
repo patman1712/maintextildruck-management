@@ -165,55 +165,44 @@ export default function OrderPrintView({ order }: OrderPrintViewProps) {
       {/* Files List */}
       {order.files && order.files.length > 0 && (
         <div className="mb-8 page-break-inside-avoid">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center">
-            <FileText size={14} className="mr-1" /> Zugehörige Dateien
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center border-b border-slate-200 pb-2">
+            <FileText size={14} className="mr-1" /> Zugehörige Dateien & Vorschauen
           </h3>
-          <div className="grid grid-cols-2 gap-4">
+          
+          <div className="grid grid-cols-2 gap-8">
             {order.files.map((file, idx) => {
-              // Check if it's an image or has a thumbnail to display larger
+              // Check if it's an image or has a thumbnail
               const isImage = file.thumbnail || (file.url && file.name.match(/\.(jpg|jpeg|png|webp)$/i));
               
               if (isImage) {
                   return (
-                    <div key={idx} className="flex flex-col p-3 border border-slate-200 rounded bg-white page-break-inside-avoid">
-                        <div className="flex items-center mb-2">
-                            <div className={`p-1.5 rounded mr-2 ${
-                                file.type === 'print' ? 'bg-red-50 text-red-600' :
-                                file.type === 'vector' ? 'bg-blue-50 text-blue-600' :
-                                file.type === 'internal' ? 'bg-amber-50 text-amber-600' :
-                                'bg-gray-50 text-gray-600'
-                            }`}>
-                                {getFileIcon(file.type)}
-                            </div>
-                            <div className="overflow-hidden">
-                                <div className="font-medium text-sm truncate">{file.name}</div>
-                                <div className="text-xs text-slate-500 uppercase">{getFileLabel(file.type)}</div>
-                            </div>
+                    <div key={idx} className="flex flex-col mb-4 page-break-inside-avoid">
+                        <div className="mb-2 flex items-center text-sm font-medium text-slate-700">
+                            <span className="uppercase text-xs text-slate-500 mr-2 border border-slate-200 px-1.5 rounded bg-slate-50">
+                                {getFileLabel(file.type)}
+                            </span>
+                            {file.name}
                         </div>
-                        <div className="w-full h-48 bg-gray-50 border border-gray-100 rounded overflow-hidden flex items-center justify-center">
+                        <div className="w-full overflow-hidden rounded border border-slate-100">
                             <img 
                                 src={file.thumbnail || file.url} 
                                 alt={file.name}
-                                className="max-w-full max-h-full object-contain" 
+                                className="w-full h-auto object-contain max-h-[300px]" 
                             />
                         </div>
                     </div>
                   );
               }
 
+              // Standard file listing for non-images
               return (
-              <div key={idx} className="flex items-center p-2 border border-slate-200 rounded bg-white">
-                <div className={`p-2 rounded mr-3 ${
-                  file.type === 'print' ? 'bg-red-50 text-red-600' :
-                  file.type === 'vector' ? 'bg-blue-50 text-blue-600' :
-                  file.type === 'internal' ? 'bg-amber-50 text-amber-600' :
-                  'bg-gray-50 text-gray-600'
-                }`}>
+              <div key={idx} className="flex items-center p-2 border-b border-slate-100 mb-2">
+                <div className="mr-3 text-slate-400">
                   {getFileIcon(file.type)}
                 </div>
                 <div className="overflow-hidden">
-                  <div className="font-medium text-sm truncate">{file.name}</div>
-                  <div className="text-xs text-slate-500 uppercase">{getFileLabel(file.type)}</div>
+                  <div className="font-medium text-sm text-slate-700 truncate">{file.name}</div>
+                  <div className="text-xs text-slate-400 uppercase">{getFileLabel(file.type)}</div>
                 </div>
               </div>
             );
