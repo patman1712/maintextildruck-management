@@ -21,7 +21,14 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
         const data = await res.json();
         
         if (data.success) {
-            alert(`Synchronisation erfolgreich!\n${data.count} Bestellungen importiert.\n${data.errors?.length > 0 ? `Fehler: ${JSON.stringify(data.errors)}` : ''}`);
+            let msg = `Synchronisation erfolgreich!\n${data.count} Bestellungen importiert.`;
+            if (data.errors?.length > 0) {
+                msg += `\nFehler: ${JSON.stringify(data.errors)}`;
+            }
+            if (data.debug?.length > 0) {
+                msg += `\nDebug Info: ${data.debug.join('\n')}`;
+            }
+            alert(msg);
             fetchData(); // Refresh list
         } else {
             alert('Fehler: ' + data.error);

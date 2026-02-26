@@ -308,6 +308,7 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
 
     let totalSynced = 0;
     const errors = [];
+    const debugInfo: string[] = [];
 
     for (const customer of customers) {
         try {
@@ -318,7 +319,84 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
             let orders = [];
 
             if (version === '5') {
-                orders = await getShopware5Orders(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
+                 // Inline logic to capture debug info
+                 const url = baseUrl.replace(/\/$/, '');
+                 const authString = Buffer.from(`${customer.shopware_access_key}:${customer.shopware_secret_key}`).toString('base64');
+                 let rawOrders = [];
+                 
+                 // Try filtered fetch
+                 try {
+                    const params = new URLSearchParams();
+                    params.append('filter[0][property]', 'status');
+                    params.append('filter[0][value]', '0');
+                    params.append('filter[1][property]', 'paymentStatusId'); 
+                    params.append('filter[1][value]', '12');
+                    params.append('limit', '50');
+
+                    const response = await fetch(`${url}/api/orders?${params.toString()}`, {
+                        headers: {
+                            'Authorization': `Basic ${authString}`,
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const json = await response.json();
+                        rawOrders = json.data || [];
+                    } else {
+                        throw new Error(response.statusText);
+                    }
+                 } catch (e) {
+                     // Fallback
+                     const params = new URLSearchParams();
+                     params.append('sort[0][property]', 'orderTime');
+                     params.append('sort[0][direction]', 'DESC');
+                     params.append('limit', '50');
+                     
+                     const response = await fetch(`${url}/api/orders?${params.toString()}`, {
+                        headers: { 'Authorization': `Basic ${authString}`, 'Accept': 'application/json' }
+                     });
+                     
+                     if (response.ok) {
+                         const json = await response.json();
+                         const fallbackOrders = json.data || [];
+                         
+                         // Collect Debug Info for User
+                         const statusDebug = fallbackOrders.slice(0, 5).map((o: any) => 
+                            `#${o.number}: S=${o.status} P=${o.paymentStatusId}/${o.paymentStatus?.id}`
+                         );
+                         debugInfo.push(`SW5 Fallback (${customer.name}): ${statusDebug.join(', ')}`);
+                         
+                         // Filter
+                         rawOrders = fallbackOrders.filter((o: any) => {
+                             // Status: 0 (Open) OR '0'
+                             // Sometimes manually reset status might be weird, but usually 0.
+                             // Let's be very tolerant: check for 0, '0', or even 17 (Open in some payment contexts? No, order status).
+                             // Standard SW5: 0=Open, 1=InProcess, 2=Completed, -1=Cancelled
+                             const s = String(o.status);
+                             const statusMatch = s === '0' || s === '17'; // 17 is sometimes 'Open' for payment, but status? 
+                             // Let's stick to 0. If user set it manually to Open, it is 0.
+                             
+                             // Payment: 12 (Completely Paid)
+                             let pMatch = false;
+                             if (o.paymentStatusId != null) pMatch = String(o.paymentStatusId) === '12';
+                             else if (o.paymentStatus?.id != null) pMatch = String(o.paymentStatus.id) === '12';
+                             
+                             return statusMatch && pMatch;
+                         });
+                     }
+                 }
+                 
+                 // Fetch Details
+                 if (rawOrders.length > 0) {
+                     orders = await Promise.all(rawOrders.map(async (order: any) => {
+                        const detailRes = await fetch(`${url}/api/orders/${order.id}`, {
+                            headers: { 'Authorization': `Basic ${authString}`, 'Accept': 'application/json' }
+                        });
+                        return detailRes.ok ? (await detailRes.json()).data : order;
+                     }));
+                 }
+                 
             } else {
                 const token = await getShopware6Token(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
                 orders = await getShopware6Orders(baseUrl, token);
@@ -460,7 +538,7 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
         }
     }
 
-    res.json({ success: true, count: totalSynced, errors });
+    res.json({ success: true, count: totalSynced, errors, debug: debugInfo });
 });
 
 // Get products for a customer
