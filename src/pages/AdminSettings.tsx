@@ -351,23 +351,62 @@ export default function AdminSettings() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex items-center">
             <Database size={20} className="mr-2" />
-            System Backup
+            System Wartung & Backup
         </h2>
-        <p className="text-sm text-gray-600 mb-4">
-            Erstellen Sie ein vollständiges Backup aller Daten (Datenbank, Uploads, Downloads).
-            Das Archiv kann bei einem Serverwechsel einfach wiederhergestellt werden.
-            <br/><br/>
-            <span className="text-xs italic text-gray-500">
-            Hinweis: Bilder aus Shopware werden als Links gespeichert. Eine lokale Kopie der Shopware-Bilder ist nicht enthalten.
-            </span>
-        </p>
-        <button 
-            onClick={handleBackup}
-            className="bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-900 flex items-center"
-        >
-            <Download size={16} className="mr-2" />
-            Backup herunterladen (.tar.gz)
-        </button>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div>
+                <h3 className="font-medium text-slate-800 mb-2">System Backup</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                    Erstellen Sie ein vollständiges Backup aller Daten (Datenbank, Uploads, Downloads).
+                    Das Archiv kann bei einem Serverwechsel einfach wiederhergestellt werden.
+                </p>
+                <button 
+                    onClick={handleBackup}
+                    className="bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-900 flex items-center"
+                >
+                    <Download size={16} className="mr-2" />
+                    Backup herunterladen (.tar.gz)
+                </button>
+            </div>
+
+            <div>
+                <h3 className="font-medium text-slate-800 mb-2">Bilder optimieren</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                    Generiert fehlende Vorschaubilder (Thumbnails) für alle hochgeladenen Dateien (PDF, JPG, PNG). 
+                    Dies verbessert die Ladezeit der Artikelansicht erheblich.
+                </p>
+                <button 
+                    onClick={async () => {
+                        if (confirm('Möchten Sie die Vorschaubilder jetzt neu generieren? Dies kann je nach Anzahl der Dateien einige Minuten dauern.')) {
+                            try {
+                                const btn = document.getElementById('regen-btn');
+                                if (btn) { btn.innerText = 'Wird verarbeitet...'; (btn as HTMLButtonElement).disabled = true; }
+                                
+                                const res = await fetch('/api/upload/regenerate-thumbnails', { method: 'POST' });
+                                const data = await res.json();
+                                
+                                if (data.success) {
+                                    alert(`Erfolgreich! ${data.updated} Dateien aktualisiert (von ${data.ordersFound} Aufträgen).`);
+                                } else {
+                                    alert('Fehler: ' + data.error);
+                                }
+                            } catch (e: any) {
+                                alert('Fehler: ' + e.message);
+                            } finally {
+                                const btn = document.getElementById('regen-btn');
+                                if (btn) { btn.innerText = 'Vorschaubilder generieren'; (btn as HTMLButtonElement).disabled = false; }
+                            }
+                        }
+                    }}
+                    id="regen-btn"
+                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center"
+                >
+                    <ImageIcon size={16} className="mr-2" />
+                    Vorschaubilder generieren
+                </button>
+            </div>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
