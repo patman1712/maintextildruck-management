@@ -1023,7 +1023,7 @@ export default function CustomerDetails() {
                                             <button onClick={() => handleDeleteFile(file)} className="text-white hover:text-red-600 p-1"><Trash2 size={16} /></button>
                                         </div>
                                     </div>
-                                    <p className="text-xs font-medium text-gray-700 truncate" title={file.customName || file.name}>
+                                    <p className="text-xs font-medium text-gray-700 break-words line-clamp-2" title={file.customName || file.name}>
                                         {file.customName || file.name}
                                     </p>
                                     <p className="text-[10px] text-gray-400 mt-1">
