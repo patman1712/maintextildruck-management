@@ -645,7 +645,17 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                          // Other Variants
                          if (details.details && Array.isArray(details.details)) {
                              for (const v of details.details) {
-                                 const vName = v.additionaltext ? `${mainName} - ${v.additionaltext}` : `${mainName} (Var)`;
+                                 // Construct Variant Name
+                                 // 1. Try additionaltext (e.g. "L / Red")
+                                 // 2. Try configuratorOptions (e.g. [{ name: "Red" }, { name: "L" }])
+                                 let variantSuffix = v.additionaltext;
+                                 
+                                 if (!variantSuffix && v.configuratorOptions && Array.isArray(v.configuratorOptions)) {
+                                     variantSuffix = v.configuratorOptions.map((opt: any) => opt.name).join(' / ');
+                                 }
+                                 
+                                 const vName = variantSuffix ? `${mainName} - ${variantSuffix}` : `${mainName} (Var ${v.number})`;
+
                                  expandedProducts.push({
                                      id: `${p.id}_${v.id}`,
                                      shopware_product_id: String(p.id),
