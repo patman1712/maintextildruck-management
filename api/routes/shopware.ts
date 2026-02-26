@@ -362,25 +362,32 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                          const fallbackOrders = json.data || [];
                          
                          // Collect Debug Info for User
-                         const statusDebug = fallbackOrders.slice(0, 5).map((o: any) => 
-                            `#${o.number}: S=${o.status} P=${o.paymentStatusId}/${o.paymentStatus?.id}`
-                         );
+                         // Enhanced Debug: Check also nested orderStatus and paymentStatus objects
+                         const statusDebug = fallbackOrders.slice(0, 5).map((o: any) => {
+                            const s = o.status ?? o.orderStatus?.id ?? o.orderStatusId ?? 'ND';
+                            const p = o.paymentStatusId ?? o.paymentStatus?.id ?? 'ND';
+                            return `#${o.number}: S=${s} P=${p}`;
+                         });
                          debugInfo.push(`SW5 Fallback (${customer.name}): ${statusDebug.join(', ')}`);
                          
                          // Filter
                          rawOrders = fallbackOrders.filter((o: any) => {
                              // Status: 0 (Open) OR '0'
-                             // Sometimes manually reset status might be weird, but usually 0.
-                             // Let's be very tolerant: check for 0, '0', or even 17 (Open in some payment contexts? No, order status).
-                             // Standard SW5: 0=Open, 1=InProcess, 2=Completed, -1=Cancelled
-                             const s = String(o.status);
-                             const statusMatch = s === '0' || s === '17'; // 17 is sometimes 'Open' for payment, but status? 
-                             // Let's stick to 0. If user set it manually to Open, it is 0.
+                             // Some SW5 installations use 'orderStatusId' or nested 'orderStatus' object
+                             let s = o.status;
+                             if (s === undefined) s = o.orderStatusId;
+                             if (s === undefined && o.orderStatus) s = o.orderStatus.id;
+                             
+                             const sStr = String(s);
+                             // Accept 0 (Open) or 17 (Open - sometimes)
+                             const statusMatch = sStr === '0' || sStr === '17'; 
                              
                              // Payment: 12 (Completely Paid)
+                             let p = o.paymentStatusId;
+                             if (p === undefined && o.paymentStatus) p = o.paymentStatus.id;
+                             
                              let pMatch = false;
-                             if (o.paymentStatusId != null) pMatch = String(o.paymentStatusId) === '12';
-                             else if (o.paymentStatus?.id != null) pMatch = String(o.paymentStatus.id) === '12';
+                             if (p != null) pMatch = String(p) === '12';
                              
                              return statusMatch && pMatch;
                          });
