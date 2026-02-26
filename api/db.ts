@@ -268,6 +268,12 @@ try {
     db.exec("ALTER TABLE customer_product_files ADD COLUMN type TEXT DEFAULT 'print'");
   }
 
+  const hasQuantity = customerProductFileColumns.some(col => col.name === 'quantity');
+  if (!hasQuantity) {
+    console.log('Migrating database: Adding quantity to customer_product_files table');
+    db.exec("ALTER TABLE customer_product_files ADD COLUMN quantity INTEGER DEFAULT 1");
+  }
+
   const hasApprovalToken = columns.some(col => col.name === 'approval_token');
   if (!hasApprovalToken) {
     console.log('Migrating database: Adding approval columns to orders table');

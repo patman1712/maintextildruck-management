@@ -14,6 +14,7 @@ interface CustomerProduct {
         file_name: string;
         thumbnail_url?: string;
         type?: string;
+        quantity?: number;
     }[];
 }
 
@@ -63,7 +64,7 @@ export default function EditOrder() {
   }, [fetchUsers]);
 
   const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
-  const [files, setFiles] = useState<{ name: string; type: 'preview' | 'print' | 'vector' | 'internal'; url?: string; file?: File; thumbnail?: string }[]>([]);
+  const [files, setFiles] = useState<{ name: string; type: 'preview' | 'print' | 'vector' | 'internal'; url?: string; file?: File; thumbnail?: string; quantity?: number }[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   // Form States
@@ -410,20 +411,34 @@ export default function EditOrder() {
 
       // Add Files (Local state, will be saved on "Save")
       if (selectedProduct.files && selectedProduct.files.length > 0) {
+          const quantityToAdd = parseInt(productSizeInput.match(/\d+/)?.[0] || "1");
+
           const newAttachments = selectedProduct.files.map(f => ({
               name: f.file_name,
               url: f.file_url,
               type: (f.type === 'view' || f.file_name === 'Shopware Bild' ? 'preview' : 'print') as 'preview' | 'print' | 'vector',
-              thumbnail: f.thumbnail_url
+              thumbnail: f.thumbnail_url,
+              quantity: (f.type !== 'view' && f.file_name !== 'Shopware Bild') ? (quantityToAdd * (f.quantity || 1)) : 1
           }));
           
-          // Filter out duplicates
-          const currentUrls = files.map(f => f.url);
-          const uniqueNewAttachments = newAttachments.filter(f => !currentUrls.includes(f.url));
+          let updatedFiles = [...files];
           
-          if (uniqueNewAttachments.length > 0) {
-              setFiles([...files, ...uniqueNewAttachments]);
-          }
+          newAttachments.forEach(newFile => {
+              const existingIndex = updatedFiles.findIndex(ef => ef.url === newFile.url);
+              if (existingIndex >= 0 && newFile.type === 'print') {
+                  // Update quantity for existing print files
+                  const currentQty = updatedFiles[existingIndex].quantity || 1;
+                  updatedFiles[existingIndex] = {
+                      ...updatedFiles[existingIndex],
+                      quantity: currentQty + (newFile.quantity || 1)
+                  };
+              } else if (existingIndex === -1) {
+                  // Add new
+                  updatedFiles.push(newFile);
+              }
+          });
+          
+          setFiles(updatedFiles);
       }
 
       setShowProductSelector(false);
@@ -739,7 +754,14 @@ export default function EditOrder() {
               <ul className="mt-4 space-y-2">
                 {printFiles.map((file, idx) => (
                   <li key={idx} className="flex justify-between items-center text-sm bg-red-50 p-2 rounded border border-red-100 text-red-800">
-                    <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                    <div className="flex items-center">
+                        <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                        {(file.quantity || 1) > 1 && (
+                            <span className="ml-2 bg-white text-red-800 text-xs px-2 py-0.5 rounded-full font-bold border border-red-100">
+                                {file.quantity}x
+                            </span>
+                        )}
+                    </div>
                     <button type="button" onClick={() => removeFile(files.indexOf(file))} className="text-red-400 hover:text-red-700">
                       <X size={16} />
                     </button>

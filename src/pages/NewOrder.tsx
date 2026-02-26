@@ -14,6 +14,7 @@ interface CustomerProduct {
         file_name: string;
         thumbnail_url?: string;
         type?: string;
+        quantity?: number;
     }[];
 }
 
@@ -519,7 +520,7 @@ export default function NewOrder() {
                       name: f.file_name,
                       url: f.file_url,
                       type: 'print' as const,
-                      quantity: quantityToAdd
+                      quantity: quantityToAdd * (f.quantity || 1)
                   });
               }
           });

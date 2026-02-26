@@ -16,6 +16,7 @@ interface Product {
         file_name: string;
         thumbnail_url?: string;
         type?: string;
+        quantity?: number;
     }[];
 }
 
@@ -387,6 +388,38 @@ export default function CustomerDetails() {
     } catch (error) {
         console.error("Upload failed:", error);
         alert("Upload fehlgeschlagen.");
+    }
+  };
+
+  const handleUpdateFileQuantity = async (fileId: string, quantity: number, productContext: Product) => {
+    try {
+        await fetch(`/api/products/${productContext.id}/files/${fileId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quantity })
+        });
+
+        // Update local state
+        const updatedProducts = products.map(p => {
+            if (p.id === productContext.id) {
+                const updatedFiles = p.files.map(f => f.id === fileId ? { ...f, quantity } : f);
+                return { ...p, files: updatedFiles };
+            }
+            return p;
+        });
+        setProducts(updatedProducts);
+        
+        // Also update editingProduct if open
+        if (editingProduct && editingProduct.id === productContext.id) {
+            setEditingProduct({
+                ...editingProduct,
+                files: editingProduct.files.map(f => f.id === fileId ? { ...f, quantity } : f)
+            });
+        }
+        
+    } catch (err) {
+        console.error(err);
+        // alert('Fehler beim Aktualisieren der Menge.');
     }
   };
 
@@ -1288,8 +1321,22 @@ export default function CustomerDetails() {
                                                     >
                                                         <X size={12} />
                                                     </button>
-                                                    <div className="text-[10px] truncate mt-1 text-gray-600" title={file.file_name}>
-                                                        {file.file_name}
+                                                    <div className="text-[10px] truncate mt-1 text-gray-600 flex justify-between items-center" title={file.file_name}>
+                                                        <span className="truncate max-w-[80px]">{file.file_name}</span>
+                                                        <div className="flex items-center bg-gray-100 rounded px-1 ml-1">
+                                                            <span className="text-[9px] text-gray-500 mr-1">x</span>
+                                                            <input 
+                                                                type="number" 
+                                                                min="1"
+                                                                className="w-6 h-4 text-[10px] bg-transparent text-center focus:outline-none p-0 border-none"
+                                                                value={file.quantity || 1}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                onChange={(e) => {
+                                                                    const val = parseInt(e.target.value);
+                                                                    if (val > 0) handleUpdateFileQuantity(file.id, val, product);
+                                                                }}
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))}
