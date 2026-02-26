@@ -176,7 +176,7 @@ export default function PreviewGenerator() {
     })));
 
     const combinedFiles = [...orderFiles, ...productFiles]
-        .filter(f => (f.type === 'print' || f.type === 'vector') && (f.name || '').toLowerCase().endsWith('.pdf'));
+        .filter(f => (f.type === 'print' || f.type === 'vector'));
     
     const uniqueFiles = Array.from(new Map(combinedFiles.map(f => [f.url, f])).values());
     const filteredFiles = uniqueFiles.filter(f => (f.name || '').toLowerCase().includes(fileSearch.toLowerCase()));
