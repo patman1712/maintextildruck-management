@@ -124,6 +124,11 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
             } catch (e) {
                 continue;
             }
+            
+            // LOGGING: Check file structure for first few orders
+            if (totalUpdated === 0 && files.length > 0) {
+                 console.log(`DEBUG: Order ${order.id} files sample:`, JSON.stringify(files[0], null, 2));
+            }
 
             let orderUpdated = false;
             for (const file of files) {
@@ -139,13 +144,14 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                 const isPdf = filename.toLowerCase().endsWith('.pdf') || (file.name && file.name.toLowerCase().endsWith('.pdf'));
                 const isImage = filename.match(/\.(jpg|jpeg|png|webp)$/i) || (file.name && file.name.match(/\.(jpg|jpeg|png|webp)$/i));
                 
-                // Check if thumbnail is missing OR if we want to force update (optional logic)
-                // For now, only missing
-                if ((isPdf || isImage) && !file.thumbnail) {
-                    // console.log(`Checking file: ${filename} (Order ${order.id})`);
-                    
+                // FORCE REGENERATE if it's an image and doesn't have a thumbnail (or has a dummy one)
+                // Also check if file exists
+                const needsThumb = (isPdf || isImage) && !file.thumbnail;
+                
+                if (needsThumb) {
                     if (await fs.pathExists(inputPath)) {
                         try {
+                            console.log(`Generating thumbnail for ${filename}...`);
                             const thumbName = `${filename}_thumb`;
                             let thumbOutputPath = "";
                             
@@ -178,12 +184,11 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                             
                             orderUpdated = true;
                             totalUpdated++;
-                            console.log(`Generated thumbnail for ${filename}`);
                         } catch (e) {
                             console.error(`Failed to regenerate thumbnail for ${filename}:`, e);
                         }
                     } else {
-                        // console.warn(`File not found on disk: ${inputPath}`);
+                        console.log(`File not found on disk: ${inputPath}`);
                     }
                 }
             }
@@ -208,9 +213,11 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
             const isPdf = filename.toLowerCase().endsWith('.pdf') || (file.file_name && file.file_name.toLowerCase().endsWith('.pdf'));
             const isImage = filename.match(/\.(jpg|jpeg|png|webp)$/i) || (file.file_name && file.file_name.match(/\.(jpg|jpeg|png|webp)$/i));
             
+            // Check if missing thumbnail
             if ((isPdf || isImage) && !file.thumbnail_url) {
                     if (await fs.pathExists(inputPath)) {
                     try {
+                        console.log(`Generating product thumbnail for ${filename}...`);
                         const thumbName = `${filename}_thumb`;
                         let thumbOutputPath = "";
                         
@@ -238,12 +245,11 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                         // Update the record
                         db.prepare('UPDATE customer_product_files SET thumbnail_url = ? WHERE id = ?').run(thumbUrl, file.id);
                         productsUpdated++;
-                        console.log(`Generated product thumbnail for ${filename}`);
                     } catch (e) {
                         console.error(`Failed to regenerate product thumbnail for ${filename}:`, e);
                     }
                     } else {
-                        // console.warn(`Product file not found on disk: ${inputPath}`);
+                         console.log(`Product file not found on disk: ${inputPath}`);
                     }
             }
         }
