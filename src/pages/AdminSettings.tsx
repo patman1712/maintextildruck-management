@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAppStore } from "@/store";
-import { Shield, Save, RotateCcw, AlertTriangle, Upload, Eye, EyeOff, LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, Printer, Zap, Database, Download, Image as ImageIcon } from "lucide-react";
+import { Shield, Save, RotateCcw, AlertTriangle, Upload, Eye, EyeOff, LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, Printer, Zap, Database, Download, Image as ImageIcon, History, GitCommit } from "lucide-react";
 
 const MENU_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -34,6 +34,19 @@ export default function AdminSettings() {
   const [nextOrderNumber, setNextOrderNumber] = useState(1);
   const [isEditing, setIsEditing] = useState(false);
   const [manualNextNumber, setManualNextNumber] = useState(1);
+  const [changelog, setChangelog] = useState<{hash: string, date: string, message: string}[]>([]);
+  const [showChangelog, setShowChangelog] = useState(false);
+
+  useEffect(() => {
+    if (showChangelog && changelog.length === 0) {
+        fetch('/api/admin/changelog')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) setChangelog(data.logs);
+            })
+            .catch(err => console.error(err));
+    }
+  }, [showChangelog]);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
@@ -407,6 +420,52 @@ export default function AdminSettings() {
                 </button>
             </div>
         </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex items-center justify-between">
+            <div className="flex items-center">
+                <History size={20} className="mr-2" />
+                System Änderungsprotokoll
+            </div>
+            <button 
+                onClick={() => setShowChangelog(!showChangelog)}
+                className="text-sm text-blue-600 hover:text-blue-800"
+            >
+                {showChangelog ? 'Verbergen' : 'Anzeigen'}
+            </button>
+        </h2>
+        
+        {showChangelog && (
+            <div className="bg-slate-50 rounded border border-slate-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
+                            <tr>
+                                <th className="p-3 w-32">Datum</th>
+                                <th className="p-3">Änderung</th>
+                                <th className="p-3 w-24">Hash</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                            {changelog.length === 0 ? (
+                                <tr>
+                                    <td colSpan={3} className="p-4 text-center text-gray-500">Lade Protokoll...</td>
+                                </tr>
+                            ) : (
+                                changelog.map((log) => (
+                                    <tr key={log.hash} className="hover:bg-white transition-colors">
+                                        <td className="p-3 text-gray-600 whitespace-nowrap">{log.date}</td>
+                                        <td className="p-3 font-medium text-slate-800">{log.message}</td>
+                                        <td className="p-3 font-mono text-xs text-gray-400">{log.hash}</td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">

@@ -164,6 +164,12 @@ export default function DashboardLayout() {
             <LogOut size={20} />
             {(sidebarOpen || mobileMenuOpen) && <span>Abmelden</span>}
           </button>
+          
+          {(sidebarOpen || mobileMenuOpen) && (
+            <div className="pt-4 mt-2 border-t border-red-800 text-[10px] text-red-300 px-2">
+                <p>Version: {__BUILD_DATE__}</p>
+            </div>
+          )}
         </div>
       </aside>
 
