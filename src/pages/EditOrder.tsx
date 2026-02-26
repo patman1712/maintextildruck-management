@@ -382,7 +382,11 @@ export default function EditOrder() {
         const baseQty = parseQuantity(productSizeInput);
         const newQuantities: Record<string, number> = {};
         selectedProduct.files.forEach(f => {
-            newQuantities[f.id] = baseQty * (f.quantity || 1);
+            if (f.type === 'view' || f.file_name === 'Shopware Bild') {
+                newQuantities[f.id] = 1;
+            } else {
+                newQuantities[f.id] = baseQty * (f.quantity || 1);
+            }
         });
         setFileQuantities(newQuantities);
     }
