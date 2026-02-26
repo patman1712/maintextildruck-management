@@ -88,6 +88,27 @@ export default function EditOrder() {
   const [showPreviewSelector, setShowPreviewSelector] = useState(false);
   const [availablePreviews, setAvailablePreviews] = useState<{name: string, url: string, date: string, source: string}[]>([]);
   const [selectedExistingPreviews, setSelectedExistingPreviews] = useState<string[]>([]);
+  
+  const parseQuantity = (input: string): number => {
+      // Try to find patterns like "5x", "5 x", "5X"
+      const matches = input.match(/(\d+)\s*[xX]/g);
+      if (matches) {
+          let total = 0;
+          matches.forEach(m => {
+              const num = parseInt(m.match(/\d+/)?.[0] || "0");
+              total += num;
+          });
+          return total > 0 ? total : 1;
+      }
+      
+      // If no "x" pattern, try to parse the whole string as a number
+      const simpleNum = parseInt(input);
+      if (!isNaN(simpleNum) && String(simpleNum) === input.trim()) {
+          return simpleNum;
+      }
+      
+      return 1;
+  };
 
   const loadCustomerPreviews = async () => {
     const customer = customers.find(c => c.name === customerName);
@@ -372,6 +393,18 @@ export default function EditOrder() {
   const [productSearchTerm, setProductSearchTerm] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<CustomerProduct | null>(null);
   const [productSizeInput, setProductSizeInput] = useState("");
+  const [fileQuantities, setFileQuantities] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (selectedProduct && selectedProduct.files) {
+        const baseQty = parseQuantity(productSizeInput);
+        const newQuantities: Record<string, number> = {};
+        selectedProduct.files.forEach(f => {
+            newQuantities[f.id] = baseQty * (f.quantity || 1);
+        });
+        setFileQuantities(newQuantities);
+    }
+  }, [productSizeInput, selectedProduct]);
   
   const loadCustomerProducts = async () => {
       // Try to find customer ID
@@ -411,14 +444,14 @@ export default function EditOrder() {
 
       // Add Files (Local state, will be saved on "Save")
       if (selectedProduct.files && selectedProduct.files.length > 0) {
-          const quantityToAdd = parseInt(productSizeInput.match(/\d+/)?.[0] || "1");
+          const quantityToAdd = parseQuantity(productSizeInput);
 
           const newAttachments = selectedProduct.files.map(f => ({
               name: f.file_name,
               url: f.file_url,
               type: (f.type === 'view' || f.file_name === 'Shopware Bild' ? 'preview' : 'print') as 'preview' | 'print' | 'vector',
               thumbnail: f.thumbnail_url,
-              quantity: (f.type !== 'view' && f.file_name !== 'Shopware Bild') ? (quantityToAdd * (f.quantity || 1)) : 1
+              quantity: (f.type !== 'view' && f.file_name !== 'Shopware Bild') ? (fileQuantities[f.id] || (quantityToAdd * (f.quantity || 1))) : 1
           }));
           
           let updatedFiles = [...files];
@@ -1186,10 +1219,27 @@ export default function EditOrder() {
                                     {selectedProduct.files.map(f => (
                                         <div key={f.id} className="text-xs bg-red-50 text-red-800 border border-red-100 px-2 py-1 rounded flex items-center">
                                             <FileText size={12} className="mr-1" />
-                                            {f.file_name}
+                                            <span className="truncate max-w-[150px] mr-2">{f.file_name}</span>
+                                            <div className="flex items-center bg-white rounded border border-red-200 overflow-hidden">
+                                                <input 
+                                                    type="number" 
+                                                    min="1"
+                                                    className="w-12 text-center text-xs p-0.5 border-none focus:ring-0 appearance-none"
+                                                    value={fileQuantities[f.id] || 0}
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value) || 0;
+                                                        setFileQuantities(prev => ({...prev, [f.id]: val}));
+                                                    }}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                                <span className="bg-gray-50 text-gray-500 px-1.5 border-l border-red-100">x</span>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
+                                <p className="text-[10px] text-gray-500 mt-1 italic">
+                                    Hinweis: Die Anzahl basiert auf Ihrer Eingabe "{productSizeInput}" und der Einstellung im Artikel. Sie können die Anzahl hier manuell anpassen.
+                                </p>
                             </div>
                         )}
 
