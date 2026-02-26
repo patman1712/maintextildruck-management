@@ -142,7 +142,13 @@ app.use(express.static(path.join(__dirname, '../dist')))
 
 // Handle client-side routing by serving index.html for all non-API routes
 app.get('*', (req: Request, res: Response) => {
-  res.sendFile(path.join(__dirname, '../dist/index.html'))
+  const indexPath = path.join(__dirname, '../dist/index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    console.error(`Frontend index.html not found at ${indexPath}. Ensure 'npm run build' executed successfully.`);
+    res.status(500).send('Frontend build not found. Please check server logs.');
+  }
 })
 
 /**
