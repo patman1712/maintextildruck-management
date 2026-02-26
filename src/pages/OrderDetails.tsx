@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/store";
 import { ArrowLeft, Calendar, User, FileText, Download, Eye, Printer, PenTool, Trash2, ShoppingCart, ExternalLink } from "lucide-react";
+import OrderPrintView from "@/components/OrderPrintView";
 
 export default function OrderDetails() {
   const { id } = useParams<{ id: string }>();
@@ -125,30 +126,40 @@ export default function OrderDetails() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <button onClick={() => navigate(-1)} className="flex items-center text-gray-500 hover:text-gray-800 mb-6 transition-colors">
-        <ArrowLeft size={18} className="mr-1" /> Zurück zur Übersicht
-      </button>
+    <>
+      <OrderPrintView order={order} />
+      <div className="max-w-5xl mx-auto print:hidden">
+        <button onClick={() => navigate(-1)} className="flex items-center text-gray-500 hover:text-gray-800 mb-6 transition-colors">
+          <ArrowLeft size={18} className="mr-1" /> Zurück zur Übersicht
+        </button>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-        {/* Header */}
-        <div className="bg-gray-50 px-8 py-6 border-b border-gray-200 flex justify-between items-start">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800 mb-2">{order.title}</h1>
-            <div className="flex flex-col sm:flex-row sm:items-center text-gray-500 text-sm gap-4">
-              <span className="flex items-center"><User size={16} className="mr-1" /> {order.customerName}</span>
-              <span className="flex items-center"><Calendar size={16} className="mr-1" /> Deadline: {new Date(order.deadline).toLocaleDateString('de-DE')}</span>
-              <span className="flex items-center">Eingang: {new Date(order.createdAt).toLocaleDateString('de-DE')}</span>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          {/* Header */}
+          <div className="bg-gray-50 px-8 py-6 border-b border-gray-200 flex justify-between items-start">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-800 mb-2">{order.title}</h1>
+              <div className="flex flex-col sm:flex-row sm:items-center text-gray-500 text-sm gap-4">
+                <span className="flex items-center"><User size={16} className="mr-1" /> {order.customerName}</span>
+                <span className="flex items-center"><Calendar size={16} className="mr-1" /> Deadline: {new Date(order.deadline).toLocaleDateString('de-DE')}</span>
+                <span className="flex items-center">Eingang: {new Date(order.createdAt).toLocaleDateString('de-DE')}</span>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center">
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              order.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-            }`}>
-              {order.status === 'active' ? 'In Bearbeitung' : 'Abgeschlossen'}
-            </span>
-            <button 
-              onClick={handleDelete} 
+            <div className="flex items-center">
+              <button
+                onClick={() => window.print()}
+                className="mr-3 flex items-center px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-md transition-colors text-sm font-medium shadow-sm"
+                title="Druckansicht"
+              >
+                <Printer size={16} className="mr-2" />
+                Drucken
+              </button>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                order.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+              }`}>
+                {order.status === 'active' ? 'In Bearbeitung' : 'Abgeschlossen'}
+              </span>
+              <button 
+                onClick={handleDelete} 
               className="ml-4 flex items-center px-3 py-1.5 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-md transition-colors text-sm font-medium shadow-sm"
               title="Auftrag löschen"
             >
@@ -351,5 +362,6 @@ export default function OrderDetails() {
         </div>
       </div>
     </div>
+    </>
   );
 }
