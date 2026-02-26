@@ -390,22 +390,46 @@ export default function CustomerDetails() {
     }
   };
 
-  const handleRemoveFile = async (fileId: string) => {
-      // Find the file first to check its URL
-      const fileToRemove = editingProduct?.files.find(f => f.id === fileId);
+  const handleRemoveFile = async (fileId: string, productContext?: Product) => {
+      // Use provided product context or fall back to editingProduct
+      const product = productContext || editingProduct;
       
+      console.log('handleRemoveFile called', { fileId, productId: product?.id, contextProvided: !!productContext });
+
+      // Find the file first to check its URL
+      const fileToRemove = product?.files.find(f => f.id === fileId);
+      
+      if (!product) {
+          console.error('No product context found for file removal');
+          return;
+      }
+
       const confirmDelete = async () => {
-          if (!editingProduct) return;
+          console.log('Confirm delete executing for', fileId);
           try {
-              await fetch(`/api/products/${editingProduct.id}/files/${fileId}`, {
+              const res = await fetch(`/api/products/${product.id}/files/${fileId}`, {
                   method: 'DELETE'
               });
               
-              const updatedFiles = editingProduct.files.filter(f => f.id !== fileId);
-              setEditingProduct({ ...editingProduct, files: updatedFiles });
+              if (!res.ok) {
+                  const err = await res.text();
+                  console.error('Delete failed:', err);
+                  alert('Fehler beim Löschen: ' + err);
+                  return;
+              }
+              
+              console.log('Delete successful, updating state...');
+
+              // If we are in editing mode, update local state
+              if (editingProduct && editingProduct.id === product.id) {
+                  const updatedFiles = editingProduct.files.filter(f => f.id !== fileId);
+                  setEditingProduct({ ...editingProduct, files: updatedFiles });
+              }
+              
               fetchProducts();
           } catch (err) {
-              console.error(err);
+              console.error('Delete error:', err);
+              alert('Fehler: ' + err);
           }
       };
 
@@ -419,7 +443,8 @@ export default function CustomerDetails() {
               onConfirm: confirmDelete
           });
       } else {
-          // Fallback if file not found locally
+          // Fallback if file not found locally but ID provided
+          console.warn('File not found in local product state, forcing delete anyway');
           confirmDelete();
       }
   };
@@ -1213,8 +1238,11 @@ export default function CustomerDetails() {
                                                         />
                                                     </div>
                                                     <button 
-                                                        onClick={() => handleRemoveFile(file.id)}
-                                                        className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRemoveFile(file.id, product);
+                                                        }}
+                                                        className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity z-10"
                                                     >
                                                         <X size={12} />
                                                     </button>
@@ -1252,8 +1280,11 @@ export default function CustomerDetails() {
                                                         </div>
                                                     </div>
                                                     <button 
-                                                        onClick={() => handleRemoveFile(file.id)}
-                                                        className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRemoveFile(file.id, product);
+                                                        }}
+                                                        className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity z-10"
                                                     >
                                                         <X size={12} />
                                                     </button>
