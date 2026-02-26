@@ -582,49 +582,100 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                 productNumber: p.mainDetail?.number || p.mainDetail?.ordernumber || '',
                 active: p.active,
                 stock: p.mainDetail?.inStock,
-                imageUrl: p.images?.[0]?.link // Shopware 5 often provides 'link' or 'path'
+                imageUrl: p.images?.[0]?.link, // Shopware 5 often provides 'link' or 'path'
+                variants: p.details // Usually included if we fetch list, but 'details' might be empty in list view
             }));
 
-            // Check which products are new and might need image enrichment
-            const existingProductsDb = db.prepare("SELECT shopware_product_id FROM customer_products WHERE customer_id = ? AND source = 'shopware'").all(customerId) as any[];
-            const existingIds = new Set(existingProductsDb.map(row => String(row.shopware_product_id)));
+            // If we want variants, we need to ensure we have them. 
+            // In standard SW5 API list call, 'details' might not be populated with all variants.
+            // We need to fetch details or check if 'configuratorSet' exists.
             
-            const newProducts = products.filter((p: any) => !existingIds.has(p.id));
+            // To get all variants, we often need to fetch article details.
+            // Let's expand products array by flattening variants.
+            
+            // NOTE: Fetching details for ALL products is heavy. 
+            // But user asked for it: "kann man da auch alle varianten einzeln abrufen?"
+            
+            // Let's modify the strategy:
+            // 1. We have 'products' which are main articles.
+            // 2. We will expand this list.
+            
+            const expandedProducts = [];
+            
+            // We need to fetch details for products to get variants
+            // We do this in batches.
+            const batchSize = 5;
+            for (let i = 0; i < products.length; i += batchSize) {
+                const batch = products.slice(i, i + batchSize);
+                await Promise.all(batch.map(async (p: any) => {
+                    // Fetch full details including variants
+                    const details = await getShopware5ArticleDetails(baseUrl, customer.shopware_access_key, customer.shopware_secret_key, p.id);
+                    
+                    if (details) {
+                         // Add Main Detail (already in p but let's refresh)
+                         // Actually, details.mainDetail is the main variant.
+                         // details.details contains OTHER variants.
+                         
+                         // Main Variant
+                         const mainName = details.name;
+                         const mainVariantName = details.mainDetail?.additionaltext ? `${mainName} - ${details.mainDetail.additionaltext}` : mainName;
+                         
+                         // Resolve Image for Main
+                         let mainImage = p.imageUrl;
+                         if (!mainImage && details.images && details.images.length > 0) {
+                             const img = details.images.find((img: any) => img.main === 1) || details.images[0];
+                             if (img.link) mainImage = img.link;
+                             else if (img.path) {
+                                 const ext = img.extension || 'jpg';
+                                 const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+                                 mainImage = `${cleanBaseUrl}/media/image/${img.path}.${ext}`;
+                             }
+                         }
 
-            if (newProducts.length > 0) {
-                // Fetch details for new products if images are missing in list view
-                // We do this in batches to be nice to the API
-                const batchSize = 5;
-                for (let i = 0; i < newProducts.length; i += batchSize) {
-                    const batch = newProducts.slice(i, i + batchSize);
-                    await Promise.all(batch.map(async (p: any) => {
-                        if (!p.imageUrl) {
-                            const details = await getShopware5ArticleDetails(baseUrl, customer.shopware_access_key, customer.shopware_secret_key, p.id);
-                            if (details && details.images && details.images.length > 0) {
-                                // Find the main image (main === 1) or take the first one
-                                const mainImage = details.images.find((img: any) => img.main === 1) || details.images[0];
-                                
-                                // Robust URL extraction strategy
-                                if (mainImage.link) {
-                                    p.imageUrl = mainImage.link;
-                                } else if (mainImage.media?.path) {
-                                    p.imageUrl = mainImage.media.path;
-                                } else if (mainImage.path) {
-                                    // Fallback: Construct URL from path and extension
-                                    // Shopware 5 standard media path: /media/image/{name}.{extension}
-                                    const ext = mainImage.extension || 'jpg';
-                                    const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-                                    p.imageUrl = `${cleanBaseUrl}/media/image/${mainImage.path}.${ext}`;
-                                }
-                                
-                                console.log(`[Shopware 5 Sync] Image resolved for ${p.name}: ${p.imageUrl}`);
-                            } else {
-                                console.log(`[Shopware 5 Sync] No images found for ${p.name} in details.`);
-                            }
-                        }
-                    }));
-                }
+                         expandedProducts.push({
+                             id: `${p.id}_main`, // Unique ID for our DB
+                             shopware_product_id: String(p.id), // Parent ID
+                             name: mainVariantName,
+                             productNumber: details.mainDetail?.number,
+                             active: details.active,
+                             stock: details.mainDetail?.inStock,
+                             imageUrl: mainImage
+                         });
+                         
+                         // Other Variants
+                         if (details.details && Array.isArray(details.details)) {
+                             for (const v of details.details) {
+                                 const vName = v.additionaltext ? `${mainName} - ${v.additionaltext}` : `${mainName} (Var)`;
+                                 expandedProducts.push({
+                                     id: `${p.id}_${v.id}`,
+                                     shopware_product_id: String(p.id),
+                                     name: vName,
+                                     productNumber: v.number,
+                                     active: v.active,
+                                     stock: v.inStock,
+                                     imageUrl: mainImage // Variants usually share main image unless specific logic
+                                 });
+                             }
+                         }
+                    } else {
+                        // Fallback if detail fetch fails
+                        expandedProducts.push({
+                            id: String(p.id),
+                            shopware_product_id: String(p.id),
+                            name: p.name,
+                            productNumber: p.productNumber,
+                            active: p.active,
+                            stock: p.stock,
+                            imageUrl: p.imageUrl
+                        });
+                    }
+                }));
             }
+            
+            products = expandedProducts;
+            
+            // Check which products are new and might need image enrichment
+            // (Image logic moved inside expansion)
 
         } else {
             // Shopware 6 Logic
