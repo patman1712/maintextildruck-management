@@ -94,8 +94,19 @@ export default function OrderDetails() {
     }
   };
 
-  const renderFilePreview = (file: { name: string, url?: string, thumbnail?: string }) => {
-    if (!file.url) return <span className="truncate max-w-[150px]">{file.name}</span>;
+  const renderFilePreview = (file: { name: string, url?: string, thumbnail?: string, quantity?: number }) => {
+    const qtyBadge = (file.quantity || 1) > 1 ? (
+        <span className="ml-2 bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded-full font-bold whitespace-nowrap">
+            {file.quantity}x
+        </span>
+    ) : null;
+
+    if (!file.url) return (
+        <div className="flex items-center">
+            <span className="truncate max-w-[150px]">{file.name}</span>
+            {qtyBadge}
+        </div>
+    );
     
     // Check if thumbnail exists
     if (file.thumbnail) {
@@ -104,7 +115,10 @@ export default function OrderDetails() {
             <div className="h-10 w-10 bg-gray-100 rounded overflow-hidden flex-shrink-0 border border-gray-200">
               <img src={file.thumbnail} alt={file.name} className="h-full w-full object-cover" />
             </div>
-            <span className="truncate max-w-[120px]">{file.name}</span>
+            <div className="flex items-center">
+                <span className="truncate max-w-[120px]">{file.name}</span>
+                {qtyBadge}
+            </div>
           </div>
         );
     }
@@ -118,11 +132,19 @@ export default function OrderDetails() {
           <div className="h-10 w-10 bg-gray-100 rounded overflow-hidden flex-shrink-0 border border-gray-200">
             <img src={file.url} alt={file.name} className="h-full w-full object-cover" />
           </div>
-          <span className="truncate max-w-[120px]">{file.name}</span>
+          <div className="flex items-center">
+            <span className="truncate max-w-[120px]">{file.name}</span>
+            {qtyBadge}
+          </div>
         </div>
       );
     }
-    return <span className="truncate max-w-[150px]">{file.name}</span>;
+    return (
+        <div className="flex items-center">
+            <span className="truncate max-w-[150px]">{file.name}</span>
+            {qtyBadge}
+        </div>
+    );
   };
 
   return (

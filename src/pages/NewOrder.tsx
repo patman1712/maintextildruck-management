@@ -292,7 +292,28 @@ export default function NewOrder() {
     setSelectedExistingFiles([]);
   };
 
-  const [existingFilesToAttach, setExistingFilesToAttach] = useState<{name: string, url: string, type: 'print'}[]>([]);
+  const [existingFilesToAttach, setExistingFilesToAttach] = useState<{name: string, url: string, type: 'print', quantity?: number}[]>([]);
+
+  const parseQuantity = (input: string): number => {
+      // Try to find patterns like "5x", "5 x", "5X"
+      const matches = input.match(/(\d+)\s*[xX]/g);
+      if (matches) {
+          let total = 0;
+          matches.forEach(m => {
+              const num = parseInt(m.match(/\d+/)?.[0] || "0");
+              total += num;
+          });
+          return total > 0 ? total : 1;
+      }
+      
+      // If no "x" pattern, try to parse the whole string as a number
+      const simpleNum = parseInt(input);
+      if (!isNaN(simpleNum) && String(simpleNum) === input.trim()) {
+          return simpleNum;
+      }
+      
+      return 1;
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "preview" | "print" | "vector" | "internal") => {
     if (e.target.files && e.target.files.length > 0) {
@@ -463,6 +484,8 @@ export default function NewOrder() {
   const handleAddProduct = () => {
       if (!selectedProduct) return;
       
+      const quantityToAdd = parseQuantity(productSizeInput);
+
       // Add Item
       const newItemEntry = {
           supplierId: selectedProduct.supplier_id || "",
@@ -478,7 +501,7 @@ export default function NewOrder() {
 
       // Add Files
       if (selectedProduct.files && selectedProduct.files.length > 0) {
-          const newPrintFiles: {name: string, url: string, type: 'print'}[] = [];
+          const newPrintFiles: {name: string, url: string, type: 'print', quantity: number}[] = [];
           const newPreviewFiles: {name: string, url: string, type: 'preview'}[] = [];
 
           selectedProduct.files.forEach(f => {
@@ -495,18 +518,31 @@ export default function NewOrder() {
                   newPrintFiles.push({
                       name: f.file_name,
                       url: f.file_url,
-                      type: 'print' as const
+                      type: 'print' as const,
+                      quantity: quantityToAdd
                   });
               }
           });
           
-          // Filter out duplicates for Print Files
-          const currentPrintUrls = existingFilesToAttach.map(f => f.url);
-          const uniquePrintAttachments = newPrintFiles.filter(f => !currentPrintUrls.includes(f.url));
+          // Update Print Files (Merge quantities)
+          let updatedExistingFiles = [...existingFilesToAttach];
           
-          if (uniquePrintAttachments.length > 0) {
-              setExistingFilesToAttach([...existingFilesToAttach, ...uniquePrintAttachments]);
-          }
+          newPrintFiles.forEach(newFile => {
+              const existingIndex = updatedExistingFiles.findIndex(ef => ef.url === newFile.url);
+              if (existingIndex >= 0) {
+                  // Update quantity
+                  const currentQty = updatedExistingFiles[existingIndex].quantity || 1;
+                  updatedExistingFiles[existingIndex] = {
+                      ...updatedExistingFiles[existingIndex],
+                      quantity: currentQty + newFile.quantity
+                  };
+              } else {
+                  // Add new
+                  updatedExistingFiles.push(newFile);
+              }
+          });
+          
+          setExistingFilesToAttach(updatedExistingFiles);
 
           // Filter out duplicates for Preview Files
           const currentPreviewUrls = existingPreviewFiles.map(f => f.url);
@@ -899,6 +935,11 @@ export default function NewOrder() {
                     <div className="flex items-center">
                         <span className="bg-red-200 text-red-800 text-[10px] px-1 rounded mr-2">ARCHIV</span>
                         <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                        {(file.quantity || 1) > 1 && (
+                            <span className="ml-2 bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded-full font-bold">
+                                {file.quantity}x
+                            </span>
+                        )}
                     </div>
                     <button type="button" onClick={() => removeExistingFile(idx)} className="text-red-400 hover:text-red-700">
                       <X size={16} />

@@ -91,8 +91,13 @@ export default function DTFOrdering() {
   const regularOrders = orders
     .filter(o => o.id !== 'inventory-manual')
     .filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'archived')
-    .filter(o => (o.files || []).some(f => f.type === 'print' || f.type === 'vector'))
-    .filter(o => o.printStatus !== 'ordered');
+    .filter(o => {
+        // Check if there are ANY print/vector files that are NOT yet ordered
+        const hasPendingFiles = (o.files || []).some(f => 
+            (f.type === 'print' || f.type === 'vector') && f.status !== 'ordered'
+        );
+        return hasPendingFiles;
+    });
 
   // 2. Manual Inventory Groups (Virtual Orders)
   const manualGroups: any[] = [];
@@ -135,7 +140,7 @@ export default function DTFOrdering() {
           const filesToAdd = (manualOrder.files || [])
              .filter(f => {
                  const fileRef = f.reference || 'Unbekannt';
-                 return fileRef === ref && (f.type === 'print' || f.type === 'vector');
+                 return fileRef === ref && (f.type === 'print' || f.type === 'vector') && f.status !== 'ordered';
              })
              .map(f => ({
                 id: f.url || Math.random().toString(36),
@@ -161,7 +166,7 @@ export default function DTFOrdering() {
       if (!order) return;
       
       const filesToAdd = (order.files || [])
-        .filter(f => f.type === 'print' || f.type === 'vector')
+        .filter(f => (f.type === 'print' || f.type === 'vector') && f.status !== 'ordered')
         .map(f => ({
             id: f.url || Math.random().toString(36),
             url: f.url,
@@ -404,8 +409,30 @@ export default function DTFOrdering() {
                     return f;
                 });
             } else if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
-                await updateOrder(orderId, { printStatus: 'ordered' });
-                updatedCount++;
+                const order = orders.find(o => o.id === orderId);
+                if (order && order.files) {
+                    // Find which files were selected for this order
+                    const filesToMark = selectedFiles.filter(f => f.orderId === orderId);
+                    
+                    const newFiles = order.files.map(f => {
+                        // Check if this file was selected (by URL match)
+                        if (filesToMark.some(sf => sf.url === f.url)) {
+                            return { ...f, status: 'ordered' as const };
+                        }
+                        return f;
+                    });
+                    
+                    // Check if all print/vector files are now ordered to update main status
+                    const allOrdered = newFiles
+                        .filter(f => f.type === 'print' || f.type === 'vector')
+                        .every(f => f.status === 'ordered');
+
+                    await updateOrder(orderId, { 
+                        files: newFiles,
+                        printStatus: allOrdered ? 'ordered' : 'pending' 
+                    });
+                    updatedCount++;
+                }
             }
         }
 

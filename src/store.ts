@@ -66,6 +66,7 @@ export interface Order {
   thumbnail?: string;
   reference?: string;
   status?: 'pending' | 'ordered';
+  quantity?: number;
 }[];
   orderItems?: OrderItem[]; // New field
   approvalStatus?: 'pending' | 'approved' | 'rejected';
