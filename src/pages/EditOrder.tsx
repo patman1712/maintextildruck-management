@@ -344,26 +344,8 @@ export default function EditOrder() {
 
         const order = orders.find(o => o.id === id);
         
-        // Check for deleted files to cleanup from server
-        if (order && order.files) {
-            const currentFileUrls = finalFiles.map(f => f.url).filter(Boolean);
-            const deletedFiles = order.files.filter(f => f.url && !currentFileUrls.includes(f.url));
-            
-            // Delete removed files from server
-            for (const file of deletedFiles) {
-                if (file.url && file.url.startsWith('/uploads/')) {
-                    try {
-                        await fetch('/api/upload/delete', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ filePath: file.url })
-                        });
-                    } catch (err) {
-                        console.error("Failed to delete orphaned file", err);
-                    }
-                }
-            }
-        }
+        // Removed automatic file deletion from server to prevent accidental data loss for shared files (customer products etc.)
+        // Files will remain on server even if removed from order.
 
         updateOrder(id, {
             title,
