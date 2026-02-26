@@ -383,7 +383,7 @@ export default function AdminSettings() {
                                 const btn = document.getElementById('regen-btn');
                                 if (btn) { btn.innerText = 'Wird verarbeitet...'; (btn as HTMLButtonElement).disabled = true; }
                                 
-                                const res = await fetch('/api/upload/regenerate-thumbnails', { method: 'POST' });
+                                const res = await fetch('/api/upload/regenerate-thumbnails?force=true', { method: 'POST' });
                                 const data = await res.json();
                                 
                                 if (data.success) {
