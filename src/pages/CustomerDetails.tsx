@@ -1412,11 +1412,11 @@ export default function CustomerDetails() {
                                                 key={idx} 
                                                 onClick={() => !isAssigned && handleAssignFile(file)}
                                                 className={`
-                                                    rounded-lg border p-2 relative group hover:shadow-md transition-all
-                                                    ${isAssigned ? 'border-green-500 bg-green-50 ring-1 ring-green-500 cursor-default' : 'border-gray-200 hover:border-red-300 cursor-pointer'}
+                                                    rounded-lg border p-3 relative group hover:shadow-md transition-all flex flex-col
+                                                    ${isAssigned ? 'border-green-500 bg-green-50 ring-1 ring-green-500 cursor-default' : 'border-gray-200 bg-white hover:border-red-300 cursor-pointer'}
                                                 `}
                                             >
-                                                <div className="aspect-square bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden relative">
+                                                <div className="aspect-square bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden relative shrink-0">
                                                     {displayThumb ? (
                                                         <img 
                                                             src={displayThumb} 
@@ -1446,12 +1446,14 @@ export default function CustomerDetails() {
                                                     )}
                                                 </div>
                                                 
-                                                <p className="text-xs font-medium truncate mb-0.5 text-gray-800" title={file.customName || file.name}>
-                                                    {file.customName || file.name}
-                                                </p>
-                                                <p className="text-[10px] text-gray-500 truncate">
-                                                    {new Date(file.orderDate).toLocaleDateString()}
-                                                </p>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-sm font-medium break-words line-clamp-2 mb-1 text-gray-800" title={file.customName || file.name}>
+                                                        {file.customName || file.name}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 truncate">
+                                                        {new Date(file.orderDate).toLocaleDateString()}
+                                                    </p>
+                                                </div>
                                             </div>
                                         );
                                     })}
