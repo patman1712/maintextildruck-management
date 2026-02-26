@@ -413,15 +413,19 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
 
             for (const swOrder of orders) {
                 // Check if order already exists
-                const existing = db.prepare('SELECT id FROM orders WHERE shopware_order_id = ?').get(swOrder.id || swOrder.id?.toString());
+                // Check by shopware_order_id OR order_number (if shopware_order_id might be missing or changed)
+                const orderNumber = swOrder.orderNumber || swOrder.number; // SW6 vs SW5
+                
+                const existing = db.prepare('SELECT id FROM orders WHERE shopware_order_id = ? OR order_number = ?')
+                    .get(swOrder.id || swOrder.id?.toString(), orderNumber);
+                
                 if (existing) {
-                    console.log(`Order ${swOrder.orderNumber} already exists. Skipping.`);
+                    console.log(`Order ${orderNumber} already exists. Skipping.`);
                     continue;
                 }
 
                 // Map Order
                 const newOrderId = Math.random().toString(36).substr(2, 9);
-                const orderNumber = swOrder.orderNumber || swOrder.number; // SW6 vs SW5
                 
                 // Determine Deadline (e.g., +14 days from now, or based on order date)
                 // Defaulting to +14 days
