@@ -626,10 +626,12 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                  }
             }
 
-            const sizeDisplay = item.quantity > 1 ? `${item.quantity}x ${cleanSize}` : cleanSize;
+            const sizeDisplay = item.quantity > 1 
+                ? `${item.quantity}x ${cleanSize}` 
+                : (cleanSize && !/^\d+x/.test(cleanSize) ? `1x ${cleanSize}` : cleanSize);
             
-            // Use cleanItemNumber if available, otherwise fallback to itemName
-            const identifier = cleanItemNumber ? cleanItemNumber : item.itemName;
+             // Use cleanItemNumber if available, otherwise fallback to itemName
+             const identifier = cleanItemNumber ? cleanItemNumber : item.itemName;
             
             body += `${identifier} | ${sizeDisplay} ${item.color ? `| ${item.color}` : ''}\n`;
         });
