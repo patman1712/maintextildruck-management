@@ -434,11 +434,19 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                 // Check by shopware_order_id OR order_number (if shopware_order_id might be missing or changed)
                 const orderNumber = swOrder.orderNumber || swOrder.number; // SW6 vs SW5
                 
-                const existing = db.prepare('SELECT id FROM orders WHERE shopware_order_id = ? OR order_number = ?')
-                    .get(swOrder.id || swOrder.id?.toString(), orderNumber);
+                const existing = db.prepare('SELECT id, shopware_order_id FROM orders WHERE shopware_order_id = ? OR order_number = ?')
+                    .get(swOrder.id || swOrder.id?.toString(), orderNumber) as any;
                 
                 if (existing) {
-                    console.log(`Order ${orderNumber} already exists. Skipping.`);
+                    console.log(`Order ${orderNumber} already exists. Checking for updates...`);
+                    
+                    // Optional: Update status if local is not completed but shopware is?
+                    // But if shopware_order_id was missing (due to bad import), we should update it!
+                    if (!existing.shopware_order_id && swOrder.id) {
+                         console.log(`Fixing missing shopware_order_id for Order ${orderNumber}`);
+                         db.prepare('UPDATE orders SET shopware_order_id = ? WHERE id = ?').run(swOrder.id.toString(), existing.id);
+                    }
+                    
                     continue;
                 }
 
