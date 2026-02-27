@@ -85,6 +85,7 @@ export default function CustomerDetails() {
   const [bulkAssignType, setBulkAssignType] = useState<'print' | 'view'>('print');
   const [isBulkAssigning, setIsBulkAssigning] = useState(false);
   const [bulkSelectedProductIds, setBulkSelectedProductIds] = useState<string[]>([]);
+  const [fileTab, setFileTab] = useState<'upload' | 'gallery'>('gallery');
 
   // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -155,7 +156,11 @@ export default function CustomerDetails() {
   };
 
   const handleCreateManualProduct = async () => {
-      if (!customer || !newManualProduct.name) return;
+      if (!customer) return;
+      if (!newManualProduct.name.trim()) {
+          alert('Bitte geben Sie einen Artikelnamen ein.');
+          return;
+      }
       try {
           const res = await fetch(`/api/products/${customer.id}`, {
               method: 'POST',
@@ -1779,93 +1784,129 @@ export default function CustomerDetails() {
                   {assignFileMode ? (
                       // FILE ASSIGN MODE
                       <>
-                        <div className="p-4 border-b bg-gray-50">
-                            <label className="flex items-center justify-center w-full h-16 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
-                                <div className="flex items-center space-x-2 text-gray-500">
-                                    <Upload size={20} />
-                                    <span className="text-sm font-medium">Neue Datei hochladen & zuweisen</span>
+                        <div className="flex border-b">
+                            <button 
+                                onClick={() => setFileTab('gallery')}
+                                className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${fileTab === 'gallery' ? 'border-blue-600 text-blue-600 bg-blue-50/30' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                            >
+                                <div className="flex items-center justify-center">
+                                    <ImageIcon size={16} className="mr-2" />
+                                    Aus Galerie wählen
                                 </div>
-                                <input type="file" className="hidden" onChange={handleDirectUploadAndAssign} accept="image/*,.pdf" />
-                            </label>
+                            </button>
+                            <button 
+                                onClick={() => setFileTab('upload')}
+                                className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${fileTab === 'upload' ? 'border-blue-600 text-blue-600 bg-blue-50/30' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                            >
+                                <div className="flex items-center justify-center">
+                                    <Upload size={16} className="mr-2" />
+                                    Neu hochladen
+                                </div>
+                            </button>
                         </div>
 
-                        <div className="p-4 border-b">
-                            <div className="relative">
-                                <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
-                                <input 
-                                    type="text" 
-                                    placeholder="Druckdaten suchen..." 
-                                    value={fileSearch}
-                                    onChange={(e) => setFileSearch(e.target.value)}
-                                    className="w-full pl-9 border border-gray-300 rounded p-2 text-sm"
-                                />
+                        {fileTab === 'upload' ? (
+                            <div className="p-8 flex flex-col items-center justify-center space-y-4">
+                                <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:bg-gray-50 hover:border-blue-400 transition-all group">
+                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                        <div className="p-3 bg-blue-50 rounded-full text-blue-500 group-hover:scale-110 transition-transform mb-3">
+                                            <Upload size={32} />
+                                        </div>
+                                        <p className="mb-2 text-sm text-gray-700 font-semibold">Klicken oder Datei hierher ziehen</p>
+                                        <p className="text-xs text-gray-500">PNG, JPG oder PDF</p>
+                                    </div>
+                                    <input type="file" className="hidden" onChange={handleDirectUploadAndAssign} accept="image/*,.pdf" />
+                                </label>
+                                <p className="text-xs text-gray-400 text-center">
+                                    Hochgeladene Dateien werden automatisch einem Archiv-Auftrag zugeordnet<br/>
+                                    und stehen anschließend in der Galerie zur Verfügung.
+                                </p>
                             </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4">
-                            {filteredPrintFilesForAssign.length > 0 ? (
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                    {filteredPrintFilesForAssign.map((file, idx) => {
-                                        const displayThumb = file.thumbnail || file.url;
-                                        const isAssigned = editingProduct?.files.some(f => f.file_url === file.url);
-                                        
-                                        return (
-                                            <div 
-                                                key={idx} 
-                                                onClick={() => !isAssigned && handleAssignFile(file)}
-                                                className={`
-                                                    rounded-lg border p-3 relative group hover:shadow-md transition-all flex flex-col
-                                                    ${isAssigned ? 'border-green-500 bg-green-50 ring-1 ring-green-500 cursor-default' : 'border-gray-200 bg-white hover:border-red-300 cursor-pointer'}
-                                                `}
-                                            >
-                                                <div className="aspect-square bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden relative shrink-0">
-                                                    {displayThumb ? (
-                                                        <img 
-                                                            src={displayThumb} 
-                                                            alt="" 
-                                                            className="w-full h-full object-contain" 
-                                                            onError={(e) => {
-                                                                e.currentTarget.style.display = 'none';
-                                                                e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
-                                                            }} 
-                                                        />
-                                                    ) : null}
-                                                    
-                                                    <div className={`fallback-icon ${displayThumb ? 'hidden' : ''} flex items-center justify-center w-full h-full absolute inset-0`}>
-                                                        {file.name.toLowerCase().endsWith('.pdf') ? (
-                                                            <FileText className="text-red-500 h-10 w-10" />
-                                                        ) : (
-                                                            <Printer className="text-gray-300 h-10 w-10" />
-                                                        )}
-                                                    </div>
+                        ) : (
+                            <>
+                                <div className="p-4 border-b bg-white">
+                                    <div className="relative">
+                                        <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
+                                        <input 
+                                            type="text" 
+                                            placeholder="Druckdaten suchen..." 
+                                            value={fileSearch}
+                                            onChange={(e) => setFileSearch(e.target.value)}
+                                            className="w-full pl-9 border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-4 bg-gray-50/30">
+                                    {filteredPrintFilesForAssign.length > 0 ? (
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                            {filteredPrintFilesForAssign.map((file, idx) => {
+                                                const displayThumb = file.thumbnail || file.url;
+                                                const isAssigned = editingProduct?.files.some(f => f.file_url === file.url);
+                                                
+                                                return (
+                                                    <div 
+                                                        key={idx} 
+                                                        onClick={() => !isAssigned && handleAssignFile(file)}
+                                                        className={`
+                                                            rounded-xl border p-3 relative group hover:shadow-lg transition-all flex flex-col bg-white
+                                                            ${isAssigned ? 'border-green-500 bg-green-50/50 ring-2 ring-green-500/20 cursor-default' : 'border-gray-200 hover:border-blue-400 cursor-pointer'}
+                                                        `}
+                                                    >
+                                                        <div className="aspect-square bg-gray-50 rounded-lg mb-3 flex items-center justify-center overflow-hidden relative shrink-0 border border-gray-100">
+                                                            {displayThumb ? (
+                                                                <img 
+                                                                    src={displayThumb} 
+                                                                    alt="" 
+                                                                    className="w-full h-full object-contain p-1" 
+                                                                    onError={(e) => {
+                                                                        e.currentTarget.style.display = 'none';
+                                                                        e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
+                                                                    }} 
+                                                                />
+                                                            ) : null}
+                                                            
+                                                            <div className={`fallback-icon ${displayThumb ? 'hidden' : ''} flex items-center justify-center w-full h-full absolute inset-0`}>
+                                                                {file.name.toLowerCase().endsWith('.pdf') ? (
+                                                                    <FileText className="text-red-500 h-10 w-10" />
+                                                                ) : (
+                                                                    <Printer className="text-gray-300 h-10 w-10" />
+                                                                )}
+                                                            </div>
 
-                                                    {isAssigned && (
-                                                        <div className="absolute inset-0 bg-green-500/10 flex items-center justify-center">
-                                                            <div className="bg-green-500 text-white rounded-full p-1 shadow-sm">
-                                                                <CheckCircle size={20} />
+                                                            {isAssigned && (
+                                                                <div className="absolute inset-0 bg-green-500/10 flex items-center justify-center">
+                                                                    <div className="bg-green-500 text-white rounded-full p-1.5 shadow-lg transform scale-110">
+                                                                        <CheckCircle size={24} />
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-sm font-semibold break-words line-clamp-2 mb-1 text-gray-800" title={file.customName || file.name}>
+                                                                {file.customName || file.name}
+                                                            </p>
+                                                            <div className="flex items-center text-[10px] text-gray-400">
+                                                                <FileText size={10} className="mr-1" />
+                                                                <span>{new Date(file.orderDate).toLocaleDateString()}</span>
                                                             </div>
                                                         </div>
-                                                    )}
-                                                </div>
-                                                
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-sm font-medium break-words line-clamp-2 mb-1 text-gray-800" title={file.customName || file.name}>
-                                                        {file.customName || file.name}
-                                                    </p>
-                                                    <p className="text-xs text-gray-500 truncate">
-                                                        {new Date(file.orderDate).toLocaleDateString()}
-                                                    </p>
-                                                </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-16 text-gray-400">
+                                            <div className="p-4 bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
+                                                <Printer size={32} />
                                             </div>
-                                        );
-                                    })}
+                                            <p className="font-medium">Keine passenden Druckdaten gefunden.</p>
+                                            <p className="text-sm">Versuchen Sie einen anderen Suchbegriff oder laden Sie eine neue Datei hoch.</p>
+                                        </div>
+                                    )}
                                 </div>
-                            ) : (
-                                <div className="text-center py-12 text-gray-500">
-                                    <Printer size={48} className="mx-auto text-gray-300 mb-4" />
-                                    <p>Keine passenden Druckdaten gefunden.</p>
-                                </div>
-                            )}
-                        </div>
+                            </>
+                        )}
                       </>
                   ) : (
                       // EDIT / CREATE MODE
@@ -1952,63 +1993,98 @@ export default function CustomerDetails() {
                   <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
                       {/* Left: File Selection */}
                       <div className="w-full md:w-1/3 border-r border-gray-200 flex flex-col bg-gray-50">
-                          <div className="p-4 border-b border-gray-200">
-                              <h4 className="font-semibold text-sm text-gray-700 mb-2">1. Datei auswählen</h4>
-                              <div className="flex space-x-2 mb-3">
+                          <div className="p-4 border-b border-gray-200 bg-white">
+                              <h4 className="font-semibold text-sm text-gray-700 mb-3">1. Datei auswählen</h4>
+                              
+                              {/* Type Selection */}
+                              <div className="flex space-x-2 mb-4">
                                   <button 
                                       onClick={() => setBulkAssignType('print')}
-                                      className={`flex-1 py-1 text-xs font-medium rounded ${bulkAssignType === 'print' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-white border border-gray-300 text-gray-600'}`}
+                                      className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${bulkAssignType === 'print' ? 'bg-red-100 text-red-700 border border-red-200 shadow-sm' : 'bg-gray-100 border border-transparent text-gray-600 hover:bg-gray-200'}`}
                                   >
                                       Druckdaten
                                   </button>
                                   <button 
                                       onClick={() => setBulkAssignType('view')}
-                                      className={`flex-1 py-1 text-xs font-medium rounded ${bulkAssignType === 'view' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-white border border-gray-300 text-gray-600'}`}
+                                      className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors ${bulkAssignType === 'view' ? 'bg-blue-100 text-blue-700 border border-blue-200 shadow-sm' : 'bg-gray-100 border border-transparent text-gray-600 hover:bg-gray-200'}`}
                                   >
                                       Ansicht
                                   </button>
                               </div>
-                              
-                              <label className="flex items-center justify-center w-full h-12 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-white transition-colors mb-4">
-                                  <div className="flex items-center space-x-2 text-gray-500">
-                                      <Upload size={16} />
-                                      <span className="text-xs font-medium">Neue Datei hochladen</span>
-                                  </div>
-                                  <input type="file" className="hidden" onChange={handleDirectUploadAndAssign} accept="image/*,.pdf" />
-                              </label>
 
-                              <div className="relative">
-                                  <Search size={14} className="absolute left-2 top-2 text-gray-400" />
-                                  <input 
-                                      type="text" 
-                                      placeholder="Datei suchen..." 
-                                      value={fileSearch}
-                                      onChange={(e) => setFileSearch(e.target.value)}
-                                      className="w-full pl-8 border border-gray-300 rounded p-1.5 text-xs"
-                                  />
+                              {/* Tabs */}
+                              <div className="flex border-b border-gray-100">
+                                  <button 
+                                      onClick={() => setFileTab('gallery')}
+                                      className={`flex-1 py-2 text-xs font-medium border-b-2 transition-colors ${fileTab === 'gallery' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                                  >
+                                      Galerie
+                                  </button>
+                                  <button 
+                                      onClick={() => setFileTab('upload')}
+                                      className={`flex-1 py-2 text-xs font-medium border-b-2 transition-colors ${fileTab === 'upload' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                                  >
+                                      Upload
+                                  </button>
                               </div>
+                              
+                              {fileTab === 'gallery' && (
+                                <div className="mt-3 relative">
+                                    <Search size={14} className="absolute left-2 top-2.5 text-gray-400" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Datei suchen..." 
+                                        value={fileSearch}
+                                        onChange={(e) => setFileSearch(e.target.value)}
+                                        className="w-full pl-8 border border-gray-300 rounded-md p-2 text-xs focus:ring-1 focus:ring-blue-500 outline-none"
+                                    />
+                                </div>
+                              )}
                           </div>
                           
-                          <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                              {filteredPrintFilesForAssign.map((file, idx) => (
-                                  <div 
-                                      key={idx}
-                                      onClick={() => setBulkSelectedFile({ url: file.url, name: file.customName || file.name, thumbnail: file.thumbnail })}
-                                      className={`p-2 rounded border cursor-pointer flex items-center space-x-3 transition-colors ${bulkSelectedFile?.url === file.url ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'bg-white border-gray-200 hover:border-blue-300'}`}
-                                  >
-                                      <div className="h-10 w-10 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center overflow-hidden border border-gray-200">
-                                          {file.thumbnail ? (
-                                              <img src={file.thumbnail} className="w-full h-full object-contain" />
-                                          ) : (
-                                              <FileText size={16} className="text-gray-400" />
-                                          )}
-                                      </div>
-                                      <div className="min-w-0">
-                                          <p className="text-xs font-medium truncate text-gray-800" title={file.customName || file.name}>{file.customName || file.name}</p>
-                                          <p className="text-[10px] text-gray-500">{new Date(file.orderDate).toLocaleDateString()}</p>
-                                      </div>
+                          <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50/50">
+                              {fileTab === 'upload' ? (
+                                  <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                                      <label className="flex flex-col items-center justify-center w-full aspect-square max-w-[200px] border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:bg-white hover:border-blue-400 transition-all group mb-4">
+                                          <div className="p-3 bg-white rounded-full text-blue-500 group-hover:scale-110 transition-transform mb-2 shadow-sm">
+                                              <Upload size={24} />
+                                          </div>
+                                          <span className="text-xs font-medium text-gray-600">Datei hochladen</span>
+                                          <input type="file" className="hidden" onChange={handleDirectUploadAndAssign} accept="image/*,.pdf" />
+                                      </label>
+                                      <p className="text-[10px] text-gray-400">
+                                          Wird automatisch archiviert & ausgewählt
+                                      </p>
                                   </div>
-                              ))}
+                              ) : (
+                                  <>
+                                    {filteredPrintFilesForAssign.length > 0 ? (
+                                        filteredPrintFilesForAssign.map((file, idx) => (
+                                          <div 
+                                              key={idx}
+                                              onClick={() => setBulkSelectedFile({ url: file.url, name: file.customName || file.name, thumbnail: file.thumbnail })}
+                                              className={`p-2 rounded-lg border cursor-pointer flex items-center space-x-3 transition-all ${bulkSelectedFile?.url === file.url ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500 shadow-sm' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm'}`}
+                                          >
+                                              <div className="h-10 w-10 bg-gray-100 rounded-md flex-shrink-0 flex items-center justify-center overflow-hidden border border-gray-200">
+                                                  {file.thumbnail ? (
+                                                      <img src={file.thumbnail} className="w-full h-full object-contain" />
+                                                  ) : (
+                                                      <FileText size={16} className="text-gray-400" />
+                                                  )}
+                                              </div>
+                                              <div className="min-w-0">
+                                                  <p className="text-xs font-medium truncate text-gray-800" title={file.customName || file.name}>{file.customName || file.name}</p>
+                                                  <p className="text-[10px] text-gray-500">{new Date(file.orderDate).toLocaleDateString()}</p>
+                                              </div>
+                                          </div>
+                                      ))
+                                    ) : (
+                                        <div className="text-center py-8 text-gray-400">
+                                            <p className="text-xs">Keine Dateien gefunden.</p>
+                                        </div>
+                                    )}
+                                  </>
+                              )}
                           </div>
                       </div>
 
