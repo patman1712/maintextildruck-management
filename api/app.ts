@@ -201,6 +201,46 @@ app.get('/api/debug/shopware-check/:orderNumber', async (req, res) => {
         res.status(500).json({ error: e.message, stack: e.stack });
     }
 });
+// DEBUG: List ALL orders from Shopware (to check if #35 is in the list)
+app.get('/api/debug/shopware-list', async (req, res) => {
+    try {
+        const customers = db.prepare("SELECT * FROM customers WHERE shopware_url IS NOT NULL").all() as any[];
+        const results = [];
+
+        for (const customer of customers) {
+            const baseUrl = customer.shopware_url;
+            const version = customer.shopware_version || '6';
+            const authString = Buffer.from(`${customer.shopware_access_key}:${customer.shopware_secret_key}`).toString('base64');
+            const url = baseUrl.replace(/\/$/, '');
+
+            if (version === '5') {
+                const params = new URLSearchParams();
+                params.append('limit', '100'); // Same as Sync
+                // No Sort
+                
+                const response = await fetch(`${url}/api/orders?${params.toString()}`, {
+                    headers: { 'Authorization': `Basic ${authString}`, 'Accept': 'application/json' }
+                });
+                const json = await response.json();
+                
+                if (json.data) {
+                    results.push({
+                        customer: customer.name,
+                        count: json.data.length,
+                        orders: json.data.map((o: any) => ({ 
+                            id: o.id, 
+                            number: o.number, 
+                            time: o.orderTime 
+                        }))
+                    });
+                }
+            }
+        }
+        res.json(results);
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
 // -------------------------------
 
 // Serve uploads
