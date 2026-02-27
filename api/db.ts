@@ -52,6 +52,7 @@ db.exec(`
     processing INTEGER DEFAULT 0,
     produced INTEGER DEFAULT 0,
     invoiced INTEGER DEFAULT 0,
+    steps TEXT,     -- stored as JSON string { processing: boolean, produced: boolean, invoiced: boolean }
     print_status TEXT DEFAULT 'pending', -- pending, ordered
     description TEXT,
     employees TEXT, -- stored as JSON string
@@ -67,6 +68,8 @@ db.exec(`
     original_name TEXT,       -- Original filename
     path TEXT NOT NULL,       -- URL/Path
     type TEXT NOT NULL,       -- print, vector, preview
+    thumbnail TEXT,
+    print_status TEXT DEFAULT 'pending', -- pending, ordered, completed
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -294,6 +297,19 @@ try {
   if (!hasShopwareOrderId) {
     console.log('Migrating database: Adding shopware_order_id to orders table');
     db.exec('ALTER TABLE orders ADD COLUMN shopware_order_id TEXT');
+  }
+
+  const hasSteps = columns.some(col => col.name === 'steps');
+  if (!hasSteps) {
+      console.log('Migrating database: Adding steps to orders table');
+      db.exec('ALTER TABLE orders ADD COLUMN steps TEXT'); // JSON string for { processing: boolean, produced: boolean, invoiced: boolean }
+  }
+
+  const fileColumns = db.prepare("PRAGMA table_info(files)").all() as any[];
+  const hasPrintStatusFile = fileColumns.some(col => col.name === 'print_status');
+  if (!hasPrintStatusFile) {
+      console.log('Migrating database: Adding print_status to files table');
+      db.exec("ALTER TABLE files ADD COLUMN print_status TEXT DEFAULT 'pending'");
   }
 
   const customerProductCols = db.prepare("PRAGMA table_info(customer_products)").all() as any[];
