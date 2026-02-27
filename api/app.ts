@@ -140,6 +140,67 @@ app.delete('/api/debug/shopware-orders', (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
+
+// DEBUG: Fetch single order from Shopware API directly to check availability
+app.get('/api/debug/shopware-check/:orderNumber', async (req, res) => {
+    try {
+        const orderNumber = req.params.orderNumber;
+        const customer = db.prepare("SELECT * FROM customers WHERE shopware_url IS NOT NULL LIMIT 1").get() as any;
+        
+        if (!customer) return res.status(404).json({ error: 'No Shopware customer found' });
+
+        const baseUrl = customer.shopware_url;
+        const version = customer.shopware_version || '6';
+
+        if (version === '5') {
+            const url = baseUrl.replace(/\/$/, '');
+            const authString = Buffer.from(`${customer.shopware_access_key}:${customer.shopware_secret_key}`).toString('base64');
+            
+            // Try to find by number
+            const response = await fetch(`${url}/api/orders?filter[0][property]=number&filter[0][value]=${orderNumber}`, {
+                headers: { 'Authorization': `Basic ${authString}`, 'Accept': 'application/json' }
+            });
+            const json = await response.json();
+            return res.json({ version: '5', found: json.data?.length > 0, data: json.data });
+        } else {
+             // SW6
+             // We need to fetch token first
+             // Note: importing internal functions is hacky, better to move logic to shared helper or copy-paste for debug
+             // For now, let's try to replicate the token fetch manually to avoid export issues if they are not exported
+             
+             const tokenRes = await fetch(`${baseUrl}/api/oauth/token`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    grant_type: 'client_credentials',
+                    client_id: customer.shopware_access_key,
+                    client_secret: customer.shopware_secret_key
+                })
+            });
+            const tokenData = await tokenRes.json();
+            const token = tokenData.access_token;
+
+            const body = {
+                filter: [{ type: 'equals', field: 'orderNumber', value: orderNumber }],
+                associations: { stateMachineState: {}, transactions: { associations: { stateMachineState: {} } } }
+            };
+
+            const searchRes = await fetch(`${baseUrl}/api/search/order`, {
+                method: 'POST',
+                headers: { 
+                    'Authorization': `Bearer ${token}`, 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json' 
+                },
+                body: JSON.stringify(body)
+            });
+            const searchData = await searchRes.json();
+            return res.json({ version: '6', found: searchData.total > 0, data: searchData });
+        }
+    } catch (e: any) {
+        res.status(500).json({ error: e.message, stack: e.stack });
+    }
+});
 // -------------------------------
 
 // Serve uploads
