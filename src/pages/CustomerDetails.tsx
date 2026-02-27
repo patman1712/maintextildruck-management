@@ -1558,7 +1558,14 @@ export default function CustomerDetails() {
                                         })()}
                                     </div>
                                     <div>
-                                        <h4 className="font-bold text-gray-900">{product.name}</h4>
+                                        <div className="flex items-center gap-2">
+                                            <h4 className="font-bold text-gray-900">{product.name}</h4>
+                                            {product.supplier_id && (
+                                                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100 font-medium">
+                                                    {suppliers.find(s => s.id === product.supplier_id)?.name || 'Lieferant'}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="flex items-center mt-1 space-x-2 flex-wrap gap-y-1">
                                             {product.product_number && (
                                                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">
