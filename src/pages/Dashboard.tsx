@@ -24,6 +24,15 @@ const MENU_ITEMS: MenuItem[] = [
         { id: 'orders_finished', label: 'Fertige Aufträge', to: '/dashboard/orders/finished', icon: Archive },
     ]
   },
+  {
+    id: 'online_orders_group',
+    label: 'Online Aufträge',
+    icon: ShoppingCart,
+    children: [
+        { id: 'online_orders', label: 'Aktuelle Online Aufträge', to: '/dashboard/orders/online', icon: Folder },
+        { id: 'online_orders_finished', label: 'Fertige Online Aufträge', to: '/dashboard/orders/online/finished', icon: Archive },
+    ]
+  },
   { id: 'inventory', label: 'Warenbestellung', to: '/dashboard/inventory', icon: ShoppingCart },
   { 
     id: 'dtf_group', 

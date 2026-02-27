@@ -75,6 +75,7 @@ export interface Order {
   rejectionReason?: string;
   approvalToken?: string;
   approvalComment?: string;
+  shopwareOrderId?: string; // Shopware order ID for online orders
 }
 
 export interface Supplier {
@@ -254,6 +255,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         rejectionReason: o.rejectionReason,
         approvalToken: o.approvalToken,
         approvalComment: o.approvalComment,
+        shopwareOrderId: o.shopware_order_id,
         orderItems: (orderItemsData.data || [])
             .filter((i: any) => i.order_id === o.id)
             .map((i: any) => ({

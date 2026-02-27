@@ -83,9 +83,11 @@ export default function App() {
         }>
           <Route index element={<DashboardHome />} />
           <Route path="orders/new" element={<NewOrder />} />
-          <Route path="orders" element={<OrderList />} />
+          <Route path="orders" element={<OrderList source="manual" />} />
           <Route path="invoices" element={<InvoiceList />} />
-          <Route path="orders/finished" element={<OrderList filter="completed" />} />
+          <Route path="orders/finished" element={<OrderList filter="completed" source="manual" />} />
+          <Route path="orders/online" element={<OrderList source="online" />} />
+          <Route path="orders/online/finished" element={<OrderList filter="completed" source="online" />} />
           <Route path="orders/:id" element={<OrderDetails />} />
           <Route path="orders/:id/edit" element={<EditOrder />} />
           <Route path="customers" element={<CustomerList />} />

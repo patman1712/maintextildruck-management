@@ -3,7 +3,7 @@ import { Folder, Search, Filter, Calendar, User, Eye, Printer, MoreHorizontal, S
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-export default function OrderList({ filter }: { filter?: "active" | "completed" }) {
+export default function OrderList({ filter, source }: { filter?: "active" | "completed", source?: "manual" | "online" }) {
   const navigate = useNavigate();
   const orders = useAppStore((state) => state.orders);
   const loading = useAppStore((state) => state.loading);
@@ -97,6 +97,15 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
 
     // Hide manual invoices from Order List (they appear in Invoice List)
     if (order.status === 'manual_invoice') return false;
+
+    // Source Filter (Manual vs Online)
+    if (source === 'online') {
+        // Show only orders with shopware_order_id
+        if (!order.shopwareOrderId) return false;
+    } else if (source === 'manual') {
+        // Show only orders WITHOUT shopware_order_id
+        if (order.shopwareOrderId) return false;
+    }
     
     return matchesSearch && matchesStatus;
   });
@@ -120,18 +129,31 @@ export default function OrderList({ filter }: { filter?: "active" | "completed" 
     <div className="max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <h1 className="text-2xl font-bold text-slate-800 flex items-center">
-          {filter === "completed" ? <Archive className="mr-2 text-red-600" /> : <Folder className="mr-2 text-red-600" />}
-          {filter === "completed" ? "Fertige Aufträge" : "Aktuelle Aufträge"}
+          {source === 'online' ? (
+              <ShoppingCart className="mr-2 text-blue-600" />
+          ) : filter === "completed" ? (
+              <Archive className="mr-2 text-red-600" />
+          ) : (
+              <Folder className="mr-2 text-red-600" />
+          )}
+          
+          {source === 'online' 
+            ? (filter === "completed" ? "Fertige Online Aufträge" : "Aktuelle Online Aufträge")
+            : (filter === "completed" ? "Fertige Aufträge" : "Aktuelle Aufträge")
+          }
         </h1>
         
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-center">
-          <button 
-            onClick={handleShopwareSync}
-            className="p-2 border border-gray-300 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
-            title="Shopware Bestellungen synchronisieren"
-          >
-            <DownloadCloud size={20} />
-          </button>
+          {/* Only show Sync button in Online Orders or if no source specified (legacy) */}
+          {(source === 'online' || !source) && (
+              <button 
+                onClick={handleShopwareSync}
+                className="p-2 border border-gray-300 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
+                title="Shopware Bestellungen synchronisieren"
+              >
+                <DownloadCloud size={20} />
+              </button>
+          )}
 
           <button 
             onClick={() => fetchData()}
