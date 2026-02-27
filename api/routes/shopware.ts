@@ -352,8 +352,9 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                     // params.append('filter[1][property]', 'paymentStatusId'); 
                     // params.append('filter[1][value]', '12');
                     params.append('limit', '100'); // Increased limit to find older/deleted orders
-                    params.append('sort[0][property]', 'orderTime'); // Ensure we get newest first
-                    params.append('sort[0][direction]', 'DESC');
+                    // REMOVED SORT to use default ID sorting (helps finding older orders if ID > date)
+                    // params.append('sort[0][property]', 'orderTime'); 
+                    // params.append('sort[0][direction]', 'DESC');
 
                     const response = await fetch(`${url}/api/orders?${params.toString()}`, {
                         headers: {
