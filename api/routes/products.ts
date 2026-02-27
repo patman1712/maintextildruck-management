@@ -37,6 +37,17 @@ router.post('/bulk-files', (req: Request, res: Response) => {
             VALUES (?, ?, ?, ?, ?, ?, ?)
         `);
 
+        const checkFileStmt = db.prepare(`
+            SELECT id FROM customer_product_files 
+            WHERE product_id = ? AND file_name = ?
+        `);
+
+        const updateFileStmt = db.prepare(`
+            UPDATE customer_product_files 
+            SET file_url = ?, thumbnail_url = ?, type = ?, quantity = ?
+            WHERE id = ?
+        `);
+
         const updateSupplierStmt = db.prepare(`
             UPDATE customer_products 
             SET supplier_id = ?
@@ -47,18 +58,34 @@ router.post('/bulk-files', (req: Request, res: Response) => {
             for (const productId of ids) {
                 console.log(`Processing product ${productId}`);
                 
-                // Insert all files for this product
+                // Insert or Update files for this product
                 for (const file of filesToProcess) {
-                    const id = Math.random().toString(36).substr(2, 9);
-                    insertFileStmt.run(
-                        id, 
-                        productId, 
-                        file.fileUrl || file.url, // Handle both key variations
-                        file.fileName || file.name, 
-                        file.thumbnailUrl || file.thumbnail, 
-                        file.type || type || 'print', 
-                        file.quantity || quantity || 1
-                    );
+                    const fName = file.fileName || file.name;
+                    const fUrl = file.fileUrl || file.url;
+                    const fThumb = file.thumbnailUrl || file.thumbnail;
+                    const fType = file.type || type || 'print';
+                    const fQty = file.quantity || quantity || 1;
+
+                    // Check if file with same name exists for this product
+                    const existingFile = checkFileStmt.get(productId, fName) as any;
+
+                    if (existingFile) {
+                        // Update existing file (User wants "newer" one)
+                        updateFileStmt.run(fUrl, fThumb, fType, fQty, existingFile.id);
+                        console.log(`Updated existing file ${fName} for product ${productId}`);
+                    } else {
+                        // Insert new file
+                        const id = Math.random().toString(36).substr(2, 9);
+                        insertFileStmt.run(
+                            id, 
+                            productId, 
+                            fUrl, 
+                            fName, 
+                            fThumb, 
+                            fType, 
+                            fQty
+                        );
+                    }
                 }
 
                 // Update supplier if provided
@@ -219,13 +246,29 @@ router.post('/:productId/files', (req: Request, res: Response) => {
     }
 
     try {
-        const id = Math.random().toString(36).substr(2, 9);
-        db.prepare(`
-            INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type, quantity)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(id, productId, fileUrl, fileName, thumbnailUrl, type || 'print', quantity || 1);
+        const checkFileStmt = db.prepare(`
+            SELECT id FROM customer_product_files 
+            WHERE product_id = ? AND file_name = ?
+        `);
 
-        res.json({ success: true, message: 'File assigned', id });
+        const existing = checkFileStmt.get(productId, fileName) as any;
+
+        if (existing) {
+            db.prepare(`
+                UPDATE customer_product_files 
+                SET file_url = ?, thumbnail_url = ?, type = ?, quantity = ? 
+                WHERE id = ?
+            `).run(fileUrl, thumbnailUrl, type || 'print', quantity || 1, existing.id);
+            res.json({ success: true, message: 'File updated', id: existing.id });
+        } else {
+            const id = Math.random().toString(36).substr(2, 9);
+            db.prepare(`
+                INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type, quantity)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(id, productId, fileUrl, fileName, thumbnailUrl, type || 'print', quantity || 1);
+
+            res.json({ success: true, message: 'File assigned', id });
+        }
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }
