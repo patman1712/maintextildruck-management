@@ -205,14 +205,13 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
     
     const hasShopwareId = order.shopwareOrderId && typeof order.shopwareOrderId === 'string' && order.shopwareOrderId.trim().length > 0;
 
+    // Filter by Source first to avoid cross-contamination
     if (source === 'online') {
-        // MUST have shopware ID
         if (!hasShopwareId) return false;
-    } else {
-        // source === 'manual' OR undefined (default)
-        // MUST NOT have shopware ID
+    } else if (source === 'manual') {
         if (hasShopwareId) return false;
     }
+    // If no source specified (legacy view?), maybe show all? But we usually pass source prop now.
     
     // In "active" filter (which is default view), hide completed/archived orders
     if (effectiveStatusFilter === 'active' && (order.status === 'completed' || (order.status as any) === 'archived')) return false;
