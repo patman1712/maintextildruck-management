@@ -489,6 +489,44 @@ router.post('/import-single', async (req: Request, res: Response) => {
                 const itemNumber = item.payload?.productNumber || item.articleNumber || '';
                 const quantity = item.quantity;
                 
+                // Extract Size & Color
+                let size = null;
+                let color = null;
+
+                // Shopware 6: Check payload.options
+                if (item.payload && item.payload.options && Array.isArray(item.payload.options)) {
+                    for (const opt of item.payload.options) {
+                        const group = (opt.group || opt.groupName || '').toLowerCase();
+                        const value = opt.option || opt.name;
+                        
+                        if (group.includes('size') || group.includes('größe')) {
+                            size = value;
+                        } else if (group.includes('color') || group.includes('farbe')) {
+                            color = value;
+                        }
+                    }
+                }
+                
+                // Shopware 5: Check additionaltext or try to parse
+                // SW5 often has 'additionaltext' like "XL / Red"
+                if (version === '5' && !size && !color && item.additionaltext) {
+                     // Simple heuristic if not structured
+                     // But usually SW5 API doesn't give structured options in order details easily without extra fetch
+                     // We can try to rely on the fact that additionaltext is what we want.
+                     // But we don't know which part is size/color without metadata.
+                     // For now, let's put additionaltext into 'size' if it's short, or just leave it?
+                     // Or try to regex common patterns?
+                     // Better: If we have 'additionaltext', let's store it in a notes field or try to split it?
+                     // User specifically asked for Size.
+                     
+                     // If additionaltext is like "XL" or "L", assume size?
+                     // If "Red", assume color?
+                     // Too risky.
+                     
+                     // Let's check if we have configuratorOptions in the item (sometimes available)
+                     // If not, we can't reliably separate them without product lookup.
+                }
+
                 // Match Product
                 const swProductId = item.productId || item.articleId; 
                 let matchedProduct = null;
@@ -501,9 +539,9 @@ router.post('/import-single', async (req: Request, res: Response) => {
                 const supplierId = (matchedProduct && matchedProduct.supplier_id) ? matchedProduct.supplier_id : 'shopware-import';
 
                 db.prepare(`
-                    INSERT INTO order_items (id, order_id, supplier_id, item_name, item_number, quantity, status)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                `).run(itemId, newOrderId, supplierId, itemName, itemNumber, quantity, isCompleted ? 'completed' : 'pending');
+                    INSERT INTO order_items (id, order_id, supplier_id, item_name, item_number, quantity, status, size, color)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `).run(itemId, newOrderId, supplierId, itemName, itemNumber, quantity, isCompleted ? 'completed' : 'pending', size, color);
 
                 // Files
                 if (matchedProduct) {
@@ -832,6 +870,24 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                         const itemNumber = item.payload?.productNumber || item.articleNumber || '';
                         const quantity = item.quantity;
                         
+                        // Extract Size & Color
+                        let size = null;
+                        let color = null;
+
+                        // Shopware 6: Check payload.options
+                        if (item.payload && item.payload.options && Array.isArray(item.payload.options)) {
+                            for (const opt of item.payload.options) {
+                                const group = (opt.group || opt.groupName || '').toLowerCase();
+                                const value = opt.option || opt.name;
+                                
+                                if (group.includes('size') || group.includes('größe')) {
+                                    size = value;
+                                } else if (group.includes('color') || group.includes('farbe')) {
+                                    color = value;
+                                }
+                            }
+                        }
+                        
                         // 1. Try to find matching Online Product (by shopware ID or number)
                         // Note: swOrder items might have 'articleId' (SW5) or 'productId' (SW6) or 'referencedId'
                         const swProductId = item.productId || item.articleId; 
@@ -853,9 +909,9 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                         const supplierId = (matchedProduct && matchedProduct.supplier_id) ? matchedProduct.supplier_id : 'shopware-import';
 
                         db.prepare(`
-                            INSERT INTO order_items (id, order_id, supplier_id, item_name, item_number, quantity, status)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
-                        `).run(itemId, newOrderId, supplierId, itemName, itemNumber, quantity, isCompleted ? 'completed' : 'pending');
+                            INSERT INTO order_items (id, order_id, supplier_id, item_name, item_number, quantity, status, size, color)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        `).run(itemId, newOrderId, supplierId, itemName, itemNumber, quantity, isCompleted ? 'completed' : 'pending', size, color);
 
                         // 3. Copy Print Files from Matched Product
                         if (matchedProduct) {
