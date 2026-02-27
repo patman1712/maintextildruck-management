@@ -218,7 +218,13 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
     if (effectiveStatusFilter === 'active' && order.status === 'completed') return false;
     
     // In "completed" filter, hide active/cancelled
-    if (effectiveStatusFilter === 'completed' && order.status !== 'completed') return false;
+    // IMPORTANT: Check status logic.
+    // Maybe imported orders have a different status? 'archived'?
+    // In Shopware import we set status = 'completed'.
+    // Let's debug by allowing ALL if filter is completed, just to see if they appear.
+    // Or check if status is EXACTLY 'completed'.
+    
+    if (effectiveStatusFilter === 'completed' && order.status !== 'completed' && (order.status as any) !== 'archived') return false;
 
     // Hide the special "Manual Inventory" order from the list
     if (order.id === 'inventory-manual') return false;
