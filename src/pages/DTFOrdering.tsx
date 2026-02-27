@@ -141,24 +141,26 @@ export default function DTFOrdering() {
           const filesToAdd = (manualOrder.files || [])
              .filter(f => {
                  const fileRef = f.reference || 'Unbekannt';
-                 return fileRef === ref && (f.type === 'print' || f.type === 'vector') && f.status !== 'ordered';
+                 return fileRef === ref && (f.type === 'print' || f.type === 'vector' || !f.type) && f.status !== 'ordered';
              })
              .map(f => ({
-                id: f.url || Math.random().toString(36),
+                id: Math.random().toString(36).substr(2, 9),
                 url: f.url,
                 name: f.customName || f.name,
-                 thumbnail: f.thumbnail,
-                 orderId: `manual-group-${ref}`, // Use Virtual ID for tracking status update
-                 customerName: 'Lager / Manuell',
-                 date: manualOrder.createdAt,
+                thumbnail: f.thumbnail,
+                orderId: `manual-group-${ref}`, // Use Virtual ID for tracking status update
+                customerName: 'Lager / Manuell',
+                date: manualOrder.createdAt,
                 quantity: f.quantity || 1,
                 width: 0,
                 height: 0,
                 reference: f.reference
             }));
           
-          filesToAdd.forEach(file => {
-              addFile(file);
+          // Batch update for manual groups too
+          setSelectedFiles(prev => {
+              const uniqueNewFiles = filesToAdd.filter(nf => !prev.some(pf => pf.url === nf.url && pf.orderId === nf.orderId && pf.name === nf.name));
+              return [...prev, ...uniqueNewFiles];
           });
           return;
       }
@@ -167,9 +169,9 @@ export default function DTFOrdering() {
       if (!order) return;
       
       const filesToAdd = (order.files || [])
-        .filter(f => (f.type === 'print' || f.type === 'vector') && f.status !== 'ordered')
+        .filter(f => (f.type === 'print' || f.type === 'vector' || !f.type) && f.status !== 'ordered')
         .map(f => ({
-            id: f.url || Math.random().toString(36),
+            id: Math.random().toString(36).substr(2, 9),
             url: f.url,
             name: f.customName || f.name,
             thumbnail: f.thumbnail,
@@ -181,28 +183,24 @@ export default function DTFOrdering() {
             height: 0
         }));
         
+      console.log('Adding files from order:', orderId, filesToAdd.length, filesToAdd);
+
       // Add all, avoid duplicates (or increment quantity?)
       // Requirement: "alle dateien sollen automatisch dann in ausgewählte dateien"
       
       // FIX: Add ALL files to selection state directly to avoid loop/state batching issues
-      const newFiles = filesToAdd.map(file => ({
-            ...file,
-            id: Math.random().toString(36).substr(2, 9),
-            quantity: file.quantity || 1,
-            width: 0,
-            height: 0
-      }));
+      const newFiles = filesToAdd; // Already mapped above with unique IDs
 
       setSelectedFiles(prev => {
-          // Filter out files that are already EXACTLY in the list (same URL + OrderID) to avoid double-adding on double-click
-          // But allow adding if not present.
+          // Filter out files that are already EXACTLY in the list (same URL + OrderID + Name) to avoid double-adding
+          // Added 'name' to check to distinguish between different files that might share a URL (edge case) or if user wants to add same file with different name
           
-          const uniqueNewFiles = newFiles.filter(nf => !prev.some(pf => pf.url === nf.url && pf.orderId === nf.orderId));
+          const uniqueNewFiles = newFiles.filter(nf => !prev.some(pf => pf.url === nf.url && pf.orderId === nf.orderId && pf.name === nf.name));
           
           // If all files already exist, increment quantity for existing
           if (uniqueNewFiles.length === 0) {
               return prev.map(pf => {
-                  const matchingNew = newFiles.find(nf => nf.url === pf.url && nf.orderId === pf.orderId);
+                  const matchingNew = newFiles.find(nf => nf.url === pf.url && nf.orderId === pf.orderId && nf.name === pf.name);
                   if (matchingNew) {
                       return { ...pf, quantity: pf.quantity + matchingNew.quantity };
                   }
