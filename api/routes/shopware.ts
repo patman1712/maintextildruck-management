@@ -284,6 +284,273 @@ router.post('/test-connection', async (req: Request, res: Response) => {
     }
 });
 
+// Import Single Order by Number
+router.post('/import-single', async (req: Request, res: Response) => {
+    const { orderNumber } = req.body;
+    if (!orderNumber) return res.status(400).json({ success: false, error: 'Order Number required' });
+
+    console.log(`Starting Single Order Import for #${orderNumber}...`);
+
+    const customers = db.prepare(`
+        SELECT * FROM customers 
+        WHERE shopware_url IS NOT NULL 
+        AND shopware_access_key IS NOT NULL 
+        AND shopware_secret_key IS NOT NULL
+    `).all() as any[];
+
+    if (customers.length === 0) {
+        return res.status(404).json({ success: false, error: 'No Shopware customers configured' });
+    }
+
+    // Try to find the order in ANY configured shopware instance
+    let foundOrder = null;
+    let foundCustomer = null;
+    let version = '6';
+
+    for (const customer of customers) {
+        try {
+            version = customer.shopware_version || '6';
+            const baseUrl = customer.shopware_url;
+            const url = baseUrl.replace(/\/$/, '');
+
+            if (version === '5') {
+                const authString = Buffer.from(`${customer.shopware_access_key}:${customer.shopware_secret_key}`).toString('base64');
+                const response = await fetch(`${url}/api/orders?filter[0][property]=number&filter[0][value]=${orderNumber}`, {
+                    headers: { 'Authorization': `Basic ${authString}`, 'Accept': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const json = await response.json();
+                    if (json.data && json.data.length > 0) {
+                        foundOrder = json.data[0];
+                        foundCustomer = customer;
+                        
+                        // Fetch details
+                        const detailRes = await fetch(`${url}/api/orders/${foundOrder.id}`, {
+                            headers: { 'Authorization': `Basic ${authString}`, 'Accept': 'application/json' }
+                        });
+                        if (detailRes.ok) {
+                            foundOrder = (await detailRes.json()).data;
+                        }
+                        break;
+                    }
+                }
+            } else {
+                // SW6
+                const token = await getShopware6Token(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
+                const body = {
+                    filter: [{ type: 'equals', field: 'orderNumber', value: orderNumber }],
+                    associations: {
+                        lineItems: { associations: { cover: {} } },
+                        stateMachineState: {},
+                        transactions: { associations: { stateMachineState: {} } },
+                        deliveries: { associations: { shippingOrderAddress: { associations: { country: {} } } } },
+                        orderCustomer: {}
+                    }
+                };
+                
+                const response = await fetch(`${url}/api/search/order`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+                
+                if (response.ok) {
+                    const json = await response.json();
+                    if (json.data && json.data.length > 0) {
+                        foundOrder = json.data[0];
+                        foundCustomer = customer;
+                        break;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error(`Error searching customer ${customer.name}:`, e);
+        }
+    }
+
+    if (!foundOrder || !foundCustomer) {
+        return res.status(404).json({ success: false, error: `Order #${orderNumber} not found in any Shopware instance.` });
+    }
+
+    // Process Import (Reusing logic from sync-orders but simplified/inline)
+    try {
+        const swOrder = foundOrder;
+        const customer = foundCustomer;
+        const orderNumberStr = swOrder.orderNumber || swOrder.number;
+
+        // Check existing
+        const existing = db.prepare('SELECT id, shopware_order_id FROM orders WHERE shopware_order_id = ? OR order_number = ?')
+            .get(swOrder.id || swOrder.id?.toString(), orderNumberStr) as any;
+
+        let newOrderId;
+        
+        if (existing) {
+            // Force Update
+            console.log(`Order ${orderNumberStr} exists (ID: ${existing.id}). Updating...`);
+            newOrderId = existing.id;
+            
+            // If missing SW ID, fix it
+            if (!existing.shopware_order_id && swOrder.id) {
+                db.prepare('UPDATE orders SET shopware_order_id = ? WHERE id = ?').run(swOrder.id.toString(), existing.id);
+            }
+            
+            // Delete old items to re-import fresh
+            db.prepare('DELETE FROM order_items WHERE order_id = ?').run(newOrderId);
+            // Don't delete files to preserve manual uploads, but we might duplicate auto-generated ones?
+            // Let's delete only 'preview' files from SW
+            db.prepare("DELETE FROM files WHERE order_id = ? AND type = 'preview'").run(newOrderId);
+            
+        } else {
+            console.log(`Importing NEW Order ${orderNumberStr}...`);
+            newOrderId = Math.random().toString(36).substr(2, 9);
+        }
+
+        // Map Order Data
+        const deadlineDate = new Date();
+        deadlineDate.setDate(deadlineDate.getDate() + 14);
+        const deadline = deadlineDate.toISOString().split('T')[0];
+
+        let address = '';
+        let contactPerson = customer.contact_person;
+        let phone = customer.phone;
+        let email = customer.email;
+
+        if (version === '5') {
+            const shipping = swOrder.shipping || swOrder.billing;
+            if (shipping) {
+                address = `${shipping.firstName} ${shipping.lastName}\n${shipping.company ? shipping.company + '\n' : ''}${shipping.street} ${shipping.streetNumber || ''}\n${shipping.zipCode} ${shipping.city}\n${shipping.country?.name || ''}`;
+                contactPerson = `${shipping.firstName} ${shipping.lastName}`;
+            }
+        } else {
+            const shipping = swOrder.deliveries?.[0]?.shippingOrderAddress;
+            if (shipping) {
+                address = `${shipping.firstName} ${shipping.lastName}\n${shipping.company ? shipping.company + '\n' : ''}${shipping.street}\n${shipping.zipcode} ${shipping.city}\n${shipping.country?.name || ''}`;
+                contactPerson = `${shipping.firstName} ${shipping.lastName}`;
+                if (shipping.phoneNumber) phone = shipping.phoneNumber;
+            }
+        }
+
+        const description = `Importiert aus Shopware.\nBestell-Nr: ${orderNumberStr}\nLieferadresse (Endkunde):\n${address}`;
+        
+        // Status Check
+        let status = 'active';
+        let isCompleted = false;
+        const steps = { processing: false, produced: false, invoiced: false };
+
+        if (version === '5') {
+            const statusId = swOrder.orderStatusId || swOrder.orderStatus?.id;
+            if (String(statusId) === '2') isCompleted = true;
+        } else {
+            const stateName = swOrder.stateMachineState?.technicalName;
+            if (stateName === 'completed') isCompleted = true;
+        }
+
+        if (isCompleted) {
+            status = 'completed';
+            steps.processing = true;
+            steps.produced = true;
+            steps.invoiced = true;
+        }
+
+        if (existing) {
+            db.prepare(`
+                UPDATE orders SET 
+                title = ?, order_number = ?, customer_address = ?, customer_contact_person = ?, 
+                description = ?, shopware_order_id = ?, status = ?, steps = ?
+                WHERE id = ?
+            `).run(
+                `Shopware Order #${orderNumberStr}`, orderNumberStr, address, contactPerson,
+                description, swOrder.id.toString(), status, JSON.stringify(steps),
+                newOrderId
+            );
+        } else {
+            db.prepare(`
+                INSERT INTO orders (
+                    id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person,
+                    deadline, status, description, shopware_order_id, created_at, steps
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                newOrderId, `Shopware Order #${orderNumberStr}`, orderNumberStr, customer.id, customer.name, email, phone, address, contactPerson,
+                deadline, status, description, swOrder.id.toString(), new Date(swOrder.orderDate || swOrder.orderTime || new Date()).toISOString(), JSON.stringify(steps)
+            );
+        }
+
+        // Map Items
+        const lineItems = version === '5' ? swOrder.details : swOrder.lineItems;
+        if (lineItems && Array.isArray(lineItems)) {
+            for (const item of lineItems) {
+                const itemId = Math.random().toString(36).substr(2, 9);
+                const itemName = item.label || item.articleName;
+                const itemNumber = item.payload?.productNumber || item.articleNumber || '';
+                const quantity = item.quantity;
+                
+                // Match Product
+                const swProductId = item.productId || item.articleId; 
+                let matchedProduct = null;
+                if (swProductId) {
+                    matchedProduct = db.prepare("SELECT * FROM customer_products WHERE customer_id = ? AND (shopware_product_id = ? OR product_number = ?) AND source = 'shopware'").get(customer.id, String(swProductId), itemNumber) as any;
+                } else {
+                    matchedProduct = db.prepare("SELECT * FROM customer_products WHERE customer_id = ? AND product_number = ? AND source = 'shopware'").get(customer.id, itemNumber) as any;
+                }
+
+                const supplierId = (matchedProduct && matchedProduct.supplier_id) ? matchedProduct.supplier_id : 'shopware-import';
+
+                db.prepare(`
+                    INSERT INTO order_items (id, order_id, supplier_id, item_name, item_number, quantity, status)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                `).run(itemId, newOrderId, supplierId, itemName, itemNumber, quantity, isCompleted ? 'completed' : 'pending');
+
+                // Files
+                if (matchedProduct) {
+                    const productFiles = db.prepare("SELECT * FROM customer_product_files WHERE product_id = ? AND type = 'print'").all(matchedProduct.id) as any[];
+                    for (const pFile of productFiles) {
+                        const newFileId = Math.random().toString(36).substr(2, 9);
+                        db.prepare(`
+                            INSERT INTO files (id, customer_id, order_id, name, path, type, thumbnail, print_status)
+                            VALUES (?, ?, ?, ?, ?, 'print', ?, ?)
+                        `).run(newFileId, customer.id, newOrderId, pFile.file_name, pFile.file_url, pFile.thumbnail_url, isCompleted ? 'completed' : 'pending');
+                    }
+                }
+
+                // Preview Image
+                let fileUrl = null;
+                if (version === '6' && item.cover?.media?.url) fileUrl = item.cover.media.url;
+                
+                if (fileUrl) {
+                    const fileId = Math.random().toString(36).substr(2, 9);
+                    db.prepare(`
+                        INSERT INTO files (id, customer_id, order_id, name, path, type)
+                        VALUES (?, ?, ?, ?, ?, 'preview')
+                    `).run(fileId, customer.id, newOrderId, `${itemName} - Vorschau`, fileUrl);
+                }
+            }
+            
+            // Update file JSON cache
+            const allLinkedFiles = db.prepare("SELECT * FROM files WHERE order_id = ?").all(newOrderId) as any[];
+            if (allLinkedFiles.length > 0) {
+                const filesJson = allLinkedFiles.map(f => ({
+                    name: f.name,
+                    url: f.path,
+                    type: f.type,
+                    thumbnail: f.thumbnail
+                }));
+                db.prepare('UPDATE orders SET files = ? WHERE id = ?').run(JSON.stringify(filesJson), newOrderId);
+            }
+        }
+
+        res.json({ success: true, message: `Order #${orderNumberStr} imported successfully`, id: newOrderId });
+
+    } catch (e: any) {
+        console.error('Single Import Error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // Sync Orders
 router.post('/sync-orders', async (req: Request, res: Response) => {
     console.log('Starting Shopware Order Sync...');

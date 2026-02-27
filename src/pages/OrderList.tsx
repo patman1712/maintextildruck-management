@@ -14,6 +14,9 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
   const [approvalInfoOrder, setApprovalInfoOrder] = useState<Order | null>(null);
 
   const [statusUpdateModal, setStatusUpdateModal] = useState<{ order: Order, isOpen: boolean } | null>(null);
+  const [importSingleModal, setImportSingleModal] = useState(false);
+  const [importOrderNumber, setImportOrderNumber] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
 
   const handleShopwareSync = async () => {
     if (!confirm('Möchten Sie jetzt Bestellungen aus Shopware abrufen? Nur bezahlte und offene Bestellungen werden importiert.')) return;
@@ -39,6 +42,69 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
         alert('Netzwerkfehler beim Synchronisieren');
         console.error(err);
     }
+  };
+
+  const handleImportSingle = async () => {
+      if (!importOrderNumber.trim()) return;
+      setImportLoading(true);
+      try {
+          const res = await fetch('/api/shopware/import-single', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ orderNumber: importOrderNumber })
+          });
+          const data = await res.json();
+          if (data.success) {
+              alert(data.message);
+              setImportSingleModal(false);
+              setImportOrderNumber("");
+              fetchData();
+          } else {
+              alert('Fehler: ' + data.error);
+          }
+      } catch (e: any) {
+          alert('Import Fehler: ' + e.message);
+      } finally {
+          setImportLoading(false);
+      }
+  };
+
+  const ImportSingleModal = () => {
+      if (!importSingleModal) return null;
+      return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setImportSingleModal(false)}>
+            <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 relative" onClick={e => e.stopPropagation()}>
+                <button 
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                  onClick={() => setImportSingleModal(false)}
+                >
+                  <X size={20} />
+                </button>
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Einzelne Bestellung importieren</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                    Geben Sie die Bestellnummer (z.B. 20005) ein, um sie gezielt aus Shopware zu laden.
+                </p>
+                <input 
+                    type="text" 
+                    placeholder="Bestellnummer" 
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 mb-4 focus:ring-blue-500 focus:border-blue-500"
+                    value={importOrderNumber}
+                    onChange={e => setImportOrderNumber(e.target.value)}
+                />
+                <div className="flex justify-end gap-2">
+                    <button onClick={() => setImportSingleModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">Abbrechen</button>
+                    <button 
+                        onClick={handleImportSingle} 
+                        disabled={importLoading}
+                        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center"
+                    >
+                        {importLoading && <RefreshCw className="animate-spin mr-2" size={16} />}
+                        Importieren
+                    </button>
+                </div>
+            </div>
+          </div>
+      );
   };
 
   const handleUpdateStatus = async (orderId: string, newStatus: string, syncShopware: boolean) => {
@@ -264,13 +330,23 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-center">
           {/* Only show Sync button in Online Orders or if no source specified (legacy) */}
           {(source === 'online' || !source) && (
-              <button 
-                onClick={handleShopwareSync}
-                className="p-2 border border-gray-300 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
-                title="Shopware Bestellungen synchronisieren"
-              >
-                <DownloadCloud size={20} />
-              </button>
+              <>
+                  <button 
+                    onClick={() => setImportSingleModal(true)}
+                    className="p-2 border border-gray-300 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
+                    title="Einzelne Bestellung importieren"
+                  >
+                    <Search size={20} />
+                  </button>
+
+                  <button 
+                    onClick={handleShopwareSync}
+                    className="p-2 border border-gray-300 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
+                    title="Shopware Bestellungen synchronisieren"
+                  >
+                    <DownloadCloud size={20} />
+                  </button>
+              </>
           )}
 
           <button 
@@ -557,6 +633,7 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
       )}
 
       {statusUpdateModal && <StatusModal />}
+      {importSingleModal && <ImportSingleModal />}
     </div>
   );
 }
