@@ -126,8 +126,8 @@ export default function DashboardLayout() {
         <nav className="flex-1 py-6 space-y-2 px-2 overflow-y-auto">
           {MENU_ITEMS.map(item => {
               const isHidden = menuSettings[item.id] === false;
-              // Hide if hidden (for everyone, including admin)
-              if (isHidden) return null;
+              // Hide if hidden, UNLESS user is admin
+              if (isHidden && currentUser?.role !== 'admin') return null;
               
               return (
                   <NavItem 
@@ -136,6 +136,7 @@ export default function DashboardLayout() {
                       isOpen={sidebarOpen || mobileMenuOpen} 
                       onClick={() => setMobileMenuOpen(false)} 
                       menuSettings={menuSettings}
+                      isAdmin={currentUser?.role === 'admin'}
                   />
               );
           })}
@@ -225,7 +226,7 @@ export default function DashboardLayout() {
   );
 }
 
-function NavItem({ item, isOpen, onClick, menuSettings }: { item: MenuItem, isOpen: boolean, onClick: () => void, menuSettings: Record<string, boolean> }) {
+function NavItem({ item, isOpen, onClick, menuSettings, isAdmin }: { item: MenuItem, isOpen: boolean, onClick: () => void, menuSettings: Record<string, boolean>, isAdmin?: boolean }) {
   const location = useLocation();
   const [isExpanded, setIsExpanded] = useState(false);
   
@@ -239,11 +240,19 @@ function NavItem({ item, isOpen, onClick, menuSettings }: { item: MenuItem, isOp
 
   const Icon = item.icon;
   const isHidden = menuSettings[item.id] === false;
-  if (isHidden) return null;
+  
+  if (isHidden && !isAdmin) return null;
+
+  const hiddenStyle = isHidden ? "opacity-50 border-l-2 border-yellow-400 bg-red-800/20" : "";
+  const hiddenTitle = isHidden ? "(Ausgeblendet für Mitarbeiter)" : undefined;
 
   if (item.children) {
+    // Filter children for non-admins
+    const visibleChildren = item.children.filter(child => isAdmin || menuSettings[child.id] !== false);
+    if (visibleChildren.length === 0 && !isAdmin) return null;
+
     return (
-        <div>
+        <div className={hiddenStyle} title={hiddenTitle}>
             <button
                 onClick={() => {
                     if (!isOpen) onClick();
@@ -254,7 +263,10 @@ function NavItem({ item, isOpen, onClick, menuSettings }: { item: MenuItem, isOp
             >
                 <div className="flex items-center space-x-3">
                     <span className="text-red-300 group-hover:text-white min-w-[24px]"><Icon /></span>
-                    {isOpen && <span className="font-medium whitespace-nowrap">{item.label}</span>}
+                    {isOpen && <span className="font-medium whitespace-nowrap flex items-center">
+                        {item.label}
+                        {isHidden && <span className="ml-2 text-[10px] bg-yellow-500/20 text-yellow-200 px-1 rounded border border-yellow-500/30">Hidden</span>}
+                    </span>}
                 </div>
                 {isOpen && (
                     isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />
@@ -264,7 +276,7 @@ function NavItem({ item, isOpen, onClick, menuSettings }: { item: MenuItem, isOp
             {isOpen && isExpanded && (
                 <div className="ml-4 mt-1 space-y-1 border-l border-red-800 pl-2 animate-in slide-in-from-top-1 duration-200">
                     {item.children.map(child => (
-                         <NavItem key={child.id} item={child} isOpen={true} onClick={onClick} menuSettings={menuSettings} />
+                         <NavItem key={child.id} item={child} isOpen={true} onClick={onClick} menuSettings={menuSettings} isAdmin={isAdmin} />
                     ))}
                 </div>
             )}
@@ -279,15 +291,18 @@ function NavItem({ item, isOpen, onClick, menuSettings }: { item: MenuItem, isOp
     <Link
       to={item.to}
       onClick={onClick}
-      className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group ${
+      className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group ${hiddenStyle} ${
         isActive
           ? "bg-white text-red-700 font-bold shadow-md" 
           : "text-red-100 hover:bg-white/10 hover:text-white"
       }`}
-      title={!isOpen ? item.label : undefined}
+      title={!isOpen ? item.label : hiddenTitle}
     >
       <span className={`${isActive ? "text-red-700" : "text-red-300 group-hover:text-white"} min-w-[24px]`}><Icon /></span>
-      {isOpen && <span className={`font-medium whitespace-nowrap ${isActive ? "text-red-700" : "text-red-100 group-hover:text-white"}`}>{item.label}</span>}
+      {isOpen && <span className={`font-medium whitespace-nowrap flex items-center ${isActive ? "text-red-700" : "text-red-100 group-hover:text-white"}`}>
+          {item.label}
+          {isHidden && <span className="ml-2 text-[10px] bg-yellow-500/20 text-yellow-200 px-1 rounded border border-yellow-500/30">Hidden</span>}
+      </span>}
     </Link>
   );
 }
