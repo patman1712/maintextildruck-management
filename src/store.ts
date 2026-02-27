@@ -261,7 +261,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         rejectionReason: o.rejectionReason,
         approvalToken: o.approvalToken,
         approvalComment: o.approvalComment,
-        shopwareOrderId: o.shopware_order_id,
+        shopwareOrderId: o.shopwareOrderId, // Correctly map from API response (camelCase)
         orderItems: (orderItemsData.data || [])
             .filter((i: any) => i.order_id === o.id)
             .map((i: any) => ({
