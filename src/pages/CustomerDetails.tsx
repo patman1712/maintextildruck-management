@@ -85,6 +85,7 @@ export default function CustomerDetails() {
   const [bulkAssignType, setBulkAssignType] = useState<'print' | 'view'>('print');
   const [isBulkAssigning, setIsBulkAssigning] = useState(false);
   const [bulkSelectedProductIds, setBulkSelectedProductIds] = useState<string[]>([]);
+  const [bulkSupplierId, setBulkSupplierId] = useState('');
   const [fileTab, setFileTab] = useState<'upload' | 'gallery'>('gallery');
 
   // Confirmation Modal State
@@ -434,7 +435,8 @@ export default function CustomerDetails() {
                   fileUrl: bulkSelectedFile.url,
                   fileName: bulkSelectedFile.name,
                   thumbnailUrl: bulkSelectedFile.thumbnail,
-                  type: bulkAssignType
+                  type: bulkAssignType,
+                  supplierId: bulkSupplierId
               })
           });
           
@@ -2092,6 +2094,21 @@ export default function CustomerDetails() {
                       <div className="w-full md:w-2/3 flex flex-col">
                           <div className="p-4 border-b border-gray-200 bg-white">
                               <h4 className="font-semibold text-sm text-gray-700 mb-2">2. Artikel suchen & zuweisen</h4>
+                              
+                              <div className="mb-3">
+                                  <label className="block text-xs font-medium text-gray-500 mb-1">Lieferant zuweisen (Optional)</label>
+                                  <select
+                                      value={bulkSupplierId}
+                                      onChange={(e) => setBulkSupplierId(e.target.value)}
+                                      className="w-full border border-gray-300 rounded p-2 text-sm"
+                                  >
+                                      <option value="">Keine Änderung</option>
+                                      {suppliers.map(s => (
+                                          <option key={s.id} value={s.id}>{s.name}</option>
+                                      ))}
+                                  </select>
+                              </div>
+
                               <div className="relative mb-3">
                                   <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
                                   <input 

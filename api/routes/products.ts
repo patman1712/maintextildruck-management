@@ -5,6 +5,51 @@ import path from 'path';
 
 const router = Router();
 
+// POST Bulk assign file to multiple products (MUST be defined before /:customerId)
+router.post('/bulk-files', (req: Request, res: Response) => {
+    const { productIds, fileUrl, fileName, thumbnailUrl, type, quantity, supplierId } = req.body;
+
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'Product IDs are required' });
+    }
+    if (!fileUrl) {
+        return res.status(400).json({ success: false, error: 'File URL is required' });
+    }
+
+    try {
+        const insertFileStmt = db.prepare(`
+            INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type, quantity)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        const updateSupplierStmt = db.prepare(`
+            UPDATE customer_products 
+            SET supplier_id = ?
+            WHERE id = ?
+        `);
+
+        const transaction = db.transaction((ids: string[]) => {
+            for (const productId of ids) {
+                // Insert file
+                const id = Math.random().toString(36).substr(2, 9);
+                insertFileStmt.run(id, productId, fileUrl, fileName, thumbnailUrl, type || 'print', quantity || 1);
+
+                // Update supplier if provided
+                if (supplierId) {
+                    updateSupplierStmt.run(supplierId, productId);
+                }
+            }
+        });
+
+        transaction(productIds);
+
+        res.json({ success: true, message: `File assigned to ${productIds.length} products${supplierId ? ' and supplier updated' : ''}` });
+    } catch (error: any) {
+        console.error('Bulk assign error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // GET all products (Global list)
 router.get('/all', (req: Request, res: Response) => {
     try {
@@ -183,39 +228,6 @@ router.delete('/:productId/files/:fileId', (req: Request, res: Response) => {
         db.prepare('DELETE FROM customer_product_files WHERE id = ?').run(fileId);
         res.json({ success: true, message: 'File removed' });
     } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// POST Bulk assign file to multiple products
-router.post('/bulk-files', (req: Request, res: Response) => {
-    const { productIds, fileUrl, fileName, thumbnailUrl, type, quantity } = req.body;
-
-    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
-        return res.status(400).json({ success: false, error: 'Product IDs are required' });
-    }
-    if (!fileUrl) {
-        return res.status(400).json({ success: false, error: 'File URL is required' });
-    }
-
-    try {
-        const stmt = db.prepare(`
-            INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type, quantity)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        const transaction = db.transaction((ids: string[]) => {
-            for (const productId of ids) {
-                const id = Math.random().toString(36).substr(2, 9);
-                stmt.run(id, productId, fileUrl, fileName, thumbnailUrl, type || 'print', quantity || 1);
-            }
-        });
-
-        transaction(productIds);
-
-        res.json({ success: true, message: `File assigned to ${productIds.length} products` });
-    } catch (error: any) {
-        console.error('Bulk assign error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
