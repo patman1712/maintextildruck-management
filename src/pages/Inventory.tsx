@@ -548,7 +548,14 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
   const confirmDeleteOrder = async () => {
       if (deleteConfirmOrder) {
-          await deleteOrder(deleteConfirmOrder);
+          const order = orders.find(o => o.id === deleteConfirmOrder);
+          if (order && order.orderItems) {
+              for (const item of order.orderItems) {
+                  if (item.status !== 'received') {
+                      await updateOrderItem(deleteConfirmOrder, item.id, { status: 'received' });
+                  }
+              }
+          }
           setDeleteConfirmOrder(null);
       }
   };
@@ -803,7 +810,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                     <button 
                                                         onClick={(e) => { e.stopPropagation(); handleDeleteOrder(orderGroup.orderId); }}
                                                         className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded ml-2"
-                                                        title="Ganzen Auftrag löschen/archivieren (Nur Admin)"
+                                                        title="Auftrag aus Bestellliste entfernen / Als Erhalten markieren (Nur Admin)"
                                                     >
                                                         <Trash2 size={16} />
                                                     </button>
@@ -1143,17 +1150,15 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                 <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200">
                     <div className="flex items-center text-red-600 mb-4">
                         <div className="bg-red-100 p-2 rounded-full mr-3">
-                            <Trash2 size={24} />
+                            <CheckCircle size={24} />
                         </div>
-                        <h3 className="text-xl font-bold text-gray-800">Auftrag archivieren</h3>
+                        <h3 className="text-xl font-bold text-gray-800">Aus Bestellliste entfernen</h3>
                     </div>
                     
                     <p className="text-gray-600 mb-6 leading-relaxed">
-                        Möchten Sie diesen Auftrag wirklich vollständig aus der Warenbestellung entfernen und ins Archiv verschieben?
+                        Möchten Sie alle Positionen dieses Auftrags als <strong>"Erhalten"</strong> markieren?
                         <br/><br/>
-                        <span className="font-semibold text-red-600 bg-red-50 px-2 py-1 rounded border border-red-100 block text-center">
-                            ⚠️ Dies kann nicht rückgängig gemacht werden.
-                        </span>
+                        Der Auftrag verschwindet damit aus der offenen Bestellliste, bleibt aber im System erhalten (z.B. wenn Ware bereits im Laden ist).
                     </p>
                     
                     <div className="flex justify-end space-x-3 pt-2 border-t border-gray-100">
@@ -1167,8 +1172,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                             onClick={confirmDeleteOrder}
                             className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 shadow-sm transition-colors flex items-center font-medium"
                         >
-                            <Trash2 size={16} className="mr-2" />
-                            Ja, archivieren
+                            <CheckCircle size={16} className="mr-2" />
+                            Als Erhalten markieren
                         </button>
                     </div>
                 </div>
