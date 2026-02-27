@@ -12,6 +12,7 @@ interface Product {
     supplier_id?: string;
     size?: string;
     color?: string;
+    created_at?: string;
     files: {
         id: string;
         file_url: string;
@@ -827,7 +828,7 @@ export default function CustomerDetails() {
           ...f,
           name: f.file_name,
           url: f.file_url,
-          thumbnail: f.thumbnail_url || f.thumbnail, // Handle both structures
+          thumbnail: f.thumbnail_url,
           orderTitle: `Artikel: ${p.name}`,
           orderDate: p.created_at || new Date().toISOString(),
           contextType: 'product'
