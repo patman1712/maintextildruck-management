@@ -187,4 +187,37 @@ router.delete('/:productId/files/:fileId', (req: Request, res: Response) => {
     }
 });
 
+// POST Bulk assign file to multiple products
+router.post('/bulk-files', (req: Request, res: Response) => {
+    const { productIds, fileUrl, fileName, thumbnailUrl, type, quantity } = req.body;
+
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'Product IDs are required' });
+    }
+    if (!fileUrl) {
+        return res.status(400).json({ success: false, error: 'File URL is required' });
+    }
+
+    try {
+        const stmt = db.prepare(`
+            INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type, quantity)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        const transaction = db.transaction((ids: string[]) => {
+            for (const productId of ids) {
+                const id = Math.random().toString(36).substr(2, 9);
+                stmt.run(id, productId, fileUrl, fileName, thumbnailUrl, type || 'print', quantity || 1);
+            }
+        });
+
+        transaction(productIds);
+
+        res.json({ success: true, message: `File assigned to ${productIds.length} products` });
+    } catch (error: any) {
+        console.error('Bulk assign error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 export default router;

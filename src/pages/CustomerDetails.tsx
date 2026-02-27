@@ -77,6 +77,13 @@ export default function CustomerDetails() {
   const [newManualProduct, setNewManualProduct] = useState({ name: '', productNumber: '', supplierId: '' });
   const [assignFileMode, setAssignFileMode] = useState(false);
   const [assignFileType, setAssignFileType] = useState<'print' | 'view'>('print');
+  
+  // Bulk Assign State
+  const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
+  const [bulkSelectedFile, setBulkSelectedFile] = useState<{url: string, name: string, thumbnail?: string} | null>(null);
+  const [bulkProductSearch, setBulkProductSearch] = useState('');
+  const [bulkAssignType, setBulkAssignType] = useState<'print' | 'view'>('print');
+  const [isBulkAssigning, setIsBulkAssigning] = useState(false);
 
   // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -329,7 +336,7 @@ export default function CustomerDetails() {
   };
 
   const handleDirectUploadAndAssign = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || !e.target.files[0] || !editingProduct || !customer) return;
+    if (!e.target.files || !e.target.files[0] || !customer) return;
     const file = e.target.files[0];
     const fileName = file.name;
 
@@ -374,23 +381,79 @@ export default function CustomerDetails() {
 
             await addOrder(newOrder);
 
-            // Assign to Product
-            await handleAssignFile({
-                url: fileUrl,
-                name: fileName,
-                customName: fileName,
-                thumbnail: thumbnail
-            }, assignFileType);
-            
-            // Close modal if desired, or keep open? 
-            // Usually user wants to see result.
-            // But handleAssignFile updates local state.
-            fetchData();
+            if (showBulkAssignModal) {
+                // Bulk Mode
+                setBulkSelectedFile({
+                    url: fileUrl,
+                    name: fileName,
+                    thumbnail: thumbnail
+                });
+            } else if (editingProduct) {
+                // Single Mode
+                await handleAssignFile({
+                    url: fileUrl,
+                    name: fileName,
+                    customName: fileName,
+                    thumbnail: thumbnail
+                }, assignFileType);
+                
+                fetchData();
+            }
         }
     } catch (error) {
         console.error("Upload failed:", error);
         alert("Upload fehlgeschlagen.");
     }
+  };
+
+  const handleBulkAssign = async () => {
+      if (!bulkSelectedFile || !customer) return;
+      
+      // Filter products based on search
+      const targetProducts = shopwareProducts.filter(p => 
+          (p.name.toLowerCase().includes(bulkProductSearch.toLowerCase()) || 
+          (p.product_number && p.product_number.toLowerCase().includes(bulkProductSearch.toLowerCase())))
+      );
+
+      if (targetProducts.length === 0) {
+          alert('Keine Artikel gefunden.');
+          return;
+      }
+
+      if (!confirm(`Möchten Sie die Datei "${bulkSelectedFile.name}" wirklich an ${targetProducts.length} gefundene Artikel zuweisen?`)) {
+          return;
+      }
+
+      setIsBulkAssigning(true);
+      try {
+          const res = await fetch('/api/products/bulk-files', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  productIds: targetProducts.map(p => p.id),
+                  fileUrl: bulkSelectedFile.url,
+                  fileName: bulkSelectedFile.name,
+                  thumbnailUrl: bulkSelectedFile.thumbnail,
+                  type: bulkAssignType
+              })
+          });
+          
+          const data = await res.json();
+          if (data.success) {
+              alert(data.message);
+              fetchProducts();
+              setShowBulkAssignModal(false);
+              setBulkSelectedFile(null);
+              setBulkProductSearch('');
+          } else {
+              alert('Fehler: ' + data.error);
+          }
+      } catch (err) {
+          console.error(err);
+          alert('Netzwerkfehler');
+      } finally {
+          setIsBulkAssigning(false);
+      }
   };
 
   const handleUpdateFileQuantity = async (fileId: string, quantity: number, productContext: Product) => {
@@ -1382,6 +1445,17 @@ export default function CustomerDetails() {
                         </div>
                     </div>
                     <div className="flex space-x-2">
+                        <button 
+                             onClick={() => {
+                                 setShowBulkAssignModal(true);
+                                 setBulkProductSearch('');
+                                 setBulkSelectedFile(null);
+                             }}
+                             className="bg-white text-blue-600 border border-blue-200 px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-50 flex items-center"
+                         >
+                             <Plus size={16} className="mr-2" />
+                             Massen-Zuweisung
+                         </button>
                          <button 
                             onClick={fetchShopwareProducts}
                             disabled={isLoadingProducts || !shopwareConfig.url}
@@ -1834,6 +1908,161 @@ export default function CustomerDetails() {
         cancelText={confirmModal.cancelText}
         type={confirmModal.type}
       />
+
+      {/* Bulk Assign Modal */}
+      {showBulkAssignModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+                  <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                      <h3 className="font-bold text-lg text-gray-800">Massen-Zuweisung von Druckdaten</h3>
+                      <button onClick={() => setShowBulkAssignModal(false)}><X size={20} className="text-gray-500" /></button>
+                  </div>
+                  
+                  <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+                      {/* Left: File Selection */}
+                      <div className="w-full md:w-1/3 border-r border-gray-200 flex flex-col bg-gray-50">
+                          <div className="p-4 border-b border-gray-200">
+                              <h4 className="font-semibold text-sm text-gray-700 mb-2">1. Datei auswählen</h4>
+                              <div className="flex space-x-2 mb-3">
+                                  <button 
+                                      onClick={() => setBulkAssignType('print')}
+                                      className={`flex-1 py-1 text-xs font-medium rounded ${bulkAssignType === 'print' ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-white border border-gray-300 text-gray-600'}`}
+                                  >
+                                      Druckdaten
+                                  </button>
+                                  <button 
+                                      onClick={() => setBulkAssignType('view')}
+                                      className={`flex-1 py-1 text-xs font-medium rounded ${bulkAssignType === 'view' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-white border border-gray-300 text-gray-600'}`}
+                                  >
+                                      Ansicht
+                                  </button>
+                              </div>
+                              
+                              <label className="flex items-center justify-center w-full h-12 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-white transition-colors mb-4">
+                                  <div className="flex items-center space-x-2 text-gray-500">
+                                      <Upload size={16} />
+                                      <span className="text-xs font-medium">Neue Datei hochladen</span>
+                                  </div>
+                                  <input type="file" className="hidden" onChange={handleDirectUploadAndAssign} accept="image/*,.pdf" />
+                              </label>
+
+                              <div className="relative">
+                                  <Search size={14} className="absolute left-2 top-2 text-gray-400" />
+                                  <input 
+                                      type="text" 
+                                      placeholder="Datei suchen..." 
+                                      value={fileSearch}
+                                      onChange={(e) => setFileSearch(e.target.value)}
+                                      className="w-full pl-8 border border-gray-300 rounded p-1.5 text-xs"
+                                  />
+                              </div>
+                          </div>
+                          
+                          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                              {filteredPrintFilesForAssign.map((file, idx) => (
+                                  <div 
+                                      key={idx}
+                                      onClick={() => setBulkSelectedFile({ url: file.url, name: file.customName || file.name, thumbnail: file.thumbnail })}
+                                      className={`p-2 rounded border cursor-pointer flex items-center space-x-3 transition-colors ${bulkSelectedFile?.url === file.url ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'bg-white border-gray-200 hover:border-blue-300'}`}
+                                  >
+                                      <div className="h-10 w-10 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center overflow-hidden border border-gray-200">
+                                          {file.thumbnail ? (
+                                              <img src={file.thumbnail} className="w-full h-full object-contain" />
+                                          ) : (
+                                              <FileText size={16} className="text-gray-400" />
+                                          )}
+                                      </div>
+                                      <div className="min-w-0">
+                                          <p className="text-xs font-medium truncate text-gray-800" title={file.customName || file.name}>{file.customName || file.name}</p>
+                                          <p className="text-[10px] text-gray-500">{new Date(file.orderDate).toLocaleDateString()}</p>
+                                      </div>
+                                  </div>
+                              ))}
+                          </div>
+                      </div>
+
+                      {/* Right: Product Selection */}
+                      <div className="w-full md:w-2/3 flex flex-col">
+                          <div className="p-4 border-b border-gray-200 bg-white">
+                              <h4 className="font-semibold text-sm text-gray-700 mb-2">2. Artikel suchen & zuweisen</h4>
+                              <div className="relative">
+                                  <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
+                                  <input 
+                                      type="text" 
+                                      placeholder="Artikel suchen (z.B. Premium T-Shirt Rot)..." 
+                                      value={bulkProductSearch}
+                                      onChange={(e) => setBulkProductSearch(e.target.value)}
+                                      className="w-full pl-9 border border-gray-300 rounded p-2 text-sm"
+                                      autoFocus
+                                  />
+                              </div>
+                          </div>
+                          
+                          <div className="flex-1 overflow-y-auto p-4 bg-gray-50/50">
+                              {bulkProductSearch ? (
+                                  <div className="space-y-2">
+                                      <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                                          Gefundene Artikel: {shopwareProducts.filter(p => (p.name.toLowerCase().includes(bulkProductSearch.toLowerCase()) || (p.product_number && p.product_number.toLowerCase().includes(bulkProductSearch.toLowerCase())))).length}
+                                      </p>
+                                      {shopwareProducts
+                                          .filter(p => (p.name.toLowerCase().includes(bulkProductSearch.toLowerCase()) || (p.product_number && p.product_number.toLowerCase().includes(bulkProductSearch.toLowerCase()))))
+                                          .map(product => (
+                                              <div key={product.id} className="bg-white p-3 rounded border border-gray-200 flex items-center justify-between">
+                                                  <div className="flex items-center space-x-3">
+                                                      <div className="h-10 w-10 bg-gray-100 rounded flex items-center justify-center text-gray-400">
+                                                          <Package size={16} />
+                                                      </div>
+                                                      <div>
+                                                          <p className="text-sm font-medium text-gray-800">{product.name}</p>
+                                                          <div className="flex gap-2">
+                                                              {product.product_number && <span className="text-xs text-gray-500">{product.product_number}</span>}
+                                                              {product.size && <span className="text-xs bg-slate-100 px-1 rounded border border-slate-200">Gr: {product.size}</span>}
+                                                              {product.color && <span className="text-xs bg-slate-100 px-1 rounded border border-slate-200">{product.color}</span>}
+                                                          </div>
+                                                      </div>
+                                                  </div>
+                                                  {bulkSelectedFile && product.files.some(f => f.file_url === bulkSelectedFile.url) && (
+                                                      <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded flex items-center">
+                                                          <CheckCircle size={12} className="mr-1" />
+                                                          Bereits zugewiesen
+                                                      </span>
+                                                  )}
+                                              </div>
+                                          ))
+                                      }
+                                  </div>
+                              ) : (
+                                  <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                                      <Search size={48} className="mb-4 opacity-20" />
+                                      <p>Bitte suchen Sie nach Artikeln, um die Zuweisung zu starten.</p>
+                                  </div>
+                              )}
+                          </div>
+
+                          <div className="p-4 border-t border-gray-200 bg-white flex justify-between items-center">
+                              <div className="text-sm text-gray-600">
+                                  {bulkSelectedFile ? (
+                                      <span className="flex items-center text-green-600">
+                                          <FileText size={16} className="mr-2" />
+                                          Datei ausgewählt: <strong>{bulkSelectedFile.name}</strong>
+                                      </span>
+                                  ) : (
+                                      <span className="text-red-500">Bitte erst eine Datei auswählen</span>
+                                  )}
+                              </div>
+                              <button 
+                                  onClick={handleBulkAssign}
+                                  disabled={!bulkSelectedFile || !bulkProductSearch || isBulkAssigning}
+                                  className="bg-blue-600 text-white px-6 py-2 rounded font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                              >
+                                  {isBulkAssigning ? 'Zuweisung läuft...' : 'An gefundene Artikel zuweisen'}
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
 
     </div>
   );
