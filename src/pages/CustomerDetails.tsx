@@ -1347,7 +1347,14 @@ export default function CustomerDetails() {
                                         })()}
                                     </div>
                                     <div>
-                                        <h4 className="font-bold text-gray-900">{product.name}</h4>
+                                        <div className="flex items-center gap-2">
+                                            <h4 className="font-bold text-gray-900">{product.name}</h4>
+                                            {product.supplier_id && (
+                                                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-100 font-medium">
+                                                    {suppliers.find(s => s.id === product.supplier_id)?.name || 'Lieferant'}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="flex items-center mt-1 space-x-2 flex-wrap gap-y-1">
                                             {product.product_number && (
                                                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">
@@ -1609,10 +1616,14 @@ export default function CustomerDetails() {
                                 </div>
                             </div>
 
-                            <div className="mt-4 pt-4 border-t border-gray-100">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-semibold text-gray-500 uppercase">Dateien & Ansichten</span>
-                                    <div className="flex space-x-2">
+                            <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Views */}
+                                <div className="bg-gray-50/50 p-3 rounded-lg border border-gray-100">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-xs font-semibold text-gray-500 uppercase flex items-center">
+                                            <ImageIcon size={12} className="mr-1.5" />
+                                            Ansicht
+                                        </span>
                                         <button 
                                             onClick={() => {
                                                 setEditingProduct(product);
@@ -1620,33 +1631,18 @@ export default function CustomerDetails() {
                                                 setAssignFileMode(true);
                                                 setAssignFileType('view');
                                             }}
-                                            className="text-xs text-blue-600 hover:text-blue-800 flex items-center font-medium"
+                                            className="text-xs text-blue-600 hover:text-blue-800 flex items-center font-medium bg-white px-2 py-1 rounded border border-blue-100 hover:bg-blue-50"
                                         >
-                                            <ImageIcon size={12} className="mr-1" />
-                                            Ansicht +
-                                        </button>
-                                        <button 
-                                            onClick={() => {
-                                                setEditingProduct(product);
-                                                setShowMappingModal(true);
-                                                setAssignFileMode(true);
-                                                setAssignFileType('print');
-                                            }}
-                                            className="text-xs text-red-600 hover:text-red-800 flex items-center font-medium"
-                                        >
-                                            <Plus size={12} className="mr-1" />
-                                            Druckdaten +
+                                            <Plus size={10} className="mr-1" />
+                                            Hinzufügen
                                         </button>
                                     </div>
-                                </div>
 
-                                {/* Views */}
-                                {product.files && product.files.filter(f => f.type === 'view').length > 0 && (
-                                    <div className="mb-3">
-                                        <div className="flex flex-wrap gap-3">
+                                    {product.files && product.files.filter(f => f.type === 'view').length > 0 ? (
+                                        <div className="flex flex-wrap gap-2">
                                             {product.files.filter(f => f.type === 'view').map(file => (
-                                                <div key={file.id} className="relative group w-16">
-                                                    <div className="h-16 w-16 bg-gray-50 rounded border border-gray-200 overflow-hidden flex items-center justify-center relative">
+                                                <div key={file.id} className="relative group w-14 h-14">
+                                                    <div className="h-14 w-14 bg-white rounded border border-gray-200 overflow-hidden flex items-center justify-center relative shadow-sm">
                                                         <img 
                                                             src={file.thumbnail_url || file.file_url} 
                                                             className="w-full h-full object-contain" 
@@ -1658,23 +1654,46 @@ export default function CustomerDetails() {
                                                             e.stopPropagation();
                                                             handleRemoveFile(file.id, product);
                                                         }}
-                                                        className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                                        className="absolute -top-1.5 -right-1.5 bg-white rounded-full p-0.5 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity z-10"
                                                     >
                                                         <X size={10} />
                                                     </button>
                                                 </div>
                                             ))}
                                         </div>
-                                    </div>
-                                )}
+                                    ) : (
+                                        <div className="text-center py-4 text-gray-300 text-xs italic">
+                                            Keine Ansichtsbilder
+                                        </div>
+                                    )}
+                                </div>
 
                                 {/* Print Files */}
-                                {product.files && product.files.filter(f => f.type !== 'view').length > 0 && (
-                                    <div className="mb-3">
-                                        <div className="flex flex-wrap gap-3">
+                                <div className="bg-red-50/30 p-3 rounded-lg border border-red-100">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-xs font-semibold text-red-800 uppercase flex items-center">
+                                            <Printer size={12} className="mr-1.5" />
+                                            Druckdaten
+                                        </span>
+                                        <button 
+                                            onClick={() => {
+                                                setEditingProduct(product);
+                                                setShowMappingModal(true);
+                                                setAssignFileMode(true);
+                                                setAssignFileType('print');
+                                            }}
+                                            className="text-xs text-red-600 hover:text-red-800 flex items-center font-medium bg-white px-2 py-1 rounded border border-red-100 hover:bg-red-50"
+                                        >
+                                            <Plus size={10} className="mr-1" />
+                                            Hinzufügen
+                                        </button>
+                                    </div>
+
+                                    {product.files && product.files.filter(f => f.type !== 'view').length > 0 ? (
+                                        <div className="flex flex-wrap gap-2">
                                             {product.files.filter(f => f.type !== 'view').map(file => (
-                                                <div key={file.id} className="relative group w-16">
-                                                    <div className="h-16 w-16 bg-gray-50 rounded border border-gray-200 overflow-hidden flex items-center justify-center relative">
+                                                <div key={file.id} className="relative group w-14 h-14">
+                                                    <div className="h-14 w-14 bg-white rounded border border-gray-200 overflow-hidden flex items-center justify-center relative shadow-sm">
                                                         {(file.thumbnail_url || file.file_url) ? (
                                                             <img 
                                                                 src={file.thumbnail_url || file.file_url} 
@@ -1695,15 +1714,19 @@ export default function CustomerDetails() {
                                                             e.stopPropagation();
                                                             handleRemoveFile(file.id, product);
                                                         }}
-                                                        className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                                        className="absolute -top-1.5 -right-1.5 bg-white rounded-full p-0.5 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity z-10"
                                                     >
                                                         <X size={10} />
                                                     </button>
                                                 </div>
                                             ))}
                                         </div>
-                                    </div>
-                                )}
+                                    ) : (
+                                        <div className="text-center py-4 text-gray-300 text-xs italic">
+                                            Keine Druckdaten
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     ))}
