@@ -423,6 +423,34 @@ export default function AdminSettings() {
                     Vorschaubilder generieren
                 </button>
             </div>
+
+            <div>
+                <h3 className="font-medium text-slate-800 mb-2">Datenbank Bereinigung</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                    Entfernt doppelte Dateizuweisungen bei Kunden-Artikeln (z.B. durch Mehrfach-Importe).
+                </p>
+                <button 
+                    onClick={async () => {
+                        if (confirm('Möchten Sie die Datenbank jetzt bereinigen?')) {
+                            try {
+                                const res = await fetch('/api/admin/cleanup-product-files', { method: 'POST' });
+                                const data = await res.json();
+                                if (data.success) {
+                                    alert(data.message);
+                                } else {
+                                    alert('Fehler: ' + data.error);
+                                }
+                            } catch (e: any) {
+                                alert('Netzwerkfehler: ' + e.message);
+                            }
+                        }
+                    }}
+                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 flex items-center"
+                >
+                    <Database size={16} className="mr-2" />
+                    Doppelte Dateien löschen
+                </button>
+            </div>
         </div>
       </div>
 
