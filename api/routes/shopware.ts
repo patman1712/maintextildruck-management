@@ -39,14 +39,18 @@ async function getShopware6Orders(baseUrl: string, token: string) {
     // Fetch orders with associations
     // Filter: State = Open (technicalName: open) AND Payment = Paid (technicalName: paid)
     // Note: This is a simplified filter. Real-world might need more robust state checking.
+    // Payload for SW6 Search API
     const payload = {
+        includes: {
+            order: ['id', 'orderNumber', 'orderDate', 'amountTotal', 'lineItems', 'deliveries', 'orderCustomer', 'transactions', 'stateMachineState']
+        },
         associations: {
             lineItems: {
                 associations: {
                     cover: {}
                 }
             },
-            stateMachineState: {},
+            stateMachineState: {}, // Need this for order status
             transactions: {
                 associations: {
                     stateMachineState: {}
@@ -58,6 +62,7 @@ async function getShopware6Orders(baseUrl: string, token: string) {
                 }
             }
         },
+        /*
         filter: [
             {
                 type: 'equals',
@@ -70,7 +75,11 @@ async function getShopware6Orders(baseUrl: string, token: string) {
                 value: 'paid'
             }
         ],
-        limit: 50
+        */
+        limit: 50,
+        sort: [
+            { field: 'orderDate', order: 'DESC' }
+        ]
     };
 
     try {
@@ -139,10 +148,11 @@ async function getShopware5Orders(baseUrl: string, username: string, apiKey: str
 
     try {
         const params = new URLSearchParams();
-        params.append('filter[0][property]', 'status');
-        params.append('filter[0][value]', '0');
-        params.append('filter[1][property]', 'paymentStatusId'); // Try paymentStatusId instead of paymentStatus
-        params.append('filter[1][value]', '12');
+        // REMOVED FILTERS to allow ALL orders
+        // params.append('filter[0][property]', 'status');
+        // params.append('filter[0][value]', '0');
+        // params.append('filter[1][property]', 'paymentStatusId'); // Try paymentStatusId instead of paymentStatus
+        // params.append('filter[1][value]', '12');
         params.append('limit', '50');
 
         const response = await fetch(`${url}/api/orders?${params.toString()}`, {
@@ -327,11 +337,12 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                  // Try filtered fetch
                  try {
                     const params = new URLSearchParams();
-                    params.append('filter[0][property]', 'status');
-                    params.append('filter[0][value]', '0');
-                    params.append('filter[1][property]', 'paymentStatusId'); 
-                    params.append('filter[1][value]', '12');
-                    params.append('limit', '50');
+                    // REMOVED FILTERS to allow ALL orders
+                    // params.append('filter[0][property]', 'status');
+                    // params.append('filter[0][value]', '0');
+                    // params.append('filter[1][property]', 'paymentStatusId'); 
+                    // params.append('filter[1][value]', '12');
+                    params.append('limit', '50'); // Keep limit to avoid timeout
 
                     const response = await fetch(`${url}/api/orders?${params.toString()}`, {
                         headers: {
@@ -370,31 +381,22 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                          });
                          debugInfo.push(`SW5 Fallback (${customer.name}): ${statusDebug.join(', ')}`);
                          
-                         // Filter
-                         rawOrders = fallbackOrders.filter((o: any) => {
+                         // Filter - DISABLED to import ALL orders
+                        rawOrders = fallbackOrders;
+                        /*
+                        rawOrders = fallbackOrders.filter((o: any) => {
                              // Status: 0 (Open) OR '0'
                              // Some SW5 installations use 'orderStatusId' or nested 'orderStatus' object
                              let s = o.status;
                              if (s === undefined) s = o.orderStatusId;
-                             if (s === undefined && o.orderStatus) s = o.orderStatus.id;
-                             
-                             const sStr = String(s);
-                             // Accept 0 (Open) or 17 (Open - sometimes)
-                             const statusMatch = sStr === '0' || sStr === '17'; 
-                             
-                             // Payment: 12 (Completely Paid)
-                             let p = o.paymentStatusId;
-                             if (p === undefined && o.paymentStatus) p = o.paymentStatus.id;
-                             
-                             let pMatch = false;
-                             if (p != null) pMatch = String(p) === '12';
-                             
-                             return statusMatch && pMatch;
-                         });
-                     }
-                 }
-                 
-                 // Fetch Details
+                             // ... rest of logic
+                             return true; 
+                        });
+                        */
+                    }
+                }
+                
+                // Fetch Details for ALL orders
                  if (rawOrders.length > 0) {
                      orders = await Promise.all(rawOrders.map(async (order: any) => {
                         const detailRes = await fetch(`${url}/api/orders/${order.id}`, {
@@ -469,18 +471,39 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                     deadline: deadline,
                     status: 'active',
                     description: `Importiert aus Shopware.\nBestell-Nr: ${orderNumber}\nLieferadresse (Endkunde):\n${address}`,
-                    shopware_order_id: swOrder.id.toString()
+                    shopware_order_id: swOrder.id.toString(),
+                    steps: { processing: false, produced: false, invoiced: false }
                 };
+
+                // Check status to determine if it should be auto-completed
+                let isCompleted = false;
+                if (version === '5') {
+                    // SW5 Status: 2 = Completed
+                    // Also check Payment Status? 12 = Completely Paid
+                    // User says: "die schon auf komplett abgeschlossen sind"
+                    const statusId = swOrder.orderStatusId || swOrder.orderStatus?.id;
+                    if (String(statusId) === '2') isCompleted = true;
+                } else {
+                    // SW6 Status: 'completed'
+                    const stateName = swOrder.stateMachineState?.technicalName;
+                    if (stateName === 'completed') isCompleted = true;
+                }
+
+                if (isCompleted) {
+                    newOrder.status = 'completed';
+                    // Auto-set steps to true
+                    newOrder.steps = { processing: true, produced: true, invoiced: true };
+                }
 
                 // Insert Order
                 db.prepare(`
                     INSERT INTO orders (
                         id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person,
-                        deadline, status, description, shopware_order_id, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        deadline, status, description, shopware_order_id, created_at, steps
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `).run(
                     newOrder.id, newOrder.title, newOrder.order_number, newOrder.customer_id, newOrder.customer_name, newOrder.customer_email, newOrder.customer_phone, newOrder.customer_address, newOrder.customer_contact_person,
-                    newOrder.deadline, newOrder.status, newOrder.description, newOrder.shopware_order_id, new Date(swOrder.orderDate || swOrder.orderTime || new Date()).toISOString()
+                    newOrder.deadline, newOrder.status, newOrder.description, newOrder.shopware_order_id, new Date(swOrder.orderDate || swOrder.orderTime || new Date()).toISOString(), JSON.stringify(newOrder.steps)
                 );
 
                 // Map Items
@@ -505,10 +528,14 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                         }
 
                         // 2. Insert Item (Link supplier if matched)
+                        // If order is completed, set item status to completed too?
+                        // User said: "benötigt es keine warenbestellung und dtf bestellung mehr"
+                        // So if order is completed, items should not be pending.
+                        
                         db.prepare(`
                             INSERT INTO order_items (id, order_id, supplier_id, item_name, item_number, quantity, status)
-                            VALUES (?, ?, ?, ?, ?, ?, 'pending')
-                        `).run(itemId, newOrderId, matchedProduct ? matchedProduct.supplier_id : 'shopware-import', itemName, itemNumber, quantity);
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        `).run(itemId, newOrderId, matchedProduct ? matchedProduct.supplier_id : 'shopware-import', itemName, itemNumber, quantity, isCompleted ? 'completed' : 'pending');
 
                         // 3. Copy Print Files from Matched Product
                         if (matchedProduct) {
@@ -516,25 +543,14 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                             
                             for (const pFile of productFiles) {
                                 // Calculate quantity based on order quantity
-                                // e.g. Ordered 3 Shirts, Print File has qty 1 (Front) -> Total 3
-                                // e.g. Ordered 3 Shirts, Print File has qty 2 (Sleeve L+R) -> Total 6
                                 const fileQty = (pFile.quantity || 1) * quantity;
-                                
-                                // Add to order files (as JSON in orders table, see below) 
-                                // AND/OR insert into files table? 
-                                // The system uses `files` table for uploads but `orders.files` JSON for order attachments usually.
-                                // Let's look at how NewOrder does it. It adds to `files` table AND updates `orders` JSON.
-                                
-                                // Ideally we just add to `orders` JSON for now, or we duplicate the file entry in `files` table linked to this order?
-                                // Duplicating in `files` table allows individual management per order.
                                 
                                 const newFileId = Math.random().toString(36).substr(2, 9);
                                 db.prepare(`
-                                    INSERT INTO files (id, customer_id, order_id, name, path, type, thumbnail)
-                                    VALUES (?, ?, ?, ?, ?, 'print', ?)
-                                `).run(newFileId, customer.id, newOrderId, pFile.file_name, pFile.file_url, pFile.thumbnail_url);
+                                    INSERT INTO files (id, customer_id, order_id, name, path, type, thumbnail, print_status)
+                                    VALUES (?, ?, ?, ?, ?, 'print', ?, ?)
+                                `).run(newFileId, customer.id, newOrderId, pFile.file_name, pFile.file_url, pFile.thumbnail_url, isCompleted ? 'completed' : 'pending');
                                 
-                                // We also need to add it to the JSON blob below
                             }
                         }
 
