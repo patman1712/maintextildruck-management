@@ -509,11 +509,16 @@ router.post('/import-single', async (req: Request, res: Response) => {
                 if (matchedProduct) {
                     const productFiles = db.prepare("SELECT * FROM customer_product_files WHERE product_id = ? AND type = 'print'").all(matchedProduct.id) as any[];
                     for (const pFile of productFiles) {
-                        const newFileId = Math.random().toString(36).substr(2, 9);
-                        db.prepare(`
-                            INSERT INTO files (id, customer_id, order_id, name, path, type, thumbnail, print_status)
-                            VALUES (?, ?, ?, ?, ?, 'print', ?, ?)
-                        `).run(newFileId, customer.id, newOrderId, pFile.file_name, pFile.file_url, pFile.thumbnail_url, isCompleted ? 'completed' : 'pending');
+                        // Check if file already exists for this order to avoid duplicates on re-import
+                        const existingFile = db.prepare('SELECT id FROM files WHERE order_id = ? AND path = ?').get(newOrderId, pFile.file_url);
+                        
+                        if (!existingFile) {
+                            const newFileId = Math.random().toString(36).substr(2, 9);
+                            db.prepare(`
+                                INSERT INTO files (id, customer_id, order_id, name, path, type, thumbnail, print_status)
+                                VALUES (?, ?, ?, ?, ?, 'print', ?, ?)
+                            `).run(newFileId, customer.id, newOrderId, pFile.file_name, pFile.file_url, pFile.thumbnail_url, isCompleted ? 'completed' : 'pending');
+                        }
                     }
                 }
 
