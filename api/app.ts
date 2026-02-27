@@ -89,6 +89,23 @@ app.use('/api/downloads', downloadsRoutes)
 app.use('/api/backup', backupRoutes)
 app.use('/api/admin', adminRoutes)
 
+// --- DEBUG ROUTE (Temporary) ---
+app.get('/api/debug/shopware-orders', (req, res) => {
+    try {
+        const orders = db.prepare(`
+            SELECT id, title, status, shopware_order_id, description, order_number 
+            FROM orders 
+            WHERE title LIKE 'Shopware Order #%' OR description LIKE '%Importiert aus Shopware%'
+            ORDER BY created_at DESC
+            LIMIT 50
+        `).all();
+        res.json({ count: orders.length, orders });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+// -------------------------------
+
 // Serve uploads
 app.use('/uploads', express.static(UPLOAD_DIR))
 app.use('/downloads', express.static(DOWNLOADS_DIR))
