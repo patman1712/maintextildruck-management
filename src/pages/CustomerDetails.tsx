@@ -52,6 +52,9 @@ export default function CustomerDetails() {
   const [customerOrders, setCustomerOrders] = useState(
     orders.filter(o => o.customerId === id || o.customerName === customer?.name)
   );
+  
+  // Archived Files State
+  const [archivedFiles, setArchivedFiles] = useState<any[]>([]);
 
   // Shopware State
   const [shopwareConfig, setShopwareConfig] = useState<{
@@ -131,6 +134,7 @@ export default function CustomerDetails() {
   useEffect(() => {
       if (customer) {
           fetchProducts();
+          fetchCustomerFiles();
       }
   }, [customer]);
 
@@ -140,6 +144,19 @@ export default function CustomerDetails() {
     await updateCustomer(customer.id, editedCustomer);
     setCustomer({ ...customer, ...editedCustomer });
     setIsEditing(false);
+  };
+
+  const fetchCustomerFiles = async () => {
+      if (!customer) return;
+      try {
+          const res = await fetch(`/api/customers/${customer.id}/files`);
+          const data = await res.json();
+          if (data.success) {
+              setArchivedFiles(data.data);
+          }
+      } catch (err) {
+          console.error(err);
+      }
   };
 
   // --- Products Logic ---
@@ -673,7 +690,7 @@ export default function CustomerDetails() {
     await updateOrder(order.id, { files: updatedFiles });
   };
 
-  const handleDeleteFile = (fileToDelete: { name: string, url?: string, orderTitle?: string, customName?: string, thumbnail?: string }) => {
+  const handleDeleteFile = (fileToDelete: { name: string, url?: string, orderTitle?: string, customName?: string, thumbnail?: string, id?: string }) => {
     setConfirmModal({
         isOpen: true,
         title: 'Datei löschen',
@@ -712,6 +729,17 @@ export default function CustomerDetails() {
                 }
             }
             
+            // Delete from Archive DB (files table)
+            if (fileToDelete.id) {
+                 try {
+                    await fetch(`/api/customers/${customer.id}/files/${fileToDelete.id}`, {
+                        method: 'DELETE'
+                    });
+                } catch (err) {
+                    console.error("Failed to delete from archive DB", err);
+                }
+            }
+
             // Physical delete from server
             const urlToDelete = fileToDelete.url || (fileToDelete as any).file_url;
             if (urlToDelete) {
@@ -726,6 +754,7 @@ export default function CustomerDetails() {
                 }
             }
             fetchData();
+            fetchCustomerFiles();
         }
     });
   };
@@ -810,10 +839,21 @@ export default function CustomerDetails() {
   if (!customer) return null;
 
   // Extract Print Files & Preview Files
-  const allOrderFiles = customerOrders.flatMap(order => 
-    (Array.isArray(order.files) ? order.files : [])
-      .map(f => ({ ...f, orderTitle: `Auftrag: ${order.title}`, orderDate: order.createdAt, contextType: 'order' }))
-  );
+  // Use archivedFiles from database as primary source, augmented with Order details if available
+  const allOrderFiles = archivedFiles.map(file => {
+      const order = customerOrders.find(o => o.id === file.order_id);
+      return {
+          ...file,
+          name: file.name,
+          customName: file.name,
+          url: file.path,
+          thumbnail: file.thumbnail,
+          type: file.type,
+          orderTitle: order ? `Auftrag: ${order.title}` : (file.order_id ? 'Archiv / Gelöschter Auftrag' : 'Direkt-Upload'),
+          orderDate: file.created_at || (order ? order.createdAt : new Date().toISOString()),
+          contextType: 'order'
+      };
+  });
 
   const allProductFiles = products.flatMap(p => 
       (p.files || []).map(f => ({

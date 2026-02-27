@@ -53,4 +53,32 @@ router.put('/:id', (req: Request, res: Response) => {
   res.json({ success: true, message: 'Customer updated' });
 });
 
+// GET customer files
+router.get('/:id/files', (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const files = db.prepare('SELECT * FROM files WHERE customer_id = ? ORDER BY created_at DESC').all(id);
+    res.json({ success: true, data: files });
+  } catch (error: any) {
+    console.error('Error fetching customer files:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE customer file (from archive)
+router.delete('/:customerId/files/:fileId', (req: Request, res: Response) => {
+  const { fileId } = req.params;
+  try {
+    const result = db.prepare('DELETE FROM files WHERE id = ?').run(fileId);
+    if (result.changes > 0) {
+      res.json({ success: true, message: 'File deleted from archive' });
+    } else {
+      res.status(404).json({ success: false, error: 'File not found' });
+    }
+  } catch (error: any) {
+    console.error('Error deleting customer file:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;
