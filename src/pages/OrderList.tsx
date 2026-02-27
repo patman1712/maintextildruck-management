@@ -198,27 +198,38 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
     // Archived orders are "hidden" storage orders for direct uploads
     if (order.status === 'archived') return false;
     
-    // In "active" filter (which is default view), hide completed orders
-    // The "Aktuelle Aufträge" view should only show active orders
-    if (effectiveStatusFilter === 'active' && order.status === 'completed') return false;
-    
-    // Hide the special "Manual Inventory" order from the list
-    if (order.id === 'inventory-manual') return false;
-
-    // Hide manual invoices from Order List (they appear in Invoice List)
-    if (order.status === 'manual_invoice') return false;
-
     // Source Filter (Manual vs Online)
+    // IMPORTANT: Source MUST be checked. If source is missing (legacy), assume manual?
+    // No, source is always passed in routes.
+    
     if (source === 'online') {
         // Show only orders with shopware_order_id
         // Ensure we check for non-empty string
         if (!order.shopwareOrderId || order.shopwareOrderId === '') return false;
     } else if (source === 'manual') {
         // Show only orders WITHOUT shopware_order_id
+        // If shopwareOrderId is present and NOT empty, exclude it.
+        if (order.shopwareOrderId && order.shopwareOrderId !== '') return false;
+    } else {
+        // Fallback: If no source specified (should not happen with current routing), 
+        // maybe show manual only? Or all?
+        // Let's default to manual for safety if someone uses component without prop.
         if (order.shopwareOrderId && order.shopwareOrderId !== '') return false;
     }
     
-    return matchesSearch && matchesStatus;
+    // In "active" filter (which is default view), hide completed orders
+    if (effectiveStatusFilter === 'active' && order.status === 'completed') return false;
+    
+    // In "completed" filter, hide active/cancelled
+    if (effectiveStatusFilter === 'completed' && order.status !== 'completed') return false;
+
+    // Hide the special "Manual Inventory" order from the list
+    if (order.id === 'inventory-manual') return false;
+
+    // Hide manual invoices from Order List (they appear in Invoice List)
+    if (order.status === 'manual_invoice') return false;
+
+    return matchesSearch;
   });
 
   const StepButton = ({ active, onClick, icon: Icon, label, colorClass }: { active: boolean, onClick: () => void, icon: any, label: string, colorClass: string }) => (
