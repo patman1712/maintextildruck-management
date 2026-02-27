@@ -320,6 +320,22 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
     const errors = [];
     const debugInfo: string[] = [];
 
+    // CLEANUP: Delete orders that look like Shopware imports but have no shopware_order_id or are incomplete
+    // This fixes the issue where failed imports left "zombie" orders in the manual list
+    try {
+        const deleted = db.prepare(`
+            DELETE FROM orders 
+            WHERE (shopware_order_id IS NULL OR shopware_order_id = '') 
+            AND (title LIKE 'Shopware Order #%' OR description LIKE '%Importiert aus Shopware%')
+        `).run();
+        if (deleted.changes > 0) {
+            console.log(`Cleaned up ${deleted.changes} broken Shopware import orders.`);
+            debugInfo.push(`Cleaned up ${deleted.changes} broken orders.`);
+        }
+    } catch (e) {
+        console.error('Cleanup failed:', e);
+    }
+
     for (const customer of customers) {
         try {
             console.log(`Syncing orders for customer: ${customer.name} (${customer.shopware_version || '6'})`);
