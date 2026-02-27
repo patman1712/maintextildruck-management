@@ -9,6 +9,13 @@ const router = Router();
 router.post('/bulk-files', (req: Request, res: Response) => {
     const { productIds, fileUrl, fileName, thumbnailUrl, type, quantity, supplierId } = req.body;
 
+    console.log('Received bulk-files request:', { 
+        productIdsCount: productIds?.length, 
+        productIds, 
+        fileUrl, 
+        supplierId 
+    });
+
     if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
         return res.status(400).json({ success: false, error: 'Product IDs are required' });
     }
@@ -30,13 +37,15 @@ router.post('/bulk-files', (req: Request, res: Response) => {
 
         const transaction = db.transaction((ids: string[]) => {
             for (const productId of ids) {
+                console.log(`Processing product ${productId} - Inserting file and updating supplier: ${supplierId}`);
                 // Insert file
                 const id = Math.random().toString(36).substr(2, 9);
                 insertFileStmt.run(id, productId, fileUrl, fileName, thumbnailUrl, type || 'print', quantity || 1);
 
                 // Update supplier if provided
                 if (supplierId) {
-                    updateSupplierStmt.run(supplierId, productId);
+                    const result = updateSupplierStmt.run(supplierId, productId);
+                    console.log(`Supplier update result for ${productId}:`, result);
                 }
             }
         });

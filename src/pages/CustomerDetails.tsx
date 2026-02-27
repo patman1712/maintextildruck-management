@@ -421,7 +421,17 @@ export default function CustomerDetails() {
           return;
       }
 
-      if (!confirm(`Möchten Sie die Datei "${bulkSelectedFile.name}" wirklich an ${bulkSelectedProductIds.length} ausgewählte Artikel zuweisen?`)) {
+      console.log('Starting bulk assign:', {
+          file: bulkSelectedFile.name,
+          products: bulkSelectedProductIds.length,
+          supplierId: bulkSupplierId
+      });
+
+      const supplierName = bulkSupplierId ? suppliers.find(s => s.id === bulkSupplierId)?.name : null;
+      const confirmMessage = `Möchten Sie die Datei "${bulkSelectedFile.name}" wirklich an ${bulkSelectedProductIds.length} ausgewählte Artikel zuweisen?` +
+          (supplierName ? `\n\nZusätzlich wird der Lieferant für diese Artikel auf "${supplierName}" gesetzt.` : '');
+
+      if (!confirm(confirmMessage)) {
           return;
       }
 
@@ -448,6 +458,7 @@ export default function CustomerDetails() {
               setBulkSelectedFile(null);
               setBulkProductSearch('');
               setBulkSelectedProductIds([]);
+              setBulkSupplierId(''); // Reset supplier selection
           } else {
               alert('Fehler: ' + data.error);
           }
@@ -808,19 +819,44 @@ export default function CustomerDetails() {
   // Extract Print Files & Preview Files
   const allOrderFiles = customerOrders.flatMap(order => 
     (Array.isArray(order.files) ? order.files : [])
-      .map(f => ({ ...f, orderTitle: order.title, orderDate: order.createdAt }))
+      .map(f => ({ ...f, orderTitle: `Auftrag: ${order.title}`, orderDate: order.createdAt, contextType: 'order' }))
+  );
+
+  const allProductFiles = products.flatMap(p => 
+      (p.files || []).map(f => ({
+          ...f,
+          name: f.file_name,
+          url: f.file_url,
+          thumbnail: f.thumbnail_url || f.thumbnail, // Handle both structures
+          orderTitle: `Artikel: ${p.name}`,
+          orderDate: p.created_at || new Date().toISOString(),
+          contextType: 'product'
+      }))
   );
   
-  const allPrintFiles = allOrderFiles.filter(f => f.type === 'print' || !f.type); // Default to print if undefined
-  const allPreviewFiles = allOrderFiles.filter(f => f.type === 'preview');
+  const combinedFiles = [...allOrderFiles, ...allProductFiles];
+  
+  const allPrintFiles = combinedFiles.filter(f => f.type === 'print' || !f.type); // Default to print if undefined
+  const allPreviewFiles = combinedFiles.filter(f => f.type === 'preview' || f.type === 'view');
 
   const uniqueFilesMap = new Map();
   allPrintFiles.forEach(file => {
-    if (file.url && !uniqueFilesMap.has(file.url)) {
-        uniqueFilesMap.set(file.url, file);
+    if (file.url) {
+        if (!uniqueFilesMap.has(file.url)) {
+            uniqueFilesMap.set(file.url, { ...file, contexts: [file.orderTitle] });
+        } else {
+            const existing = uniqueFilesMap.get(file.url);
+            if (!existing.contexts.includes(file.orderTitle)) {
+                existing.contexts.push(file.orderTitle);
+            }
+            // Update date to latest usage
+            if (new Date(file.orderDate) > new Date(existing.orderDate)) {
+                existing.orderDate = file.orderDate;
+            }
+        }
     }
   });
-  const printFiles = Array.from(uniqueFilesMap.values()).sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+  const printFiles = Array.from(uniqueFilesMap.values()).sort((a: any, b: any) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
 
   const freistellerProducts = products.filter(p => p.product_number === 'FREISTELLER');
   const freistellerFiles = freistellerProducts.flatMap(p => p.files.map(f => ({
@@ -1176,9 +1212,11 @@ export default function CustomerDetails() {
                                 </h4>
                                 <button onClick={() => startRename(file)} className="text-gray-400 hover:text-blue-600 p-1"><Pencil size={14} /></button>
                             </div>
-                            <p className="text-xs text-gray-500 flex items-center">
+                            <p className="text-xs text-gray-500 flex items-center" title={file.contexts && file.contexts.join(', ')}>
                                 <FileText size={12} className="mr-1" />
-                                Aus: {file.orderTitle}
+                                {file.contexts && file.contexts.length > 1 
+                                    ? `Verwendet in ${file.contexts.length} Orten` 
+                                    : `Aus: ${file.contexts ? file.contexts[0] : file.orderTitle}`}
                             </p>
                             </div>
                         ))}
@@ -1888,9 +1926,9 @@ export default function CustomerDetails() {
                                                             <p className="text-sm font-semibold break-words line-clamp-2 mb-1 text-gray-800" title={file.customName || file.name}>
                                                                 {file.customName || file.name}
                                                             </p>
-                                                            <div className="flex items-center text-[10px] text-gray-400">
+                                                            <div className="flex items-center text-[10px] text-gray-400" title={file.contexts && file.contexts.join(', ')}>
                                                                 <FileText size={10} className="mr-1" />
-                                                                <span>{new Date(file.orderDate).toLocaleDateString()}</span>
+                                                                <span className="truncate">{file.contexts && file.contexts.length > 1 ? `${file.contexts.length} Verwendungen` : (file.contexts ? file.contexts[0] : file.orderTitle)}</span>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -2076,7 +2114,9 @@ export default function CustomerDetails() {
                                               </div>
                                               <div className="min-w-0">
                                                   <p className="text-xs font-medium truncate text-gray-800" title={file.customName || file.name}>{file.customName || file.name}</p>
-                                                  <p className="text-[10px] text-gray-500">{new Date(file.orderDate).toLocaleDateString()}</p>
+                                                  <p className="text-[10px] text-gray-500 truncate" title={file.contexts && file.contexts.join(', ')}>
+                                                      {file.contexts && file.contexts.length > 1 ? `${file.contexts.length} Verwendungen` : (file.contexts ? file.contexts[0] : file.orderTitle)}
+                                                  </p>
                                               </div>
                                           </div>
                                       ))
