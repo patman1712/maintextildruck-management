@@ -13,6 +13,8 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">(filter || "active");
   const [approvalInfoOrder, setApprovalInfoOrder] = useState<Order | null>(null);
 
+  const [statusUpdateModal, setStatusUpdateModal] = useState<{ order: Order, isOpen: boolean } | null>(null);
+
   const handleShopwareSync = async () => {
     if (!confirm('Möchten Sie jetzt Bestellungen aus Shopware abrufen? Nur bezahlte und offene Bestellungen werden importiert.')) return;
     
@@ -37,6 +39,114 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
         alert('Netzwerkfehler beim Synchronisieren');
         console.error(err);
     }
+  };
+
+  const handleUpdateStatus = async (orderId: string, newStatus: string, syncShopware: boolean) => {
+    try {
+        const payload: any = { orderId, status: newStatus };
+        
+        if (syncShopware) {
+            // Map internal status to Shopware status
+            let swStatus = '';
+            switch(newStatus) {
+                case 'active': swStatus = 'in_progress'; break;
+                case 'completed': swStatus = 'completed'; break;
+                case 'cancelled': swStatus = 'cancelled'; break;
+                default: swStatus = 'open';
+            }
+            payload.shopwareStatus = swStatus;
+        }
+
+        const res = await fetch('/api/shopware/update-order-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            if (data.message && data.message.includes('Shopware update failed')) {
+                alert('Warnung: ' + data.message);
+            } else {
+                // alert('Status aktualisiert');
+            }
+            fetchData();
+            setStatusUpdateModal(null);
+        } else {
+            alert('Fehler: ' + data.error);
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Fehler beim Status-Update');
+    }
+  };
+
+  const StatusModal = () => {
+      if (!statusUpdateModal || !statusUpdateModal.isOpen) return null;
+      const { order } = statusUpdateModal;
+      const [selectedStatus, setSelectedStatus] = useState(order.status);
+      const [syncShopware, setSyncShopware] = useState(!!order.shopwareOrderId);
+
+      return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setStatusUpdateModal(null)}>
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 relative" onClick={e => e.stopPropagation()}>
+                <button 
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                  onClick={() => setStatusUpdateModal(null)}
+                >
+                  <X size={20} />
+                </button>
+                
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Status ändern</h3>
+                
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Neuer Status</label>
+                        <select 
+                            className="w-full border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500"
+                            value={selectedStatus}
+                            onChange={(e) => setSelectedStatus(e.target.value as any)}
+                        >
+                            <option value="active">In Bearbeitung</option>
+                            <option value="completed">Abgeschlossen</option>
+                            <option value="cancelled">Storniert</option>
+                        </select>
+                    </div>
+
+                    {order.shopwareOrderId && (
+                        <div className="flex items-center">
+                            <input
+                                id="sync-sw"
+                                type="checkbox"
+                                className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+                                checked={syncShopware}
+                                onChange={(e) => setSyncShopware(e.target.checked)}
+                            />
+                            <label htmlFor="sync-sw" className="ml-2 block text-sm text-gray-900">
+                                Auch an Shopware senden
+                            </label>
+                        </div>
+                    )}
+                    
+                    <div className="flex justify-end gap-3 mt-6">
+                        <button 
+                            onClick={() => setStatusUpdateModal(null)}
+                            className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50"
+                        >
+                            Abbrechen
+                        </button>
+                        <button 
+                            onClick={() => handleUpdateStatus(order.id, selectedStatus, syncShopware)}
+                            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                        >
+                            Speichern
+                        </button>
+                    </div>
+                </div>
+            </div>
+          </div>
+      );
   };
 
   const handleShareProof = async (orderId: string, e: React.MouseEvent) => {
@@ -316,23 +426,32 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                                <XCircle size={10} className="mr-1" /> Abgelehnt
                             </span>
                             <button 
-                              onClick={(e) => { e.stopPropagation(); setApprovalInfoOrder(order); }}
-                              className="text-gray-400 hover:text-blue-600 p-1 hover:bg-gray-100 rounded-full transition-colors"
-                              title="Details zur Ablehnung anzeigen"
-                            >
-                               <Info size={14} />
-                            </button>
-                          </div>
-                        )}
-                        {order.approvalStatus === 'pending' && order.approvalToken && (
-                          <span className="px-2 inline-flex items-center text-xs leading-5 font-semibold rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">
-                             Wartet auf Freigabe
-                          </span>
-                        )}
+                          onClick={(e) => { e.stopPropagation(); setApprovalInfoOrder(order); }}
+                          className="text-gray-400 hover:text-blue-600 p-1 hover:bg-gray-100 rounded-full transition-colors"
+                          title="Details zur Ablehnung anzeigen"
+                        >
+                           <Info size={14} />
+                        </button>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-1">
+                    )}
+                    {order.approvalStatus === 'pending' && order.approvalToken && (
+                      <span className="px-2 inline-flex items-center text-xs leading-5 font-semibold rounded-full bg-yellow-50 text-yellow-700 border border-yellow-200">
+                         Wartet auf Freigabe
+                      </span>
+                    )}
+
+                    {order.shopwareOrderId && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); setStatusUpdateModal({ order, isOpen: true }); }}
+                            className="mt-1 flex items-center text-xs text-blue-600 hover:text-blue-800"
+                        >
+                            <RefreshCw size={10} className="mr-1" /> Status Sync
+                        </button>
+                    )}
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <div className="flex justify-end space-x-1">
                         <button 
                           onClick={(e) => handleShareProof(order.id, e)}
                           className="text-gray-400 hover:text-blue-600 transition-colors p-2 hover:bg-blue-50 rounded-full"
@@ -428,6 +547,8 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
           </div>
         </div>
       )}
+
+      {statusUpdateModal && <StatusModal />}
     </div>
   );
 }

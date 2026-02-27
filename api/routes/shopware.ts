@@ -435,47 +435,37 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
 
                 // Determine Address
                 let address = '';
+                let contactPerson = customer.contact_person;
+                let phone = customer.phone;
+                let email = customer.email; // Usually the agency/B2B customer email, maybe we want the end-customer email in description?
+
                 if (version === '5') {
                     // SW5 Address mapping
                     const shipping = swOrder.shipping || swOrder.billing; // Fallback
                     if (shipping) {
-                        address = `${shipping.street} ${shipping.streetNumber || ''}\n${shipping.zipCode} ${shipping.city}`;
+                        address = `${shipping.firstName} ${shipping.lastName}\n${shipping.company ? shipping.company + '\n' : ''}${shipping.street} ${shipping.streetNumber || ''}\n${shipping.zipCode} ${shipping.city}\n${shipping.country?.name || ''}`;
+                        contactPerson = `${shipping.firstName} ${shipping.lastName}`;
                     }
                 } else {
                     // SW6 Address mapping
                     const shipping = swOrder.deliveries?.[0]?.shippingOrderAddress;
                     if (shipping) {
-                        address = `${shipping.street}\n${shipping.zipcode} ${shipping.city}`;
+                        address = `${shipping.firstName} ${shipping.lastName}\n${shipping.company ? shipping.company + '\n' : ''}${shipping.street}\n${shipping.zipcode} ${shipping.city}\n${shipping.country?.name || ''}`;
+                        contactPerson = `${shipping.firstName} ${shipping.lastName}`;
+                        if (shipping.phoneNumber) phone = shipping.phoneNumber;
                     }
                 }
 
                 const newOrder = {
                     id: newOrderId,
                     title: `Shopware Order #${orderNumber}`,
-                    order_number: orderNumber, // Store SW number as order_number or keep internal format? User wants internal format usually.
-                    // Actually, let's keep order_number null so it generates automatically? 
-                    // But usually imports keep the external reference. 
-                    // Let's use the SW number but prefixed or just as is.
-                    // The system generates YYYY-XXXX. If we put "1005", it might break sort.
-                    // Let's store "SW-1005" as title and let the system generate internal number?
-                    // Or just use the SW number. 
-                    // User Request: "daraus direkt einen auftrag bei uns anlegen"
-                    // Let's use the internal number generator logic? 
-                    // For now, I'll store the SW number in `order_number` but ensure it doesn't conflict.
-                    // Actually, better to let the frontend/DB generate the internal number if possible, or just use the SW number.
-                    // I will use the SW number.
+                    order_number: orderNumber, 
                     customer_id: customer.id,
-                    customer_name: customer.name, // Use the B2B customer name (Agency), NOT the end-customer from Shopware order
-                    // Wait, usually the Agency orders for THEMSELVES. 
-                    // If the Shopware order has a billing address, is that the End Customer or the Agency?
-                    // Usually "Sync from Shopware" means "My Shopware Store got an order".
-                    // If "Maintextildruck" is the fulfillment provider, and the "Customer" in DB is the "Shop Owner".
-                    // Then the `customer_name` in Order should be `customer.name` (The Shop Owner).
-                    // And the `description` should contain the End-Customer info.
-                    customer_email: customer.email,
-                    customer_phone: customer.phone,
-                    customer_address: customer.address, // Agency Address
-                    customer_contact_person: customer.contact_person,
+                    customer_name: customer.name, 
+                    customer_email: email,
+                    customer_phone: phone,
+                    customer_address: address, // Use End-Customer Shipping Address
+                    customer_contact_person: contactPerson,
                     deadline: deadline,
                     status: 'active',
                     description: `Importiert aus Shopware.\nBestell-Nr: ${orderNumber}\nLieferadresse (Endkunde):\n${address}`,
@@ -503,7 +493,52 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                         const itemNumber = item.payload?.productNumber || item.articleNumber || '';
                         const quantity = item.quantity;
                         
-                        // Try to find image
+                        // 1. Try to find matching Online Product (by shopware ID or number)
+                        // Note: swOrder items might have 'articleId' (SW5) or 'productId' (SW6) or 'referencedId'
+                        const swProductId = item.productId || item.articleId; 
+                        
+                        let matchedProduct = null;
+                        if (swProductId) {
+                            matchedProduct = db.prepare("SELECT * FROM customer_products WHERE customer_id = ? AND (shopware_product_id = ? OR product_number = ?) AND source = 'shopware'").get(customer.id, String(swProductId), itemNumber) as any;
+                        } else {
+                            matchedProduct = db.prepare("SELECT * FROM customer_products WHERE customer_id = ? AND product_number = ? AND source = 'shopware'").get(customer.id, itemNumber) as any;
+                        }
+
+                        // 2. Insert Item (Link supplier if matched)
+                        db.prepare(`
+                            INSERT INTO order_items (id, order_id, supplier_id, item_name, item_number, quantity, status)
+                            VALUES (?, ?, ?, ?, ?, ?, 'pending')
+                        `).run(itemId, newOrderId, matchedProduct ? matchedProduct.supplier_id : 'shopware-import', itemName, itemNumber, quantity);
+
+                        // 3. Copy Print Files from Matched Product
+                        if (matchedProduct) {
+                            const productFiles = db.prepare("SELECT * FROM customer_product_files WHERE product_id = ? AND type = 'print'").all(matchedProduct.id) as any[];
+                            
+                            for (const pFile of productFiles) {
+                                // Calculate quantity based on order quantity
+                                // e.g. Ordered 3 Shirts, Print File has qty 1 (Front) -> Total 3
+                                // e.g. Ordered 3 Shirts, Print File has qty 2 (Sleeve L+R) -> Total 6
+                                const fileQty = (pFile.quantity || 1) * quantity;
+                                
+                                // Add to order files (as JSON in orders table, see below) 
+                                // AND/OR insert into files table? 
+                                // The system uses `files` table for uploads but `orders.files` JSON for order attachments usually.
+                                // Let's look at how NewOrder does it. It adds to `files` table AND updates `orders` JSON.
+                                
+                                // Ideally we just add to `orders` JSON for now, or we duplicate the file entry in `files` table linked to this order?
+                                // Duplicating in `files` table allows individual management per order.
+                                
+                                const newFileId = Math.random().toString(36).substr(2, 9);
+                                db.prepare(`
+                                    INSERT INTO files (id, customer_id, order_id, name, path, type, thumbnail)
+                                    VALUES (?, ?, ?, ?, ?, 'print', ?)
+                                `).run(newFileId, customer.id, newOrderId, pFile.file_name, pFile.file_url, pFile.thumbnail_url);
+                                
+                                // We also need to add it to the JSON blob below
+                            }
+                        }
+
+                        // Try to find image (Shopware Preview)
                         let fileUrl = null;
                         if (version === '6' && item.cover?.media?.url) {
                             fileUrl = item.cover.media.url;
@@ -512,12 +547,6 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                         // But we might have it if we fetched details.
                         // SW5 detail object has 'articleId'.
                         
-                        // Insert Item
-                        db.prepare(`
-                            INSERT INTO order_items (id, order_id, supplier_id, item_name, item_number, quantity, status)
-                            VALUES (?, ?, ?, ?, ?, ?, 'pending')
-                        `).run(itemId, newOrderId, 'shopware-import', itemName, itemNumber, quantity);
-
                         // If we have a file, add it to files table and link to order
                         if (fileUrl) {
                             const fileId = Math.random().toString(36).substr(2, 9);
@@ -525,17 +554,19 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                                 INSERT INTO files (id, customer_id, order_id, name, path, type)
                                 VALUES (?, ?, ?, ?, ?, 'preview')
                             `).run(fileId, customer.id, newOrderId, `${itemName} - Vorschau`, fileUrl);
-                            
-                            // Update order files JSON
-                            const currentFilesStr = db.prepare('SELECT files FROM orders WHERE id = ?').get(newOrderId) as any;
-                            const currentFiles = currentFilesStr.files ? JSON.parse(currentFilesStr.files) : [];
-                            currentFiles.push({
-                                name: `${itemName} - Vorschau`,
-                                url: fileUrl,
-                                type: 'preview'
-                            });
-                            db.prepare('UPDATE orders SET files = ? WHERE id = ?').run(JSON.stringify(currentFiles), newOrderId);
                         }
+                    }
+                    
+                    // After processing all items, update the orders.files JSON with all linked files
+                    const allLinkedFiles = db.prepare("SELECT * FROM files WHERE order_id = ?").all(newOrderId) as any[];
+                    if (allLinkedFiles.length > 0) {
+                        const filesJson = allLinkedFiles.map(f => ({
+                            name: f.name,
+                            url: f.path,
+                            type: f.type,
+                            thumbnail: f.thumbnail
+                        }));
+                        db.prepare('UPDATE orders SET files = ? WHERE id = ?').run(JSON.stringify(filesJson), newOrderId);
                     }
                 }
 
@@ -550,6 +581,115 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
     }
 
     res.json({ success: true, count: totalSynced, errors, debug: debugInfo });
+});
+
+// Update Order Status in Shopware
+router.post('/update-order-status', async (req: Request, res: Response) => {
+    const { orderId, status, shopwareStatus } = req.body;
+
+    try {
+        const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
+        if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+        
+        if (!order.shopware_order_id) {
+             // Just update local status if not shopware
+             db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, orderId);
+             return res.json({ success: true, message: 'Local status updated' });
+        }
+
+        const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(order.customer_id) as any;
+        if (!customer) return res.status(404).json({ success: false, error: 'Customer not found' });
+
+        // Update local status first
+        db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, orderId);
+
+        // Update Shopware Status if requested
+        if (shopwareStatus) {
+            const version = customer.shopware_version || '6';
+            const baseUrl = customer.shopware_url.replace(/\/$/, '');
+            
+            if (version === '6') {
+                const token = await getShopware6Token(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
+                
+                // SW6 Status Transition
+                // We need to find the transition action name for the target status.
+                // Common transitions: 'process', 'complete', 'cancel'
+                // Mapping (simplified):
+                // pending -> open
+                // processing -> process
+                // completed -> complete
+                // cancelled -> cancel
+                
+                let actionName = '';
+                switch (shopwareStatus) {
+                    case 'open': actionName = 'reopen'; break;
+                    case 'in_progress': actionName = 'process'; break;
+                    case 'completed': actionName = 'complete'; break;
+                    case 'cancelled': actionName = 'cancel'; break;
+                }
+
+                if (actionName) {
+                     const transitionUrl = `${baseUrl}/api/_action/order_transaction/${order.shopware_order_id}/state/${actionName}`;
+                     // Note: In SW6, order state is often on the ORDER, but payment/delivery states are separate.
+                     // The order state machine is usually: open -> in_progress -> completed
+                     // Endpoint: /api/_action/order/{orderId}/state/{transition}
+                     
+                     // Let's try order state first
+                     const orderStateUrl = `${baseUrl}/api/_action/order/${order.shopware_order_id}/state/${actionName}`;
+                     
+                     const response = await fetch(orderStateUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({})
+                     });
+                     
+                     if (!response.ok) {
+                         const err = await response.text();
+                         console.error('Shopware Status Update Failed:', err);
+                         // Don't fail the whole request, just warn
+                         return res.json({ success: true, message: 'Local updated, Shopware update failed: ' + err });
+                     }
+                }
+            } else {
+                // SW5 Status Update
+                // PUT /api/orders/{id} with { orderStatusId: X }
+                // Status IDs: 0=Open, 1=InProcess, 2=Completed, 3=PartiallyCompleted, 4=Cancelled...
+                
+                let statusId = -1;
+                switch (shopwareStatus) {
+                    case 'open': statusId = 0; break;
+                    case 'in_progress': statusId = 1; break;
+                    case 'completed': statusId = 2; break;
+                    case 'cancelled': statusId = 4; break;
+                }
+
+                if (statusId !== -1) {
+                    const auth = Buffer.from(`${customer.shopware_access_key}:${customer.shopware_secret_key}`).toString('base64');
+                    const response = await fetch(`${baseUrl}/api/orders/${order.shopware_order_id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Basic ${auth}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ orderStatusId: statusId })
+                    });
+                    
+                     if (!response.ok) {
+                         const err = await response.text();
+                         return res.json({ success: true, message: 'Local updated, Shopware update failed: ' + err });
+                     }
+                }
+            }
+        }
+
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Update status error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 // Get products for a customer
