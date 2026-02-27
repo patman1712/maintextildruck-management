@@ -84,6 +84,7 @@ export default function CustomerDetails() {
   const [bulkProductSearch, setBulkProductSearch] = useState('');
   const [bulkAssignType, setBulkAssignType] = useState<'print' | 'view'>('print');
   const [isBulkAssigning, setIsBulkAssigning] = useState(false);
+  const [bulkSelectedProductIds, setBulkSelectedProductIds] = useState<string[]>([]);
 
   // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -409,18 +410,12 @@ export default function CustomerDetails() {
   const handleBulkAssign = async () => {
       if (!bulkSelectedFile || !customer) return;
       
-      // Filter products based on search
-      const targetProducts = shopwareProducts.filter(p => 
-          (p.name.toLowerCase().includes(bulkProductSearch.toLowerCase()) || 
-          (p.product_number && p.product_number.toLowerCase().includes(bulkProductSearch.toLowerCase())))
-      );
-
-      if (targetProducts.length === 0) {
-          alert('Keine Artikel gefunden.');
+      if (bulkSelectedProductIds.length === 0) {
+          alert('Bitte wählen Sie mindestens einen Artikel aus.');
           return;
       }
 
-      if (!confirm(`Möchten Sie die Datei "${bulkSelectedFile.name}" wirklich an ${targetProducts.length} gefundene Artikel zuweisen?`)) {
+      if (!confirm(`Möchten Sie die Datei "${bulkSelectedFile.name}" wirklich an ${bulkSelectedProductIds.length} ausgewählte Artikel zuweisen?`)) {
           return;
       }
 
@@ -430,7 +425,7 @@ export default function CustomerDetails() {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                  productIds: targetProducts.map(p => p.id),
+                  productIds: bulkSelectedProductIds,
                   fileUrl: bulkSelectedFile.url,
                   fileName: bulkSelectedFile.name,
                   thumbnailUrl: bulkSelectedFile.thumbnail,
@@ -445,6 +440,7 @@ export default function CustomerDetails() {
               setShowBulkAssignModal(false);
               setBulkSelectedFile(null);
               setBulkProductSearch('');
+              setBulkSelectedProductIds([]);
           } else {
               alert('Fehler: ' + data.error);
           }
@@ -454,6 +450,40 @@ export default function CustomerDetails() {
       } finally {
           setIsBulkAssigning(false);
       }
+  };
+
+  const toggleProductSelection = (productId: string) => {
+    setBulkSelectedProductIds(prev => {
+        if (prev.includes(productId)) {
+            return prev.filter(id => id !== productId);
+        } else {
+            return [...prev, productId];
+        }
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    const allShopwareProducts = products.filter(p => p.source === 'shopware');
+    const visibleProducts = allShopwareProducts.filter(p => 
+        (p.name.toLowerCase().includes(bulkProductSearch.toLowerCase()) || 
+        (p.product_number && p.product_number.toLowerCase().includes(bulkProductSearch.toLowerCase())))
+    );
+    
+    const visibleIds = visibleProducts.map(p => p.id);
+    if (visibleIds.length === 0) return;
+
+    const allVisibleSelected = visibleIds.every(id => bulkSelectedProductIds.includes(id));
+    
+    if (allVisibleSelected) {
+        // Deselect all visible
+        setBulkSelectedProductIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+        // Select all visible (merge)
+        setBulkSelectedProductIds(prev => {
+            const newSet = new Set([...prev, ...visibleIds]);
+            return Array.from(newSet);
+        });
+    }
   };
 
   const handleUpdateFileQuantity = async (fileId: string, quantity: number, productContext: Product) => {
@@ -1450,6 +1480,7 @@ export default function CustomerDetails() {
                                  setShowBulkAssignModal(true);
                                  setBulkProductSearch('');
                                  setBulkSelectedFile(null);
+                                 setBulkSelectedProductIds([]);
                              }}
                              className="bg-white text-blue-600 border border-blue-200 px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-50 flex items-center"
                          >
@@ -1985,7 +2016,7 @@ export default function CustomerDetails() {
                       <div className="w-full md:w-2/3 flex flex-col">
                           <div className="p-4 border-b border-gray-200 bg-white">
                               <h4 className="font-semibold text-sm text-gray-700 mb-2">2. Artikel suchen & zuweisen</h4>
-                              <div className="relative">
+                              <div className="relative mb-3">
                                   <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
                                   <input 
                                       type="text" 
@@ -1996,40 +2027,72 @@ export default function CustomerDetails() {
                                       autoFocus
                                   />
                               </div>
+                              {bulkProductSearch && (
+                                <div className="flex justify-between items-center">
+                                    <button 
+                                        onClick={toggleSelectAllVisible}
+                                        className="text-xs text-blue-600 font-medium hover:underline"
+                                    >
+                                        Alle angezeigten auswählen / abwählen
+                                    </button>
+                                    <span className="text-xs text-gray-500">
+                                        {bulkSelectedProductIds.length} Artikel ausgewählt
+                                    </span>
+                                </div>
+                              )}
                           </div>
                           
                           <div className="flex-1 overflow-y-auto p-4 bg-gray-50/50">
                               {bulkProductSearch ? (
                                   <div className="space-y-2">
-                                      <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                                          Gefundene Artikel: {shopwareProducts.filter(p => (p.name.toLowerCase().includes(bulkProductSearch.toLowerCase()) || (p.product_number && p.product_number.toLowerCase().includes(bulkProductSearch.toLowerCase())))).length}
-                                      </p>
-                                      {shopwareProducts
-                                          .filter(p => (p.name.toLowerCase().includes(bulkProductSearch.toLowerCase()) || (p.product_number && p.product_number.toLowerCase().includes(bulkProductSearch.toLowerCase()))))
-                                          .map(product => (
-                                              <div key={product.id} className="bg-white p-3 rounded border border-gray-200 flex items-center justify-between">
-                                                  <div className="flex items-center space-x-3">
-                                                      <div className="h-10 w-10 bg-gray-100 rounded flex items-center justify-center text-gray-400">
+                                      {(() => {
+                                          const allShopwareProducts = products.filter(p => p.source === 'shopware');
+                                          const visibleProducts = allShopwareProducts.filter(p => (p.name.toLowerCase().includes(bulkProductSearch.toLowerCase()) || (p.product_number && p.product_number.toLowerCase().includes(bulkProductSearch.toLowerCase()))));
+                                          
+                                          if (visibleProducts.length === 0) {
+                                              return <p className="text-center text-gray-400 py-4">Keine Artikel gefunden.</p>;
+                                          }
+
+                                          return visibleProducts.map(product => {
+                                              const isSelected = bulkSelectedProductIds.includes(product.id);
+                                              const isAlreadyAssigned = bulkSelectedFile && product.files && product.files.some(f => f.file_url === bulkSelectedFile.url);
+
+                                              return (
+                                              <div 
+                                                  key={product.id} 
+                                                  onClick={() => toggleProductSelection(product.id)}
+                                                  className={`p-3 rounded border flex items-center justify-between cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 border-blue-300 ring-1 ring-blue-300' : 'bg-white border-gray-200 hover:border-blue-200'}`}
+                                              >
+                                                  <div className="flex items-center space-x-3 overflow-hidden">
+                                                      <div onClick={(e) => e.stopPropagation()}>
+                                                          <input 
+                                                            type="checkbox" 
+                                                            checked={isSelected} 
+                                                            onChange={() => toggleProductSelection(product.id)}
+                                                            className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                                          />
+                                                      </div>
+                                                      <div className="h-10 w-10 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center text-gray-400">
                                                           <Package size={16} />
                                                       </div>
-                                                      <div>
-                                                          <p className="text-sm font-medium text-gray-800">{product.name}</p>
-                                                          <div className="flex gap-2">
+                                                      <div className="min-w-0">
+                                                          <p className="text-sm font-medium text-gray-800 truncate">{product.name}</p>
+                                                          <div className="flex gap-2 flex-wrap">
                                                               {product.product_number && <span className="text-xs text-gray-500">{product.product_number}</span>}
                                                               {product.size && <span className="text-xs bg-slate-100 px-1 rounded border border-slate-200">Gr: {product.size}</span>}
                                                               {product.color && <span className="text-xs bg-slate-100 px-1 rounded border border-slate-200">{product.color}</span>}
                                                           </div>
                                                       </div>
                                                   </div>
-                                                  {bulkSelectedFile && product.files.some(f => f.file_url === bulkSelectedFile.url) && (
-                                                      <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded flex items-center">
+                                                  {isAlreadyAssigned && (
+                                                      <span className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded flex items-center flex-shrink-0 ml-2">
                                                           <CheckCircle size={12} className="mr-1" />
-                                                          Bereits zugewiesen
+                                                          Zugewiesen
                                                       </span>
                                                   )}
                                               </div>
-                                          ))
-                                      }
+                                          )});
+                                      })()}
                                   </div>
                               ) : (
                                   <div className="h-full flex flex-col items-center justify-center text-gray-400">
@@ -2052,10 +2115,10 @@ export default function CustomerDetails() {
                               </div>
                               <button 
                                   onClick={handleBulkAssign}
-                                  disabled={!bulkSelectedFile || !bulkProductSearch || isBulkAssigning}
+                                  disabled={!bulkSelectedFile || bulkSelectedProductIds.length === 0 || isBulkAssigning}
                                   className="bg-blue-600 text-white px-6 py-2 rounded font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                               >
-                                  {isBulkAssigning ? 'Zuweisung läuft...' : 'An gefundene Artikel zuweisen'}
+                                  {isBulkAssigning ? 'Zuweisung läuft...' : `An ${bulkSelectedProductIds.length} ausgewählte Artikel zuweisen`}
                               </button>
                           </div>
                       </div>
