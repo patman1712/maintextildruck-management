@@ -36,21 +36,18 @@ async function getShopware6Token(baseUrl: string, accessKey: string, secretKey: 
 async function getShopware6Orders(baseUrl: string, token: string) {
     const url = baseUrl.replace(/\/$/, '');
     
-    // Fetch orders with associations
-    // Filter: State = Open (technicalName: open) AND Payment = Paid (technicalName: paid)
-    // Note: This is a simplified filter. Real-world might need more robust state checking.
-    // Payload for SW6 Search API
+    // Fetch all recent orders (limit 100)
+    // We remove filters to allow importing all orders (including completed)
     const payload = {
-        includes: {
-            order: ['id', 'orderNumber', 'orderDate', 'amountTotal', 'lineItems', 'deliveries', 'orderCustomer', 'transactions', 'stateMachineState']
-        },
+        limit: 100,
+        sort: [{ field: 'orderDateTime', order: 'DESC' }],
         associations: {
             lineItems: {
                 associations: {
                     cover: {}
                 }
             },
-            stateMachineState: {}, // Need this for order status
+            stateMachineState: {}, 
             transactions: {
                 associations: {
                     stateMachineState: {}
@@ -58,28 +55,15 @@ async function getShopware6Orders(baseUrl: string, token: string) {
             },
             deliveries: {
                 associations: {
-                    shippingOrderAddress: {}
+                    shippingOrderAddress: {
+                        associations: {
+                            country: {}
+                        }
+                    }
                 }
-            }
-        },
-        /*
-        filter: [
-            {
-                type: 'equals',
-                field: 'stateMachineState.technicalName',
-                value: 'open'
             },
-            {
-                type: 'equals',
-                field: 'transactions.stateMachineState.technicalName',
-                value: 'paid'
-            }
-        ],
-        */
-        limit: 50,
-        sort: [
-            { field: 'orderDate', order: 'DESC' }
-        ]
+            orderCustomer: {}
+        }
     };
 
     try {
@@ -367,7 +351,9 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                     // params.append('filter[0][value]', '0');
                     // params.append('filter[1][property]', 'paymentStatusId'); 
                     // params.append('filter[1][value]', '12');
-                    params.append('limit', '50'); // Keep limit to avoid timeout
+                    params.append('limit', '100'); // Increased limit to find older/deleted orders
+                    params.append('sort[0][property]', 'orderTime'); // Ensure we get newest first
+                    params.append('sort[0][direction]', 'DESC');
 
                     const response = await fetch(`${url}/api/orders?${params.toString()}`, {
                         headers: {
