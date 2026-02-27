@@ -532,10 +532,14 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                         // User said: "benötigt es keine warenbestellung und dtf bestellung mehr"
                         // So if order is completed, items should not be pending.
                         
+                        // Fix for "NOT NULL constraint failed: order_items.supplier_id"
+                        // Ensure supplier_id is never null. If no product matched, use 'shopware-import' or 'unknown'
+                        const supplierId = (matchedProduct && matchedProduct.supplier_id) ? matchedProduct.supplier_id : 'shopware-import';
+
                         db.prepare(`
                             INSERT INTO order_items (id, order_id, supplier_id, item_name, item_number, quantity, status)
                             VALUES (?, ?, ?, ?, ?, ?, ?)
-                        `).run(itemId, newOrderId, matchedProduct ? matchedProduct.supplier_id : 'shopware-import', itemName, itemNumber, quantity, isCompleted ? 'completed' : 'pending');
+                        `).run(itemId, newOrderId, supplierId, itemName, itemNumber, quantity, isCompleted ? 'completed' : 'pending');
 
                         // 3. Copy Print Files from Matched Product
                         if (matchedProduct) {

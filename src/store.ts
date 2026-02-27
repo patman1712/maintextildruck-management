@@ -62,12 +62,18 @@ export interface Order {
   createdAt: string;
   description?: string;
   employees: string[];
-  files: { name: string; type: 'preview' | 'print' | 'vector' | 'internal'; url?: string; file?: File; customName?: string;
-  thumbnail?: string;
-  reference?: string;
-  status?: 'pending' | 'ordered';
-  quantity?: number;
-}[];
+  files: { 
+    name: string; 
+    type: 'preview' | 'print' | 'vector' | 'internal'; 
+    url?: string; 
+    file?: File; 
+    customName?: string;
+    thumbnail?: string;
+    reference?: string;
+    status?: 'pending' | 'ordered';
+    print_status?: 'pending' | 'ordered' | 'completed'; // Add print_status to file interface
+    quantity?: number;
+  }[];
   orderItems?: OrderItem[]; // New field
   approvalStatus?: 'pending' | 'approved' | 'rejected';
   approvedBy?: string;
