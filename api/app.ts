@@ -104,6 +104,42 @@ app.get('/api/debug/shopware-orders', (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
+
+app.delete('/api/debug/shopware-orders', (req, res) => {
+    try {
+        const deleteItems = db.prepare(`
+            DELETE FROM order_items 
+            WHERE order_id IN (
+                SELECT id FROM orders 
+                WHERE title LIKE 'Shopware Order #%' OR description LIKE '%Importiert aus Shopware%' OR shopware_order_id IS NOT NULL
+            )
+        `).run();
+
+        const deleteFiles = db.prepare(`
+            DELETE FROM files 
+            WHERE order_id IN (
+                SELECT id FROM orders 
+                WHERE title LIKE 'Shopware Order #%' OR description LIKE '%Importiert aus Shopware%' OR shopware_order_id IS NOT NULL
+            )
+        `).run();
+
+        const deleteOrders = db.prepare(`
+            DELETE FROM orders 
+            WHERE title LIKE 'Shopware Order #%' OR description LIKE '%Importiert aus Shopware%' OR shopware_order_id IS NOT NULL
+        `).run();
+
+        res.json({ 
+            success: true, 
+            deleted: {
+                orders: deleteOrders.changes,
+                items: deleteItems.changes,
+                files: deleteFiles.changes
+            }
+        });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
 // -------------------------------
 
 // Serve uploads

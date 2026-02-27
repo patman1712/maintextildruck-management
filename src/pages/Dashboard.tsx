@@ -285,7 +285,9 @@ function NavItem({ item, isOpen, onClick, menuSettings, isAdmin }: { item: MenuI
   }
 
   if (!item.to) return null;
-  const isActive = location.pathname === item.to || (item.to !== "/dashboard" && location.pathname.startsWith(item.to));
+  // Fix: Strict path matching to avoid highlighting parent routes (e.g. /dashboard/orders shouldn't be active for /dashboard/orders/online)
+  // We check if it matches exactly OR if it starts with the path followed by a slash (to indicate sub-route)
+  const isActive = location.pathname === item.to || (item.to !== "/dashboard" && location.pathname.startsWith(item.to + '/'));
 
   return (
     <Link
