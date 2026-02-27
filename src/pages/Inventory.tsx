@@ -517,6 +517,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const [selectedOrders, setSelectedOrders] = useState<Record<string, string[]>>({}); // supplierId -> orderIds[]
 
   const deleteOrderItem = useAppStore((state) => state.deleteOrderItem);
+  const deleteOrder = useAppStore((state) => state.deleteOrder);
 
   const updateStatus = async (orderId: string, itemId: string, status: 'pending' | 'ordered' | 'received') => {
     // Optimistically update local state if needed, but for now we rely on store update
@@ -527,6 +528,17 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     if (confirm('Posten wirklich löschen?')) {
       await deleteOrderItem(orderId, itemId);
     }
+  };
+
+  const handleDeleteOrder = async (orderId: string) => {
+      if (orderId === 'inventory-manual' || orderId.startsWith('manual-')) {
+          alert('Manuelle Lagerbestellungen können nicht als Ganzes gelöscht werden. Bitte löschen Sie die Positionen einzeln.');
+          return;
+      }
+      
+      if (confirm('Möchten Sie diesen Auftrag wirklich vollständig aus der Warenbestellung entfernen/archivieren? Dies kann nicht rückgängig gemacht werden.')) {
+          await deleteOrder(orderId);
+      }
   };
 
   const toggleOrderSelectionForSupplier = (supplierId: string, orderId: string) => {
@@ -752,6 +764,17 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                 {orderGroup.orderNumber && <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs font-mono">{orderGroup.orderNumber}</span>}
                                                 <span className="truncate">{orderGroup.orderId === 'inventory-manual' ? 'Lagerbestellung' : orderGroup.title}</span>
                                                 {!hasPending && <span className="text-xs font-normal text-green-600 bg-green-50 px-2 py-0.5 rounded shrink-0">Erledigt</span>}
+                                                
+                                                {/* Admin Order Delete Action */}
+                                                {currentUser?.role === 'admin' && orderGroup.orderId !== 'inventory-manual' && !orderGroup.orderId.startsWith('manual-') && (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); handleDeleteOrder(orderGroup.orderId); }}
+                                                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded ml-2"
+                                                        title="Ganzen Auftrag löschen/archivieren (Nur Admin)"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
                                             </h4>
                                             {orderGroup.orderId !== 'inventory-manual' && !orderGroup.orderId.startsWith('manual-') && (
                                                 <div className="text-xs text-gray-500 flex items-center mt-0.5">
@@ -822,17 +845,25 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                                         <RotateCcw size={18} />
                                                                     </button>
                                                                 )}
-                                                                {showCompleted && currentUser?.role === 'admin' && (
-                                                                    <button 
-                                                                        onClick={() => handleDelete(item.orderId, item.id)}
-                                                                        className="p-1.5 text-gray-400 hover:bg-red-50 rounded hover:text-red-600"
-                                                                        title="Löschen (Nur Admin)"
-                                                                    >
-                                                                        <Trash2 size={18} />
-                                                                    </button>
-                                                                )}
                                                             </div>
                                                         )}
+
+                                                        {/* Admin Always Allow Delete */}
+                                                        {currentUser?.role === 'admin' && (
+                                                            <button 
+                                                                onClick={() => handleDelete(item.orderId, item.id)}
+                                                                className="p-1.5 text-gray-400 hover:bg-red-50 rounded hover:text-red-600"
+                                                                title="Löschen (Nur Admin)"
+                                                            >
+                                                                <Trash2 size={18} />
+                                                            </button>
+                                                        )}
+                                                        
+                                                        {/* Regular User Delete (only if completed and admin, handled above, or other conditions?) 
+                                                            Wait, original code only showed delete if showCompleted && admin. 
+                                                            Now admin can delete ANYTIME. 
+                                                            We need to avoid duplicating the button.
+                                                         */}
                                                     </div>
                                                 </div>
                                             </div>
