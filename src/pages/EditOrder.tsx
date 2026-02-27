@@ -7,6 +7,7 @@ interface CustomerProduct {
     id: string;
     name: string;
     product_number: string;
+    source?: 'manual' | 'shopware';
     supplier_id?: string;
     files: {
         id: string;
@@ -1163,39 +1164,50 @@ export default function EditOrder() {
                             />
                         </div>
                         
-                        {customerProducts.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase())).length === 0 ? (
-                            <p className="text-center text-gray-500 py-8">
-                                {productSearchTerm ? "Keine passenden Artikel gefunden." : "Keine Artikel für diesen Kunden hinterlegt."}
-                            </p>
-                        ) : (
-                            <div className="grid grid-cols-1 gap-2">
-                                {customerProducts
-                                    .filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()))
-                                    .map((product) => (
-                                    <div 
-                                        key={product.id} 
-                                        className="border rounded p-3 cursor-pointer hover:bg-gray-50 hover:border-red-300 transition-all flex justify-between items-center group"
-                                        onClick={() => setSelectedProduct(product)}
-                                    >
-                                        <div>
-                                            <p className="font-medium text-gray-800">{product.name}</p>
-                                            <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
-                                                {product.product_number && <span className="bg-gray-100 px-1.5 py-0.5 rounded font-mono">{product.product_number}</span>}
-                                                {product.supplier_id && suppliers.find(s => s.id === product.supplier_id) && (
-                                                    <span className="text-purple-600 flex items-center">
-                                                        <Package size={10} className="mr-1" />
-                                                        {suppliers.find(s => s.id === product.supplier_id)?.name}
-                                                    </span>
-                                                )}
+                        {(() => {
+                            const currentOrder = orders.find(o => o.id === id);
+                            const isOnlineOrder = !!currentOrder?.shopwareOrderId;
+                            const filtered = customerProducts.filter(p => 
+                                p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && 
+                                (isOnlineOrder ? p.source === 'shopware' : p.source !== 'shopware')
+                            );
+
+                            if (filtered.length === 0) {
+                                return (
+                                    <p className="text-center text-gray-500 py-8">
+                                        {productSearchTerm ? "Keine passenden Artikel gefunden." : (isOnlineOrder ? "Keine Online-Artikel für diesen Kunden." : "Keine manuellen Artikel für diesen Kunden.")}
+                                    </p>
+                                );
+                            }
+
+                            return (
+                                <div className="grid grid-cols-1 gap-2">
+                                    {filtered.map((product) => (
+                                        <div 
+                                            key={product.id} 
+                                            className="border rounded p-3 cursor-pointer hover:bg-gray-50 hover:border-red-300 transition-all flex justify-between items-center group"
+                                            onClick={() => setSelectedProduct(product)}
+                                        >
+                                            <div>
+                                                <p className="font-medium text-gray-800">{product.name}</p>
+                                                <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
+                                                    {product.product_number && <span className="bg-gray-100 px-1.5 py-0.5 rounded font-mono">{product.product_number}</span>}
+                                                    {product.supplier_id && suppliers.find(s => s.id === product.supplier_id) && (
+                                                        <span className="text-purple-600 flex items-center">
+                                                            <Package size={10} className="mr-1" />
+                                                            {suppliers.find(s => s.id === product.supplier_id)?.name}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="text-red-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Plus size={20} />
                                             </div>
                                         </div>
-                                        <div className="text-red-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Plus size={20} />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                                    ))}
+                                </div>
+                            );
+                        })()}
                     </div>
                 ) : (
                     // Step 2: Enter Details
