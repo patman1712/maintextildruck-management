@@ -312,6 +312,12 @@ try {
       db.exec("ALTER TABLE files ADD COLUMN print_status TEXT DEFAULT 'pending'");
   }
 
+  const hasThumbnailFile = fileColumns.some(col => col.name === 'thumbnail');
+  if (!hasThumbnailFile) {
+      console.log('Migrating database: Adding thumbnail to files table');
+      db.exec("ALTER TABLE files ADD COLUMN thumbnail TEXT");
+  }
+
   const customerProductCols = db.prepare("PRAGMA table_info(customer_products)").all() as any[];
   const hasColor = customerProductCols.some(col => col.name === 'color');
   if (!hasColor) {
