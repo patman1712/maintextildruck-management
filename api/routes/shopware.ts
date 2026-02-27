@@ -322,12 +322,21 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
 
     // CLEANUP: Delete orders that look like Shopware imports but have no shopware_order_id or are incomplete
     // This fixes the issue where failed imports left "zombie" orders in the manual list
+    // WARNING: This is aggressive but requested by user to clean up broken state.
     try {
         const deleted = db.prepare(`
             DELETE FROM orders 
             WHERE (shopware_order_id IS NULL OR shopware_order_id = '') 
             AND (title LIKE 'Shopware Order #%' OR description LIKE '%Importiert aus Shopware%')
         `).run();
+        
+        // Also delete items related to these orders? 
+        // SQLite usually handles this via foreign keys if CASCADE is set, but let's be safe.
+        // Actually our DB schema doesn't seem to have CASCADE on order_items -> orders.
+        // So we should clean up orphans.
+        db.prepare('DELETE FROM order_items WHERE order_id NOT IN (SELECT id FROM orders)').run();
+        db.prepare('DELETE FROM files WHERE order_id NOT IN (SELECT id FROM orders)').run();
+
         if (deleted.changes > 0) {
             console.log(`Cleaned up ${deleted.changes} broken Shopware import orders.`);
             debugInfo.push(`Cleaned up ${deleted.changes} broken orders.`);
