@@ -81,7 +81,7 @@ export default function CustomerDetails() {
   
   // Bulk Assign State
   const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
-  const [bulkSelectedFile, setBulkSelectedFile] = useState<{url: string, name: string, thumbnail?: string} | null>(null);
+  const [bulkSelectedFiles, setBulkSelectedFiles] = useState<{url: string, name: string, thumbnail?: string}[]>([]);
   const [bulkProductSearch, setBulkProductSearch] = useState('');
   const [bulkAssignType, setBulkAssignType] = useState<'print' | 'view'>('print');
   const [isBulkAssigning, setIsBulkAssigning] = useState(false);
@@ -391,11 +391,11 @@ export default function CustomerDetails() {
 
             if (showBulkAssignModal) {
                 // Bulk Mode
-                setBulkSelectedFile({
+                setBulkSelectedFiles(prev => [...prev, {
                     url: fileUrl,
                     name: fileName,
                     thumbnail: thumbnail
-                });
+                }]);
             } else if (editingProduct) {
                 // Single Mode
                 await handleAssignFile({
@@ -415,7 +415,7 @@ export default function CustomerDetails() {
   };
 
   const handleBulkAssign = async () => {
-      if (!bulkSelectedFile || !customer) return;
+      if (bulkSelectedFiles.length === 0 || !customer) return;
       
       if (bulkSelectedProductIds.length === 0) {
           alert('Bitte wählen Sie mindestens einen Artikel aus.');
@@ -423,13 +423,13 @@ export default function CustomerDetails() {
       }
 
       console.log('Starting bulk assign:', {
-          file: bulkSelectedFile.name,
+          files: bulkSelectedFiles.length,
           products: bulkSelectedProductIds.length,
           supplierId: bulkSupplierId
       });
 
       const supplierName = bulkSupplierId ? suppliers.find(s => s.id === bulkSupplierId)?.name : null;
-      const confirmMessage = `Möchten Sie die Datei "${bulkSelectedFile.name}" wirklich an ${bulkSelectedProductIds.length} ausgewählte Artikel zuweisen?` +
+      const confirmMessage = `Möchten Sie ${bulkSelectedFiles.length} Datei(en) wirklich an ${bulkSelectedProductIds.length} ausgewählte Artikel zuweisen?` +
           (supplierName ? `\n\nZusätzlich wird der Lieferant für diese Artikel auf "${supplierName}" gesetzt.` : '');
 
       if (!confirm(confirmMessage)) {
@@ -443,10 +443,12 @@ export default function CustomerDetails() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                   productIds: bulkSelectedProductIds,
-                  fileUrl: bulkSelectedFile.url,
-                  fileName: bulkSelectedFile.name,
-                  thumbnailUrl: bulkSelectedFile.thumbnail,
-                  type: bulkAssignType,
+                  files: bulkSelectedFiles.map(f => ({
+                      fileUrl: f.url,
+                      fileName: f.name,
+                      thumbnailUrl: f.thumbnail,
+                      type: bulkAssignType
+                  })),
                   supplierId: bulkSupplierId
               })
           });
@@ -456,7 +458,7 @@ export default function CustomerDetails() {
               alert(data.message);
               fetchProducts();
               setShowBulkAssignModal(false);
-              setBulkSelectedFile(null);
+              setBulkSelectedFiles([]);
               setBulkProductSearch('');
               setBulkSelectedProductIds([]);
               setBulkSupplierId(''); // Reset supplier selection
@@ -469,6 +471,17 @@ export default function CustomerDetails() {
       } finally {
           setIsBulkAssigning(false);
       }
+  };
+
+  const toggleFileSelection = (file: {url: string, name: string, thumbnail?: string}) => {
+    setBulkSelectedFiles(prev => {
+        const exists = prev.some(f => f.url === file.url);
+        if (exists) {
+            return prev.filter(f => f.url !== file.url);
+        } else {
+            return [...prev, file];
+        }
+    });
   };
 
   const toggleProductSelection = (productId: string) => {
@@ -2103,8 +2116,8 @@ export default function CustomerDetails() {
                                         filteredPrintFilesForAssign.map((file, idx) => (
                                           <div 
                                               key={idx}
-                                              onClick={() => setBulkSelectedFile({ url: file.url, name: file.customName || file.name, thumbnail: file.thumbnail })}
-                                              className={`p-2 rounded-lg border cursor-pointer flex items-center space-x-3 transition-all ${bulkSelectedFile?.url === file.url ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500 shadow-sm' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm'}`}
+                                              onClick={() => toggleFileSelection({ url: file.url, name: file.customName || file.name, thumbnail: file.thumbnail })}
+                                              className={`p-2 rounded-lg border cursor-pointer flex items-center space-x-3 transition-all ${bulkSelectedFiles.some(f => f.url === file.url) ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500 shadow-sm' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm'}`}
                                           >
                                               <div className="h-10 w-10 bg-gray-100 rounded-md flex-shrink-0 flex items-center justify-center overflow-hidden border border-gray-200">
                                                   {file.thumbnail ? (
@@ -2189,7 +2202,7 @@ export default function CustomerDetails() {
 
                                           return visibleProducts.map(product => {
                                               const isSelected = bulkSelectedProductIds.includes(product.id);
-                                              const isAlreadyAssigned = bulkSelectedFile && product.files && product.files.some(f => f.file_url === bulkSelectedFile.url);
+                                              const isAlreadyAssigned = bulkSelectedFiles.length > 0 && product.files && bulkSelectedFiles.every(sf => product.files.some(f => f.file_url === sf.url));
 
                                               return (
                                               <div 
@@ -2238,10 +2251,10 @@ export default function CustomerDetails() {
 
                           <div className="p-4 border-t border-gray-200 bg-white flex justify-between items-center">
                               <div className="text-sm text-gray-600">
-                                  {bulkSelectedFile ? (
+                                  {bulkSelectedFiles.length > 0 ? (
                                       <span className="flex items-center text-green-600">
                                           <FileText size={16} className="mr-2" />
-                                          Datei ausgewählt: <strong>{bulkSelectedFile.name}</strong>
+                                          <strong>{bulkSelectedFiles.length}</strong> Datei(en) ausgewählt
                                       </span>
                                   ) : (
                                       <span className="text-red-500">Bitte erst eine Datei auswählen</span>
@@ -2249,7 +2262,7 @@ export default function CustomerDetails() {
                               </div>
                               <button 
                                   onClick={handleBulkAssign}
-                                  disabled={!bulkSelectedFile || bulkSelectedProductIds.length === 0 || isBulkAssigning}
+                                  disabled={bulkSelectedFiles.length === 0 || bulkSelectedProductIds.length === 0 || isBulkAssigning}
                                   className="bg-blue-600 text-white px-6 py-2 rounded font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                               >
                                   {isBulkAssigning ? 'Zuweisung läuft...' : `An ${bulkSelectedProductIds.length} ausgewählte Artikel zuweisen`}

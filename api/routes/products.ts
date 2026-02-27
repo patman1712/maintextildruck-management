@@ -7,20 +7,28 @@ const router = Router();
 
 // POST Bulk assign file to multiple products (MUST be defined before /:customerId)
 router.post('/bulk-files', (req: Request, res: Response) => {
-    const { productIds, fileUrl, fileName, thumbnailUrl, type, quantity, supplierId } = req.body;
+    const { productIds, fileUrl, fileName, thumbnailUrl, type, quantity, supplierId, files } = req.body;
+
+    // Normalize files input to array
+    let filesToProcess: any[] = [];
+    if (files && Array.isArray(files)) {
+        filesToProcess = files;
+    } else if (fileUrl) {
+        filesToProcess = [{ fileUrl, fileName, thumbnailUrl, type, quantity }];
+    }
 
     console.log('Received bulk-files request:', { 
         productIdsCount: productIds?.length, 
         productIds, 
-        fileUrl, 
+        filesCount: filesToProcess.length,
         supplierId 
     });
 
     if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
         return res.status(400).json({ success: false, error: 'Product IDs are required' });
     }
-    if (!fileUrl) {
-        return res.status(400).json({ success: false, error: 'File URL is required' });
+    if (filesToProcess.length === 0) {
+        return res.status(400).json({ success: false, error: 'At least one file is required' });
     }
 
     try {
@@ -37,10 +45,21 @@ router.post('/bulk-files', (req: Request, res: Response) => {
 
         const transaction = db.transaction((ids: string[]) => {
             for (const productId of ids) {
-                console.log(`Processing product ${productId} - Inserting file and updating supplier: ${supplierId}`);
-                // Insert file
-                const id = Math.random().toString(36).substr(2, 9);
-                insertFileStmt.run(id, productId, fileUrl, fileName, thumbnailUrl, type || 'print', quantity || 1);
+                console.log(`Processing product ${productId}`);
+                
+                // Insert all files for this product
+                for (const file of filesToProcess) {
+                    const id = Math.random().toString(36).substr(2, 9);
+                    insertFileStmt.run(
+                        id, 
+                        productId, 
+                        file.fileUrl || file.url, // Handle both key variations
+                        file.fileName || file.name, 
+                        file.thumbnailUrl || file.thumbnail, 
+                        file.type || type || 'print', 
+                        file.quantity || quantity || 1
+                    );
+                }
 
                 // Update supplier if provided
                 if (supplierId) {
@@ -52,7 +71,7 @@ router.post('/bulk-files', (req: Request, res: Response) => {
 
         transaction(productIds);
 
-        res.json({ success: true, message: `File assigned to ${productIds.length} products${supplierId ? ' and supplier updated' : ''}` });
+        res.json({ success: true, message: `${filesToProcess.length} file(s) assigned to ${productIds.length} products${supplierId ? ' and supplier updated' : ''}` });
     } catch (error: any) {
         console.error('Bulk assign error:', error);
         res.status(500).json({ success: false, error: error.message });
