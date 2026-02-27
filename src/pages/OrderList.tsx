@@ -211,10 +211,11 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
     // Source Filter (Manual vs Online)
     if (source === 'online') {
         // Show only orders with shopware_order_id
-        if (!order.shopwareOrderId) return false;
+        // Ensure we check for non-empty string
+        if (!order.shopwareOrderId || order.shopwareOrderId === '') return false;
     } else if (source === 'manual') {
         // Show only orders WITHOUT shopware_order_id
-        if (order.shopwareOrderId) return false;
+        if (order.shopwareOrderId && order.shopwareOrderId !== '') return false;
     }
     
     return matchesSearch && matchesStatus;
