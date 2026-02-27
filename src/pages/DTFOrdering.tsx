@@ -184,8 +184,33 @@ export default function DTFOrdering() {
       // Add all, avoid duplicates (or increment quantity?)
       // Requirement: "alle dateien sollen automatisch dann in ausgewählte dateien"
       
-      filesToAdd.forEach(file => {
-          addFile(file); // Re-use addFile logic which handles duplicates/increments
+      // FIX: Add ALL files to selection state directly to avoid loop/state batching issues
+      const newFiles = filesToAdd.map(file => ({
+            ...file,
+            id: Math.random().toString(36).substr(2, 9),
+            quantity: file.quantity || 1,
+            width: 0,
+            height: 0
+      }));
+
+      setSelectedFiles(prev => {
+          // Filter out files that are already EXACTLY in the list (same URL + OrderID) to avoid double-adding on double-click
+          // But allow adding if not present.
+          
+          const uniqueNewFiles = newFiles.filter(nf => !prev.some(pf => pf.url === nf.url && pf.orderId === nf.orderId));
+          
+          // If all files already exist, increment quantity for existing
+          if (uniqueNewFiles.length === 0) {
+              return prev.map(pf => {
+                  const matchingNew = newFiles.find(nf => nf.url === pf.url && nf.orderId === pf.orderId);
+                  if (matchingNew) {
+                      return { ...pf, quantity: pf.quantity + matchingNew.quantity };
+                  }
+                  return pf;
+              });
+          }
+          
+          return [...prev, ...uniqueNewFiles];
       });
   };
 
