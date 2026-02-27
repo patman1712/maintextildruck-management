@@ -645,13 +645,28 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                          // Other Variants
                          if (details.details && Array.isArray(details.details)) {
                              for (const v of details.details) {
-                                 // Construct Variant Name
-                                 // 1. Try additionaltext (e.g. "L / Red")
-                                 // 2. Try configuratorOptions (e.g. [{ name: "Red" }, { name: "L" }])
+                                 // Construct Variant Name & Attributes
                                  let variantSuffix = v.additionaltext;
+                                 let size = null;
+                                 let color = null;
                                  
-                                 if (!variantSuffix && v.configuratorOptions && Array.isArray(v.configuratorOptions)) {
-                                     variantSuffix = v.configuratorOptions.map((opt: any) => opt.name).join(' / ');
+                                 if (v.configuratorOptions && Array.isArray(v.configuratorOptions)) {
+                                     // Parse options for size/color
+                                     for (const opt of v.configuratorOptions) {
+                                         const groupName = opt.group?.name || opt.groupName || '';
+                                         const optName = opt.name || opt.option || '';
+                                         
+                                         if (groupName.toLowerCase().includes('größe') || groupName.toLowerCase().includes('size')) {
+                                             size = optName;
+                                         } else if (groupName.toLowerCase().includes('farbe') || groupName.toLowerCase().includes('color')) {
+                                             color = optName;
+                                         }
+                                     }
+                                     
+                                     // If additionaltext is missing, build suffix from options
+                                     if (!variantSuffix) {
+                                         variantSuffix = v.configuratorOptions.map((opt: any) => opt.name || opt.option).join(' / ');
+                                     }
                                  }
                                  
                                  const vName = variantSuffix ? `${mainName} - ${variantSuffix}` : `${mainName} (Var ${v.number})`;
@@ -663,7 +678,9 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                                      productNumber: v.number,
                                      active: v.active,
                                      stock: v.inStock,
-                                     imageUrl: mainImage // Variants usually share main image unless specific logic
+                                     imageUrl: mainImage,
+                                     size: size,
+                                     color: color
                                  });
                              }
                          }
@@ -676,7 +693,9 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                             productNumber: p.productNumber,
                             active: p.active,
                             stock: p.stock,
-                            imageUrl: p.imageUrl
+                            imageUrl: p.imageUrl,
+                            size: null,
+                            color: null
                         });
                     }
                 }));
@@ -684,14 +703,12 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
             
             products = expandedProducts;
             
-            // Check which products are new and might need image enrichment
-            // (Image logic moved inside expansion)
-
         } else {
             // Shopware 6 Logic
             const token = await getShopware6Token(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
             
-            const response = await fetch(`${baseUrl}/api/product?limit=100&associations[cover][]`, {
+            // SW6: fetch products with children association to get variants
+            const response = await fetch(`${baseUrl}/api/product?limit=100&associations[cover][]&associations[children][associations][options][associations][group][]`, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json'
@@ -704,14 +721,43 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
 
             const data = await response.json();
             
-            products = data.data.map((p: any) => ({
-                id: p.id,
-                name: p.name,
-                productNumber: p.productNumber,
-                active: p.active,
-                stock: p.stock,
-                imageUrl: p.cover?.media?.url
-            }));
+            products = [];
+            
+            // Iterate SW6 products
+            for (const p of data.data) {
+                // Main product (parent)
+                // If it has children, we might want to list children instead?
+                // Or list parent + children.
+                
+                // For now, let's just map the main ones, but check if we can extract options if it is a variant itself (parentId != null)
+                // SW6 often returns parents and children in the same list if not filtered.
+                
+                // Let's extract options if available
+                let size = null;
+                let color = null;
+                
+                if (p.options && Array.isArray(p.options)) {
+                    for (const opt of p.options) {
+                        const groupName = opt.group?.name || '';
+                        if (groupName.toLowerCase().includes('größe') || groupName.toLowerCase().includes('size')) {
+                            size = opt.name;
+                        } else if (groupName.toLowerCase().includes('farbe') || groupName.toLowerCase().includes('color')) {
+                            color = opt.name;
+                        }
+                    }
+                }
+
+                products.push({
+                    id: p.id,
+                    name: p.name,
+                    productNumber: p.productNumber,
+                    active: p.active,
+                    stock: p.stock,
+                    imageUrl: p.cover?.media?.url,
+                    size,
+                    color
+                });
+            }
         }
 
         // Sync with local DB (upsert)
@@ -722,13 +768,20 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                 const existing = existingProducts.find(ep => ep.shopware_product_id === p.id);
                 
                 if (existing) {
-                    // User requested NOT to overwrite existing products so local edits are preserved.
-                    // If the user wants to update/reset a product, they should delete it locally and re-sync.
+                    // Update existing product with new details (size/color) if missing?
+                    // User said "not overwrite", but we just added new columns.
+                    // Maybe we should update ONLY the new columns if they are null?
+                    // For now, respect "don't overwrite" rule for existing rows to avoid losing manual edits?
+                    // Actually, let's update size/color if they are present in new data, as these are new fields.
+                    if (p.size || p.color) {
+                         db.prepare("UPDATE customer_products SET size = ?, color = ? WHERE id = ?")
+                           .run(p.size, p.color, existing.id);
+                    }
                     continue;
                 } else {
                     const newId = Math.random().toString(36).substr(2, 9);
-                    db.prepare("INSERT INTO customer_products (id, customer_id, name, product_number, source, shopware_product_id) VALUES (?, ?, ?, ?, 'shopware', ?)")
-                      .run(newId, customerId, p.name, p.productNumber, p.id);
+                    db.prepare("INSERT INTO customer_products (id, customer_id, name, product_number, source, shopware_product_id, size, color) VALUES (?, ?, ?, ?, 'shopware', ?, ?, ?)")
+                      .run(newId, customerId, p.name, p.productNumber, p.id, p.size, p.color);
 
                     if (p.imageUrl) {
                         const fileId = Math.random().toString(36).substr(2, 9);

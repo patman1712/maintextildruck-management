@@ -10,6 +10,8 @@ interface Product {
     product_number: string;
     source: 'shopware' | 'manual';
     supplier_id?: string;
+    size?: string;
+    color?: string;
     files: {
         id: string;
         file_url: string;
@@ -43,7 +45,7 @@ export default function CustomerDetails() {
   const [uploadFileName, setUploadFileName] = useState("");
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'previews' | 'products' | 'shopware'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'previews' | 'products' | 'online_products' | 'shopware'>('overview');
   
   const [customer, setCustomer] = useState(customers.find(c => c.id === id));
   const [customerOrders, setCustomerOrders] = useState(
@@ -751,7 +753,14 @@ export default function CustomerDetails() {
   const filteredProducts = products.filter(p => 
       (p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
       (p.product_number && p.product_number.toLowerCase().includes(productSearch.toLowerCase()))) &&
-      p.product_number !== 'FREISTELLER' // Filter out Freisteller dummy products from the main list
+      p.product_number !== 'FREISTELLER' && // Filter out Freisteller dummy products from the main list
+      p.source !== 'shopware' // Only show manual products in the main list
+  );
+
+  const shopwareProducts = products.filter(p => 
+      (p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
+      (p.product_number && p.product_number.toLowerCase().includes(productSearch.toLowerCase()))) &&
+      p.source === 'shopware'
   );
 
   return (
@@ -849,12 +858,21 @@ export default function CustomerDetails() {
                 </div>
             </button>
             <button
+                onClick={() => setActiveTab('online_products')}
+                className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'online_products' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+                <div className="flex items-center">
+                    <ShoppingBag size={16} className="mr-2" />
+                    Online Artikel ({shopwareProducts.length})
+                </div>
+            </button>
+            <button
                 onClick={() => setActiveTab('shopware')}
                 className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'shopware' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
                 <div className="flex items-center">
-                    <ShoppingBag size={16} className="mr-2" />
-                    Shopware Anbindung
+                    <Link size={16} className="mr-2" />
+                    Shopware Config
                 </div>
             </button>
         </div>
@@ -1340,6 +1358,201 @@ export default function CustomerDetails() {
                         <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
                             <Package size={48} className="mx-auto text-gray-300 mb-4" />
                             <p>Keine Artikel gefunden.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
+        {/* TAB: ONLINE PRODUCTS */}
+        {activeTab === 'online_products' && (
+            <div className="p-8 animate-in fade-in">
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex items-center space-x-4">
+                        <h3 className="text-lg font-bold text-gray-800">Online Artikel (Shopware)</h3>
+                        <div className="relative">
+                            <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
+                            <input 
+                                type="text" 
+                                placeholder="Suchen..." 
+                                value={productSearch}
+                                onChange={(e) => setProductSearch(e.target.value)}
+                                className="pl-9 border border-gray-300 rounded-md py-1.5 text-sm w-64"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex space-x-2">
+                         <button 
+                            onClick={fetchShopwareProducts}
+                            disabled={isLoadingProducts || !shopwareConfig.url}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center"
+                        >
+                            <Download size={16} className="mr-2" />
+                            {isLoadingProducts ? 'Lade...' : 'Artikel importieren'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    {shopwareProducts.map(product => (
+                        <div key={product.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-all">
+                            <div className="flex justify-between items-start">
+                                <div className="flex items-start">
+                                    <div className="rounded-lg mr-4 overflow-hidden w-16 h-16 flex-shrink-0 flex items-center justify-center border border-gray-100 bg-blue-50 text-blue-600">
+                                        {(() => {
+                                            const image = product.files?.find(f => f.thumbnail_url || f.file_name.match(/\.(jpg|jpeg|png|webp)$/i));
+                                            if (image) {
+                                                return <img src={image.thumbnail_url || image.file_url} alt={product.name} className="w-full h-full object-contain bg-white" />;
+                                            }
+                                            return <ShoppingBag size={24} />;
+                                        })()}
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-gray-900">{product.name}</h4>
+                                        <div className="flex items-center mt-1 space-x-2 flex-wrap gap-y-1">
+                                            {product.product_number && (
+                                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-mono">
+                                                    {product.product_number}
+                                                </span>
+                                            )}
+                                            {product.size && (
+                                                <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium border border-slate-200">
+                                                    Größe: {product.size}
+                                                </span>
+                                            )}
+                                            {product.color && (
+                                                <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium border border-slate-200">
+                                                    Farbe: {product.color}
+                                                </span>
+                                            )}
+                                            {/* Fallback if size/color not parsed but likely in name */}
+                                            {!product.size && !product.color && product.name.includes(' - ') && (
+                                                <span className="text-xs text-gray-500 italic">
+                                                    Variante aus Titel
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex space-x-2">
+                                    <button 
+                                        onClick={() => handleDeleteProduct(product.id)}
+                                        className="text-gray-400 hover:text-red-600 p-1"
+                                        title="Löschen"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 pt-4 border-t border-gray-100">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-semibold text-gray-500 uppercase">Dateien & Ansichten</span>
+                                    <div className="flex space-x-2">
+                                        <button 
+                                            onClick={() => {
+                                                setEditingProduct(product);
+                                                setShowMappingModal(true);
+                                                setAssignFileMode(true);
+                                                setAssignFileType('view');
+                                            }}
+                                            className="text-xs text-blue-600 hover:text-blue-800 flex items-center font-medium"
+                                        >
+                                            <ImageIcon size={12} className="mr-1" />
+                                            Ansicht +
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                setEditingProduct(product);
+                                                setShowMappingModal(true);
+                                                setAssignFileMode(true);
+                                                setAssignFileType('print');
+                                            }}
+                                            className="text-xs text-red-600 hover:text-red-800 flex items-center font-medium"
+                                        >
+                                            <Plus size={12} className="mr-1" />
+                                            Druckdaten +
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Views */}
+                                {product.files && product.files.filter(f => f.type === 'view').length > 0 && (
+                                    <div className="mb-3">
+                                        <div className="flex flex-wrap gap-3">
+                                            {product.files.filter(f => f.type === 'view').map(file => (
+                                                <div key={file.id} className="relative group w-16">
+                                                    <div className="h-16 w-16 bg-gray-50 rounded border border-gray-200 overflow-hidden flex items-center justify-center relative">
+                                                        <img 
+                                                            src={file.thumbnail_url || file.file_url} 
+                                                            className="w-full h-full object-contain" 
+                                                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                        />
+                                                    </div>
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRemoveFile(file.id, product);
+                                                        }}
+                                                        className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                                    >
+                                                        <X size={10} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Print Files */}
+                                {product.files && product.files.filter(f => f.type !== 'view').length > 0 && (
+                                    <div className="mb-3">
+                                        <div className="flex flex-wrap gap-3">
+                                            {product.files.filter(f => f.type !== 'view').map(file => (
+                                                <div key={file.id} className="relative group w-16">
+                                                    <div className="h-16 w-16 bg-gray-50 rounded border border-gray-200 overflow-hidden flex items-center justify-center relative">
+                                                        {(file.thumbnail_url || file.file_url) ? (
+                                                            <img 
+                                                                src={file.thumbnail_url || file.file_url} 
+                                                                className="w-full h-full object-contain" 
+                                                                onError={(e) => {
+                                                                    e.currentTarget.style.display = 'none';
+                                                                    e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
+                                                                }}
+                                                            />
+                                                        ) : null}
+                                                        
+                                                        <div className={`fallback-icon ${(file.thumbnail_url || file.file_url) ? 'hidden' : ''} flex items-center justify-center w-full h-full absolute inset-0`}>
+                                                            <FileText size={20} className="text-red-500" />
+                                                        </div>
+                                                    </div>
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRemoveFile(file.id, product);
+                                                        }}
+                                                        className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-sm border border-gray-200 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                                    >
+                                                        <X size={10} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                    {shopwareProducts.length === 0 && (
+                        <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
+                            <ShoppingBag size={48} className="mx-auto text-gray-300 mb-4" />
+                            <p>Keine Online-Artikel importiert.</p>
+                            <button 
+                                onClick={fetchShopwareProducts}
+                                className="mt-4 text-blue-600 hover:underline"
+                            >
+                                Jetzt importieren
+                            </button>
                         </div>
                     )}
                 </div>

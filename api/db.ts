@@ -295,6 +295,14 @@ try {
     console.log('Migrating database: Adding shopware_order_id to orders table');
     db.exec('ALTER TABLE orders ADD COLUMN shopware_order_id TEXT');
   }
+
+  const customerProductCols = db.prepare("PRAGMA table_info(customer_products)").all() as any[];
+  const hasColor = customerProductCols.some(col => col.name === 'color');
+  if (!hasColor) {
+    console.log('Migrating database: Adding color/size to customer_products table');
+    db.exec('ALTER TABLE customer_products ADD COLUMN color TEXT');
+    db.exec('ALTER TABLE customer_products ADD COLUMN size TEXT');
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }
