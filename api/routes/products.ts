@@ -185,6 +185,18 @@ router.delete('/customer/:customerId/all', (req: Request, res: Response) => {
     }
 });
 
+// DELETE ALL Shopware products for a customer
+router.delete('/customer/:customerId/shopware', (req: Request, res: Response) => {
+    const { customerId } = req.params;
+    try {
+        const result = db.prepare("DELETE FROM customer_products WHERE customer_id = ? AND source = 'shopware'").run(customerId);
+        res.json({ success: true, message: 'All Shopware products deleted', changes: result.changes });
+    } catch (error: any) {
+        console.error('Error deleting shopware products:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // POST create manual product
 router.post('/:customerId', (req: Request, res: Response) => {
     const { customerId } = req.params;

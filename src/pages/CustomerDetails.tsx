@@ -310,6 +310,35 @@ export default function CustomerDetails() {
       });
   };
 
+  const handleDeleteAllShopwareProducts = () => {
+      if (!customer) return;
+      
+      const shopwareCount = products.filter(p => p.source === 'shopware').length;
+      if (shopwareCount === 0) return;
+
+      setConfirmModal({
+          isOpen: true,
+          title: 'Alle Online-Artikel löschen',
+          message: `Möchten Sie wirklich alle ${shopwareCount} importierten Shopware-Artikel löschen? Manuell erstellte Artikel bleiben erhalten.`,
+          type: 'danger',
+          confirmText: 'Alle löschen',
+          onConfirm: async () => {
+              try {
+                  const res = await fetch(`/api/products/customer/${customer.id}/shopware`, { method: 'DELETE' });
+                  const data = await res.json();
+                  if (data.success) {
+                      fetchProducts();
+                  } else {
+                      alert('Fehler: ' + data.error);
+                  }
+              } catch (err) {
+                  console.error(err);
+                  alert('Netzwerkfehler.');
+              }
+          }
+      });
+  };
+
   const handleAssignFile = async (file: any, type: 'print' | 'view' = assignFileType) => {
       if (!editingProduct) return;
       try {
@@ -1560,6 +1589,16 @@ export default function CustomerDetails() {
                         </div>
                     </div>
                     <div className="flex space-x-2">
+                        {shopwareProducts.length > 0 && (
+                             <button 
+                                 onClick={handleDeleteAllShopwareProducts}
+                                 className="bg-white text-red-600 border border-red-200 px-4 py-2 rounded-md text-sm font-medium hover:bg-red-50 flex items-center"
+                                 title="Alle importierten Shopware-Artikel löschen"
+                             >
+                                 <Trash2 size={16} className="mr-2" />
+                                 Alle löschen
+                             </button>
+                        )}
                         <button 
                              onClick={() => {
                                  setShowBulkAssignModal(true);
