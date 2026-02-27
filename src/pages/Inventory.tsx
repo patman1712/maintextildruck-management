@@ -488,6 +488,12 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     const grouped: Record<string, { supplier: Supplier | undefined, items: (OrderItem & { orderTitle: string, orderNumber?: string, orderDeadline: string })[] }> = {};
     
     orders.forEach(order => {
+        // Skip archived orders from "Current" tab
+        // If showCompleted is true (History tab), we might want to show archived orders? 
+        // Or should archived be completely hidden?
+        // Usually 'archived' means hidden from active view.
+        if (order.status === 'archived' && !showCompleted) return;
+
         if (order.orderItems) {
             order.orderItems.forEach(item => {
                 // Filter based on completion status
