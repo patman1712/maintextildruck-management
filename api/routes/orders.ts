@@ -32,7 +32,9 @@ router.get('/', (req: Request, res: Response) => {
     approvedAt: row.approved_at,
     rejectionReason: row.rejection_reason,
     approvalToken: row.approval_token,
-    approvalComment: row.approval_comment
+    approvalComment: row.approval_comment,
+    shopwareOrderId: row.shopware_order_id, // Map DB column to frontend property
+    steps: row.steps ? JSON.parse(row.steps) : { processing: !!row.processing, produced: !!row.produced, invoiced: !!row.invoiced } // Map steps JSON or fallback
   }));
   
   res.json({ success: true, data: orders });
