@@ -609,9 +609,28 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     Object.keys(itemsByOrder).forEach(orderTitle => {
         body += `(${orderTitle})\n`;
         itemsByOrder[orderTitle].forEach(item => {
-            const sizeDisplay = item.quantity > 1 ? `${item.quantity}x ${item.size}` : item.size;
-            // Use itemNumber if available, otherwise fallback to itemName
-            const identifier = item.itemNumber ? item.itemNumber : item.itemName;
+            // Logic to clean item number (remove .X suffix)
+            // e.g. "7402-400.4" -> "7402-400"
+            const cleanItemNumber = item.itemNumber ? item.itemNumber.replace(/\.\d+$/, '') : '';
+            
+            // Logic to extract size from item name if size is missing or empty
+            let cleanSize = item.size;
+            
+            // Special handling for Shopware items (often have size in name like "Allwetterjacke 164")
+            if (!cleanSize || cleanSize.trim() === '' || item.itemName.match(/\d{2,3}$/)) {
+                 const nameParts = item.itemName.trim().split(' ');
+                 const lastPart = nameParts[nameParts.length - 1];
+                 // Heuristic: Last part is likely size if it's short (S, M, 164, etc.)
+                 if (lastPart && (lastPart.length <= 4 || /^\d{2,3}$/.test(lastPart) || /^[XSML]+$/.test(lastPart))) {
+                     cleanSize = lastPart;
+                 }
+            }
+
+            const sizeDisplay = item.quantity > 1 ? `${item.quantity}x ${cleanSize}` : cleanSize;
+            
+            // Use cleanItemNumber if available, otherwise fallback to itemName
+            const identifier = cleanItemNumber ? cleanItemNumber : item.itemName;
+            
             body += `${identifier} | ${sizeDisplay} ${item.color ? `| ${item.color}` : ''}\n`;
         });
         body += `\n`;
