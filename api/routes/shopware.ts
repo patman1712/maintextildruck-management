@@ -446,6 +446,30 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                     continue;
                 }
 
+                // CHECK IF CUSTOMER EXISTS LOCALLY
+                // The current loop variable 'customer' is the Configured Shopware Customer (the one we are syncing FROM).
+                // But the order itself belongs to a specific customer IN Shopware (e.g. "Max Mustermann").
+                // We need to map this to a local customer entry in our 'customers' table.
+                
+                // Currently, we just assign it to 'customer.id' (the agency/B2B account that has the API keys).
+                // This is correct for the "Agency Model" (one API key = one main customer).
+                // But if the user wants separate customers for "Online Orders" where end-customers differ,
+                // we might need to create them.
+                
+                // However, based on the prompt "sie ist auch nur online", the user implies that maybe the *config* is missing?
+                // No, the user probably means the END CUSTOMER of that order is not in the system yet.
+                // But our code currently assigns ALL imported orders to the 'customer' object from the loop (line 332).
+                // So if 'customer' exists (which it must, otherwise the loop wouldn't run), then customer_id is valid.
+                
+                // WAIT! Is it possible that `customer.id` refers to a customer that was deleted?
+                // No, we fetched it from DB in line 292.
+                
+                // Is it possible that swOrder.id is somehow matching something else?
+                // We checked 'existing' above.
+                
+                // DEBUG LOGGING
+                console.log(`Processing Order ${orderNumber} (ID: ${swOrder.id})...`);
+
                 // Map Order
                 const newOrderId = Math.random().toString(36).substr(2, 9);
                 
