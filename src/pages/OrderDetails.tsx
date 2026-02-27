@@ -24,34 +24,6 @@ export default function OrderDetails() {
     }
   }, [id, orders, navigate, loading]);
 
-  const handleDeleteFile = async (fileToDelete: { name: string, url?: string, type: string }) => {
-    if (!order) return;
-    if (!confirm(`Möchten Sie die Datei "${fileToDelete.name}" wirklich löschen?`)) return;
-
-    // Remove from local state and store
-    const updatedFiles = order.files.filter(f => f.url !== fileToDelete.url);
-    const updatedOrder = { ...order, files: updatedFiles };
-    
-    // Optimistic update
-    setOrder(updatedOrder);
-    
-    // Update backend (DB)
-    await updateOrder(order.id, { files: updatedFiles });
-
-    // Delete physical file from server
-    if (fileToDelete.url && fileToDelete.url.startsWith('/uploads/')) {
-        try {
-            await fetch('/api/upload/delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filePath: fileToDelete.url })
-            });
-        } catch (err) {
-            console.error("Failed to delete file from server", err);
-        }
-    }
-  };
-
   const handleDelete = async () => {
     if (!order) return;
     if (confirm(`Möchten Sie den Auftrag "${order.title}" wirklich löschen? Er wird archiviert, damit die Druckdaten erhalten bleiben.`)) {
@@ -317,9 +289,6 @@ export default function OrderDetails() {
                       <button onClick={() => downloadFile(file)} className="text-gray-400 hover:text-red-600 p-1" title="Herunterladen">
                         <Download size={16} />
                       </button>
-                      <button onClick={() => handleDeleteFile({...file, type: 'preview'})} className="text-gray-400 hover:text-red-600 p-1" title="Löschen">
-                        <Trash2 size={16} />
-                      </button>
                     </div>
                   </li>
                 ))}
@@ -342,9 +311,6 @@ export default function OrderDetails() {
                     <div className="flex space-x-1">
                       <button onClick={() => downloadFile(file)} className="text-blue-400 hover:text-blue-700 p-1" title="Herunterladen">
                         <Download size={16} />
-                      </button>
-                      <button onClick={() => handleDeleteFile({...file, type: 'vector'})} className="text-blue-400 hover:text-blue-700 p-1" title="Löschen">
-                        <Trash2 size={16} />
                       </button>
                     </div>
                   </li>
@@ -369,9 +335,6 @@ export default function OrderDetails() {
                       <button onClick={() => downloadFile(file)} className="text-red-400 hover:text-red-700 p-1" title="Herunterladen">
                         <Download size={16} />
                       </button>
-                      <button onClick={() => handleDeleteFile({...file, type: 'print'})} className="text-red-400 hover:text-red-700 p-1" title="Löschen">
-                        <Trash2 size={16} />
-                      </button>
                     </div>
                   </li>
                 ))}
@@ -394,9 +357,6 @@ export default function OrderDetails() {
                     <div className="flex space-x-1">
                       <button onClick={() => downloadFile(file)} className="text-amber-400 hover:text-amber-700 p-1" title="Herunterladen">
                         <Download size={16} />
-                      </button>
-                      <button onClick={() => handleDeleteFile({...file, type: 'internal'})} className="text-amber-400 hover:text-amber-700 p-1" title="Löschen">
-                        <Trash2 size={16} />
                       </button>
                     </div>
                   </li>
