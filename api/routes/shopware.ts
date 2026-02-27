@@ -777,6 +777,17 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                          db.prepare("UPDATE customer_products SET size = ?, color = ? WHERE id = ?")
                            .run(p.size, p.color, existing.id);
                     }
+                    
+                    // DO NOT overwrite files. 
+                    // If we wanted to update the image, we would check if a 'view' type file exists and update it, 
+                    // but we must NEVER touch 'print' files that the user manually uploaded.
+                    
+                    // Only add the Shopware image if NO view image exists at all?
+                    // Or add it as a new view if it's different?
+                    // For now, user request is "not overwrite print data".
+                    // The code below (in the else block) only runs for NEW products.
+                    // So for existing products, we do nothing with files here, which is correct.
+                    
                     continue;
                 } else {
                     const newId = Math.random().toString(36).substr(2, 9);
