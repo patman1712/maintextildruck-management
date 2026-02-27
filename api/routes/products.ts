@@ -236,6 +236,47 @@ router.delete('/:id', (req: Request, res: Response) => {
     }
 });
 
+// POST duplicate product (Online -> Manual)
+router.post('/:productId/duplicate', (req: Request, res: Response) => {
+    const { productId } = req.params;
+    const { name, productNumber } = req.body;
+
+    try {
+        const product = db.prepare('SELECT * FROM customer_products WHERE id = ?').get(productId) as any;
+        
+        if (!product) {
+            return res.status(404).json({ success: false, error: 'Product not found' });
+        }
+
+        const newId = Math.random().toString(36).substr(2, 9);
+        const newName = name || `${product.name} (Kopie)`;
+        const newProductNumber = productNumber || (product.product_number ? `${product.product_number}-COPY` : '');
+
+        // Create new manual product
+        db.prepare(`
+            INSERT INTO customer_products (id, customer_id, name, product_number, source, supplier_id, size, color)
+            VALUES (?, ?, ?, ?, 'manual', ?, ?, ?)
+        `).run(newId, product.customer_id, newName, newProductNumber, product.supplier_id, product.size, product.color);
+
+        // Copy files
+        const files = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ?').all(productId) as any[];
+        
+        const insertFileStmt = db.prepare(`
+            INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type, quantity)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        for (const file of files) {
+            const fileId = Math.random().toString(36).substr(2, 9);
+            insertFileStmt.run(fileId, newId, file.file_url, file.file_name, file.thumbnail_url, file.type, file.quantity);
+        }
+
+        res.json({ success: true, message: 'Product duplicated', id: newId });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // POST assign file to product
 router.post('/:productId/files', (req: Request, res: Response) => {
     const { productId } = req.params;

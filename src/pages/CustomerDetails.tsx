@@ -225,45 +225,24 @@ export default function CustomerDetails() {
       
       if (!confirm(`Möchten Sie den Artikel "${product.name}" wirklich duplizieren?`)) return;
 
-      const newName = `${product.name} (Kopie)`;
-      const newProductNumber = product.product_number ? `${product.product_number}-kopie` : '';
-
       try {
-          // 1. Create the product (Source will be 'manual' by default in backend)
-          const res = await fetch(`/api/products/${customer.id}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  name: newName,
-                  productNumber: newProductNumber,
-                  supplierId: product.supplier_id
-              })
+          const response = await fetch(`/api/products/${product.id}/duplicate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                name: `${product.name} (Kopie)`
+            })
           });
-          const data = await res.json();
           
-          if (data.success && data.id) {
-             const newProductId = data.id;
-             
-             // 2. Associate files
-             if (product.files && product.files.length > 0) {
-                 for (const file of product.files) {
-                     await fetch(`/api/products/${newProductId}/files`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            fileUrl: file.file_url,
-                            fileName: file.file_name,
-                            thumbnailUrl: file.thumbnail_url,
-                            type: file.type
-                        })
-                     });
-                 }
-             }
-             
-             // alert('Produkt erfolgreich dupliziert.');
-             fetchProducts();
+          const data = await response.json();
+          
+          if (data.success) {
+            fetchData();
+            setActiveTab('products');
           } else {
-              alert('Fehler beim Erstellen des Duplikats: ' + (data.error || 'Unbekannter Fehler'));
+            alert('Fehler beim Duplizieren: ' + data.error);
           }
       } catch (err) {
           console.error(err);
@@ -1606,6 +1585,13 @@ export default function CustomerDetails() {
                                     </div>
                                 </div>
                                 <div className="flex space-x-2">
+                                    <button 
+                                        onClick={() => handleDuplicateProduct(product)}
+                                        className="text-gray-400 hover:text-blue-600 p-1"
+                                        title="Als manuellen Artikel duplizieren"
+                                    >
+                                        <Copy size={18} />
+                                    </button>
                                     <button 
                                         onClick={() => handleDeleteProduct(product.id)}
                                         className="text-gray-400 hover:text-red-600 p-1"
