@@ -2,10 +2,58 @@
 import { Router } from 'express';
 import { exec } from 'child_process';
 import util from 'util';
-import db from '../db.js';
+import fs from 'fs';
+import path from 'path';
+import db, { DATA_DIR } from '../db.js';
 
 const router = Router();
 const execAsync = util.promisify(exec);
+
+// GET System Health (Disk Usage, DB Size)
+router.get('/system-health', async (req, res) => {
+    try {
+        // 1. Check Disk Usage
+        let diskUsage = '';
+        try {
+            const { stdout } = await execAsync('df -h /');
+            diskUsage = stdout;
+        } catch (e: any) {
+            diskUsage = 'Error fetching disk usage: ' + e.message;
+        }
+
+        // 2. Check Database Size
+        let dbSize = 'Unknown';
+        try {
+            const stats = fs.statSync(path.join(DATA_DIR, 'database.sqlite'));
+            const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
+            dbSize = `${sizeInMB} MB`;
+        } catch (e: any) {
+            dbSize = 'Error fetching DB size: ' + e.message;
+        }
+
+        // 3. Check WAL file size (if exists)
+        let walSize = 'None';
+        try {
+            if (fs.existsSync(path.join(DATA_DIR, 'database.sqlite-wal'))) {
+                const stats = fs.statSync(path.join(DATA_DIR, 'database.sqlite-wal'));
+                const sizeInMB = (stats.size / (1024 * 1024)).toFixed(2);
+                walSize = `${sizeInMB} MB`;
+            }
+        } catch (e: any) {
+            walSize = 'Error: ' + e.message;
+        }
+
+        res.json({
+            success: true,
+            diskUsage,
+            dbSize,
+            walSize,
+            dataDir: DATA_DIR
+        });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 router.post('/cleanup-product-files', (req, res) => {
     try {

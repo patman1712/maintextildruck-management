@@ -40,6 +40,19 @@ export default function AdminSettings() {
   const [manualNextNumber, setManualNextNumber] = useState(1);
   const [changelog, setChangelog] = useState<{hash: string, date: string, message: string}[]>([]);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [systemHealth, setSystemHealth] = useState<{diskUsage: string, dbSize: string, walSize: string, dataDir: string} | null>(null);
+
+  const checkSystemHealth = async () => {
+      try {
+          const res = await fetch('/api/admin/system-health');
+          const data = await res.json();
+          if (data.success) {
+              setSystemHealth(data);
+          }
+      } catch (e) {
+          console.error('Failed to check system health', e);
+      }
+  };
 
   useEffect(() => {
     if (showChangelog && changelog.length === 0) {
@@ -451,6 +464,40 @@ export default function AdminSettings() {
                     Doppelte Dateien löschen
                 </button>
             </div>
+        </div>
+
+        <div className="mt-8 border-t pt-6">
+            <h3 className="font-medium text-slate-800 mb-2 flex items-center justify-between">
+                <span>System Status & Speicherplatz</span>
+                <button 
+                    onClick={checkSystemHealth}
+                    className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded hover:bg-slate-200"
+                >
+                    Status prüfen
+                </button>
+            </h3>
+            
+            {systemHealth ? (
+                <div className="bg-slate-50 p-4 rounded text-xs font-mono text-slate-700 overflow-x-auto">
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="bg-white p-2 rounded border border-slate-200">
+                            <span className="block text-slate-400 mb-1">Datenbank Größe:</span>
+                            <span className="text-lg font-bold text-slate-800">{systemHealth.dbSize}</span>
+                        </div>
+                        <div className="bg-white p-2 rounded border border-slate-200">
+                            <span className="block text-slate-400 mb-1">WAL (Temp) Größe:</span>
+                            <span className="text-lg font-bold text-slate-800">{systemHealth.walSize}</span>
+                        </div>
+                    </div>
+                    
+                    <div className="mb-2 font-bold text-slate-500 uppercase">Disk Usage (Server):</div>
+                    <pre className="whitespace-pre-wrap bg-white p-2 rounded border border-slate-200">
+                        {systemHealth.diskUsage}
+                    </pre>
+                </div>
+            ) : (
+                <p className="text-sm text-gray-500 italic">Klicken Sie auf "Status prüfen", um die aktuelle Speicherauslastung anzuzeigen.</p>
+            )}
         </div>
       </div>
 
