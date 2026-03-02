@@ -20,6 +20,8 @@ const dbPath = path.join(DATA_DIR, 'database.sqlite');
 console.log(`Using database at: ${dbPath}`);
 
 const db = new Database(dbPath);
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
 
 // Initialize tables
 db.exec(`

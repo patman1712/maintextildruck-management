@@ -226,12 +226,22 @@ export default function CustomerDetails() {
           confirmText: 'Löschen',
           onConfirm: async () => {
               try {
-                  await fetch(`/api/products/${productId}`, {
+                  const res = await fetch(`/api/products/${productId}`, {
                       method: 'DELETE'
                   });
-                  fetchProducts();
+                  const data = await res.json();
+                  
+                  if (data.success) {
+                      // Remove from local state immediately to give instant feedback
+                      setProducts(prev => prev.filter(p => p.id !== productId));
+                      // Then fetch to be sure
+                      fetchProducts();
+                  } else {
+                      alert('Fehler beim Löschen: ' + (data.error || 'Unbekannter Fehler'));
+                  }
               } catch (err) {
                   console.error(err);
+                  alert('Netzwerkfehler beim Löschen.');
               }
           }
       });
