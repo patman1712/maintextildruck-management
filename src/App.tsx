@@ -24,12 +24,14 @@ import ImageVector from "@/pages/ImageVector";
 import FAQ from "@/pages/FAQ";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import UpdateNotification from "@/components/UpdateNotification";
 
 export default function App() {
   const fetchData = useAppStore((state) => state.fetchData);
   const initialLoadTime = useRef(Date.now());
   const versionCheckInterval = useRef<any>(null);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -47,10 +49,8 @@ export default function App() {
                 // it means a redeployment happened.
                 // We add a 60s buffer to avoid reload loops if client/server times are slightly off or during the deployment window itself.
                 if (serverStartTime > (initialLoadTime.current + 60000)) {
-                    console.log("New version detected. Reloading...");
-                    if (confirm("Ein neues Update wurde installiert. Die Seite muss neu geladen werden, um die Änderungen zu sehen.")) {
-                         window.location.reload();
-                    }
+                    console.log("New version detected.");
+                    setUpdateAvailable(true);
                 }
             }
         } catch (e) {
@@ -70,7 +70,13 @@ export default function App() {
   }, [fetchData]);
 
   return (
-    <Router>
+    <>
+      <UpdateNotification 
+        isOpen={updateAvailable} 
+        onReload={() => window.location.reload()} 
+        onClose={() => setUpdateAvailable(false)} 
+      />
+      <Router>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<Login />} />
@@ -107,5 +113,6 @@ export default function App() {
         </Route>
       </Routes>
     </Router>
+    </>
   );
 }
