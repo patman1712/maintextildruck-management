@@ -298,6 +298,60 @@ export default function NewOrder() {
 
   const [existingFilesToAttach, setExistingFilesToAttach] = useState<{name: string, url: string, type: 'print' | 'photoshop', quantity?: number}[]>([]);
 
+  const [showPhotoshopSelector, setShowPhotoshopSelector] = useState(false);
+  const [availablePhotoshopFiles, setAvailablePhotoshopFiles] = useState<{name: string, url: string, type: 'photoshop', date: string, orderTitle: string}[]>([]);
+  const [selectedExistingPhotoshopFiles, setSelectedExistingPhotoshopFiles] = useState<string[]>([]); // URLs
+
+  const loadCustomerPhotoshopFiles = () => {
+    if (!selectedCustomerId) return;
+    
+    // Find all orders for this customer
+    const orders = useAppStore.getState().orders;
+    const customerOrders = orders
+        .filter(o => o.customerId === selectedCustomerId)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    const allFiles: {name: string, url: string, type: 'photoshop', date: string, orderTitle: string}[] = [];
+    const seenUrls = new Set<string>();
+    
+    customerOrders.forEach(order => {
+        if (order.files) {
+            order.files.forEach(f => {
+                if (f.type === 'photoshop' && f.url) {
+                    if (!seenUrls.has(f.url)) {
+                        seenUrls.add(f.url);
+                        allFiles.push({
+                            name: f.customName || f.name,
+                            url: f.url,
+                            type: 'photoshop',
+                            date: order.createdAt,
+                            orderTitle: order.title
+                        });
+                    }
+                }
+            });
+        }
+    });
+    
+    setAvailablePhotoshopFiles(allFiles);
+    setSearchTerm("");
+    setShowPhotoshopSelector(true);
+  };
+
+  const addSelectedPhotoshopFiles = () => {
+    const filesToAdd = availablePhotoshopFiles.filter(f => selectedExistingPhotoshopFiles.includes(f.url));
+    
+    const newAttachments = filesToAdd.map(f => ({
+        name: f.name,
+        url: f.url,
+        type: 'photoshop' as const
+    }));
+    
+    setExistingFilesToAttach([...existingFilesToAttach, ...newAttachments]);
+    setShowPhotoshopSelector(false);
+    setSelectedExistingPhotoshopFiles([]);
+  };
+
   const parseQuantity = (input: string): number => {
       // Try to find patterns like "5x", "5 x", "5X"
       const matches = input.match(/(\d+)\s*[xX]/g);
@@ -1324,6 +1378,7 @@ export default function NewOrder() {
             </div>
         </div>
       )}
+      {showFileSelector && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
                 <div className="p-4 border-b flex justify-between items-center">
@@ -1404,9 +1459,7 @@ export default function NewOrder() {
             </div>
         </div>
       )}
-
-        {/* Section 6: Order Items / Goods */}
-        <div>
+      {/* Product Selector Modal */}
           <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex items-center justify-between">
             <div className="flex items-center">
                 <ShoppingCart className="mr-2 text-red-600" size={20} />
@@ -1535,7 +1588,6 @@ export default function NewOrder() {
                 Keine Ware hinzugefügt.
             </p>
           )}
-        </div>
 
         {/* Section 5: Description */}
         <div>
@@ -1565,13 +1617,12 @@ export default function NewOrder() {
             Auftrag anlegen
           </button>
         </div>
-
       </form>
 
       {/* Product Selector Modal */}
       {showProductSelector && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
                 <div className="p-4 border-b flex justify-between items-center">
                     <h3 className="text-lg font-bold text-gray-800">Artikel aus Kundenstamm wählen</h3>
                     <button onClick={() => setShowProductSelector(false)} className="text-gray-500 hover:text-gray-700">

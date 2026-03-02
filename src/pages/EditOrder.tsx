@@ -84,6 +84,7 @@ export default function EditOrder() {
   const [showFileSelector, setShowFileSelector] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [availableFiles, setAvailableFiles] = useState<{name: string, url: string, type: 'print' | 'vector', date: string, orderTitle: string}[]>([]);
+  const [selectedExistingFiles, setSelectedExistingFiles] = useState<string[]>([]); // URLs
   const [selectedExistingPhotoshopFiles, setSelectedExistingPhotoshopFiles] = useState<string[]>([]); // URLs
   const [showPhotoshopSelector, setShowPhotoshopSelector] = useState(false);
   const [availablePhotoshopFiles, setAvailablePhotoshopFiles] = useState<{name: string, url: string, type: 'photoshop', date: string, orderTitle: string}[]>([]);
@@ -1397,6 +1398,7 @@ export default function EditOrder() {
             </div>
         </div>
       )}
+      {showFileSelector && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
                 <div className="p-4 border-b flex justify-between items-center">
@@ -1477,7 +1479,6 @@ export default function EditOrder() {
             </div>
         </div>
       )}
-
       </form>
 
       {/* Product Selector Modal */}
