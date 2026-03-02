@@ -48,6 +48,7 @@ export default function DTFOrdering() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadCustomerId, setUploadCustomerId] = useState<string>("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Processing State
   const [isGenerating, setIsGenerating] = useState(false);
@@ -483,6 +484,24 @@ export default function DTFOrdering() {
         setShowSuccessModal(false);
     };
 
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            setUploadFile(e.dataTransfer.files[0]);
+        }
+    };
+
   return (
     <div className="max-w-7xl mx-auto h-[calc(100vh-100px)] flex flex-col">
       <div className="flex justify-between items-center mb-6 shrink-0">
@@ -739,10 +758,21 @@ export default function DTFOrdering() {
                 </div>
                 
                 {pickerTab === 'upload' ? (
-                    <div className="p-4 bg-red-50 border-b border-red-100 animate-in slide-in-from-top-2 flex-1">
-                        <div className="max-w-xl mx-auto bg-white p-4 rounded shadow-sm border border-red-100">
+                    <div 
+                        className="p-4 bg-red-50 border-b border-red-100 animate-in slide-in-from-top-2 flex-1"
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                    >
+                        <div className={`max-w-xl mx-auto bg-white p-4 rounded shadow-sm border transition-all ${isDragging ? 'border-red-400 ring-2 ring-red-200' : 'border-red-100'}`}>
                             <h4 className="font-semibold text-gray-800 mb-3">Datei hochladen & Kunde zuweisen</h4>
                             
+                            {isDragging && (
+                                <div className="mb-4 p-4 bg-red-50 border-2 border-dashed border-red-300 rounded text-center text-red-600 font-medium">
+                                    Datei hier ablegen
+                                </div>
+                            )}
+
                             <div className="space-y-4">
                                 <div>
                                     <label className="block text-xs font-medium text-gray-500 mb-1">Kunde auswählen (Optional)</label>
@@ -771,6 +801,9 @@ export default function DTFOrdering() {
                                         onChange={(e) => setUploadFile(e.target.files ? e.target.files[0] : null)}
                                         className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
                                     />
+                                    <p className="text-[10px] text-gray-400 mt-1">
+                                        Drag & Drop möglich
+                                    </p>
                                 </div>
                                 
                                 <div className="flex justify-end pt-2">

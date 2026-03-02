@@ -129,6 +129,7 @@ export default function NewOrder() {
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [isDragging, setIsDragging] = useState<string | null>(null);
   
   // Form States
   const [orderNumber, setOrderNumber] = useState(""); // State for automatic order number
@@ -346,6 +347,36 @@ export default function NewOrder() {
       setInternalFiles(internalFiles.filter((_, i) => i !== index));
     } else if (type === "photoshop") {
       setPhotoshopFiles(photoshopFiles.filter((_, i) => i !== index));
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent, type: string) => {
+    e.preventDefault();
+    setIsDragging(type);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, type: "preview" | "print" | "vector" | "internal" | "photoshop") => {
+    e.preventDefault();
+    setIsDragging(null);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const newFiles = Array.from(e.dataTransfer.files);
+      if (type === "preview") {
+        setFiles([...files, ...newFiles]);
+      } else if (type === "print") {
+        setPrintFiles([...printFiles, ...newFiles.map(f => ({ file: f, customName: "" }))]);
+      } else if (type === "vector") {
+        setVectorFiles([...vectorFiles, ...newFiles]);
+      } else if (type === "internal") {
+        setInternalFiles([...internalFiles, ...newFiles]);
+      } else if (type === "photoshop") {
+        setPhotoshopFiles([...photoshopFiles, ...newFiles]);
+      }
     }
   };
 
@@ -793,12 +824,22 @@ export default function NewOrder() {
         {/* Section 4: Files */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Previews */}
-          <div>
+          <div 
+            onDragOver={(e) => handleDragOver(e, "preview")}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, "preview")}
+            className="relative"
+          >
+            {isDragging === "preview" && (
+                <div className="absolute inset-0 bg-gray-100/90 z-10 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-400">
+                    <p className="text-gray-700 font-bold">Vorschaubilder hier ablegen</p>
+                </div>
+            )}
             <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex justify-between items-center">
               <span>Ansichten / Vorschauen</span>
               <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded">Nur Ansicht</span>
             </h3>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors relative">
+            <div className={`border-2 border-dashed ${isDragging === "preview" ? 'border-gray-400 bg-gray-100' : 'border-gray-300'} rounded-lg p-6 text-center hover:bg-gray-50 transition-colors relative`}>
               <input
                 type="file"
                 multiple
@@ -867,12 +908,22 @@ export default function NewOrder() {
           </div>
 
           {/* Vector/Raw Files */}
-          <div>
+          <div 
+            onDragOver={(e) => handleDragOver(e, "vector")}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, "vector")}
+            className="relative"
+          >
+            {isDragging === "vector" && (
+                <div className="absolute inset-0 bg-blue-100/90 z-10 rounded-lg flex items-center justify-center border-2 border-dashed border-blue-400">
+                    <p className="text-blue-700 font-bold">Rohdaten hier ablegen</p>
+                </div>
+            )}
             <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex justify-between items-center">
               <span>Rohdaten / Zum Vektorisieren</span>
               <span className="text-xs font-normal text-blue-800 bg-blue-100 px-2 py-1 rounded">Bearbeitung</span>
             </h3>
-            <div className="border-2 border-dashed border-blue-200 bg-blue-50/30 rounded-lg p-6 text-center hover:bg-blue-50 transition-colors relative">
+            <div className={`border-2 border-dashed ${isDragging === "vector" ? 'border-blue-400 bg-blue-100' : 'border-blue-200 bg-blue-50/30'} rounded-lg p-6 text-center hover:bg-blue-50 transition-colors relative`}>
               <input
                 type="file"
                 multiple
@@ -898,12 +949,22 @@ export default function NewOrder() {
           </div>
 
           {/* Internal Files */}
-          <div>
+          <div 
+            onDragOver={(e) => handleDragOver(e, "internal")}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, "internal")}
+            className="relative"
+          >
+            {isDragging === "internal" && (
+                <div className="absolute inset-0 bg-amber-100/90 z-10 rounded-lg flex items-center justify-center border-2 border-dashed border-amber-400">
+                    <p className="text-amber-700 font-bold">Interne Bilder hier ablegen</p>
+                </div>
+            )}
             <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex justify-between items-center">
               <span>Interne Bilder</span>
               <span className="text-xs font-normal text-amber-800 bg-amber-100 px-2 py-1 rounded">Nur Intern</span>
             </h3>
-            <div className="border-2 border-dashed border-amber-200 bg-amber-50/30 rounded-lg p-6 text-center hover:bg-amber-50 transition-colors relative">
+            <div className={`border-2 border-dashed ${isDragging === "internal" ? 'border-amber-400 bg-amber-100' : 'border-amber-200 bg-amber-50/30'} rounded-lg p-6 text-center hover:bg-amber-50 transition-colors relative`}>
               <input
                 type="file"
                 multiple
@@ -930,12 +991,22 @@ export default function NewOrder() {
           </div>
 
           {/* Photoshop Files */}
-          <div>
+          <div 
+            onDragOver={(e) => handleDragOver(e, "photoshop")}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, "photoshop")}
+            className="relative"
+          >
+            {isDragging === "photoshop" && (
+                <div className="absolute inset-0 bg-blue-100/90 z-10 rounded-lg flex items-center justify-center border-2 border-dashed border-blue-400">
+                    <p className="text-blue-700 font-bold">Photoshop Dateien hier ablegen</p>
+                </div>
+            )}
             <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex justify-between items-center">
               <span>Photoshop Dateien</span>
               <span className="text-xs font-normal text-blue-900 bg-blue-100 px-2 py-1 rounded">Intern (.psd, .pdf)</span>
             </h3>
-            <div className="border-2 border-dashed border-blue-200 bg-blue-50/30 rounded-lg p-6 text-center hover:bg-blue-50 transition-colors relative">
+            <div className={`border-2 border-dashed ${isDragging === "photoshop" ? 'border-blue-400 bg-blue-100' : 'border-blue-200 bg-blue-50/30'} rounded-lg p-6 text-center hover:bg-blue-50 transition-colors relative`}>
               <input
                 type="file"
                 multiple
@@ -962,12 +1033,22 @@ export default function NewOrder() {
           </div>
 
           {/* Print Files */}
-          <div className="md:col-span-2">
+          <div 
+            className="md:col-span-2 relative"
+            onDragOver={(e) => handleDragOver(e, "print")}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, "print")}
+          >
+            {isDragging === "print" && (
+                <div className="absolute inset-0 bg-red-100/90 z-10 rounded-lg flex items-center justify-center border-2 border-dashed border-red-400">
+                    <p className="text-red-700 font-bold">Druckdaten hier ablegen</p>
+                </div>
+            )}
             <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex justify-between items-center">
               <span>Fertige Druckdaten DTF</span>
               <span className="text-xs font-normal text-white bg-red-600 px-2 py-1 rounded">PNG & PDF</span>
             </h3>
-            <div className="border-2 border-dashed border-red-200 bg-red-50/30 rounded-lg p-6 text-center hover:bg-red-50 transition-colors relative">
+            <div className={`border-2 border-dashed ${isDragging === "print" ? 'border-red-400 bg-red-100' : 'border-red-200 bg-red-50/30'} rounded-lg p-6 text-center hover:bg-red-50 transition-colors relative`}>
               <input
                 type="file"
                 multiple
