@@ -44,6 +44,7 @@ export default function CustomerDetails() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadFileName, setUploadFileName] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
 
   // Tabs
   const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'previews' | 'products' | 'online_products' | 'shopware' | 'photoshop'>('overview');
@@ -798,12 +799,12 @@ export default function CustomerDetails() {
     });
   };
   
-  const handleDirectUpload = async () => {
+  const handleDirectUpload = async (type: 'print' | 'photoshop' = 'print') => {
     if (!uploadFile || !customer) return;
 
     try {
         const formData = new FormData();
-        formData.append('print', uploadFile);
+        formData.append(type, uploadFile);
 
         const res = await fetch('/api/upload', {
             method: 'POST',
@@ -811,14 +812,14 @@ export default function CustomerDetails() {
         });
         const data = await res.json();
 
-        if (data.success && data.files && data.files.print && data.files.print.length > 0) {
-            const uploadedFile = data.files.print[0];
+        if (data.success && data.files && data.files[type] && data.files[type].length > 0) {
+            const uploadedFile = data.files[type][0];
             const fileUrl = uploadedFile.path;
             const thumbnail = uploadedFile.thumbnail;
             
             const newOrder: Order = {
                 id: Math.random().toString(36).substr(2, 9),
-                title: "Direkter Dateiupload",
+                title: type === 'photoshop' ? "Photoshop Upload" : "Direkter Dateiupload",
                 customerId: customer.id,
                 customerName: customer.name,
                 customerEmail: customer.email,
@@ -832,7 +833,7 @@ export default function CustomerDetails() {
                 employees: [],
                 files: [{
                     name: uploadedFile.originalName,
-                    type: 'print' as const,
+                    type: type,
                     url: fileUrl,
                     thumbnail: thumbnail,
                     customName: uploadFileName || uploadedFile.originalName
@@ -848,6 +849,27 @@ export default function CustomerDetails() {
     } catch (error) {
         console.error("Upload failed:", error);
         alert("Upload fehlgeschlagen.");
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        setUploadFile(file);
+        setIsUploading(true);
     }
   };
 
@@ -1101,13 +1123,33 @@ export default function CustomerDetails() {
         
         {/* TAB: PHOTOSHOP */}
         {activeTab === 'photoshop' && (
-            <div className="p-8 animate-in fade-in">
+            <div 
+                className={`p-8 animate-in fade-in relative ${isDragging ? 'bg-blue-50 border-2 border-dashed border-blue-400' : ''}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+            >
+                {isDragging && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-blue-100/50 z-50 rounded-lg pointer-events-none">
+                        <div className="text-center">
+                            <Upload size={48} className="mx-auto text-blue-500 mb-2" />
+                            <p className="text-blue-700 font-bold text-lg">Datei hier ablegen</p>
+                        </div>
+                    </div>
+                )}
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-bold text-gray-800 flex items-center">
                         <Layers className="mr-2 text-blue-600" />
                         Photoshop / PDF Dateien (Intern)
                     </h2>
                     <div className="flex items-center space-x-2">
+                         <button 
+                            onClick={() => setIsUploading(true)}
+                            className="bg-white text-blue-600 border border-blue-200 hover:bg-blue-50 px-3 py-1.5 rounded-md text-sm font-medium flex items-center shadow-sm"
+                        >
+                            <Upload size={16} className="mr-2" />
+                            Datei hochladen
+                        </button>
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                             <input 
@@ -1120,6 +1162,33 @@ export default function CustomerDetails() {
                         </div>
                     </div>
                 </div>
+
+                {isUploading && (
+                    <div className="bg-blue-50 px-8 py-4 border-b border-blue-100 animate-in fade-in slide-in-from-top-4 mb-6 rounded-lg">
+                        <div className="max-w-md bg-white p-4 rounded-lg shadow-sm border border-blue-100 mx-auto">
+                            <h4 className="font-bold text-gray-800 mb-3 text-sm">Neue Photoshop-Datei hochladen</h4>
+                            <input 
+                                type="file" 
+                                accept=".psd,.pdf"
+                                onChange={(e) => setUploadFile(e.target.files ? e.target.files[0] : null)}
+                                className="block w-full text-sm text-gray-500 mb-3"
+                            />
+                            {uploadFile && (
+                                <input 
+                                    type="text" 
+                                    placeholder="Titel vergeben (optional)"
+                                    value={uploadFileName}
+                                    onChange={(e) => setUploadFileName(e.target.value)}
+                                    className="w-full border border-gray-300 rounded p-2 text-sm mb-3"
+                                />
+                            )}
+                            <div className="flex justify-end space-x-2">
+                                <button onClick={() => { setIsUploading(false); setUploadFile(null); }} className="px-3 py-1.5 text-gray-600 text-sm">Abbrechen</button>
+                                <button onClick={() => handleDirectUpload('photoshop')} disabled={!uploadFile} className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded disabled:opacity-50">Hochladen</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {allPhotoshopFiles.length === 0 ? (
                     <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
@@ -1301,7 +1370,20 @@ export default function CustomerDetails() {
         {/* TAB: FILES */}
         {activeTab === 'files' && (
             // ... (Files tab content remains same) ...
-            <div className="animate-in fade-in">
+            <div 
+                className={`animate-in fade-in relative ${isDragging ? 'bg-red-50 border-2 border-dashed border-red-400' : ''}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+            >
+                {isDragging && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-red-100/50 z-50 rounded-lg pointer-events-none">
+                        <div className="text-center">
+                            <Upload size={48} className="mx-auto text-red-500 mb-2" />
+                            <p className="text-red-700 font-bold text-lg">Datei hier ablegen</p>
+                        </div>
+                    </div>
+                )}
                 <div className="px-8 py-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
                     <div>
                         <h3 className="text-lg font-semibold text-gray-800">Gespeicherte Druckdaten</h3>
@@ -1337,7 +1419,7 @@ export default function CustomerDetails() {
                             )}
                             <div className="flex justify-end space-x-2">
                                 <button onClick={() => { setIsUploading(false); setUploadFile(null); }} className="px-3 py-1.5 text-gray-600 text-sm">Abbrechen</button>
-                                <button onClick={handleDirectUpload} disabled={!uploadFile} className="px-3 py-1.5 bg-red-600 text-white text-sm rounded disabled:opacity-50">Hochladen</button>
+                                <button onClick={() => handleDirectUpload('print')} disabled={!uploadFile} className="px-3 py-1.5 bg-red-600 text-white text-sm rounded disabled:opacity-50">Hochladen</button>
                             </div>
                         </div>
                     </div>
