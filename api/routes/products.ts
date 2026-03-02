@@ -172,22 +172,19 @@ router.get('/:customerId', (req: Request, res: Response) => {
 router.delete('/customer/:customerId/all', (req: Request, res: Response) => {
     const { customerId } = req.params;
     try {
-        const transaction = db.transaction((custId) => {
-             // Find all products for this customer
-             const products = db.prepare('SELECT id FROM customer_products WHERE customer_id = ?').all(custId) as any[];
-             const productIds = products.map(p => p.id);
+        // Find all products for this customer
+        const products = db.prepare('SELECT id FROM customer_products WHERE customer_id = ?').all(customerId) as any[];
+        const productIds = products.map(p => p.id);
 
-             if (productIds.length > 0) {
-                 // Delete all files associated with these products
-                 const placeholders = productIds.map(() => '?').join(',');
-                 db.prepare(`DELETE FROM customer_product_files WHERE product_id IN (${placeholders})`).run(...productIds);
-             }
-             
-             // Delete the products
-             db.prepare('DELETE FROM customer_products WHERE customer_id = ?').run(custId);
-        });
+        if (productIds.length > 0) {
+            // Delete all files associated with these products
+            const placeholders = productIds.map(() => '?').join(',');
+            db.prepare(`DELETE FROM customer_product_files WHERE product_id IN (${placeholders})`).run(...productIds);
+        }
+        
+        // Delete the products
+        db.prepare('DELETE FROM customer_products WHERE customer_id = ?').run(customerId);
 
-        transaction(customerId);
         res.json({ success: true, message: 'All products deleted (files preserved)' });
     } catch (error: any) {
         console.error('Error deleting all products:', error);
@@ -199,22 +196,19 @@ router.delete('/customer/:customerId/all', (req: Request, res: Response) => {
 router.delete('/customer/:customerId/shopware', (req: Request, res: Response) => {
     const { customerId } = req.params;
     try {
-         const transaction = db.transaction((custId) => {
-             // Find all shopware products
-             const products = db.prepare("SELECT id FROM customer_products WHERE customer_id = ? AND source = 'shopware'").all(custId) as any[];
-             const productIds = products.map(p => p.id);
+        // Find all shopware products
+        const products = db.prepare("SELECT id FROM customer_products WHERE customer_id = ? AND source = 'shopware'").all(customerId) as any[];
+        const productIds = products.map(p => p.id);
 
-             if (productIds.length > 0) {
-                 // Delete all files associated with these products
-                 const placeholders = productIds.map(() => '?').join(',');
-                 db.prepare(`DELETE FROM customer_product_files WHERE product_id IN (${placeholders})`).run(...productIds);
-             }
+        if (productIds.length > 0) {
+            // Delete all files associated with these products
+            const placeholders = productIds.map(() => '?').join(',');
+            db.prepare(`DELETE FROM customer_product_files WHERE product_id IN (${placeholders})`).run(...productIds);
+        }
 
-             // Delete the products
-             db.prepare("DELETE FROM customer_products WHERE customer_id = ? AND source = 'shopware'").run(custId);
-        });
+        // Delete the products
+        db.prepare("DELETE FROM customer_products WHERE customer_id = ? AND source = 'shopware'").run(customerId);
 
-        transaction(customerId);
         res.json({ success: true, message: 'All Shopware products deleted' });
     } catch (error: any) {
         console.error('Error deleting shopware products:', error);
@@ -266,14 +260,11 @@ router.put('/:id', (req: Request, res: Response) => {
 router.delete('/:id', (req: Request, res: Response) => {
     const { id } = req.params;
     try {
-        const transaction = db.transaction((productId) => {
-             // Delete associated files first (manual cascade)
-             db.prepare('DELETE FROM customer_product_files WHERE product_id = ?').run(productId);
-             // Delete product
-             db.prepare('DELETE FROM customer_products WHERE id = ?').run(productId);
-        });
+        // Delete associated files first (manual cascade)
+        db.prepare('DELETE FROM customer_product_files WHERE product_id = ?').run(id);
+        // Delete product
+        db.prepare('DELETE FROM customer_products WHERE id = ?').run(id);
 
-        transaction(id);
         res.json({ success: true, message: 'Product deleted' });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });

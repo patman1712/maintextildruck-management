@@ -20,6 +20,7 @@ const dbPath = path.join(DATA_DIR, 'database.sqlite');
 console.log(`Using database at: ${dbPath}`);
 
 const db = new Database(dbPath);
+db.pragma('temp_store = MEMORY');
 
 // Initialize tables
 db.exec(`
