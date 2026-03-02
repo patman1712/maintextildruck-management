@@ -172,13 +172,23 @@ router.get('/:customerId', (req: Request, res: Response) => {
 router.delete('/customer/:customerId/all', (req: Request, res: Response) => {
     const { customerId } = req.params;
     try {
-        // Only delete the product entries from the database
-        // Do NOT delete the physical files from the filesystem
-        // Files should only be deleted when explicitly requested or via a garbage collection process
-        
-        // With ON DELETE CASCADE on the foreign key, this removes all related entries in customer_product_files
-        const result = db.prepare('DELETE FROM customer_products WHERE customer_id = ?').run(customerId);
-        res.json({ success: true, message: 'All products deleted (files preserved)', changes: result.changes });
+        const transaction = db.transaction((custId) => {
+             // Find all products for this customer
+             const products = db.prepare('SELECT id FROM customer_products WHERE customer_id = ?').all(custId) as any[];
+             const productIds = products.map(p => p.id);
+
+             if (productIds.length > 0) {
+                 // Delete all files associated with these products
+                 const placeholders = productIds.map(() => '?').join(',');
+                 db.prepare(`DELETE FROM customer_product_files WHERE product_id IN (${placeholders})`).run(...productIds);
+             }
+             
+             // Delete the products
+             db.prepare('DELETE FROM customer_products WHERE customer_id = ?').run(custId);
+        });
+
+        transaction(customerId);
+        res.json({ success: true, message: 'All products deleted (files preserved)' });
     } catch (error: any) {
         console.error('Error deleting all products:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -189,8 +199,23 @@ router.delete('/customer/:customerId/all', (req: Request, res: Response) => {
 router.delete('/customer/:customerId/shopware', (req: Request, res: Response) => {
     const { customerId } = req.params;
     try {
-        const result = db.prepare("DELETE FROM customer_products WHERE customer_id = ? AND source = 'shopware'").run(customerId);
-        res.json({ success: true, message: 'All Shopware products deleted', changes: result.changes });
+         const transaction = db.transaction((custId) => {
+             // Find all shopware products
+             const products = db.prepare("SELECT id FROM customer_products WHERE customer_id = ? AND source = 'shopware'").all(custId) as any[];
+             const productIds = products.map(p => p.id);
+
+             if (productIds.length > 0) {
+                 // Delete all files associated with these products
+                 const placeholders = productIds.map(() => '?').join(',');
+                 db.prepare(`DELETE FROM customer_product_files WHERE product_id IN (${placeholders})`).run(...productIds);
+             }
+
+             // Delete the products
+             db.prepare("DELETE FROM customer_products WHERE customer_id = ? AND source = 'shopware'").run(custId);
+        });
+
+        transaction(customerId);
+        res.json({ success: true, message: 'All Shopware products deleted' });
     } catch (error: any) {
         console.error('Error deleting shopware products:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -241,7 +266,14 @@ router.put('/:id', (req: Request, res: Response) => {
 router.delete('/:id', (req: Request, res: Response) => {
     const { id } = req.params;
     try {
-        db.prepare('DELETE FROM customer_products WHERE id = ?').run(id);
+        const transaction = db.transaction((productId) => {
+             // Delete associated files first (manual cascade)
+             db.prepare('DELETE FROM customer_product_files WHERE product_id = ?').run(productId);
+             // Delete product
+             db.prepare('DELETE FROM customer_products WHERE id = ?').run(productId);
+        });
+
+        transaction(id);
         res.json({ success: true, message: 'Product deleted' });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
