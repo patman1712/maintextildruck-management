@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore, Order } from "@/store";
-import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon, Copy } from "lucide-react";
+import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon, Copy, Layers } from "lucide-react";
 import ConfirmationModal from "@/components/ConfirmationModal";
 
 interface Product {
@@ -46,7 +46,7 @@ export default function CustomerDetails() {
   const [uploadFileName, setUploadFileName] = useState("");
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'previews' | 'products' | 'online_products' | 'shopware'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'previews' | 'products' | 'online_products' | 'shopware' | 'photoshop'>('overview');
   
   const [customer, setCustomer] = useState(customers.find(c => c.id === id));
   const [customerOrders, setCustomerOrders] = useState(
@@ -910,6 +910,7 @@ export default function CustomerDetails() {
   
   const allPrintFiles = combinedFiles.filter(f => f.type === 'print' || !f.type); // Default to print if undefined
   const allPreviewFiles = combinedFiles.filter(f => f.type === 'preview' || f.type === 'view');
+  const allPhotoshopFiles = combinedFiles.filter(f => f.type === 'photoshop');
 
   const uniqueFilesMap = new Map();
   allPrintFiles.forEach(file => {
@@ -1057,6 +1058,15 @@ export default function CustomerDetails() {
                 </div>
             </button>
             <button
+                onClick={() => setActiveTab('photoshop')}
+                className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'photoshop' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+                <div className="flex items-center">
+                    <Layers size={16} className="mr-2" />
+                    Photoshop ({allPhotoshopFiles.length})
+                </div>
+            </button>
+            <button
                 onClick={() => setActiveTab('products')}
                 className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'products' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
@@ -1089,6 +1099,102 @@ export default function CustomerDetails() {
       {/* Content */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden min-h-[400px]">
         
+        {/* TAB: PHOTOSHOP */}
+        {activeTab === 'photoshop' && (
+            <div className="p-8 animate-in fade-in">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold text-gray-800 flex items-center">
+                        <Layers className="mr-2 text-blue-600" />
+                        Photoshop / PDF Dateien (Intern)
+                    </h2>
+                    <div className="flex items-center space-x-2">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                            <input 
+                                type="text" 
+                                placeholder="Suchen..." 
+                                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 w-64"
+                                value={fileSearch}
+                                onChange={(e) => setFileSearch(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {allPhotoshopFiles.length === 0 ? (
+                    <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                        <Layers className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+                        <p className="text-gray-500 font-medium">Keine Photoshop-Dateien vorhanden.</p>
+                        <p className="text-sm text-gray-400 mt-1">Laden Sie .psd oder .pdf Dateien in Aufträgen hoch.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {allPhotoshopFiles
+                            .filter(f => (f.customName || f.name).toLowerCase().includes(fileSearch.toLowerCase()))
+                            .map((file, idx) => (
+                            <div key={idx} className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
+                                <div className="h-40 bg-gray-100 relative group-hover:bg-gray-50 transition-colors flex items-center justify-center p-4">
+                                    {file.thumbnail ? (
+                                        <img 
+                                            src={file.thumbnail} 
+                                            alt={file.name} 
+                                            className="h-full w-full object-contain" 
+                                            onError={(e) => {
+                                                e.currentTarget.style.display = 'none';
+                                                e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
+                                            }}
+                                        />
+                                    ) : null}
+                                    
+                                    <div className={`fallback-icon ${file.thumbnail ? 'hidden' : ''} flex flex-col items-center justify-center`}>
+                                        <Layers className="h-12 w-12 text-blue-300 mb-2" />
+                                        <span className="text-xs text-gray-400 font-mono uppercase">{file.name.split('.').pop()}</span>
+                                    </div>
+
+                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                        <button 
+                                            onClick={() => downloadFile(file)}
+                                            className="bg-white text-gray-700 p-2 rounded-full shadow-lg hover:text-blue-600 transform translate-y-2 group-hover:translate-y-0 transition-all mx-1"
+                                            title="Herunterladen"
+                                        >
+                                            <Download size={20} />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDeleteFile(file)}
+                                            className="bg-white text-gray-700 p-2 rounded-full shadow-lg hover:text-red-600 transform translate-y-2 group-hover:translate-y-0 transition-all mx-1 delay-75"
+                                            title="Löschen"
+                                        >
+                                            <Trash2 size={20} />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="p-4 border-t border-gray-100">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <h4 className="font-medium text-gray-800 truncate flex-1" title={file.customName || file.name}>
+                                            {file.customName || file.name}
+                                        </h4>
+                                        <button 
+                                            onClick={() => startRename(file)}
+                                            className="text-gray-400 hover:text-blue-600 ml-2"
+                                        >
+                                            <Pencil size={14} />
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mb-2 truncate" title={file.orderTitle}>
+                                        {file.orderTitle}
+                                    </p>
+                                    <div className="flex justify-between items-center text-xs text-gray-400">
+                                        <span>{new Date(file.orderDate).toLocaleDateString()}</span>
+                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[10px] font-bold">INTERN</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        )}
+
         {/* TAB: OVERVIEW */}
         {activeTab === 'overview' && (
             <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in">

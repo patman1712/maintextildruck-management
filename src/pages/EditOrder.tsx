@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Upload, X, User, Calendar, FileText, ArrowLeft, ShoppingCart, Trash2, Plus, Package, Shield } from "lucide-react";
+import { Upload, X, User, Calendar, FileText, ArrowLeft, ShoppingCart, Trash2, Plus, Package, Shield, Layers } from "lucide-react";
 import { useAppStore, Order } from "@/store";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -65,7 +65,7 @@ export default function EditOrder() {
   }, [fetchUsers]);
 
   const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
-  const [files, setFiles] = useState<{ name: string; type: 'preview' | 'print' | 'vector' | 'internal'; url?: string; file?: File; thumbnail?: string; quantity?: number }[]>([]);
+  const [files, setFiles] = useState<{ name: string; type: 'preview' | 'print' | 'vector' | 'internal' | 'photoshop'; url?: string; file?: File; thumbnail?: string; quantity?: number }[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   // Form States
@@ -285,7 +285,7 @@ export default function EditOrder() {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "preview" | "print" | "vector" | "internal") => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "preview" | "print" | "vector" | "internal" | "photoshop") => {
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files).map(f => ({ name: f.name, type, file: f }));
       setFiles([...files, ...newFiles]);
@@ -337,6 +337,9 @@ export default function EditOrder() {
                     if (data.files.internal) {
                         finalFiles = [...finalFiles, ...data.files.internal.map((f: any) => ({ name: f.originalName, type: 'internal' as const, url: f.path, thumbnail: f.thumbnail }))];
                     }
+                    if (data.files.photoshop) {
+                        finalFiles = [...finalFiles, ...data.files.photoshop.map((f: any) => ({ name: f.originalName, type: 'photoshop' as const, url: f.path, thumbnail: f.thumbnail }))];
+                    }
                 }
             } catch (err) {
                 console.error("Upload failed", err);
@@ -369,6 +372,7 @@ export default function EditOrder() {
   const printFiles = files.filter(f => f.type === 'print');
   const vectorFiles = files.filter(f => f.type === 'vector');
   const internalFiles = files.filter(f => f.type === 'internal');
+  const photoshopFiles = files.filter(f => f.type === 'photoshop');
 
   // --- Customer Product Logic ---
   const [showProductSelector, setShowProductSelector] = useState(false);
@@ -738,6 +742,38 @@ export default function EditOrder() {
                   <li key={idx} className="flex justify-between items-center text-sm bg-amber-50 p-2 rounded border border-amber-100 text-amber-800">
                     <span className="truncate max-w-[200px] font-medium">{file.name}</span>
                     <button type="button" onClick={() => removeFile(files.indexOf(file))} className="text-amber-400 hover:text-amber-700">
+                      <X size={16} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Photoshop Files */}
+          <div>
+            <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex justify-between items-center">
+              <span>Photoshop Dateien</span>
+              <span className="text-xs font-normal text-blue-900 bg-blue-100 px-2 py-1 rounded">Intern (.psd, .pdf)</span>
+            </h3>
+            <div className="border-2 border-dashed border-blue-200 bg-blue-50/30 rounded-lg p-6 text-center hover:bg-blue-50 transition-colors relative">
+              <input
+                type="file"
+                multiple
+                onChange={(e) => handleFileUpload(e, "photoshop")}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                accept=".psd,.pdf"
+              />
+              <Layers className="mx-auto h-8 w-8 text-blue-500 mb-2" />
+              <p className="text-sm text-blue-700 font-medium">PSD/PDF hochladen</p>
+              <p className="text-xs text-blue-500 mt-1">Nur für interne Bearbeitung</p>
+            </div>
+            {photoshopFiles.length > 0 && (
+              <ul className="mt-4 space-y-2">
+                {photoshopFiles.map((file, idx) => (
+                  <li key={idx} className="flex justify-between items-center text-sm bg-blue-50 p-2 rounded border border-blue-100 text-blue-800">
+                    <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                    <button type="button" onClick={() => removeFile(files.indexOf(file))} className="text-blue-400 hover:text-blue-700">
                       <X size={16} />
                     </button>
                   </li>

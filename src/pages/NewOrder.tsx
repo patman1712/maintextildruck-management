@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Upload, Plus, X, User, Calendar, FileText, ShoppingCart, Trash2, Package, Shield } from "lucide-react";
+import { Upload, Plus, X, User, Calendar, FileText, ShoppingCart, Trash2, Package, Shield, Layers } from "lucide-react";
 import { useAppStore, Order } from "@/store";
 import { useNavigate } from "react-router-dom";
 
@@ -125,6 +125,7 @@ export default function NewOrder() {
   const [printFiles, setPrintFiles] = useState<{file: File, customName?: string}[]>([]);
   const [vectorFiles, setVectorFiles] = useState<File[]>([]);
   const [internalFiles, setInternalFiles] = useState<File[]>([]);
+  const [photoshopFiles, setPhotoshopFiles] = useState<File[]>([]);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
@@ -317,7 +318,7 @@ export default function NewOrder() {
       return 1;
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "preview" | "print" | "vector" | "internal") => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "preview" | "print" | "vector" | "internal" | "photoshop") => {
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files);
       if (type === "preview") {
@@ -328,11 +329,13 @@ export default function NewOrder() {
         setVectorFiles([...vectorFiles, ...newFiles]);
       } else if (type === "internal") {
         setInternalFiles([...internalFiles, ...newFiles]);
+      } else if (type === "photoshop") {
+        setPhotoshopFiles([...photoshopFiles, ...newFiles]);
       }
     }
   };
 
-  const removeFile = (index: number, type: "preview" | "print" | "vector" | "internal") => {
+  const removeFile = (index: number, type: "preview" | "print" | "vector" | "internal" | "photoshop") => {
     if (type === "preview") {
       setFiles(files.filter((_, i) => i !== index));
     } else if (type === "print") {
@@ -341,6 +344,8 @@ export default function NewOrder() {
       setVectorFiles(vectorFiles.filter((_, i) => i !== index));
     } else if (type === "internal") {
       setInternalFiles(internalFiles.filter((_, i) => i !== index));
+    } else if (type === "photoshop") {
+      setPhotoshopFiles(photoshopFiles.filter((_, i) => i !== index));
     }
   };
 
@@ -365,15 +370,16 @@ export default function NewOrder() {
     printFiles.forEach(f => formData.append('print', f.file));
     vectorFiles.forEach(f => formData.append('vector', f));
     internalFiles.forEach(f => formData.append('internal', f));
+    photoshopFiles.forEach(f => formData.append('photoshop', f));
 
-    let uploadedFiles: { name: string; type: 'preview' | 'print' | 'vector' | 'internal'; url?: string; customName?: string }[] = [];
+    let uploadedFiles: { name: string; type: 'preview' | 'print' | 'vector' | 'internal' | 'photoshop'; url?: string; customName?: string }[] = [];
     
     // Add existing attached files first
     uploadedFiles = [...uploadedFiles, ...existingFilesToAttach, ...existingPreviewFiles];
 
     try {
       // Only fetch if there are files
-      if (files.length > 0 || printFiles.length > 0 || vectorFiles.length > 0 || internalFiles.length > 0) {
+      if (files.length > 0 || printFiles.length > 0 || vectorFiles.length > 0 || internalFiles.length > 0 || photoshopFiles.length > 0) {
         const res = await fetch('/api/upload', {
           method: 'POST',
           body: formData
@@ -400,6 +406,9 @@ export default function NewOrder() {
           }
           if (data.files.internal) {
             uploadedFiles = [...uploadedFiles, ...data.files.internal.map((f: any) => ({ name: f.originalName, type: 'internal' as const, url: f.path }))];
+          }
+          if (data.files.photoshop) {
+            uploadedFiles = [...uploadedFiles, ...data.files.photoshop.map((f: any) => ({ name: f.originalName, type: 'photoshop' as const, url: f.path, thumbnail: f.thumbnail }))];
           }
         }
       }
@@ -912,6 +921,38 @@ export default function NewOrder() {
                   <li key={idx} className="flex justify-between items-center text-sm bg-amber-50 p-2 rounded border border-amber-100 text-amber-800">
                     <span className="truncate max-w-[200px] font-medium">{file.name}</span>
                     <button type="button" onClick={() => removeFile(idx, "internal")} className="text-amber-400 hover:text-amber-700">
+                      <X size={16} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Photoshop Files */}
+          <div>
+            <h3 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex justify-between items-center">
+              <span>Photoshop Dateien</span>
+              <span className="text-xs font-normal text-blue-900 bg-blue-100 px-2 py-1 rounded">Intern (.psd, .pdf)</span>
+            </h3>
+            <div className="border-2 border-dashed border-blue-200 bg-blue-50/30 rounded-lg p-6 text-center hover:bg-blue-50 transition-colors relative">
+              <input
+                type="file"
+                multiple
+                onChange={(e) => handleFileUpload(e, "photoshop")}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                accept=".psd,.pdf"
+              />
+              <Layers className="mx-auto h-8 w-8 text-blue-500 mb-2" />
+              <p className="text-sm text-blue-700 font-medium">PSD/PDF hochladen</p>
+              <p className="text-xs text-blue-500 mt-1">Nur für interne Bearbeitung</p>
+            </div>
+            {photoshopFiles.length > 0 && (
+              <ul className="mt-4 space-y-2">
+                {photoshopFiles.map((file, idx) => (
+                  <li key={idx} className="flex justify-between items-center text-sm bg-blue-50 p-2 rounded border border-blue-100 text-blue-800">
+                    <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                    <button type="button" onClick={() => removeFile(idx, "photoshop")} className="text-blue-400 hover:text-blue-700">
                       <X size={16} />
                     </button>
                   </li>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/store";
-import { ArrowLeft, Calendar, User, FileText, Download, Eye, Printer, PenTool, Trash2, ShoppingCart, ExternalLink, Shield } from "lucide-react";
+import { ArrowLeft, Calendar, User, FileText, Download, Eye, Printer, PenTool, Trash2, ShoppingCart, ExternalLink, Shield, Layers } from "lucide-react";
 import OrderPrintView from "@/components/OrderPrintView";
 
 export default function OrderDetails() {
@@ -364,6 +364,29 @@ export default function OrderDetails() {
                   </ul>
                 ) : (
                   <p className="text-xs text-amber-400 italic">Keine internen Dateien.</p>
+                )}
+              </div>
+
+              {/* Photoshop Files */}
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                <h4 className="font-medium text-blue-800 mb-3 flex items-center">
+                  <Layers size={16} className="mr-2 text-blue-600" /> Photoshop (Intern)
+                </h4>
+                {order.files.filter(f => f.type === 'photoshop').length > 0 ? (
+                  <ul className="space-y-2">
+                    {order.files.filter(f => f.type === 'photoshop').map((file, idx) => (
+                  <li key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-blue-100">
+                    {renderFilePreview(file)}
+                    <div className="flex space-x-1">
+                      <button onClick={() => downloadFile(file)} className="text-blue-400 hover:text-blue-700 p-1" title="Herunterladen">
+                        <Download size={16} />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-blue-400 italic">Keine Photoshop Dateien.</p>
                 )}
               </div>
             </div>

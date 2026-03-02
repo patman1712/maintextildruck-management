@@ -64,7 +64,7 @@ export interface Order {
   employees: string[];
   files: { 
     name: string; 
-    type: 'preview' | 'print' | 'vector' | 'internal'; 
+    type: 'preview' | 'print' | 'vector' | 'internal' | 'photoshop'; 
     url?: string; 
     file?: File; 
     customName?: string;
@@ -104,7 +104,7 @@ export interface Product {
     file_name?: string; name?: string;
     thumbnail_url?: string; thumbnail?: string;
     customName?: string;
-    type?: 'preview' | 'print' | 'vector' | 'internal';
+    type?: 'preview' | 'print' | 'vector' | 'internal' | 'photoshop';
     created_at?: string;
   }[];
   created_at?: string;

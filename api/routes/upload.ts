@@ -79,10 +79,11 @@ router.post('/', upload.fields([
   { name: 'preview', maxCount: 20 },
   { name: 'print', maxCount: 20 },
   { name: 'vector', maxCount: 20 },
-  { name: 'internal', maxCount: 20 }
+  { name: 'internal', maxCount: 20 },
+  { name: 'photoshop', maxCount: 20 }
 ]), async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-  const result: any = { preview: [], print: [], vector: [], internal: [] };
+  const result: any = { preview: [], print: [], vector: [], internal: [], photoshop: [] };
 
   if (files) {
     if (files.preview) {
@@ -100,6 +101,12 @@ router.post('/', upload.fields([
     }
     if (files.internal) {
       result.internal = await Promise.all(files.internal.map(generateThumbnail));
+    }
+    if (files.photoshop) {
+        // Photoshop files (.psd) might not be supported by sharp directly or fully for thumbnails
+        // But the user also allows .pdf here.
+        // We will try to generate thumbnail if possible, otherwise just store it.
+        result.photoshop = await Promise.all(files.photoshop.map(generateThumbnail));
     }
   }
 

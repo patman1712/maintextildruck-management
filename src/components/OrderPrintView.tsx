@@ -32,6 +32,7 @@ export default function OrderPrintView({ order }: OrderPrintViewProps) {
       case 'vector': return 'Rohdaten';
       case 'print': return 'Druckdaten';
       case 'internal': return 'Intern';
+      case 'photoshop': return 'Photoshop (Intern)';
       default: return 'Datei';
     }
   };
