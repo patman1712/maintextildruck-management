@@ -296,7 +296,7 @@ export default function NewOrder() {
     setSelectedExistingFiles([]);
   };
 
-  const [existingFilesToAttach, setExistingFilesToAttach] = useState<{name: string, url: string, type: 'print', quantity?: number}[]>([]);
+  const [existingFilesToAttach, setExistingFilesToAttach] = useState<{name: string, url: string, type: 'print' | 'photoshop', quantity?: number}[]>([]);
 
   const parseQuantity = (input: string): number => {
       // Try to find patterns like "5x", "5 x", "5X"
@@ -1018,6 +1018,37 @@ export default function NewOrder() {
               <p className="text-sm text-blue-700 font-medium">PSD/PDF hochladen</p>
               <p className="text-xs text-blue-500 mt-1">Nur für interne Bearbeitung</p>
             </div>
+            {/* Button to load existing Photoshop files */}
+            {selectedCustomerId && (
+                <div className="mt-2 text-right">
+                    <button 
+                        type="button"
+                        onClick={loadCustomerPhotoshopFiles}
+                        className="text-xs text-blue-600 hover:text-blue-800 underline font-medium flex items-center justify-end ml-auto"
+                    >
+                        <Layers size={14} className="mr-1" />
+                        Bereits hochgeladene Photoshop-Dateien verwenden
+                    </button>
+                </div>
+            )}
+
+            {/* Existing Photoshop Files List */}
+            {existingFilesToAttach.filter(f => f.type === 'photoshop').length > 0 && (
+              <ul className="mt-4 space-y-2">
+                {existingFilesToAttach.filter(f => f.type === 'photoshop').map((file, idx) => (
+                  <li key={`existing-ps-${idx}`} className="flex justify-between items-center text-sm bg-blue-50 p-2 rounded border border-blue-100 text-blue-800">
+                    <div className="flex items-center">
+                        <span className="bg-blue-200 text-blue-800 text-[10px] px-1 rounded mr-2">ARCHIV</span>
+                        <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                    </div>
+                    <button type="button" onClick={() => removeExistingFile(existingFilesToAttach.indexOf(file))} className="text-blue-400 hover:text-blue-700">
+                      <X size={16} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
             {photoshopFiles.length > 0 && (
               <ul className="mt-4 space-y-2">
                 {photoshopFiles.map((file, idx) => (
@@ -1211,8 +1242,88 @@ export default function NewOrder() {
         </div>
       )}
 
-      {/* File Selector Modal */}
-      {showFileSelector && (
+      {/* Photoshop File Selector Modal */}
+      {showPhotoshopSelector && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
+                <div className="p-4 border-b flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-gray-800">Photoshop-Dateien aus Archiv wählen</h3>
+                    <button onClick={() => setShowPhotoshopSelector(false)} className="text-gray-500 hover:text-gray-700">
+                        <X size={20} />
+                    </button>
+                </div>
+                
+                <div className="p-4 overflow-y-auto flex-1">
+                    <div className="mb-4">
+                        <input 
+                            type="text" 
+                            placeholder="Dateien suchen (Titel)..." 
+                            className="w-full border p-2 rounded text-sm focus:ring-red-500 focus:border-red-500"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            autoFocus
+                        />
+                    </div>
+                    
+                    {availablePhotoshopFiles.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">
+                            {searchTerm ? "Keine passenden Dateien gefunden." : "Keine Photoshop-Dateien für diesen Kunden gefunden."}
+                        </p>
+                    ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                            {availablePhotoshopFiles
+                                .filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                                .map((file, idx) => (
+                                <div 
+                                    key={idx} 
+                                    className={`border rounded p-3 cursor-pointer transition-all relative ${
+                                        selectedExistingPhotoshopFiles.includes(file.url) 
+                                        ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' 
+                                        : 'border-gray-200 hover:border-blue-300'
+                                    }`}
+                                    onClick={() => {
+                                        if (selectedExistingPhotoshopFiles.includes(file.url)) {
+                                            setSelectedExistingPhotoshopFiles(selectedExistingPhotoshopFiles.filter(u => u !== file.url));
+                                        } else {
+                                            setSelectedExistingPhotoshopFiles([...selectedExistingPhotoshopFiles, file.url]);
+                                        }
+                                    }}
+                                >
+                                    <div className="h-24 bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden">
+                                         <Layers className="h-10 w-10 text-blue-400" />
+                                    </div>
+                                    <p className="text-xs font-medium truncate" title={file.name}>{file.name}</p>
+                                    <p className="text-[10px] text-gray-500 truncate">{new Date(file.date).toLocaleDateString()} - {file.orderTitle}</p>
+                                    
+                                    {selectedExistingPhotoshopFiles.includes(file.url) && (
+                                        <div className="absolute top-2 right-2 bg-blue-500 text-white rounded-full p-0.5">
+                                            <div className="w-3 h-3 flex items-center justify-center text-[10px]">✓</div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+                
+                <div className="p-4 border-t bg-gray-50 flex justify-end space-x-3">
+                    <button 
+                        onClick={() => setShowPhotoshopSelector(false)}
+                        className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                    >
+                        Abbrechen
+                    </button>
+                    <button 
+                        onClick={addSelectedPhotoshopFiles}
+                        disabled={selectedExistingPhotoshopFiles.length === 0}
+                        className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Ausgewählte hinzufügen ({selectedExistingPhotoshopFiles.length})
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] flex flex-col">
                 <div className="p-4 border-b flex justify-between items-center">
