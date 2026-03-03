@@ -232,7 +232,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     type TEXT NOT NULL, -- 'size' or 'color'
-    values TEXT NOT NULL, -- JSON string or comma-separated
+    variable_values TEXT NOT NULL, -- JSON string or comma-separated
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `);

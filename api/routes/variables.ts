@@ -9,7 +9,7 @@ const router = Router();
 router.get('/', (req, res) => {
   try {
     const variables = db.prepare(`
-      SELECT v.*, 
+      SELECT v.id, v.name, v.type, v.variable_values as "values", v.created_at, 
       (SELECT json_group_array(shop_id) FROM shop_variable_assignments WHERE variable_id = v.id) as assigned_shop_ids
       FROM product_variables v 
       ORDER BY v.created_at DESC
@@ -46,7 +46,7 @@ router.post('/', (req, res) => {
     const valuesStr = Array.isArray(values) ? values.join(',') : values;
 
     db.prepare(`
-      INSERT INTO product_variables (id, name, type, values)
+      INSERT INTO product_variables (id, name, type, variable_values)
       VALUES (?, ?, ?, ?)
     `).run(id, name, type, valuesStr);
 
@@ -58,7 +58,7 @@ router.post('/', (req, res) => {
         }
     }
 
-    const variable = db.prepare('SELECT * FROM product_variables WHERE id = ?').get(id);
+    const variable = db.prepare('SELECT id, name, type, variable_values as "values", created_at FROM product_variables WHERE id = ?').get(id);
     res.json({ success: true, data: variable });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -75,7 +75,7 @@ router.put('/:id', (req, res) => {
 
     db.prepare(`
       UPDATE product_variables 
-      SET name = ?, type = ?, values = ?
+      SET name = ?, type = ?, variable_values = ?
       WHERE id = ?
     `).run(name, type, valuesStr, id);
 
@@ -91,7 +91,7 @@ router.put('/:id', (req, res) => {
         }
     }
 
-    const variable = db.prepare('SELECT * FROM product_variables WHERE id = ?').get(id);
+    const variable = db.prepare('SELECT id, name, type, variable_values as "values", created_at FROM product_variables WHERE id = ?').get(id);
     res.json({ success: true, data: variable });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -114,7 +114,7 @@ router.get('/shop/:shopId', (req, res) => {
     try {
         const { shopId } = req.params;
         const variables = db.prepare(`
-            SELECT v.* 
+            SELECT v.id, v.name, v.type, v.variable_values as "values", v.created_at 
             FROM product_variables v
             JOIN shop_variable_assignments sva ON v.id = sva.variable_id
             WHERE sva.shop_id = ?
