@@ -335,6 +335,7 @@ router.post('/:productId/duplicate', (req: Request, res: Response) => {
 // POST Upload file and assign to product
 router.post('/:productId/upload', upload.single('file'), async (req: Request, res: Response) => {
     const { productId } = req.params;
+    const { type } = req.body; // Support type from body
     const file = req.file;
 
     if (!file) {
@@ -365,10 +366,12 @@ router.post('/:productId/upload', upload.single('file'), async (req: Request, re
         }
 
         const id = Math.random().toString(36).substr(2, 9);
+        const fileType = type || 'print'; // Default to print if not specified
+
         db.prepare(`
             INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type, quantity)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(id, productId, fileUrl, originalName, thumbnailUrl, 'print', 1);
+        `).run(id, productId, fileUrl, originalName, thumbnailUrl, fileType, 1);
 
         const newFile = {
             id,
@@ -376,7 +379,7 @@ router.post('/:productId/upload', upload.single('file'), async (req: Request, re
             file_url: fileUrl,
             file_name: originalName,
             thumbnail_url: thumbnailUrl,
-            type: 'print',
+            type: fileType,
             quantity: 1
         };
 

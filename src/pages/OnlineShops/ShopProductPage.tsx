@@ -169,7 +169,7 @@ const ShopProductPage: React.FC = () => {
   if (loading) return <div className="container mx-auto p-8 text-center">Lade Produkt...</div>;
   if (!product) return <div className="container mx-auto p-8 text-center">Produkt nicht gefunden.</div>;
 
-  const images = product.files || [];
+  const images = (product.files || []).filter((f: any) => !f.type || f.type === 'view' || f.type === 'preview' || (f.thumbnail_url && f.type !== 'print' && f.type !== 'vector' && f.type !== 'internal'));
   
   // Filter images: 
   // 1. If NO personalization is selected, show ONLY standard images (no personalization_option_id)

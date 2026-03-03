@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Save, Image as ImageIcon, Plus, Trash2, ArrowRight } from 'lucide-react';
+import { X, Save, Image as ImageIcon, Plus, Trash2, ArrowRight, FileText, Download } from 'lucide-react';
 import { ShopProductAssignment, Product } from '../../../store';
 
 interface ProductEditorModalProps {
@@ -19,6 +19,9 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
   if (!isOpen) return null;
 
   const isCreateMode = !assignment;
+
+  // Tabs for Left Column
+  const [activeTab, setActiveTab] = useState<'view' | 'print'>('view');
 
   // Form Data for Shop Settings
   const [formData, setFormData] = useState({
@@ -156,9 +159,6 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                     description: formData.description,
                     manufacturer_info: formData.manufacturer_info,
                     size: formData.size
-                    // We don't save price in base product, only in shop assignment usually? 
-                    // But manual product doesn't have a price field in `customer_products` currently?
-                    // Let's check schema later. For now, assignment holds the price.
                 })
             });
             const prodData = await prodRes.json();
@@ -179,7 +179,6 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                 
                 if (assignData.success) {
                     // 3. Update Assignment with full details (personalization, variants, etc.)
-                    // We need to do a second PUT because POST might not accept all fields or to be consistent
                     await fetch(`/api/shop-management/${shopId}/products/${assignData.data.id}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
@@ -213,9 +212,9 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     setSaving(false);
   };
 
-  // Images
-  const [currentImages, setCurrentImages] = useState<any[]>([]);
-  const [availableImages, setAvailableImages] = useState<any[]>([]);
+  // Files (Images & Print Files)
+  const [currentFiles, setCurrentFiles] = useState<any[]>([]);
+  const [availableFiles, setAvailableFiles] = useState<any[]>([]);
   
   useEffect(() => {
       if (assignment?.id) {
@@ -223,15 +222,15 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
               .then(res => res.json())
               .then(data => {
                   if (data.success) {
-                      setCurrentImages(data.data.assigned);
-                      setAvailableImages(data.data.available);
+                      setCurrentFiles(data.data.assigned);
+                      setAvailableFiles(data.data.available);
                   }
               })
               .catch(err => console.error(err));
       }
   }, [shopId, assignment?.id]);
 
-  const handleAddImage = async (fileId: string) => {
+  const handleAddFile = async (fileId: string) => {
       if (!assignment) return;
       try {
           const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images`, {
@@ -241,15 +240,15 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
           });
           const data = await res.json();
           if (data.success) {
-              const assigned = availableImages.find(img => img.id === fileId);
+              const assigned = availableFiles.find(img => img.id === fileId);
               if (assigned) {
-                  setCurrentImages([...currentImages, assigned]);
+                  setCurrentFiles([...currentFiles, assigned]);
               }
           }
       } catch (e) { console.error(e); }
   };
 
-  const handleRemoveImage = async (fileId: string) => {
+  const handleRemoveFile = async (fileId: string) => {
       if (!assignment) return;
       try {
           const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
@@ -257,7 +256,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
           });
           const data = await res.json();
           if (data.success) {
-              setCurrentImages(currentImages.filter(img => img.id !== fileId));
+              setCurrentFiles(currentFiles.filter(img => img.id !== fileId));
           }
       } catch (e) { console.error(e); }
   };
@@ -269,6 +268,8 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       const file = e.target.files[0];
       const formData = new FormData();
       formData.append('file', file);
+      // Determine type based on active tab
+      formData.append('type', activeTab === 'view' ? 'view' : 'print');
       
       try {
           const productId = assignment.product_id; 
@@ -279,8 +280,8 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
           const data = await res.json();
           
           if (data.success) {
-              await handleAddImage(data.data.id);
-              setAvailableImages([data.data, ...availableImages]);
+              await handleAddFile(data.data.id);
+              setAvailableFiles([data.data, ...availableFiles]);
           }
       } catch (e) { console.error(e); }
   };
@@ -295,7 +296,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
           });
           const data = await res.json();
           if (data.success) {
-              setCurrentImages(currentImages.map(img => 
+              setCurrentFiles(currentFiles.map(img => 
                   img.id === fileId ? { ...img, personalization_option_ids: optionIds } : img
               ));
           }
@@ -309,7 +310,27 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       handleAssignImageToOptions(fileId, newOptionIds);
   };
 
-  const mainImage = currentImages.length > 0 ? (currentImages[0].file_url || currentImages[0].thumbnail_url) : null;
+  // Filter logic for tabs
+  const filteredCurrentFiles = currentFiles.filter(f => {
+      if (activeTab === 'view') {
+          // View tab: Show view, preview, or images (by extension/thumbnail) unless explicitly print/vector
+          return f.type === 'view' || f.type === 'preview' || (!f.type && f.thumbnail_url); 
+      } else {
+          // Print tab: Show print, vector, photoshop, internal
+          return ['print', 'vector', 'photoshop', 'internal'].includes(f.type) || (!f.type && !f.thumbnail_url);
+      }
+  });
+
+  const filteredAvailableFiles = availableFiles.filter(f => {
+       // Only show available files that match current tab type
+       if (activeTab === 'view') {
+           return (f.type === 'view' || f.type === 'preview' || (!f.type && f.thumbnail_url)) && !currentFiles.some(c => c.id === f.id);
+       } else {
+           return (['print', 'vector', 'photoshop', 'internal'].includes(f.type) || (!f.type && !f.thumbnail_url)) && !currentFiles.some(c => c.id === f.id);
+       }
+  });
+
+  const mainImage = currentFiles.find(f => f.type === 'view' || f.type === 'preview' || f.thumbnail_url)?.file_url;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 overflow-y-auto">
@@ -335,13 +356,13 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            {/* Left Column: Images */}
+            {/* Left Column: Images & Files */}
             <div className="flex flex-col gap-4">
                {isCreateMode ? (
                    <div className="w-full bg-slate-50 aspect-[3/4] rounded-lg border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 p-8 text-center">
                        <ImageIcon size={48} className="mb-4 opacity-50" />
-                       <h3 className="font-bold text-lg text-slate-600 mb-2">Bilder erst nach Speichern</h3>
-                       <p className="text-sm">Bitte legen Sie das Produkt erst an. Danach können Sie Bilder hochladen und zuweisen.</p>
+                       <h3 className="font-bold text-lg text-slate-600 mb-2">Bilder & Dateien</h3>
+                       <p className="text-sm">Bitte legen Sie das Produkt erst an. Danach können Sie Bilder und Druckdaten hinzufügen.</p>
                        <div className="mt-6 flex items-center text-blue-600 font-medium">
                            <Save size={16} className="mr-2" />
                            <span>Erst speichern</span>
@@ -350,96 +371,170 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                    </div>
                ) : (
                    <>
-                       {/* Main Image */}
-                       <div className="w-full bg-slate-50 aspect-[3/4] rounded-lg border border-slate-200 flex items-center justify-center text-slate-300 relative group overflow-hidden">
-                            {mainImage ? (
-                                <img src={mainImage} className="w-full h-full object-cover" />
-                            ) : (
-                                <div className="flex flex-col items-center">
-                                    <ImageIcon size={48} className="mb-2 opacity-50" />
-                                    <span className="font-bold">Kein Bild</span>
-                                </div>
-                            )}
-                            
-                            {/* Drag & Drop Overlay */}
-                            <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer">
-                                <Plus size={32} className="mb-2" />
-                                <span className="font-bold">Bild hinzufügen</span>
-                                <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
-                            </label>
+                       {/* Tabs */}
+                       <div className="flex space-x-1 border-b border-slate-200 mb-2">
+                           <button 
+                               onClick={() => setActiveTab('view')}
+                               className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'view' ? 'border-slate-800 text-slate-800' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                           >
+                               Ansichtsbilder
+                           </button>
+                           <button 
+                               onClick={() => setActiveTab('print')}
+                               className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'print' ? 'border-slate-800 text-slate-800' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                           >
+                               Druckdaten
+                           </button>
                        </div>
 
-                       {/* Thumbnails List */}
-                       <div className="space-y-2">
-                           <p className="text-xs font-bold uppercase text-slate-500">Aktive Bilder (Shop)</p>
-                           <div className="grid grid-cols-4 gap-2">
-                              {currentImages.map((img: any, idx: number) => (
-                                  <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden">
-                                      <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
-                                      
-                                      {/* Personalization Badge */}
-                                      {img.personalization_option_ids && img.personalization_option_ids.length > 0 && (
-                                          <div className="absolute bottom-0 left-0 right-0 bg-blue-600/90 text-white text-[9px] font-bold px-1 py-0.5 truncate text-center">
-                                              {img.personalization_option_ids.map((oid: string) => personalizationOptions.find(o => o.id === oid)?.name).join(', ')}
-                                          </div>
-                                      )}
-
-                                      {/* Remove Button */}
-                                      <button 
-                                          onClick={() => handleRemoveImage(img.id)}
-                                          className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 z-10"
-                                          title="Aus Shop entfernen"
-                                      >
-                                          <Trash2 size={12} />
-                                      </button>
-                                      
-                                      {/* Assign Option Overlay */}
-                                      <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 text-xs text-white overflow-y-auto">
-                                          <div className="font-bold mb-1 underline">Zuordnung:</div>
-                                          <div className="space-y-1 w-full">
-                                              {personalizationOptions.filter(o => selectedPersonalizationIds.includes(o.id)).map(opt => {
-                                                  const isSelected = img.personalization_option_ids?.includes(opt.id);
-                                                  return (
-                                                      <label key={opt.id} className="flex items-center space-x-2 cursor-pointer hover:bg-white/10 p-1 rounded">
-                                                          <input 
-                                                              type="checkbox" 
-                                                              checked={isSelected}
-                                                              onChange={() => toggleImageOption(img.id, opt.id, img.personalization_option_ids || [])}
-                                                              className="rounded text-blue-500 focus:ring-0"
-                                                          />
-                                                          <span className="truncate">{opt.name}</span>
-                                                      </label>
-                                                  );
-                                              })}
-                                              {personalizationOptions.filter(o => selectedPersonalizationIds.includes(o.id)).length === 0 && (
-                                                  <div className="text-[10px] italic text-slate-400">Keine Optionen aktiviert</div>
-                                              )}
-                                          </div>
-                                      </div>
-                                  </div>
-                              ))}
-                              <label className="aspect-square bg-slate-100 border border-dashed border-slate-300 rounded flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-600 cursor-pointer transition-colors">
-                                  <Plus size={20} />
-                                  <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
-                              </label>
+                       {/* Main Image (Only visible in View tab) */}
+                       {activeTab === 'view' && (
+                           <div className="w-full bg-slate-50 aspect-[3/4] rounded-lg border border-slate-200 flex items-center justify-center text-slate-300 relative group overflow-hidden mb-2">
+                                {mainImage ? (
+                                    <img src={mainImage} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="flex flex-col items-center">
+                                        <ImageIcon size={48} className="mb-2 opacity-50" />
+                                        <span className="font-bold">Kein Bild</span>
+                                    </div>
+                                )}
+                                
+                                {/* Drag & Drop Overlay */}
+                                <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer">
+                                    <Plus size={32} className="mb-2" />
+                                    <span className="font-bold">Bild hinzufügen</span>
+                                    <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+                                </label>
                            </div>
-                           <p className="text-[10px] text-slate-400 italic">Hovern Sie über ein Bild, um es einer Option zuzuweisen.</p>
-                       </div>
+                       )}
 
-                       {/* Available Images (from Customer Product) */}
-                       {availableImages.filter(img => !currentImages.some(c => c.id === img.id)).length > 0 && (
-                           <div className="space-y-2 pt-4 border-t border-slate-100">
-                               <p className="text-xs font-bold uppercase text-slate-500">Verfügbare Bilder (Kunde)</p>
-                               <div className="grid grid-cols-4 gap-2 opacity-60 hover:opacity-100 transition-opacity">
-                                  {availableImages.filter(img => !currentImages.some(c => c.id === img.id)).map((img: any, idx: number) => (
-                                      <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden cursor-pointer" onClick={() => handleAddImage(img.id)}>
+                       {/* Files List */}
+                       <div className="space-y-2">
+                           <p className="text-xs font-bold uppercase text-slate-500">
+                               Aktive {activeTab === 'view' ? 'Bilder' : 'Dateien'} (Shop)
+                           </p>
+                           
+                           {activeTab === 'view' ? (
+                               // Grid View for Images
+                               <div className="grid grid-cols-4 gap-2">
+                                  {filteredCurrentFiles.map((img: any, idx: number) => (
+                                      <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden">
                                           <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
-                                          <div className="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 flex items-center justify-center">
-                                              <Plus size={20} className="text-white drop-shadow-md" />
+                                          
+                                          {/* Personalization Badge */}
+                                          {img.personalization_option_ids && img.personalization_option_ids.length > 0 && (
+                                              <div className="absolute bottom-0 left-0 right-0 bg-blue-600/90 text-white text-[9px] font-bold px-1 py-0.5 truncate text-center">
+                                                  {img.personalization_option_ids.map((oid: string) => personalizationOptions.find(o => o.id === oid)?.name).join(', ')}
+                                              </div>
+                                          )}
+
+                                          <button 
+                                              onClick={() => handleRemoveFile(img.id)}
+                                              className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 z-10"
+                                              title="Entfernen"
+                                          >
+                                              <Trash2 size={12} />
+                                          </button>
+                                          
+                                          {/* Assign Option Overlay */}
+                                          <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 text-xs text-white overflow-y-auto">
+                                              <div className="font-bold mb-1 underline">Zuordnung:</div>
+                                              <div className="space-y-1 w-full">
+                                                  {personalizationOptions.filter(o => selectedPersonalizationIds.includes(o.id)).map(opt => {
+                                                      const isSelected = img.personalization_option_ids?.includes(opt.id);
+                                                      return (
+                                                          <label key={opt.id} className="flex items-center space-x-2 cursor-pointer hover:bg-white/10 p-1 rounded">
+                                                              <input 
+                                                                  type="checkbox" 
+                                                                  checked={isSelected}
+                                                                  onChange={() => toggleImageOption(img.id, opt.id, img.personalization_option_ids || [])}
+                                                                  className="rounded text-blue-500 focus:ring-0"
+                                                              />
+                                                              <span className="truncate">{opt.name}</span>
+                                                          </label>
+                                                      );
+                                                  })}
+                                                  {personalizationOptions.filter(o => selectedPersonalizationIds.includes(o.id)).length === 0 && (
+                                                      <div className="text-[10px] italic text-slate-400">Keine Optionen aktiviert</div>
+                                                  )}
+                                              </div>
                                           </div>
                                       </div>
                                   ))}
+                                  <label className="aspect-square bg-slate-100 border border-dashed border-slate-300 rounded flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-600 cursor-pointer transition-colors">
+                                      <Plus size={20} />
+                                      <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+                                  </label>
                                </div>
+                           ) : (
+                               // List View for Print Files
+                               <div className="space-y-2">
+                                   {filteredCurrentFiles.map((file: any) => (
+                                       <div key={file.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded hover:shadow-sm">
+                                           <div className="flex items-center space-x-3 overflow-hidden">
+                                               <div className="h-10 w-10 bg-slate-100 rounded flex items-center justify-center text-slate-500 flex-shrink-0">
+                                                   <FileText size={20} />
+                                               </div>
+                                               <div className="truncate">
+                                                   <p className="font-bold text-sm text-slate-800 truncate">{file.file_name}</p>
+                                                   <p className="text-xs text-slate-500 uppercase">{file.type}</p>
+                                               </div>
+                                           </div>
+                                           <div className="flex items-center space-x-2">
+                                               <a href={file.file_url} target="_blank" rel="noreferrer" className="p-1 text-slate-400 hover:text-blue-600">
+                                                   <Download size={16} />
+                                               </a>
+                                               <button onClick={() => handleRemoveFile(file.id)} className="p-1 text-slate-400 hover:text-red-600">
+                                                   <Trash2 size={16} />
+                                               </button>
+                                           </div>
+                                       </div>
+                                   ))}
+                                   
+                                   <label className="flex items-center justify-center p-3 border border-dashed border-slate-300 rounded text-slate-500 hover:bg-slate-50 hover:text-slate-700 cursor-pointer transition-colors">
+                                       <Plus size={16} className="mr-2" />
+                                       <span>Druckdaten hochladen</span>
+                                       <input type="file" className="hidden" onChange={handleFileUpload} />
+                                   </label>
+                               </div>
+                           )}
+                           
+                           {activeTab === 'view' && <p className="text-[10px] text-slate-400 italic">Hovern Sie über ein Bild, um es einer Option zuzuweisen.</p>}
+                       </div>
+
+                       {/* Available Files (from Customer Product) */}
+                       {filteredAvailableFiles.length > 0 && (
+                           <div className="space-y-2 pt-4 border-t border-slate-100 mt-4">
+                               <p className="text-xs font-bold uppercase text-slate-500">Verfügbare {activeTab === 'view' ? 'Bilder' : 'Dateien'} (Kunde)</p>
+                               
+                               {activeTab === 'view' ? (
+                                   <div className="grid grid-cols-4 gap-2 opacity-60 hover:opacity-100 transition-opacity">
+                                      {filteredAvailableFiles.map((img: any, idx: number) => (
+                                          <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden cursor-pointer" onClick={() => handleAddFile(img.id)}>
+                                              <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
+                                              <div className="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 flex items-center justify-center">
+                                                  <Plus size={20} className="text-white drop-shadow-md" />
+                                              </div>
+                                          </div>
+                                      ))}
+                                   </div>
+                               ) : (
+                                   <div className="space-y-2 opacity-60 hover:opacity-100 transition-opacity">
+                                       {filteredAvailableFiles.map((file: any) => (
+                                           <div key={file.id} className="flex items-center justify-between p-2 bg-slate-50 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-200" onClick={() => handleAddFile(file.id)}>
+                                               <div className="flex items-center space-x-3 overflow-hidden">
+                                                   <div className="h-8 w-8 bg-white rounded flex items-center justify-center text-slate-400 border border-slate-200 flex-shrink-0">
+                                                       <FileText size={14} />
+                                                   </div>
+                                                   <div className="truncate">
+                                                       <p className="font-medium text-xs text-slate-700 truncate">{file.file_name}</p>
+                                                   </div>
+                                               </div>
+                                               <Plus size={16} className="text-blue-600" />
+                                           </div>
+                                       ))}
+                                   </div>
+                               )}
                            </div>
                        )}
                    </>

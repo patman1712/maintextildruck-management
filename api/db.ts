@@ -478,6 +478,25 @@ try {
     console.log('Migrating database: Adding manufacturer_info to customer_products table');
     db.exec('ALTER TABLE customer_products ADD COLUMN manufacturer_info TEXT');
   }
+
+  // Migration: Fix file types for shop images
+  // Previously all files were 'print'. We want shop images to be 'view'.
+  // We assume all files currently assigned to shops are images.
+  try {
+      // Check if we have any 'view' types yet. If not, this might be the first run of this migration.
+      const viewTypeExists = db.prepare("SELECT count(*) as count FROM customer_product_files WHERE type = 'view'").get() as any;
+      if (viewTypeExists.count === 0) {
+          console.log('Migrating database: Updating Shop Images to type="view"');
+          db.exec(`
+            UPDATE customer_product_files 
+            SET type = 'view' 
+            WHERE id IN (SELECT customer_product_file_id FROM shop_product_images)
+          `);
+      }
+  } catch (e) {
+      console.error('Migration error (view type):', e);
+  }
+
 } catch (error) {
   console.error('Migration error:', error);
 }
