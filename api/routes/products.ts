@@ -1,9 +1,29 @@
 import { Router, type Request, type Response } from 'express';
-import db from '../db.js';
-import fs from 'fs';
+import db, { DATA_DIR } from '../db.js';
+import fs from 'fs-extra';
 import path from 'path';
+import multer from 'multer';
+import sharp from 'sharp';
 
 const router = Router();
+
+// Configure Multer for Product Uploads
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+fs.ensureDirSync(UPLOAD_DIR);
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, UPLOAD_DIR);
+  },
+  filename: function (req, file, cb) {
+    const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    const safeName = originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const timestamp = Date.now();
+    cb(null, `${timestamp}_${safeName}`);
+  }
+});
+
+const upload = multer({ storage: storage });
 
 // POST Bulk assign file to multiple products (MUST be defined before /:customerId)
 router.post('/bulk-files', (req: Request, res: Response) => {
@@ -308,6 +328,61 @@ router.post('/:productId/duplicate', (req: Request, res: Response) => {
 
         res.json({ success: true, message: 'Product duplicated', id: newId });
     } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST Upload file and assign to product
+router.post('/:productId/upload', upload.single('file'), async (req: Request, res: Response) => {
+    const { productId } = req.params;
+    const file = req.file;
+
+    if (!file) {
+        return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+
+    try {
+        const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        const fileUrl = `/uploads/${file.filename}`;
+        let thumbnailUrl = null;
+
+        // Generate thumbnail if image
+        if (file.mimetype.startsWith('image/')) {
+             const thumbName = `${file.filename}_thumb`;
+             const thumbOutputPath = path.join(UPLOAD_DIR, `${thumbName}.png`);
+             
+             try {
+                 await sharp(file.path)
+                    .resize(300, 300, {
+                        fit: 'contain',
+                        background: { r: 255, g: 255, b: 255, alpha: 0 }
+                    })
+                    .toFile(thumbOutputPath);
+                 thumbnailUrl = `/uploads/${thumbName}.png`;
+             } catch (e) {
+                 console.error('Thumbnail generation failed', e);
+             }
+        }
+
+        const id = Math.random().toString(36).substr(2, 9);
+        db.prepare(`
+            INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type, quantity)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(id, productId, fileUrl, originalName, thumbnailUrl, 'print', 1);
+
+        const newFile = {
+            id,
+            product_id: productId,
+            file_url: fileUrl,
+            file_name: originalName,
+            thumbnail_url: thumbnailUrl,
+            type: 'print',
+            quantity: 1
+        };
+
+        res.json({ success: true, message: 'File uploaded and assigned', data: newFile });
+    } catch (error: any) {
+        console.error('Upload error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

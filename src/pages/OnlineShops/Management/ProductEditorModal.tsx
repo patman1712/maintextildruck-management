@@ -218,7 +218,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       try {
           // We need the base product ID
           const productId = assignment.product_id; 
-          const res = await fetch(`/api/products/${productId}/files`, {
+          const res = await fetch(`/api/products/${productId}/upload`, {
               method: 'POST',
               body: formData
           });
