@@ -112,7 +112,7 @@ router.get('/:id/products', (req, res) => {
     if (assignmentIds.length > 0) {
         const placeholders = assignmentIds.map(() => '?').join(',');
         const assignedImages = db.prepare(`
-            SELECT cpf.*, spi.shop_product_assignment_id, spi.sort_order
+            SELECT cpf.*, spi.shop_product_assignment_id, spi.sort_order, spi.personalization_option_id
             FROM shop_product_images spi
             JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
             WHERE spi.shop_product_assignment_id IN (${placeholders})
