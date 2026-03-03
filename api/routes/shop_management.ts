@@ -80,7 +80,7 @@ router.get('/:shopId/products', (req, res) => {
     // Fetch files for each product (simple N+1 for now, or could use GROUP_CONCAT but JSON structure is safer here)
     // Given the low number of shop products usually, this is acceptable for now.
     const productsWithFiles = products.map(p => {
-        const files = db.prepare('SELECT * FROM product_files WHERE product_id = ? ORDER BY created_at DESC').all(p.product_id);
+        const files = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at DESC').all(p.product_id);
         return { ...p, files };
     });
 
