@@ -21,7 +21,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     description: assignment.description || '',
     manufacturer_info: assignment.manufacturer_info || '',
     size: assignment.size || '', 
-    variants: (assignment.variants as any) || {} // e.g. { "Kinder": { price: 15, sizes: "98, 104..." }, "Erwachsene": { price: 20, sizes: "S, M..." } }
+    variants: assignment.variants ? (typeof assignment.variants === 'string' ? JSON.parse(assignment.variants) : assignment.variants) : {}
   });
 
   const [shopVariables, setShopVariables] = useState<any[]>([]);
@@ -34,18 +34,16 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
               .then(data => {
                   if (data.success) {
                       setShopVariables(data.data);
-                      // Initial check of which variants are active based on formData.variants
-                      // Actually, let's just use the keys of formData.variants which might be variable names or IDs
-                      // Ideally we use variable IDs as keys.
-                      // But for simplicity and readability, let's assume we store by Variable Name or ID.
-                      // Let's use Variable ID.
-                      const existingVariantIds = Object.keys(formData.variants || {});
+                      
+                      // Check variants from formData (which is initialized from assignment)
+                      const currentVariants = formData.variants || {};
+                      const existingVariantIds = Object.keys(currentVariants);
                       setActiveVariants(existingVariantIds);
                   }
               })
               .catch(err => console.error(err));
       }
-  }, [shopId]);
+  }, [shopId]); // Remove formData from dependency array to avoid infinite loop or re-init
 
   const toggleVariant = (variable: any) => {
       const isActive = activeVariants.includes(variable.id);
