@@ -85,7 +85,8 @@ const ShopDashboard: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             product_id: product.id,
-            price: 0, // Default price?
+            category_id: null, // Explicitly send null or selected category if UI supported it
+            price: 0, 
             is_featured: false
         })
       });
@@ -108,10 +109,21 @@ const ShopDashboard: React.FC = () => {
 
   const handleUpdateProduct = async (id: string, updates: any) => {
     try {
+      // Find current state to merge
+      const currentProduct = shopProducts.find(p => p.id === id);
+      if (!currentProduct) return;
+      
+      const payload = { ...currentProduct, ...updates };
+
       await fetch(`/api/shop-management/${shopId}/products/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
+        body: JSON.stringify({
+            category_id: payload.category_id,
+            price: payload.price,
+            is_featured: payload.is_featured,
+            sort_order: payload.sort_order
+        })
       });
       setShopProducts(shopProducts.map(p => p.id === id ? { ...p, ...updates } : p));
     } catch (e) { console.error(e); }
@@ -344,7 +356,7 @@ const ShopDashboard: React.FC = () => {
                                 </div>
                                 <div className="flex items-center space-x-6">
                                     <select 
-                                        className="border border-slate-300 rounded p-1 text-sm"
+                                        className="border border-slate-300 rounded p-1 text-sm max-w-[150px]"
                                         value={sp.category_id || ''}
                                         onChange={(e) => handleUpdateProduct(sp.id, { category_id: e.target.value || null })}
                                     >
