@@ -1,12 +1,64 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store';
-import { ShoppingBag, Plus, Edit, Trash2, ExternalLink, Palette, Truck, CreditCard } from 'lucide-react';
+import { ShoppingBag, Plus, Edit, Trash2, ExternalLink, Palette, Truck, CreditCard, Sliders, Save, X } from 'lucide-react';
 
 const OnlineShops: React.FC = () => {
   const { shops, customers, addShop, updateShop, deleteShop } = useAppStore();
   const [showModal, setShowModal] = useState(false);
   const [editingShop, setEditingShop] = useState<any>(null);
+  
+  // --- VARIABLES STATE ---
+  const [variables, setVariables] = useState<any[]>([]);
+  const [editingVariable, setEditingVariable] = useState<any | null>(null);
+  const [showVariables, setShowVariables] = useState(false); // Toggle Variables Section
+
+  const fetchVariables = async () => {
+      try {
+          const res = await fetch('/api/variables');
+          const data = await res.json();
+          if (data.success) setVariables(data.data);
+      } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => {
+      fetchVariables();
+  }, []);
+
+  const handleSaveVariable = async () => {
+      if (!editingVariable || !editingVariable.name || !editingVariable.values) return;
+
+      try {
+          const url = editingVariable.id ? `/api/variables/${editingVariable.id}` : '/api/variables';
+          const method = editingVariable.id ? 'PUT' : 'POST';
+          
+          const res = await fetch(url, {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(editingVariable)
+          });
+          const data = await res.json();
+          
+          if (data.success) {
+              fetchVariables();
+              setEditingVariable(null);
+          } else {
+              alert('Fehler: ' + data.error);
+          }
+      } catch (e: any) {
+          alert('Fehler: ' + e.message);
+      }
+  };
+
+  const handleDeleteVariable = async (id: string) => {
+      if (!confirm('Variable wirklich löschen?')) return;
+      try {
+          await fetch(`/api/variables/${id}`, { method: 'DELETE' });
+          fetchVariables();
+      } catch (e) { console.error(e); }
+  };
+  // -----------------------
+
   const [formData, setFormData] = useState({
     customer_id: '',
     name: '',
@@ -62,14 +114,152 @@ const OnlineShops: React.FC = () => {
           </h1>
           <p className="text-slate-500">Erstellen und verwalten Sie individuelle Kunden-Shops</p>
         </div>
-        <button 
-          onClick={handleAdd}
-          className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-red-700 transition-colors"
-        >
-          <Plus size={20} className="mr-2" />
-          Neuer Shop
-        </button>
+        <div className="flex space-x-2">
+            <button 
+              onClick={() => setShowVariables(!showVariables)}
+              className={`px-4 py-2 rounded-lg flex items-center transition-colors ${showVariables ? 'bg-slate-200 text-slate-800' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+            >
+              <Sliders size={20} className="mr-2" />
+              Einstellungen & Variablen
+            </button>
+            <button 
+              onClick={handleAdd}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-red-700 transition-colors"
+            >
+              <Plus size={20} className="mr-2" />
+              Neuer Shop
+            </button>
+        </div>
       </div>
+
+      {showVariables && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8 animate-in fade-in slide-in-from-top-4">
+            <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex items-center justify-between">
+                <div className="flex items-center">
+                    <Sliders size={20} className="mr-2" />
+                    Globale Shop-Attribute (Größen, Farben)
+                </div>
+                <button 
+                    onClick={() => setEditingVariable({ name: '', type: 'size', values: '', shop_ids: [] })}
+                    className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center"
+                >
+                    <Plus size={16} className="mr-1" /> Neu
+                </button>
+            </h2>
+            <p className="text-sm text-gray-600 mb-6">
+                Definieren Sie hier Standardwerte für Größen und Farben, die in den Shops verwendet werden können. 
+                Diese können anschließend spezifischen Shops zugewiesen werden.
+            </p>
+
+            {editingVariable && (
+                <div className="mb-6 bg-slate-50 p-4 rounded-lg border border-blue-200">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-slate-800">{editingVariable.id ? 'Variable bearbeiten' : 'Neue Variable'}</h3>
+                        <button onClick={() => setEditingVariable(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Name (Intern)</label>
+                            <input 
+                                type="text" 
+                                className="w-full border p-2 rounded" 
+                                placeholder="z.B. Kindergrößen"
+                                value={editingVariable.name} 
+                                onChange={e => setEditingVariable({...editingVariable, name: e.target.value})}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Typ</label>
+                            <select 
+                                className="w-full border p-2 rounded"
+                                value={editingVariable.type}
+                                onChange={e => setEditingVariable({...editingVariable, type: e.target.value})}
+                            >
+                                <option value="size">Größe (Size)</option>
+                                <option value="color">Farbe (Color)</option>
+                            </select>
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Werte (Kommagetrennt)</label>
+                            <input 
+                                type="text" 
+                                className="w-full border p-2 rounded" 
+                                placeholder={editingVariable.type === 'size' ? "S, M, L, XL" : "Rot, Blau, Grün"}
+                                value={editingVariable.values} 
+                                onChange={e => setEditingVariable({...editingVariable, values: e.target.value})}
+                            />
+                            <p className="text-xs text-gray-400 mt-1">Geben Sie die verfügbaren Optionen getrennt durch Kommas ein.</p>
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Verfügbar in Shops</label>
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-40 overflow-y-auto p-2 border rounded bg-white">
+                                {shops.map(shop => (
+                                    <label key={shop.id} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={(editingVariable.shop_ids || []).includes(shop.id)}
+                                            onChange={e => {
+                                                const current = editingVariable.shop_ids || [];
+                                                const updated = e.target.checked 
+                                                    ? [...current, shop.id]
+                                                    : current.filter((id: string) => id !== shop.id);
+                                                setEditingVariable({...editingVariable, shop_ids: updated});
+                                            }}
+                                            className="rounded text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span className="text-sm truncate" title={shop.name}>{shop.name}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex justify-end space-x-2">
+                        <button 
+                            onClick={() => setEditingVariable(null)}
+                            className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded"
+                        >
+                            Abbrechen
+                        </button>
+                        <button 
+                            onClick={handleSaveVariable}
+                            className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded flex items-center"
+                        >
+                            <Save size={16} className="mr-2" /> Speichern
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {variables.map(v => (
+                    <div key={v.id} className="bg-slate-50 border border-slate-200 rounded-lg p-4 hover:bg-white hover:shadow-sm transition-all group">
+                        <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-center space-x-2">
+                                <span className="font-bold text-slate-800">{v.name}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 uppercase font-bold">{v.type === 'size' ? 'Größe' : 'Farbe'}</span>
+                            </div>
+                            <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => setEditingVariable({...v, shop_ids: v.assigned_shop_ids || []})} className="p-1 text-slate-400 hover:text-blue-600"><Edit size={16} /></button>
+                                <button onClick={() => handleDeleteVariable(v.id)} className="p-1 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
+                            </div>
+                        </div>
+                        <p className="text-sm text-gray-600 truncate mb-3" title={v.values}>{v.values}</p>
+                        <div className="flex items-center justify-between text-xs text-gray-400 border-t border-slate-200 pt-2">
+                            <span>Zugewiesen:</span>
+                            <span className="bg-white px-2 py-0.5 rounded border border-slate-200 font-mono text-slate-600">
+                                {v.assigned_shop_ids ? v.assigned_shop_ids.length : 0} Shops
+                            </span>
+                        </div>
+                    </div>
+                ))}
+                {variables.length === 0 && (
+                    <div className="col-span-full text-center py-8 text-slate-400 border-2 border-dashed border-slate-200 rounded-lg">
+                        Keine Variablen vorhanden.
+                    </div>
+                )}
+            </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {shops.map(shop => {
