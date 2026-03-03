@@ -92,11 +92,54 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     }
   };
 
+  const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
+  const [selectedPersonalizationIds, setSelectedPersonalizationIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/personalization')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                setPersonalizationOptions(data.data);
+                
+                // Initialize selected options from assignment
+                // We need to make sure the backend sends this field.
+                // Assuming assignment has personalization_options as array or JSON string
+                let initialSelected: string[] = [];
+                if ((assignment as any).personalization_options) {
+                    try {
+                        const raw = (assignment as any).personalization_options;
+                        initialSelected = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                    } catch (e) {
+                        initialSelected = [];
+                    }
+                }
+                setSelectedPersonalizationIds(initialSelected);
+            }
+        })
+        .catch(err => console.error(err));
+  }, []);
+
+  const togglePersonalizationOption = (id: string) => {
+      setSelectedPersonalizationIds(prev => {
+          const newSelection = prev.includes(id) 
+              ? prev.filter(pid => pid !== id)
+              : [...prev, id];
+          
+          // Update formData immediately so it's ready for save
+          // But wait, formData doesn't have this field yet.
+          // We'll handle it in handleSave
+          return newSelection;
+      });
+  };
 
   const handleSave = async () => {
     setSaving(true);
-    await onSave(assignment.id, formData);
+    await onSave(assignment.id, {
+        ...formData,
+        personalization_options: selectedPersonalizationIds // Add this to the update payload
+    });
     setSaving(false);
     onClose();
   };
@@ -283,9 +326,30 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                     </div>
                     
                     {formData.personalization_enabled ? (
-                        <div className="text-sm text-blue-800">
-                            Die Personalisierungs-Optionen (Name, Nummer, Logos) werden im Frontend angezeigt.
-                            <br/><span className="text-xs opacity-70">(Konfiguration der Preise folgt in einem späteren Update)</span>
+                        <div className="space-y-3 mt-4">
+                            <p className="text-xs text-blue-800 mb-2">Wählen Sie die verfügbaren Optionen:</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {personalizationOptions.map(option => (
+                                    <label key={option.id} className={`flex items-center p-3 rounded border cursor-pointer transition-colors ${selectedPersonalizationIds.includes(option.id) ? 'bg-blue-100 border-blue-300' : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selectedPersonalizationIds.includes(option.id)}
+                                            onChange={() => togglePersonalizationOption(option.id)}
+                                            className="mr-3 h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                                        />
+                                        <div className="flex-1">
+                                            <div className="font-bold text-sm text-slate-800">{option.name}</div>
+                                            <div className="text-xs text-slate-500 flex justify-between">
+                                                <span>{option.type === 'text' ? 'Text' : option.type === 'number' ? 'Nummer' : 'Logo'}</span>
+                                                <span className="font-bold text-blue-700">+ € {option.price_adjustment?.toFixed(2)}</span>
+                                            </div>
+                                        </div>
+                                    </label>
+                                ))}
+                            </div>
+                            {personalizationOptions.length === 0 && (
+                                <p className="text-xs text-red-500 italic">Keine Optionen definiert. Bitte unter "Einstellungen & Variablen" anlegen.</p>
+                            )}
                         </div>
                     ) : (
                         <div className="text-sm text-slate-500 italic">

@@ -20,12 +20,70 @@ const ShopProductPage: React.FC = () => {
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const [personalization, setPersonalization] = useState({
-    print: 'none', // none, own_name, player_name, club
-    logo: [] as string[],
-    ownName: '',
-    ownNumber: ''
-  });
+  const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
+  const [selectedPersonalization, setSelectedPersonalization] = useState<{ [key: string]: string | boolean }>({});
+
+  useEffect(() => {
+    // Parse Personalization Options from Product Assignment
+    let options: any[] = [];
+    if (product && product.personalization_options) {
+        try {
+            const selectedIds = typeof product.personalization_options === 'string' 
+                ? JSON.parse(product.personalization_options) 
+                : product.personalization_options;
+            
+            // We need to fetch the full details for these IDs.
+            // Ideally the backend should join this, but for now we fetch all options and filter.
+            // Or we could fetch just the ones we need.
+            fetch('/api/personalization')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        const allOptions = data.data;
+                        const productOptions = allOptions.filter((o: any) => selectedIds.includes(o.id));
+                        setPersonalizationOptions(productOptions);
+                    }
+                });
+        } catch (e) {
+            console.error("Failed to parse personalization options", e);
+        }
+    }
+  }, [product]);
+
+  const toggleOption = (option: any) => {
+      setSelectedPersonalization(prev => {
+          if (prev[option.id]) {
+              const newState = { ...prev };
+              delete newState[option.id];
+              return newState;
+          } else {
+              return { ...prev, [option.id]: true }; // For boolean/checkbox type options
+          }
+      });
+  };
+
+  const setOptionValue = (optionId: string, value: string) => {
+      setSelectedPersonalization(prev => ({
+          ...prev,
+          [optionId]: value
+      }));
+  };
+
+  const calculatePersonalizationPrice = () => {
+      let total = 0;
+      Object.keys(selectedPersonalization).forEach(key => {
+          const option = personalizationOptions.find(o => o.id === key);
+          if (option && selectedPersonalization[key]) {
+              // Only add price if it's selected (true) or has a value (string)
+              if (typeof selectedPersonalization[key] === 'boolean' && selectedPersonalization[key] === true) {
+                  total += option.price_adjustment || 0;
+              } else if (typeof selectedPersonalization[key] === 'string' && selectedPersonalization[key] !== '') {
+                   total += option.price_adjustment || 0;
+              }
+          }
+      });
+      return total;
+  };
 
   const [expandedSection, setExpandedSection] = useState<'description' | 'manufacturer' | null>('description');
   
@@ -203,101 +261,57 @@ const ShopProductPage: React.FC = () => {
             </div>
 
             {/* Personalization Section */}
-            {isPersonalizationEnabled && (
+            {isPersonalizationEnabled && personalizationOptions.length > 0 && (
                 <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-8">
                     <h3 className="font-bold text-blue-900 flex items-center mb-4">
-                        PERSONALISIERE DEIN TRIKOT <span className="ml-2 text-xs">✨</span>
+                        PERSONALISIERE DEIN PRODUKT <span className="ml-2 text-xs">✨</span>
                     </h3>
                     
-                    <div className="mb-4">
-                        <label className="text-xs font-bold uppercase mb-2 block">Print:</label>
-                        <div className="grid grid-cols-4 gap-2">
-                            <button 
-                                className={`border rounded p-2 text-center hover:border-blue-500 bg-white ${personalization.print === 'none' ? 'border-blue-600 ring-1 ring-blue-600' : 'border-slate-200'}`}
-                                onClick={() => setPersonalization({...personalization, print: 'none'})}
-                            >
-                                <div className="text-2xl mb-1">👕</div>
-                                <div className="text-[10px] font-bold">Ohne</div>
-                                <div className="text-[10px] text-slate-500">+ € 0,00</div>
-                            </button>
-                            <button 
-                                className={`border rounded p-2 text-center hover:border-blue-500 bg-white ${personalization.print === 'own_name' ? 'border-blue-600 ring-1 ring-blue-600' : 'border-slate-200'}`}
-                                onClick={() => setPersonalization({...personalization, print: 'own_name'})}
-                            >
-                                <div className="text-2xl mb-1">👤</div>
-                                <div className="text-[10px] font-bold">Eigener Name</div>
-                                <div className="text-[10px] text-slate-500">+ € 15,00</div>
-                            </button>
-                            {/* Disabled options for now */}
-                            <button className="border border-slate-200 rounded p-2 text-center hover:border-blue-500 bg-white opacity-50 cursor-not-allowed">
-                                <div className="text-2xl mb-1">⚽</div>
-                                <div className="text-[10px] font-bold">Spielername</div>
-                                <div className="text-[10px] text-slate-500">+ € 12,50</div>
-                            </button>
-                            <button className="border border-slate-200 rounded p-2 text-center hover:border-blue-500 bg-white opacity-50 cursor-not-allowed">
-                                <div className="text-2xl mb-1">🛡️</div>
-                                <div className="text-[10px] font-bold">Verein</div>
-                                <div className="text-[10px] text-slate-500">+ € 7,50</div>
-                            </button>
-                        </div>
-                    </div>
-
-                    {personalization.print === 'own_name' && (
-                        <div className="mb-4 space-y-2 animate-in fade-in slide-in-from-top-2">
-                            <input 
-                                type="text" 
-                                placeholder="Name (max. 12 Zeichen)" 
-                                className="w-full border border-slate-300 rounded p-2 text-sm"
-                                maxLength={12}
-                                value={personalization.ownName}
-                                onChange={(e) => setPersonalization({...personalization, ownName: e.target.value})}
-                            />
-                            <input 
-                                type="number" 
-                                placeholder="Nummer (0-99)" 
-                                className="w-full border border-slate-300 rounded p-2 text-sm"
-                                max={99}
-                                value={personalization.ownNumber}
-                                onChange={(e) => setPersonalization({...personalization, ownNumber: e.target.value})}
-                            />
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="text-xs font-bold uppercase mb-2 block">Logo:</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            {/* Example logos, these could also be dynamic later */}
-                            <button 
-                                className={`border rounded p-2 text-center hover:border-blue-500 bg-white flex items-center justify-center space-x-2 ${personalization.logo.includes('sc') ? 'border-blue-600 ring-1 ring-blue-600' : 'border-slate-200'}`}
-                                onClick={() => {
-                                    const newLogos = personalization.logo.includes('sc') 
-                                        ? personalization.logo.filter(l => l !== 'sc') 
-                                        : [...personalization.logo, 'sc'];
-                                    setPersonalization({...personalization, logo: newLogos});
-                                }}
-                            >
-                                <span className="text-lg">🛡️</span>
-                                <div className="text-left">
-                                    <div className="text-[10px] font-bold">SC-Logo</div>
-                                    <div className="text-[10px] text-slate-500">+ € 4,00</div>
+                    <div className="space-y-4">
+                        {personalizationOptions.map(option => (
+                            <div key={option.id} className="bg-white p-3 rounded border border-slate-200">
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="flex items-center space-x-2 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
+                                            checked={!!selectedPersonalization[option.id]}
+                                            onChange={() => toggleOption(option)}
+                                        />
+                                        <span className="font-bold text-sm text-slate-800">{option.name}</span>
+                                    </label>
+                                    <span className="text-xs text-blue-600 font-bold">+ € {option.price_adjustment.toFixed(2)}</span>
                                 </div>
-                            </button>
-                            <button 
-                                className={`border rounded p-2 text-center hover:border-blue-500 bg-white flex items-center justify-center space-x-2 ${personalization.logo.includes('dfl') ? 'border-blue-600 ring-1 ring-blue-600' : 'border-slate-200'}`}
-                                onClick={() => {
-                                    const newLogos = personalization.logo.includes('dfl') 
-                                        ? personalization.logo.filter(l => l !== 'dfl') 
-                                        : [...personalization.logo, 'dfl'];
-                                    setPersonalization({...personalization, logo: newLogos});
-                                }}
-                            >
-                                <span className="text-lg">🏆</span>
-                                <div className="text-left">
-                                    <div className="text-[10px] font-bold">Liga-Logo</div>
-                                    <div className="text-[10px] text-slate-500">+ € 4,00</div>
-                                </div>
-                            </button>
-                        </div>
+                                
+                                {selectedPersonalization[option.id] && (
+                                    <div className="pl-6 animate-in fade-in slide-in-from-top-1">
+                                        {option.type === 'text' && (
+                                            <input 
+                                                type="text" 
+                                                placeholder="Text eingeben..." 
+                                                className="w-full border border-slate-300 rounded p-2 text-sm"
+                                                value={typeof selectedPersonalization[option.id] === 'string' ? selectedPersonalization[option.id] as string : ''}
+                                                onChange={(e) => setOptionValue(option.id, e.target.value)}
+                                            />
+                                        )}
+                                        {option.type === 'number' && (
+                                            <input 
+                                                type="number" 
+                                                placeholder="Nummer eingeben..." 
+                                                className="w-full border border-slate-300 rounded p-2 text-sm"
+                                                value={typeof selectedPersonalization[option.id] === 'string' ? selectedPersonalization[option.id] as string : ''}
+                                                onChange={(e) => setOptionValue(option.id, e.target.value)}
+                                            />
+                                        )}
+                                        {option.type === 'logo' && (
+                                            <div className="text-xs text-slate-500 italic">
+                                                Logo wird automatisch hinzugefügt.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}
@@ -305,11 +319,7 @@ const ShopProductPage: React.FC = () => {
             {/* Total Price */}
             <div className="mb-6">
                 <div className="text-xs font-bold uppercase text-slate-500 mb-1">Gesamtpreis:</div>
-                <div className="text-3xl font-bold">€ {(
-                    currentPrice + 
-                    (personalization.print === 'own_name' ? 15 : 0) +
-                    (personalization.logo.length * 4)
-                ).toFixed(2)}</div>
+                <div className="text-3xl font-bold">€ {(currentPrice + calculatePersonalizationPrice()).toFixed(2)}</div>
             </div>
 
             {/* Add to Cart */}

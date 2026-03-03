@@ -124,14 +124,23 @@ router.post('/:shopId/products', (req, res) => {
 router.put('/:shopId/products/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { category_id, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size, variants } = req.body;
+    const { category_id, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size, variants, personalization_options } = req.body;
 
     // Update assignment
     db.prepare(`
       UPDATE shop_product_assignments 
-      SET category_id = ?, price = ?, is_featured = ?, personalization_enabled = ?, sort_order = ?, variants = ?
+      SET category_id = ?, price = ?, is_featured = ?, personalization_enabled = ?, sort_order = ?, variants = ?, personalization_options = ?
       WHERE id = ?
-    `).run(category_id, price, is_featured ? 1 : 0, personalization_enabled ? 1 : 0, sort_order, variants ? JSON.stringify(variants) : null, id);
+    `).run(
+        category_id, 
+        price, 
+        is_featured ? 1 : 0, 
+        personalization_enabled ? 1 : 0, 
+        sort_order, 
+        variants ? JSON.stringify(variants) : null, 
+        personalization_options ? JSON.stringify(personalization_options) : null,
+        id
+    );
 
     // Update product details (manufacturer_info, description, size)
     const assignment = db.prepare('SELECT product_id FROM shop_product_assignments WHERE id = ?').get(id) as { product_id: string };
@@ -144,10 +153,17 @@ router.put('/:shopId/products/:id', (req, res) => {
     }
 
     const updatedAssignment = db.prepare('SELECT * FROM shop_product_assignments WHERE id = ?').get(id);
-    // Parse variants back to JSON
-    if (updatedAssignment && (updatedAssignment as any).variants) {
-        (updatedAssignment as any).variants = JSON.parse((updatedAssignment as any).variants);
+    
+    // Parse variants and personalization_options back to JSON
+    if (updatedAssignment) {
+        if ((updatedAssignment as any).variants) {
+            (updatedAssignment as any).variants = JSON.parse((updatedAssignment as any).variants);
+        }
+        if ((updatedAssignment as any).personalization_options) {
+            (updatedAssignment as any).personalization_options = JSON.parse((updatedAssignment as any).personalization_options);
+        }
     }
+    
     res.json({ success: true, data: updatedAssignment });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

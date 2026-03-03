@@ -13,6 +13,10 @@ const OnlineShops: React.FC = () => {
   const [editingVariable, setEditingVariable] = useState<any | null>(null);
   const [showVariables, setShowVariables] = useState(false); // Toggle Variables Section
 
+  // --- PERSONALIZATION STATE ---
+  const [personalizations, setPersonalizations] = useState<any[]>([]);
+  const [editingPersonalization, setEditingPersonalization] = useState<any | null>(null);
+
   const fetchVariables = async () => {
       try {
           const res = await fetch('/api/variables');
@@ -21,8 +25,17 @@ const OnlineShops: React.FC = () => {
       } catch (e) { console.error(e); }
   };
 
+  const fetchPersonalizations = async () => {
+      try {
+          const res = await fetch('/api/personalization');
+          const data = await res.json();
+          if (data.success) setPersonalizations(data.data);
+      } catch (e) { console.error(e); }
+  };
+
   useEffect(() => {
       fetchVariables();
+      fetchPersonalizations();
   }, []);
 
   const handleSaveVariable = async () => {
@@ -50,11 +63,44 @@ const OnlineShops: React.FC = () => {
       }
   };
 
+  const handleSavePersonalization = async () => {
+      if (!editingPersonalization || !editingPersonalization.name || !editingPersonalization.type) return;
+
+      try {
+          const url = editingPersonalization.id ? `/api/personalization/${editingPersonalization.id}` : '/api/personalization';
+          const method = editingPersonalization.id ? 'PUT' : 'POST';
+          
+          const res = await fetch(url, {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(editingPersonalization)
+          });
+          const data = await res.json();
+          
+          if (data.success) {
+              fetchPersonalizations();
+              setEditingPersonalization(null);
+          } else {
+              alert('Fehler: ' + data.error);
+          }
+      } catch (e: any) {
+          alert('Fehler: ' + e.message);
+      }
+  };
+
   const handleDeleteVariable = async (id: string) => {
       if (!confirm('Variable wirklich löschen?')) return;
       try {
           await fetch(`/api/variables/${id}`, { method: 'DELETE' });
           fetchVariables();
+      } catch (e) { console.error(e); }
+  };
+
+  const handleDeletePersonalization = async (id: string) => {
+      if (!confirm('Option wirklich löschen?')) return;
+      try {
+          await fetch(`/api/personalization/${id}`, { method: 'DELETE' });
+          fetchPersonalizations();
       } catch (e) { console.error(e); }
   };
   // -----------------------
@@ -230,7 +276,7 @@ const OnlineShops: React.FC = () => {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                 {variables.map(v => (
                     <div key={v.id} className="bg-slate-50 border border-slate-200 rounded-lg p-4 hover:bg-white hover:shadow-sm transition-all group">
                         <div className="flex justify-between items-start mb-2">
@@ -255,6 +301,112 @@ const OnlineShops: React.FC = () => {
                 {variables.length === 0 && (
                     <div className="col-span-full text-center py-8 text-slate-400 border-2 border-dashed border-slate-200 rounded-lg">
                         Keine Variablen vorhanden.
+                    </div>
+                )}
+            </div>
+
+            <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex items-center justify-between">
+                <div className="flex items-center">
+                    <span className="mr-2 text-xl">✨</span>
+                    Personalisierungs-Optionen
+                </div>
+                <button 
+                    onClick={() => setEditingPersonalization({ name: '', type: 'text', price_adjustment: 0 })}
+                    className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center"
+                >
+                    <Plus size={16} className="mr-1" /> Neu
+                </button>
+            </h2>
+            <p className="text-sm text-gray-600 mb-6">
+                Definieren Sie hier Optionen für die Personalisierung (z.B. "Trikotnummer", "Initialen", "Vereinslogo"), die Sie später einzelnen Produkten hinzufügen können.
+            </p>
+
+            {editingPersonalization && (
+                <div className="mb-6 bg-slate-50 p-4 rounded-lg border border-blue-200">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-slate-800">{editingPersonalization.id ? 'Option bearbeiten' : 'Neue Option'}</h3>
+                        <button onClick={() => setEditingPersonalization(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Name (z.B. "Trikotnummer")</label>
+                            <input 
+                                type="text" 
+                                className="w-full border p-2 rounded" 
+                                placeholder="z.B. Initialen"
+                                value={editingPersonalization.name} 
+                                onChange={e => setEditingPersonalization({...editingPersonalization, name: e.target.value})}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Typ</label>
+                            <select 
+                                className="w-full border p-2 rounded"
+                                value={editingPersonalization.type}
+                                onChange={e => setEditingPersonalization({...editingPersonalization, type: e.target.value})}
+                            >
+                                <option value="text">Text (Name, Initialen)</option>
+                                <option value="number">Nummer (0-99)</option>
+                                <option value="logo">Logo (Vereinslogo, Sponsor)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Aufpreis (€)</label>
+                            <div className="flex items-center">
+                                <span className="mr-2 text-slate-500">€</span>
+                                <input 
+                                    type="number" 
+                                    step="0.01"
+                                    className="w-full border p-2 rounded" 
+                                    placeholder="0.00"
+                                    value={editingPersonalization.price_adjustment} 
+                                    onChange={e => setEditingPersonalization({...editingPersonalization, price_adjustment: parseFloat(e.target.value)})}
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex justify-end space-x-2">
+                        <button 
+                            onClick={() => setEditingPersonalization(null)}
+                            className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded"
+                        >
+                            Abbrechen
+                        </button>
+                        <button 
+                            onClick={handleSavePersonalization}
+                            className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded flex items-center"
+                        >
+                            <Save size={16} className="mr-2" /> Speichern
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {personalizations.map(p => (
+                    <div key={p.id} className="bg-slate-50 border border-slate-200 rounded-lg p-4 hover:bg-white hover:shadow-sm transition-all group">
+                        <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-center space-x-2">
+                                <span className="font-bold text-slate-800">{p.name}</span>
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold ${
+                                    p.type === 'text' ? 'bg-yellow-100 text-yellow-700' :
+                                    p.type === 'number' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                                }`}>{p.type}</span>
+                            </div>
+                            <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => setEditingPersonalization(p)} className="p-1 text-slate-400 hover:text-blue-600"><Edit size={16} /></button>
+                                <button onClick={() => handleDeletePersonalization(p.id)} className="p-1 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between text-sm mt-3">
+                            <span className="text-slate-500">Aufpreis:</span>
+                            <span className="font-bold text-slate-800">+ € {p.price_adjustment?.toFixed(2)}</span>
+                        </div>
+                    </div>
+                ))}
+                {personalizations.length === 0 && (
+                    <div className="col-span-full text-center py-8 text-slate-400 border-2 border-dashed border-slate-200 rounded-lg">
+                        Keine Personalisierungs-Optionen vorhanden.
                     </div>
                 )}
             </div>

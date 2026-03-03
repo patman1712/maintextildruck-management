@@ -249,6 +249,16 @@ db.exec(`
 `);
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS personalization_options (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL, -- 'text', 'number', 'logo'
+    price_adjustment DECIMAL(10, 2) DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS shop_product_assignments (
     id TEXT PRIMARY KEY,
     shop_id TEXT NOT NULL,
@@ -273,8 +283,14 @@ try {
     console.log('Migrating database: Adding variants to shop_product_assignments table');
     db.exec('ALTER TABLE shop_product_assignments ADD COLUMN variants TEXT');
   }
+  
+  const hasPersonalizationOptions = shopProductAssignmentCols.some(col => col.name === 'personalization_options');
+  if (!hasPersonalizationOptions) {
+    console.log('Migrating database: Adding personalization_options to shop_product_assignments table');
+    db.exec('ALTER TABLE shop_product_assignments ADD COLUMN personalization_options TEXT'); // JSON array of selected option IDs
+  }
 } catch (error) {
-  console.error('Migration error (variants):', error);
+  console.error('Migration error (variants/personalization):', error);
 }
 
 // Migration: Add customer_id if it doesn't exist (for existing databases)
