@@ -219,7 +219,7 @@ router.delete('/customer/:customerId/shopware', (req: Request, res: Response) =>
 // POST create manual product
 router.post('/:customerId', (req: Request, res: Response) => {
     const { customerId } = req.params;
-    const { name, productNumber, supplierId } = req.body;
+    const { name, productNumber, supplierId, description, size, color } = req.body;
 
     if (!name) {
         return res.status(400).json({ success: false, error: 'Name is required' });
@@ -228,9 +228,9 @@ router.post('/:customerId', (req: Request, res: Response) => {
     try {
         const id = Math.random().toString(36).substr(2, 9);
         db.prepare(`
-            INSERT INTO customer_products (id, customer_id, name, product_number, source, supplier_id)
-            VALUES (?, ?, ?, ?, 'manual', ?)
-        `).run(id, customerId, name, productNumber || '', supplierId || null);
+            INSERT INTO customer_products (id, customer_id, name, product_number, source, supplier_id, description, size, color)
+            VALUES (?, ?, ?, ?, 'manual', ?, ?, ?, ?)
+        `).run(id, customerId, name, productNumber || '', supplierId || null, description || null, size || null, color || null);
 
         res.json({ success: true, message: 'Product created', id });
     } catch (error: any) {
@@ -241,14 +241,14 @@ router.post('/:customerId', (req: Request, res: Response) => {
 // PUT update product
 router.put('/:id', (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, productNumber, supplierId } = req.body;
+    const { name, productNumber, supplierId, description, size, color } = req.body;
 
     try {
         db.prepare(`
             UPDATE customer_products 
-            SET name = ?, product_number = ?, supplier_id = ?
+            SET name = ?, product_number = ?, supplier_id = ?, description = ?, size = ?, color = ?
             WHERE id = ?
-        `).run(name, productNumber, supplierId || null, id);
+        `).run(name, productNumber, supplierId || null, description || null, size || null, color || null, id);
 
         res.json({ success: true, message: 'Product updated' });
     } catch (error: any) {
@@ -289,9 +289,9 @@ router.post('/:productId/duplicate', (req: Request, res: Response) => {
 
         // Create new manual product
         db.prepare(`
-            INSERT INTO customer_products (id, customer_id, name, product_number, source, supplier_id, size, color)
-            VALUES (?, ?, ?, ?, 'manual', ?, ?, ?)
-        `).run(newId, product.customer_id, newName, newProductNumber, product.supplier_id, product.size, product.color);
+            INSERT INTO customer_products (id, customer_id, name, product_number, source, supplier_id, size, color, description)
+            VALUES (?, ?, ?, ?, 'manual', ?, ?, ?, ?)
+        `).run(newId, product.customer_id, newName, newProductNumber, product.supplier_id, product.size, product.color, product.description);
 
         // Copy files
         const files = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ?').all(productId) as any[];

@@ -376,6 +376,12 @@ try {
     db.exec('ALTER TABLE customer_products ADD COLUMN size TEXT');
   }
 
+  const hasDescription = customerProductCols.some(col => col.name === 'description');
+  if (!hasDescription) {
+    console.log('Migrating database: Adding description to customer_products table');
+    db.exec('ALTER TABLE customer_products ADD COLUMN description TEXT');
+  }
+
   const shopCategoryCols = db.prepare("PRAGMA table_info(shop_categories)").all() as any[];
   const hasParentId = shopCategoryCols.some(col => col.name === 'parent_id');
   if (!hasParentId) {
