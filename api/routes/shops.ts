@@ -102,15 +102,48 @@ router.get('/:id/products', (req, res) => {
       ORDER BY spa.sort_order ASC, cp.name ASC
     `).all(shopId) as any[];
 
-    // Fetch files for these products
-    const productIds = products.map((p: any) => p.product_id);
-    if (productIds.length > 0) {
-        const placeholders = productIds.map(() => '?').join(',');
-        const files = db.prepare(`SELECT * FROM customer_product_files WHERE product_id IN (${placeholders}) ORDER BY created_at DESC`).all(...productIds);
+    // Fetch files for these products.
+    // Logic: Use shop_product_images if available, otherwise fallback to customer_product_files.
+    // To do this efficiently in one query is tricky, so we iterate or do a complex join.
+    // For now, we iterate, as we did in the management API.
+    
+    // 1. Get all assigned images for these shop products
+    const assignmentIds = products.map((p: any) => p.assignment_id);
+    if (assignmentIds.length > 0) {
+        const placeholders = assignmentIds.map(() => '?').join(',');
+        const assignedImages = db.prepare(`
+            SELECT cpf.*, spi.shop_product_assignment_id, spi.sort_order
+            FROM shop_product_images spi
+            JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
+            WHERE spi.shop_product_assignment_id IN (${placeholders})
+            ORDER BY spi.sort_order ASC, spi.created_at ASC
+        `).all(...assignmentIds) as any[];
+
+        // 2. Get all fallback images (if no assigned images)
+        // We only need this for assignments that have NO entries in assignedImages
+        const assignmentsWithImages = new Set(assignedImages.map((img: any) => img.shop_product_assignment_id));
         
-        // Attach files to products
+        const productIdsNeedingFallback = products
+            .filter((p: any) => !assignmentsWithImages.has(p.assignment_id))
+            .map((p: any) => p.product_id);
+            
+        let fallbackImages: any[] = [];
+        if (productIdsNeedingFallback.length > 0) {
+            const productPlaceholders = productIdsNeedingFallback.map(() => '?').join(',');
+            fallbackImages = db.prepare(`
+                SELECT * FROM customer_product_files 
+                WHERE product_id IN (${productPlaceholders}) 
+                ORDER BY created_at DESC
+            `).all(...productIdsNeedingFallback);
+        }
+
+        // 3. Attach images to products
         products.forEach((p: any) => {
-            p.files = files.filter((f: any) => f.product_id === p.product_id);
+            if (assignmentsWithImages.has(p.assignment_id)) {
+                p.files = assignedImages.filter((img: any) => img.shop_product_assignment_id === p.assignment_id);
+            } else {
+                p.files = fallbackImages.filter((img: any) => img.product_id === p.product_id);
+            }
         });
     } else {
         products.forEach((p: any) => p.files = []);
