@@ -138,13 +138,37 @@ const ShopProductPage: React.FC = () => {
 
   const images = product.files || [];
   
-  // Filter images: Show standard images AND images for selected options
+  // Filter images: 
+  // 1. If NO personalization is selected, show ONLY standard images (no personalization_option_id)
+  // 2. If personalization IS selected, show standard images AND the specific image for that option
+  
+  const hasSelectedPersonalization = Object.values(selectedPersonalization).some(v => !!v);
+
   const displayedImages = images.filter((img: any) => {
-      // Show if no personalization assigned (standard image)
-      if (!img.personalization_option_id) return true;
+      // Standard images always shown? Or only if no personalization selected?
+      // User said: "standard soll ausgeblendet werden wenn es eine personalisierung gibt"
+      // -> If personalization selected, hide standard images? Or just show the personalized one?
+      // Usually you want to keep standard images (front/side) and ADD the personalized one (back).
+      // But user said "standard soll ausgeblendet werden". Let's try strict mode.
       
-      // Show if assigned to a selected option
-      return !!selectedPersonalization[img.personalization_option_id];
+      if (img.personalization_option_id) {
+          // This is a personalized image. Show only if this specific option is selected.
+          return !!selectedPersonalization[img.personalization_option_id];
+      } else {
+          // This is a standard image.
+          // Hide if any personalization is selected AND that personalization has a linked image?
+          // Or just hide always if any personalization is selected?
+          // "die sollen dann ausgeblendet werden wenn die mit einer personalisierung ausgewählt werden"
+          
+          // Let's check if the currently selected personalization HAS a linked image.
+          // If yes, hide standard images. If no (e.g. option selected but no image for it), keep standard images.
+          const activePersonalizationIds = Object.keys(selectedPersonalization).filter(k => !!selectedPersonalization[k]);
+          const hasActivePersonalizedImage = images.some((i: any) => i.personalization_option_id && activePersonalizationIds.includes(i.personalization_option_id));
+          
+          if (hasActivePersonalizedImage) return false;
+          
+          return true;
+      }
   });
 
   // Fallback image if no files
