@@ -112,12 +112,25 @@ router.get('/:id/products', (req, res) => {
     if (assignmentIds.length > 0) {
         const placeholders = assignmentIds.map(() => '?').join(',');
         const assignedImages = db.prepare(`
-            SELECT cpf.*, spi.shop_product_assignment_id, spi.sort_order, spi.personalization_option_id
+            SELECT cpf.*, spi.shop_product_assignment_id, spi.sort_order, spi.personalization_option_id, spi.personalization_option_ids
             FROM shop_product_images spi
             JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
             WHERE spi.shop_product_assignment_id IN (${placeholders})
             ORDER BY spi.sort_order ASC, spi.created_at ASC
         `).all(...assignmentIds) as any[];
+
+        // Parse JSON for option_ids
+        assignedImages.forEach((img: any) => {
+             try {
+                 img.personalization_option_ids = img.personalization_option_ids ? JSON.parse(img.personalization_option_ids) : [];
+                 // Fallback for migration
+                 if (img.personalization_option_ids.length === 0 && img.personalization_option_id) {
+                     img.personalization_option_ids = [img.personalization_option_id];
+                 }
+             } catch (e) {
+                 img.personalization_option_ids = [];
+             }
+        });
 
         // 2. Get all fallback images (if no assigned images)
         // We only need this for assignments that have NO entries in assignedImages
