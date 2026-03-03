@@ -124,6 +124,26 @@ export interface Shop {
   created_at: string;
 }
 
+export interface ShopCategory {
+  id: string;
+  shop_id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  image_url?: string;
+  sort_order: number;
+}
+
+export interface ShopProductAssignment {
+  id: string;
+  shop_id: string;
+  product_id: string;
+  category_id?: string;
+  price?: number;
+  is_featured: boolean;
+  sort_order: number;
+}
+
 interface AppState {
   orders: Order[];
   customers: Customer[];

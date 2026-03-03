@@ -23,6 +23,7 @@ import PublicOrderProof from "@/pages/PublicOrderProof";
 import ImageVector from "@/pages/ImageVector";
 import FAQ from "@/pages/FAQ";
 import OnlineShops from "@/pages/OnlineShops/OnlineShops";
+import ShopDashboard from "@/pages/OnlineShops/Management/ShopDashboard";
 import ShopFrontend from "@/pages/OnlineShops/ShopFrontend";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
@@ -110,6 +111,7 @@ export default function App() {
           <Route path="vector" element={<ImageVector />} />
           <Route path="employees" element={<Employees />} />
           <Route path="shops" element={<OnlineShops />} />
+          <Route path="shops/:shopId" element={<ShopDashboard />} />
           <Route path="admin" element={<AdminSettings />} />
           <Route path="profile" element={<Profile />} />
           <Route path="faq" element={<FAQ />} />

@@ -211,6 +211,36 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS shop_categories (
+    id TEXT PRIMARY KEY,
+    shop_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL,
+    description TEXT,
+    image_url TEXT,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE
+  )
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS shop_product_assignments (
+    id TEXT PRIMARY KEY,
+    shop_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    category_id TEXT,
+    price DECIMAL(10, 2),
+    is_featured BOOLEAN DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE,
+    FOREIGN KEY(product_id) REFERENCES customer_products(id) ON DELETE CASCADE,
+    FOREIGN KEY(category_id) REFERENCES shop_categories(id) ON DELETE SET NULL
+  )
+`);
+
 // Migration: Add customer_id if it doesn't exist (for existing databases)
 try {
   const columns = db.prepare("PRAGMA table_info(orders)").all() as any[];

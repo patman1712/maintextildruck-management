@@ -168,12 +168,11 @@ export default function DashboardLayout() {
                     {shops.map(shop => (
                          <Link
                             key={shop.id}
-                            to={`/shop/${shop.domain_slug}`}
-                            target="_blank"
+                            to={`/dashboard/shops/${shop.id}`}
                             className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group text-red-100 hover:bg-white/10 hover:text-white`}
                             title={!sidebarOpen && !mobileMenuOpen ? shop.name : undefined}
                         >
-                            <span className="text-red-300 group-hover:text-white min-w-[24px]"><ExternalLink size={20} /></span>
+                            <span className="text-red-300 group-hover:text-white min-w-[24px]"><ShoppingBag size={20} /></span>
                             {(sidebarOpen || mobileMenuOpen) && <span className="font-medium whitespace-nowrap text-sm truncate">{shop.name}</span>}
                         </Link>
                     ))}

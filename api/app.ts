@@ -63,6 +63,7 @@ import downloadsRoutes, { DOWNLOADS_DIR } from './routes/downloads.js'
 import backupRoutes from './routes/backup.js'
 import adminRoutes from './routes/admin.js'
 import shopRoutes from './routes/shops.js'
+import shopManagementRoutes from './routes/shop_management.js'
 
 
 const app: express.Application = express()
@@ -90,6 +91,7 @@ app.use('/api/downloads', downloadsRoutes)
 app.use('/api/backup', backupRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/shops', shopRoutes)
+app.use('/api/shop-management', shopManagementRoutes)
 
 // --- DEBUG ROUTE (Temporary) ---
 app.get('/api/debug/shopware-orders', (req, res) => {
