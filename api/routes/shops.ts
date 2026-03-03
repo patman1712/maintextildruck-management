@@ -81,12 +81,14 @@ router.get('/:id/products', (req, res) => {
         spa.id as assignment_id,
         spa.price,
         spa.is_featured,
+        spa.personalization_enabled,
         spa.category_id,
         spa.sort_order,
         cp.id as product_id,
         cp.name,
         cp.product_number,
         cp.description,
+        cp.manufacturer_info,
         cp.color,
         cp.size,
         sc.name as category_name,
@@ -96,13 +98,13 @@ router.get('/:id/products', (req, res) => {
       LEFT JOIN shop_categories sc ON spa.category_id = sc.id
       WHERE spa.shop_id = ?
       ORDER BY spa.sort_order ASC, cp.name ASC
-    `).all(shopId);
+    `).all(shopId) as any[];
 
     // Fetch files for these products
     const productIds = products.map((p: any) => p.product_id);
     if (productIds.length > 0) {
         const placeholders = productIds.map(() => '?').join(',');
-        const files = db.prepare(`SELECT * FROM customer_product_files WHERE product_id IN (${placeholders})`).all(...productIds);
+        const files = db.prepare(`SELECT * FROM customer_product_files WHERE product_id IN (${placeholders}) ORDER BY created_at DESC`).all(...productIds);
         
         // Attach files to products
         products.forEach((p: any) => {
