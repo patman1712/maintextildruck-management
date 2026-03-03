@@ -132,7 +132,8 @@ const ShopDashboard: React.FC = () => {
             manufacturer_info: updates.manufacturer_info,
             description: updates.description,
             size: updates.size,
-            color: updates.color
+            color: updates.color,
+            variants: updates.variants !== undefined ? updates.variants : payload.variants
         })
       });
       setShopProducts(shopProducts.map(p => p.id === id ? { ...p, ...updates } : p));
