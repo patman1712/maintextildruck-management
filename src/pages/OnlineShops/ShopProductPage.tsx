@@ -62,7 +62,13 @@ const ShopProductPage: React.FC = () => {
   const mainImage = activeImage || (images.length > 0 ? images[0].file_url : null);
   
   // Parse Variants
-  const variants = product.variants ? (typeof product.variants === 'string' ? JSON.parse(product.variants) : product.variants) : {};
+  // If product.variants is undefined, it defaults to {}.
+  // If product.variants is null or empty string, we should treat it as no variants.
+  // The backend might return null for variants column.
+  const variants = (product.variants && typeof product.variants === 'string') 
+      ? JSON.parse(product.variants) 
+      : (product.variants || {});
+  
   const variantKeys = Object.keys(variants);
   const hasVariants = variantKeys.length > 0;
 
@@ -77,8 +83,10 @@ const ShopProductPage: React.FC = () => {
               availableSizes = variant.values ? variant.values.split(',').map((s: string) => s.trim()) : [];
               if (variant.price) currentPrice = variant.price;
           }
+      } else {
+          // If variants exist but none selected, availableSizes stays empty to force selection
+          availableSizes = [];
       }
-      // If variants exist but none selected, availableSizes stays empty to force selection
   } else {
       // Fallback to standard sizes if no variants configured
       availableSizes = product.size ? product.size.split(',').map((s: string) => s.trim()) : ['S', 'M', 'L', 'XL', 'XXL'];
