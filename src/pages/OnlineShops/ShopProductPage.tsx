@@ -52,25 +52,31 @@ const ShopProductPage: React.FC = () => {
 
   const toggleOption = (option: any) => {
       setSelectedPersonalization(prev => {
+          const wasSelected = !!prev[option.id];
           let newState;
-          if (prev[option.id]) {
+          
+          if (wasSelected) {
               newState = { ...prev };
               delete newState[option.id];
           } else {
-              newState = { ...prev, [option.id]: true }; // For boolean/checkbox type options
+              newState = { ...prev, [option.id]: true }; 
           }
           
-          // Check if any image is assigned to this option
-          if (!prev[option.id]) {
-              // Option is being selected
-              const linkedImage = images.find((img: any) => img.personalization_option_id === option.id);
+          // Image Logic
+          const linkedImage = images.find((img: any) => img.personalization_option_id === option.id);
+          
+          if (!wasSelected) {
+              // Selecting: If there is a linked image, switch to it
               if (linkedImage) {
                   setActiveImage(linkedImage.file_url);
               }
           } else {
-              // Option is being deselected, revert to default image?
-              // For now, we stay on the current image or go back to first one
-              // setActiveImage(images[0]?.file_url);
+              // Deselecting: If we are currently looking at the linked image, switch back to standard
+              if (linkedImage && activeImage === linkedImage.file_url) {
+                   // Find first standard image (one without personalization_option_id)
+                   const standardImage = images.find((img: any) => !img.personalization_option_id);
+                   if (standardImage) setActiveImage(standardImage.file_url);
+              }
           }
           
           return newState;
@@ -131,8 +137,18 @@ const ShopProductPage: React.FC = () => {
   if (!product) return <div className="container mx-auto p-8 text-center">Produkt nicht gefunden.</div>;
 
   const images = product.files || [];
+  
+  // Filter images: Show standard images AND images for selected options
+  const displayedImages = images.filter((img: any) => {
+      // Show if no personalization assigned (standard image)
+      if (!img.personalization_option_id) return true;
+      
+      // Show if assigned to a selected option
+      return !!selectedPersonalization[img.personalization_option_id];
+  });
+
   // Fallback image if no files
-  const mainImage = activeImage || (images.length > 0 ? images[0].file_url : null);
+  const mainImage = activeImage || (displayedImages.length > 0 ? displayedImages[0].file_url : null);
   
   // Parse Variants
   // If product.variants is undefined, it defaults to {}.
@@ -193,17 +209,22 @@ const ShopProductPage: React.FC = () => {
         <div className="flex flex-col-reverse lg:flex-row gap-4">
             {/* Thumbnails */}
             <div className="flex lg:flex-col gap-4 overflow-x-auto lg:overflow-visible">
-                {images.map((img: any, idx: number) => (
+                {displayedImages.map((img: any, idx: number) => (
                     <button 
                         key={idx} 
                         onClick={() => setActiveImage(img.file_url)}
-                        className={`w-20 h-20 border-2 flex-shrink-0 bg-slate-50 ${activeImage === img.file_url ? 'border-slate-800' : 'border-transparent hover:border-slate-300'}`}
+                        className={`w-20 h-20 border-2 flex-shrink-0 bg-slate-50 relative ${activeImage === img.file_url ? 'border-slate-800' : 'border-transparent hover:border-slate-300'}`}
                     >
                         <img src={img.thumbnail_url || img.file_url} alt="" className="w-full h-full object-cover" />
+                        {img.personalization_option_id && (
+                             <div className="absolute bottom-0 right-0 bg-blue-600 text-white p-0.5 rounded-tl text-[8px] font-bold">
+                                 ★
+                             </div>
+                        )}
                     </button>
                 ))}
                 {/* Fallback thumbnails if few images */}
-                {images.length === 0 && [1,2,3].map(i => (
+                {displayedImages.length === 0 && [1,2,3].map(i => (
                      <div key={i} className="w-20 h-20 bg-slate-100 flex items-center justify-center text-slate-300 text-xs">No Img</div>
                 ))}
             </div>
