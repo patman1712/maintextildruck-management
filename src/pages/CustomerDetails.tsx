@@ -382,6 +382,29 @@ export default function CustomerDetails() {
   const handleDirectUploadAndAssign = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0] || !customer) return;
     const file = e.target.files[0];
+    await processFileAssign(file);
+  };
+
+  const handleModalDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsModalDragging(true);
+  };
+
+  const handleModalDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsModalDragging(false);
+  };
+
+  const handleModalDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsModalDragging(false);
+
+    if (!e.dataTransfer.files || !e.dataTransfer.files[0] || !customer) return;
+    const file = e.dataTransfer.files[0];
+    await processFileAssign(file);
+  };
+
+  const processFileAssign = async (file: File) => {
     const fileName = file.name;
 
     try {
@@ -403,11 +426,11 @@ export default function CustomerDetails() {
             const newOrder: Order = {
                 id: Math.random().toString(36).substr(2, 9),
                 title: `Direkt-Upload: ${fileName}`,
-                customerId: customer.id,
-                customerName: customer.name,
-                customerEmail: customer.email,
-                customerPhone: customer.phone,
-                customerAddress: customer.address,
+                customerId: customer!.id,
+                customerName: customer!.name,
+                customerEmail: customer!.email,
+                customerPhone: customer!.phone,
+                customerAddress: customer!.address,
                 deadline: new Date().toISOString().split('T')[0],
                 status: "archived",
                 steps: { processing: true, produced: true, invoiced: true },
@@ -716,6 +739,8 @@ export default function CustomerDetails() {
     await handleRenameFile({ name: "", url: editingFile.url }, editingFile.name);
     setEditingFile(null);
   };
+
+  const [isModalDragging, setIsModalDragging] = useState(false);
 
   const handleRenameFile = async (fileToRename: { name: string, url?: string }, newName: string) => {
     const order = customerOrders.find(o => o.files.some(f => f.url === fileToRename.url));
@@ -2154,12 +2179,19 @@ export default function CustomerDetails() {
 
                         {fileTab === 'upload' ? (
                             <div className="p-8 flex flex-col items-center justify-center space-y-4">
-                                <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:bg-gray-50 hover:border-blue-400 transition-all group">
+                                <label 
+                                    className={`flex flex-col items-center justify-center w-full h-40 border-2 border-dashed rounded-xl cursor-pointer transition-all group ${isModalDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50 hover:border-blue-400'}`}
+                                    onDragOver={handleModalDragOver}
+                                    onDragLeave={handleModalDragLeave}
+                                    onDrop={handleModalDrop}
+                                >
                                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                        <div className="p-3 bg-blue-50 rounded-full text-blue-500 group-hover:scale-110 transition-transform mb-3">
+                                        <div className={`p-3 rounded-full transition-transform mb-3 ${isModalDragging ? 'bg-blue-100 text-blue-600 scale-110' : 'bg-blue-50 text-blue-500 group-hover:scale-110'}`}>
                                             <Upload size={32} />
                                         </div>
-                                        <p className="mb-2 text-sm text-gray-700 font-semibold">Klicken oder Datei hierher ziehen</p>
+                                        <p className={`mb-2 text-sm font-semibold ${isModalDragging ? 'text-blue-700' : 'text-gray-700'}`}>
+                                            {isModalDragging ? 'Datei loslassen' : 'Klicken oder Datei hierher ziehen'}
+                                        </p>
                                         <p className="text-xs text-gray-500">PNG, JPG oder PDF</p>
                                     </div>
                                     <input type="file" className="hidden" onChange={handleDirectUploadAndAssign} accept="image/*,.pdf" />
