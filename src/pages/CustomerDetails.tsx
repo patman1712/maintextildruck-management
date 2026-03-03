@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useAppStore, Order } from "@/store";
-import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon, Copy, Layers } from "lucide-react";
+import { useAppStore, Order, ShopProductAssignment } from "@/store";
+import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon, Copy, Layers, Globe } from "lucide-react";
 import ConfirmationModal from "@/components/ConfirmationModal";
+import CustomerOnlineShopProducts from "@/components/CustomerOnlineShopProducts";
 
 interface Product {
     id: string;
@@ -35,6 +36,7 @@ export default function CustomerDetails() {
   const updateCustomer = useAppStore((state) => state.updateCustomer);
   const updateOrder = useAppStore((state) => state.updateOrder);
   const addOrder = useAppStore((state) => state.addOrder);
+  const shops = useAppStore((state) => state.shops);
 
   // Local state for editing
   const [isEditing, setIsEditing] = useState(false);
@@ -47,7 +49,7 @@ export default function CustomerDetails() {
   const [isDragging, setIsDragging] = useState(false);
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'previews' | 'products' | 'online_products' | 'shopware' | 'photoshop'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'previews' | 'products' | 'shop_products' | 'shopware_products' | 'shopware' | 'photoshop'>('overview');
   
   const [customer, setCustomer] = useState(customers.find(c => c.id === id));
   const [customerOrders, setCustomerOrders] = useState(
@@ -131,6 +133,8 @@ export default function CustomerDetails() {
       navigate("/dashboard/customers");
     }
   }, [id, customers, orders, navigate, loading]);
+
+  const customerShop = shops.find(s => s.customer_id === customer?.id);
 
   useEffect(() => {
       if (customer) {
@@ -1003,14 +1007,11 @@ export default function CustomerDetails() {
   });
 
   // Products filtered by search
-  const allProductsCombined = products.filter(p => 
+  const filteredProducts = products.filter(p => 
       (p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
       (p.product_number && p.product_number.toLowerCase().includes(productSearch.toLowerCase()))) &&
-      p.product_number !== 'FREISTELLER'
-  );
-
-  const filteredPrintFilesForAssign = printFiles.filter(f => 
-      (f.customName || f.name).toLowerCase().includes(fileSearch.toLowerCase())
+      p.product_number !== 'FREISTELLER' &&
+      p.source === 'manual' // Only manual products in "Artikel" tab
   );
 
   const shopwareProducts = products.filter(p => 
@@ -1019,11 +1020,8 @@ export default function CustomerDetails() {
       p.source === 'shopware'
   );
 
-  const filteredProducts = products.filter(p => 
-      (p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
-      (p.product_number && p.product_number.toLowerCase().includes(productSearch.toLowerCase()))) &&
-      p.product_number !== 'FREISTELLER' && // Filter out Freisteller dummy products from the main list
-      p.source !== 'shopware' // Only show manual products in the main list
+  const filteredPrintFilesForAssign = printFiles.filter(f => 
+      (f.customName || f.name).toLowerCase().includes(fileSearch.toLowerCase())
   );
 
   return (
@@ -1126,9 +1124,29 @@ export default function CustomerDetails() {
             >
                 <div className="flex items-center">
                     <Package size={16} className="mr-2" />
-                    Artikel ({allProductsCombined.length})
+                    Manuelle Artikel ({filteredProducts.length})
                 </div>
             </button>
+            <button
+                onClick={() => setActiveTab('shopware_products')}
+                className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'shopware_products' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+                <div className="flex items-center">
+                    <ShoppingBag size={16} className="mr-2" />
+                    Shopware Artikel ({shopwareProducts.length})
+                </div>
+            </button>
+            {customerShop && (
+                <button
+                    onClick={() => setActiveTab('shop_products')}
+                    className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'shop_products' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                    <div className="flex items-center">
+                        <Globe size={16} className="mr-2" />
+                        Online Shop
+                    </div>
+                </button>
+            )}
             <button
                 onClick={() => setActiveTab('shopware')}
                 className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'shopware' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
@@ -1792,8 +1810,20 @@ export default function CustomerDetails() {
             </div>
         )}
 
-        {/* TAB: ONLINE PRODUCTS */}
-        {activeTab === 'online_products' && (
+        {/* TAB: SHOP PRODUCTS (Assignments) */}
+        {activeTab === 'shop_products' && (
+             customerShop ? (
+                <CustomerOnlineShopProducts shopId={customerShop.id} products={products} />
+             ) : (
+                <div className="p-8 text-center text-gray-500">
+                    <ShoppingBag size={48} className="mx-auto text-gray-300 mb-4" />
+                    <p>Kein Online Shop diesem Kunden zugewiesen.</p>
+                </div>
+             )
+        )}
+
+        {/* TAB: SHOPWARE PRODUCTS */}
+        {activeTab === 'shopware_products' && (
             <div className="p-8 animate-in fade-in">
                 <div className="flex justify-between items-center mb-6">
                     <div className="flex items-center space-x-4">
