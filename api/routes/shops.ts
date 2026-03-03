@@ -84,6 +84,7 @@ router.get('/:id/products', (req, res) => {
         spa.personalization_enabled,
         spa.category_id,
         spa.sort_order,
+        spa.variants,
         cp.id as product_id,
         cp.name,
         cp.product_number,
