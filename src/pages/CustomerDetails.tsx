@@ -1795,7 +1795,7 @@ export default function CustomerDetails() {
         {/* TAB: SHOP PRODUCTS (Assignments) */}
         {activeTab === 'shop_products' && (
              customerShop ? (
-                <CustomerOnlineShopProducts shopId={customerShop.id} products={products} />
+                <CustomerOnlineShopProducts shopId={customerShop.id} customerId={customer.id} products={products} />
              ) : (
                 <div className="p-8 text-center text-gray-500">
                     <ShoppingBag size={48} className="mx-auto text-gray-300 mb-4" />

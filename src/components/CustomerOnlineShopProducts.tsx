@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ShoppingBag, Edit2, Trash2, Plus, Search, ImageIcon, X, ExternalLink } from 'lucide-react';
 import { ShopProductAssignment, Product, ShopCategory } from '@/store';
@@ -5,16 +6,18 @@ import ProductEditorModal from '../pages/OnlineShops/Management/ProductEditorMod
 
 interface CustomerOnlineShopProductsProps {
     shopId: string;
+    customerId: string; // Added customerId
     products: Product[]; // Pass all available products for assignment
 }
 
-const CustomerOnlineShopProducts: React.FC<CustomerOnlineShopProductsProps> = ({ shopId, products }) => {
+const CustomerOnlineShopProducts: React.FC<CustomerOnlineShopProductsProps> = ({ shopId, customerId, products }) => {
     const [shopProducts, setShopProducts] = useState<(ShopProductAssignment & { product_name?: string, product_number?: string, category_name?: string })[]>([]);
     const [categories, setCategories] = useState<ShopCategory[]>([]);
     const [loading, setLoading] = useState(false);
     
     // Editor Modal State
     const [editorAssignment, setEditorAssignment] = useState<any | null>(null);
+    const [isCreateMode, setIsCreateMode] = useState(false); // Track create mode
     
     // Add Product Modal State
     const [showAddModal, setShowAddModal] = useState(false);
@@ -81,13 +84,23 @@ const CustomerOnlineShopProducts: React.FC<CustomerOnlineShopProductsProps> = ({
             });
             
             setShopProducts(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
-            
-            // If modal open, close it if save was from modal (usually modal handles close itself via onClose, but here just update state)
-            // Actually ProductEditorModal calls onSave then we update state.
         } catch (e) {
             console.error(e);
             alert('Fehler beim Aktualisieren');
         }
+    };
+
+    const handleCreateProduct = (newAssignment: any) => {
+        // Add new assignment to list immediately
+        setShopProducts(prev => [newAssignment, ...prev]);
+        // Also we might want to switch to edit mode for this new product immediately?
+        // For now, let's just close the create modal (which ProductEditorModal does)
+        // and optionally open it in edit mode.
+        // ProductEditorModal calls onClose internally.
+        
+        // Open in edit mode to allow image upload immediately
+        setIsCreateMode(false);
+        setEditorAssignment(newAssignment);
     };
 
     const handleRemoveProduct = async (id: string) => {
@@ -210,7 +223,10 @@ const CustomerOnlineShopProducts: React.FC<CustomerOnlineShopProductsProps> = ({
 
                             <div className="flex space-x-2">
                                 <button 
-                                    onClick={() => setEditorAssignment(sp)}
+                                    onClick={() => {
+                                        setIsCreateMode(false);
+                                        setEditorAssignment(sp);
+                                    }}
                                     className="text-gray-400 hover:text-blue-600 p-1"
                                     title="Bearbeiten"
                                 >
@@ -254,12 +270,28 @@ const CustomerOnlineShopProducts: React.FC<CustomerOnlineShopProductsProps> = ({
                                 <X size={20} />
                             </button>
                         </div>
-                        <div className="p-4 border-b">
+                        <div className="p-4 border-b bg-gray-50">
+                            {/* Create New Button */}
+                            <button 
+                                onClick={() => {
+                                    setShowAddModal(false);
+                                    setIsCreateMode(true);
+                                    setEditorAssignment({}); // Empty object triggers create mode logic in modal via isCreateMode prop check if we change logic slightly or just pass undefined
+                                    // Actually, better to setEditorAssignment(null) and have a separate state or 
+                                    // pass a specific flag.
+                                    // My ProductEditorModal logic: "assignment" prop optional.
+                                }}
+                                className="w-full bg-white border-2 border-dashed border-blue-300 text-blue-600 p-3 rounded-lg flex items-center justify-center hover:bg-blue-50 transition-colors mb-4 font-bold"
+                            >
+                                <Plus size={20} className="mr-2" />
+                                Neues manuelles Produkt erstellen
+                            </button>
+
                             <div className="relative">
                                 <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
                                 <input 
                                     type="text" 
-                                    placeholder="Produkt suchen..."
+                                    placeholder="Vorhandenes Produkt suchen..."
                                     className="w-full pl-10 border border-gray-300 rounded-lg p-2"
                                     value={addProductSearch}
                                     onChange={(e) => setAddProductSearch(e.target.value)}
@@ -298,13 +330,18 @@ const CustomerOnlineShopProducts: React.FC<CustomerOnlineShopProductsProps> = ({
             )}
 
             {/* Editor Modal */}
-            {editorAssignment && (
+            {(editorAssignment || isCreateMode) && (
                 <ProductEditorModal 
-                    isOpen={!!editorAssignment}
-                    assignment={editorAssignment}
+                    isOpen={!!editorAssignment || isCreateMode}
+                    assignment={isCreateMode ? undefined : editorAssignment}
                     shopId={shopId}
-                    onClose={() => setEditorAssignment(null)}
+                    customerId={customerId}
+                    onClose={() => {
+                        setEditorAssignment(null);
+                        setIsCreateMode(false);
+                    }}
                     onSave={handleUpdateProduct}
+                    onCreate={handleCreateProduct}
                 />
             )}
         </div>
