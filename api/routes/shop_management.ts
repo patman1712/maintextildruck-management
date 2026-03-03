@@ -204,12 +204,26 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
         
         // Get currently assigned images
         const assignedImages = db.prepare(`
-            SELECT cpf.*, spi.id as assignment_image_id, spi.sort_order, spi.personalization_option_id
+            SELECT cpf.*, spi.id as assignment_image_id, spi.sort_order, spi.personalization_option_id, spi.personalization_option_ids
             FROM shop_product_images spi
             JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
             WHERE spi.shop_product_assignment_id = ?
             ORDER BY spi.sort_order ASC
         `).all(assignmentId);
+
+        // Parse JSON for option_ids
+        const assignedImagesParsed = assignedImages.map((img: any) => {
+             try {
+                 img.personalization_option_ids = img.personalization_option_ids ? JSON.parse(img.personalization_option_ids) : [];
+                 // Fallback for migration: If single ID exists but array is empty, populate array
+                 if (img.personalization_option_ids.length === 0 && img.personalization_option_id) {
+                     img.personalization_option_ids = [img.personalization_option_id];
+                 }
+             } catch (e) {
+                 img.personalization_option_ids = [];
+             }
+             return img;
+        });
 
         // Get all available images for the base product
         const assignment = db.prepare('SELECT product_id FROM shop_product_assignments WHERE id = ?').get(assignmentId) as { product_id: string };
@@ -217,7 +231,7 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
 
         const allImages = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at DESC').all(assignment.product_id);
 
-        res.json({ success: true, data: { assigned: assignedImages, available: allImages } });
+        res.json({ success: true, data: { assigned: assignedImagesParsed, available: allImages } });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -234,8 +248,8 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
         if (exists) return res.json({ success: true, message: 'Already assigned' });
 
         db.prepare(`
-            INSERT INTO shop_product_images (id, shop_product_assignment_id, customer_product_file_id, sort_order)
-            VALUES (?, ?, ?, 0)
+            INSERT INTO shop_product_images (id, shop_product_assignment_id, customer_product_file_id, sort_order, personalization_option_ids)
+            VALUES (?, ?, ?, 0, '[]')
         `).run(id, assignmentId, file_id);
 
         res.json({ success: true });
@@ -247,13 +261,16 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
 router.put('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
     try {
         const { assignmentId, fileId } = req.params;
-        const { personalization_option_id } = req.body;
+        const { personalization_option_ids } = req.body; // Expect array of IDs
+
+        // Also update the legacy single column with the first ID or null, just in case
+        const legacyId = (personalization_option_ids && personalization_option_ids.length > 0) ? personalization_option_ids[0] : null;
 
         db.prepare(`
             UPDATE shop_product_images 
-            SET personalization_option_id = ? 
+            SET personalization_option_ids = ?, personalization_option_id = ?
             WHERE shop_product_assignment_id = ? AND customer_product_file_id = ?
-        `).run(personalization_option_id || null, assignmentId, fileId);
+        `).run(JSON.stringify(personalization_option_ids || []), legacyId, assignmentId, fileId);
 
         res.json({ success: true });
     } catch (error: any) {

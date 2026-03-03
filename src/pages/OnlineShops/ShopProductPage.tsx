@@ -62,19 +62,52 @@ const ShopProductPage: React.FC = () => {
               newState = { ...prev, [option.id]: true }; 
           }
           
-          // Image Logic
-          const linkedImage = images.find((img: any) => img.personalization_option_id === option.id);
+          // Image Logic: Find the best matching image for the NEW state
+          // We need to find an image where ALL its required options are selected in newState
           
-          if (!wasSelected) {
-              // Selecting: If there is a linked image, switch to it
-              if (linkedImage) {
-                  setActiveImage(linkedImage.file_url);
+          // Get all currently selected option IDs (including the one just toggled)
+          const selectedIds = Object.keys(newState).filter(k => !!newState[k]);
+          
+          // Find images that have personalization requirements
+          const personalizedImages = images.filter((img: any) => 
+              img.personalization_option_ids && img.personalization_option_ids.length > 0
+          );
+          
+          // Try to find an image where ALL required options are present in selectedIds
+          // We prefer images with MORE matching options (specificity)
+          let bestMatch = null;
+          let maxMatchCount = 0;
+          
+          for (const img of personalizedImages) {
+              const requiredIds = img.personalization_option_ids;
+              const allRequiredPresent = requiredIds.every((id: string) => selectedIds.includes(id));
+              
+              if (allRequiredPresent) {
+                  // This image is a candidate. Check if it's more specific than previous candidate
+                  if (requiredIds.length > maxMatchCount) {
+                      maxMatchCount = requiredIds.length;
+                      bestMatch = img;
+                  }
               }
+          }
+          
+          if (bestMatch) {
+              setActiveImage(bestMatch.file_url);
           } else {
-              // Deselecting: If we are currently looking at the linked image, switch back to standard
-              if (linkedImage && activeImage === linkedImage.file_url) {
-                   // Find first standard image (one without personalization_option_id)
-                   const standardImage = images.find((img: any) => !img.personalization_option_id);
+              // No matching personalized image found.
+              // If we were viewing a personalized image that is no longer valid, revert to standard.
+              // Or just revert to standard if no match found?
+              
+              // Check if currently active image is a personalized one that is now invalid
+              const activeImgObj = images.find((i: any) => i.file_url === activeImage);
+              const activeIsPersonalized = activeImgObj && activeImgObj.personalization_option_ids && activeImgObj.personalization_option_ids.length > 0;
+              
+              if (activeIsPersonalized) {
+                   // Switch to standard
+                   const standardImage = images.find((img: any) => !img.personalization_option_ids || img.personalization_option_ids.length === 0);
+                   if (standardImage) setActiveImage(standardImage.file_url);
+              } else if (!activeImage) {
+                   const standardImage = images.find((img: any) => !img.personalization_option_ids || img.personalization_option_ids.length === 0);
                    if (standardImage) setActiveImage(standardImage.file_url);
               }
           }
@@ -145,24 +178,28 @@ const ShopProductPage: React.FC = () => {
   const hasSelectedPersonalization = Object.values(selectedPersonalization).some(v => !!v);
 
   const displayedImages = images.filter((img: any) => {
-      // Standard images
-      if (!img.personalization_option_id) {
-          // Hide standard images if ANY personalization with a linked image is active
-          // First, find if any currently selected option has a linked image
+      // Standard images (no personalization requirements)
+      if (!img.personalization_option_ids || img.personalization_option_ids.length === 0) {
+          // Hide standard images if ANY personalized image is currently valid and active
           const activeOptionIds = Object.keys(selectedPersonalization).filter(k => !!selectedPersonalization[k]);
           
-          const hasActiveLinkedImage = images.some((i: any) => 
-              i.personalization_option_id && activeOptionIds.includes(i.personalization_option_id)
+          const hasActivePersonalizedImage = images.some((i: any) => 
+              i.personalization_option_ids && 
+              i.personalization_option_ids.length > 0 &&
+              i.personalization_option_ids.every((id: string) => activeOptionIds.includes(id))
           );
           
-          if (hasActiveLinkedImage) return false; // Hide standard image
-          return true; // Show standard image
+          if (hasActivePersonalizedImage) return false; 
+          return true; 
       } 
       
       // Personalized images
       else {
-          // Show only if this specific option is selected
-          return !!selectedPersonalization[img.personalization_option_id];
+          const requiredIds = img.personalization_option_ids;
+          const activeOptionIds = Object.keys(selectedPersonalization).filter(k => !!selectedPersonalization[k]);
+          
+          // Show only if ALL required options for this image are currently selected
+          return requiredIds.every((id: string) => activeOptionIds.includes(id));
       }
   });
 

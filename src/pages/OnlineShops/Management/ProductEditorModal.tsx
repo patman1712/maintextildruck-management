@@ -234,20 +234,27 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       } catch (e) { console.error(e); }
   };
 
-  const handleAssignImageToOption = async (fileId: string, optionId: string | null) => {
+  const handleAssignImageToOptions = async (fileId: string, optionIds: string[]) => {
       try {
           const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ personalization_option_id: optionId })
+              body: JSON.stringify({ personalization_option_ids: optionIds })
           });
           const data = await res.json();
           if (data.success) {
               setCurrentImages(currentImages.map(img => 
-                  img.id === fileId ? { ...img, personalization_option_id: optionId } : img
+                  img.id === fileId ? { ...img, personalization_option_ids: optionIds } : img
               ));
           }
       } catch (e) { console.error(e); }
+  };
+
+  const toggleImageOption = (fileId: string, optionId: string, currentOptionIds: string[]) => {
+      const newOptionIds = currentOptionIds.includes(optionId)
+          ? currentOptionIds.filter(id => id !== optionId)
+          : [...currentOptionIds, optionId];
+      handleAssignImageToOptions(fileId, newOptionIds);
   };
 
   const mainImage = currentImages.length > 0 ? (currentImages[0].file_url || currentImages[0].thumbnail_url) : null;
@@ -299,9 +306,9 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                               <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
                               
                               {/* Personalization Badge */}
-                              {img.personalization_option_id && (
-                                  <div className="absolute bottom-0 left-0 right-0 bg-blue-600/90 text-white text-[9px] font-bold px-1 py-0.5 truncate text-center" title={personalizationOptions.find(o => o.id === img.personalization_option_id)?.name}>
-                                      {personalizationOptions.find(o => o.id === img.personalization_option_id)?.name || 'Option'}
+                              {img.personalization_option_ids && img.personalization_option_ids.length > 0 && (
+                                  <div className="absolute bottom-0 left-0 right-0 bg-blue-600/90 text-white text-[9px] font-bold px-1 py-0.5 truncate text-center">
+                                      {img.personalization_option_ids.map((oid: string) => personalizationOptions.find(o => o.id === oid)?.name).join(', ')}
                                   </div>
                               )}
 
@@ -315,18 +322,27 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                               </button>
                               
                               {/* Assign Option Overlay */}
-                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
-                                  <select 
-                                      className="w-full text-[10px] bg-white text-slate-800 rounded p-1 outline-none border border-slate-300"
-                                      value={img.personalization_option_id || ''}
-                                      onChange={(e) => handleAssignImageToOption(img.id, e.target.value || null)}
-                                      onClick={(e) => e.stopPropagation()}
-                                  >
-                                      <option value="">(Standard)</option>
-                                      {personalizationOptions.filter(o => selectedPersonalizationIds.includes(o.id)).map(opt => (
-                                          <option key={opt.id} value={opt.id}>{opt.name}</option>
-                                      ))}
-                                  </select>
+                              <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 text-xs text-white overflow-y-auto">
+                                  <div className="font-bold mb-1 underline">Zuordnung:</div>
+                                  <div className="space-y-1 w-full">
+                                      {personalizationOptions.filter(o => selectedPersonalizationIds.includes(o.id)).map(opt => {
+                                          const isSelected = img.personalization_option_ids?.includes(opt.id);
+                                          return (
+                                              <label key={opt.id} className="flex items-center space-x-2 cursor-pointer hover:bg-white/10 p-1 rounded">
+                                                  <input 
+                                                      type="checkbox" 
+                                                      checked={isSelected}
+                                                      onChange={() => toggleImageOption(img.id, opt.id, img.personalization_option_ids || [])}
+                                                      className="rounded text-blue-500 focus:ring-0"
+                                                  />
+                                                  <span className="truncate">{opt.name}</span>
+                                              </label>
+                                          );
+                                      })}
+                                      {personalizationOptions.filter(o => selectedPersonalizationIds.includes(o.id)).length === 0 && (
+                                          <div className="text-[10px] italic text-slate-400">Keine Optionen aktiviert</div>
+                                      )}
+                                  </div>
                               </div>
                           </div>
                       ))}
