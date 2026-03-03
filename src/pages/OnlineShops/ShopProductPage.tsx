@@ -18,6 +18,7 @@ const ShopProductPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string>('');
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [personalization, setPersonalization] = useState({
     print: 'none', // none, own_name, player_name, club
@@ -60,10 +61,24 @@ const ShopProductPage: React.FC = () => {
   // Fallback image if no files
   const mainImage = activeImage || (images.length > 0 ? images[0].file_url : null);
   
+  // Parse Variants
+  const variants = product.variants ? (typeof product.variants === 'string' ? JSON.parse(product.variants) : product.variants) : {};
+  const variantKeys = Object.keys(variants);
+  const hasVariants = variantKeys.length > 0;
+
   // Derived state (needs to be here because product is null initially)
-  const availableSizes = product.size 
-    ? product.size.split(',').map((s: string) => s.trim()) 
-    : ['S', 'M', 'L', 'XL', 'XXL'];
+  let availableSizes: string[] = [];
+  let currentPrice = product.price > 0 ? product.price : 29.95;
+
+  if (hasVariants && selectedVariantId) {
+      const variant = variants[selectedVariantId];
+      if (variant) {
+          availableSizes = variant.values ? variant.values.split(',').map((s: string) => s.trim()) : [];
+          if (variant.price) currentPrice = variant.price;
+      }
+  } else if (!hasVariants) {
+      availableSizes = product.size ? product.size.split(',').map((s: string) => s.trim()) : ['S', 'M', 'L', 'XL', 'XXL'];
+  }
 
   const isPersonalizationEnabled = product.personalization_enabled === 1 || product.personalization_enabled === true;
 
@@ -119,9 +134,34 @@ const ShopProductPage: React.FC = () => {
         <div>
             <h1 className="text-3xl font-black uppercase italic tracking-tighter mb-2">{product.name}</h1>
             <div className="flex items-center justify-between mb-6">
-                <div className="text-2xl font-bold">€ {product.price > 0 ? product.price.toFixed(2) : '29.95'}</div>
+                <div className="text-2xl font-bold">€ {currentPrice.toFixed(2)}</div>
                 <div className="text-xs text-slate-500">inkl. MwSt. zzgl. Versandkosten</div>
             </div>
+
+            {/* Variant Selection Buttons - Render logic above was slightly incorrect, moving it here properly */}
+            {hasVariants && (
+                <div className="mb-6">
+                    <label className="font-bold text-sm uppercase block mb-2">Ausführung:</label>
+                    <div className="flex flex-wrap gap-2">
+                        {variantKeys.map(key => {
+                            const variant = variants[key];
+                            const isSelected = selectedVariantId === key;
+                            return (
+                                <button
+                                    key={key}
+                                    onClick={() => {
+                                        setSelectedVariantId(key);
+                                        setSelectedSize(''); // Reset size when variant changes
+                                    }}
+                                    className={`px-4 py-2 border rounded text-sm font-medium transition-colors ${isSelected ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'}`}
+                                >
+                                    {variant.name}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* Size Selection */}
             <div className="mb-8">
@@ -130,11 +170,14 @@ const ShopProductPage: React.FC = () => {
                     <button className="text-xs text-slate-500 underline hover:text-slate-800">Grössentabelle</button>
                 </div>
                 <select 
-                    className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none"
+                    className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none disabled:bg-slate-100 disabled:text-slate-400"
                     value={selectedSize}
                     onChange={(e) => setSelectedSize(e.target.value)}
+                    disabled={hasVariants && !selectedVariantId}
                 >
-                    <option value="">Bitte Grösse wählen</option>
+                    <option value="">
+                        {hasVariants && !selectedVariantId ? 'Bitte erst Ausführung wählen' : 'Bitte Grösse wählen'}
+                    </option>
                     {availableSizes.map((size: string) => (
                         <option key={size} value={size}>{size}</option>
                     ))}
@@ -245,7 +288,7 @@ const ShopProductPage: React.FC = () => {
             <div className="mb-6">
                 <div className="text-xs font-bold uppercase text-slate-500 mb-1">Gesamtpreis:</div>
                 <div className="text-3xl font-bold">€ {(
-                    (product.price > 0 ? product.price : 29.95) + 
+                    currentPrice + 
                     (personalization.print === 'own_name' ? 15 : 0) +
                     (personalization.logo.length * 4)
                 ).toFixed(2)}</div>

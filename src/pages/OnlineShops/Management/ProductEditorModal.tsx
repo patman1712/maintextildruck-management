@@ -21,20 +21,63 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     description: assignment.description || '',
     manufacturer_info: assignment.manufacturer_info || '',
     size: assignment.size || '', 
+    variants: (assignment.variants as any) || {} // e.g. { "Kinder": { price: 15, sizes: "98, 104..." }, "Erwachsene": { price: 20, sizes: "S, M..." } }
   });
 
   const [shopVariables, setShopVariables] = useState<any[]>([]);
+  const [activeVariants, setActiveVariants] = useState<string[]>([]); // Array of variable IDs currently active
 
   useEffect(() => {
       if (shopId) {
           fetch(`/api/variables/shop/${shopId}`)
               .then(res => res.json())
               .then(data => {
-                  if (data.success) setShopVariables(data.data);
+                  if (data.success) {
+                      setShopVariables(data.data);
+                      // Initial check of which variants are active based on formData.variants
+                      // Actually, let's just use the keys of formData.variants which might be variable names or IDs
+                      // Ideally we use variable IDs as keys.
+                      // But for simplicity and readability, let's assume we store by Variable Name or ID.
+                      // Let's use Variable ID.
+                      const existingVariantIds = Object.keys(formData.variants || {});
+                      setActiveVariants(existingVariantIds);
+                  }
               })
               .catch(err => console.error(err));
       }
   }, [shopId]);
+
+  const toggleVariant = (variable: any) => {
+      const isActive = activeVariants.includes(variable.id);
+      let newActive = [...activeVariants];
+      let newVariantsData = { ...formData.variants };
+
+      if (isActive) {
+          newActive = newActive.filter(id => id !== variable.id);
+          delete newVariantsData[variable.id];
+      } else {
+          newActive.push(variable.id);
+          // Initialize variant data
+          newVariantsData[variable.id] = {
+              name: variable.name,
+              values: variable.values, // Default to all values
+              price: formData.price // Default to base price
+          };
+      }
+      
+      setActiveVariants(newActive);
+      setFormData({ ...formData, variants: newVariantsData });
+  };
+
+  const updateVariantPrice = (varId: string, price: number) => {
+      setFormData(prev => ({
+          ...prev,
+          variants: {
+              ...prev.variants,
+              [varId]: { ...prev.variants[varId], price }
+          }
+      }));
+  };
 
   // Handle Price Input with comma/dot support
   const [priceInput, setPriceInput] = useState((assignment.price || 0).toFixed(2));
@@ -147,31 +190,80 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
 
                 {/* Sizes */}
                 <div>
-                    <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Verfügbare Größen</label>
+                    <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Verfügbare Größen & Varianten</label>
                     <div className="flex flex-wrap gap-2 mb-2">
-                        <button onClick={() => applySizePreset(sizePresets.kids)} className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded">Kinder</button>
-                        <button onClick={() => applySizePreset(sizePresets.adults)} className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded">Erwachsene</button>
-                        <button onClick={() => applySizePreset(sizePresets.unisex)} className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded">Unisex (XXS-5XL)</button>
-                        
                         {/* Dynamic Presets from Variables */}
-                        {shopVariables.filter((v: any) => v.type === 'size').map((v: any) => (
-                            <button 
-                                key={v.id} 
-                                onClick={() => applySizePreset(v.values)} 
-                                className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded flex items-center"
-                            >
-                                <span className="mr-1">★</span> {v.name}
-                            </button>
-                        ))}
+                        {shopVariables.filter((v: any) => v.type === 'size').map((v: any) => {
+                            const isActive = activeVariants.includes(v.id);
+                            return (
+                                <button 
+                                    key={v.id} 
+                                    onClick={() => toggleVariant(v)} 
+                                    className={`text-xs px-2 py-1 rounded flex items-center border transition-all ${isActive ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400'}`}
+                                >
+                                    <span className="mr-1">{isActive ? '✓' : '+'}</span> {v.name}
+                                </button>
+                            );
+                        })}
                     </div>
-                    <input 
-                        type="text" 
-                        className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none"
-                        placeholder="S, M, L, XL, XXL (Kommagetrennt)"
-                        value={formData.size}
-                        onChange={(e) => setFormData({...formData, size: e.target.value})}
-                    />
-                    <p className="text-xs text-slate-400 mt-1">Diese Werte werden im Dropdown angezeigt.</p>
+                    
+                    {/* If no variants selected, show standard input */}
+                    {activeVariants.length === 0 ? (
+                        <>
+                            <input 
+                                type="text" 
+                                className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none"
+                                placeholder="S, M, L, XL, XXL (Kommagetrennt)"
+                                value={formData.size}
+                                onChange={(e) => setFormData({...formData, size: e.target.value})}
+                            />
+                            <p className="text-xs text-slate-400 mt-1">Diese Werte werden im Dropdown angezeigt.</p>
+                        </>
+                    ) : (
+                        <div className="space-y-3 mt-3 bg-slate-50 p-3 rounded border border-slate-200">
+                            <p className="text-xs font-bold text-slate-500 uppercase mb-2">Konfiguration der Varianten</p>
+                            {activeVariants.map(varId => {
+                                const variable = shopVariables.find(v => v.id === varId);
+                                const variantData = formData.variants[varId] || {};
+                                if (!variable) return null;
+
+                                return (
+                                    <div key={varId} className="bg-white p-3 rounded border border-slate-200 shadow-sm">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="font-bold text-sm text-slate-800">{variable.name}</span>
+                                            <div className="flex items-center">
+                                                <span className="text-xs mr-2 text-slate-500">Preis:</span>
+                                                <div className="flex items-center">
+                                                    <span className="text-sm font-bold mr-1">€</span>
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.01"
+                                                        className="w-20 border border-slate-300 rounded px-2 py-1 text-sm font-bold text-right"
+                                                        value={variantData.price || formData.price}
+                                                        onChange={(e) => {
+                                                            const newVariants = { ...formData.variants };
+                                                            newVariants[varId] = { ...newVariants[varId], price: parseFloat(e.target.value) };
+                                                            setFormData({ ...formData, variants: newVariants });
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <input 
+                                            type="text" 
+                                            className="w-full border border-slate-200 rounded p-2 text-xs text-slate-600"
+                                            value={variantData.values || variable.values}
+                                            onChange={(e) => {
+                                                const newVariants = { ...formData.variants };
+                                                newVariants[varId] = { ...newVariants[varId], values: e.target.value };
+                                                setFormData({ ...formData, variants: newVariants });
+                                            }}
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
 
                 {/* Personalization Toggle */}

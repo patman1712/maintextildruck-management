@@ -265,6 +265,18 @@ db.exec(`
   )
 `);
 
+// Add variants column to shop_product_assignments
+try {
+  const shopProductAssignmentCols = db.prepare("PRAGMA table_info(shop_product_assignments)").all() as any[];
+  const hasVariants = shopProductAssignmentCols.some(col => col.name === 'variants');
+  if (!hasVariants) {
+    console.log('Migrating database: Adding variants to shop_product_assignments table');
+    db.exec('ALTER TABLE shop_product_assignments ADD COLUMN variants TEXT');
+  }
+} catch (error) {
+  console.error('Migration error (variants):', error);
+}
+
 // Migration: Add customer_id if it doesn't exist (for existing databases)
 try {
   const columns = db.prepare("PRAGMA table_info(orders)").all() as any[];

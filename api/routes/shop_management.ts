@@ -81,6 +81,13 @@ router.get('/:shopId/products', (req, res) => {
     // Given the low number of shop products usually, this is acceptable for now.
     const productsWithFiles = products.map(p => {
         const files = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at DESC').all(p.product_id);
+        if (p.variants) {
+            try {
+                p.variants = JSON.parse(p.variants);
+            } catch (e) {
+                p.variants = null;
+            }
+        }
         return { ...p, files };
     });
 
@@ -117,14 +124,14 @@ router.post('/:shopId/products', (req, res) => {
 router.put('/:shopId/products/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { category_id, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size } = req.body;
+    const { category_id, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size, variants } = req.body;
 
     // Update assignment
     db.prepare(`
       UPDATE shop_product_assignments 
-      SET category_id = ?, price = ?, is_featured = ?, personalization_enabled = ?, sort_order = ?
+      SET category_id = ?, price = ?, is_featured = ?, personalization_enabled = ?, sort_order = ?, variants = ?
       WHERE id = ?
-    `).run(category_id, price, is_featured ? 1 : 0, personalization_enabled ? 1 : 0, sort_order, id);
+    `).run(category_id, price, is_featured ? 1 : 0, personalization_enabled ? 1 : 0, sort_order, variants ? JSON.stringify(variants) : null, id);
 
     // Update product details (manufacturer_info, description, size)
     const assignment = db.prepare('SELECT product_id FROM shop_product_assignments WHERE id = ?').get(id) as { product_id: string };
@@ -137,6 +144,10 @@ router.put('/:shopId/products/:id', (req, res) => {
     }
 
     const updatedAssignment = db.prepare('SELECT * FROM shop_product_assignments WHERE id = ?').get(id);
+    // Parse variants back to JSON
+    if (updatedAssignment && (updatedAssignment as any).variants) {
+        (updatedAssignment as any).variants = JSON.parse((updatedAssignment as any).variants);
+    }
     res.json({ success: true, data: updatedAssignment });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
