@@ -52,13 +52,28 @@ const ShopProductPage: React.FC = () => {
 
   const toggleOption = (option: any) => {
       setSelectedPersonalization(prev => {
+          let newState;
           if (prev[option.id]) {
-              const newState = { ...prev };
+              newState = { ...prev };
               delete newState[option.id];
-              return newState;
           } else {
-              return { ...prev, [option.id]: true }; // For boolean/checkbox type options
+              newState = { ...prev, [option.id]: true }; // For boolean/checkbox type options
           }
+          
+          // Check if any image is assigned to this option
+          if (!prev[option.id]) {
+              // Option is being selected
+              const linkedImage = images.find((img: any) => img.personalization_option_id === option.id);
+              if (linkedImage) {
+                  setActiveImage(linkedImage.file_url);
+              }
+          } else {
+              // Option is being deselected, revert to default image?
+              // For now, we stay on the current image or go back to first one
+              // setActiveImage(images[0]?.file_url);
+          }
+          
+          return newState;
       });
   };
 

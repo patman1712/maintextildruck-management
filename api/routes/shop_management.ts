@@ -204,7 +204,7 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
         
         // Get currently assigned images
         const assignedImages = db.prepare(`
-            SELECT cpf.*, spi.id as assignment_image_id, spi.sort_order
+            SELECT cpf.*, spi.id as assignment_image_id, spi.sort_order, spi.personalization_option_id
             FROM shop_product_images spi
             JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
             WHERE spi.shop_product_assignment_id = ?
@@ -237,6 +237,23 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
             INSERT INTO shop_product_images (id, shop_product_assignment_id, customer_product_file_id, sort_order)
             VALUES (?, ?, ?, 0)
         `).run(id, assignmentId, file_id);
+
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.put('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
+    try {
+        const { assignmentId, fileId } = req.params;
+        const { personalization_option_id } = req.body;
+
+        db.prepare(`
+            UPDATE shop_product_images 
+            SET personalization_option_id = ? 
+            WHERE shop_product_assignment_id = ? AND customer_product_file_id = ?
+        `).run(personalization_option_id || null, assignmentId, fileId);
 
         res.json({ success: true });
     } catch (error: any) {

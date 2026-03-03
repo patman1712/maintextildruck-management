@@ -234,6 +234,22 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       } catch (e) { console.error(e); }
   };
 
+  const handleAssignImageToOption = async (fileId: string, optionId: string | null) => {
+      try {
+          const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ personalization_option_id: optionId })
+          });
+          const data = await res.json();
+          if (data.success) {
+              setCurrentImages(currentImages.map(img => 
+                  img.id === fileId ? { ...img, personalization_option_id: optionId } : img
+              ));
+          }
+      } catch (e) { console.error(e); }
+  };
+
   const mainImage = currentImages.length > 0 ? (currentImages[0].file_url || currentImages[0].thumbnail_url) : null;
 
   return (
@@ -281,13 +297,37 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                       {currentImages.map((img: any, idx: number) => (
                           <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden">
                               <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
+                              
+                              {/* Personalization Badge */}
+                              {img.personalization_option_id && (
+                                  <div className="absolute bottom-0 left-0 right-0 bg-blue-600/90 text-white text-[9px] font-bold px-1 py-0.5 truncate text-center" title={personalizationOptions.find(o => o.id === img.personalization_option_id)?.name}>
+                                      {personalizationOptions.find(o => o.id === img.personalization_option_id)?.name || 'Option'}
+                                  </div>
+                              )}
+
+                              {/* Remove Button */}
                               <button 
                                   onClick={() => handleRemoveImage(img.id)}
-                                  className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                                  className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 z-10"
                                   title="Aus Shop entfernen"
                               >
                                   <Trash2 size={12} />
                               </button>
+                              
+                              {/* Assign Option Overlay */}
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
+                                  <select 
+                                      className="w-full text-[10px] bg-white text-slate-800 rounded p-1 outline-none border border-slate-300"
+                                      value={img.personalization_option_id || ''}
+                                      onChange={(e) => handleAssignImageToOption(img.id, e.target.value || null)}
+                                      onClick={(e) => e.stopPropagation()}
+                                  >
+                                      <option value="">(Standard)</option>
+                                      {personalizationOptions.filter(o => selectedPersonalizationIds.includes(o.id)).map(opt => (
+                                          <option key={opt.id} value={opt.id}>{opt.name}</option>
+                                      ))}
+                                  </select>
+                              </div>
                           </div>
                       ))}
                       <label className="aspect-square bg-slate-100 border border-dashed border-slate-300 rounded flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-600 cursor-pointer transition-colors">
@@ -295,6 +335,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                           <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
                       </label>
                    </div>
+                   <p className="text-[10px] text-slate-400 italic">Hovern Sie über ein Bild, um es einer Option zuzuweisen.</p>
                </div>
 
                {/* Available Images (from Customer Product) */}

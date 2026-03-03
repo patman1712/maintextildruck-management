@@ -289,6 +289,13 @@ db.exec(`
 
 // Add variants column to shop_product_assignments
 try {
+  const shopProductImageCols = db.prepare("PRAGMA table_info(shop_product_images)").all() as any[];
+  const hasPersonalizationOptionId = shopProductImageCols.some(col => col.name === 'personalization_option_id');
+  if (!hasPersonalizationOptionId) {
+    console.log('Migrating database: Adding personalization_option_id to shop_product_images table');
+    db.exec('ALTER TABLE shop_product_images ADD COLUMN personalization_option_id TEXT');
+  }
+
   const shopProductAssignmentCols = db.prepare("PRAGMA table_info(shop_product_assignments)").all() as any[];
   const hasVariants = shopProductAssignmentCols.some(col => col.name === 'variants');
   if (!hasVariants) {
