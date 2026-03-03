@@ -267,51 +267,40 @@ const ShopProductPage: React.FC = () => {
                         PERSONALISIERE DEIN PRODUKT <span className="ml-2 text-xs">✨</span>
                     </h3>
                     
-                    <div className="space-y-4">
-                        {personalizationOptions.map(option => (
-                            <div key={option.id} className="bg-white p-3 rounded border border-slate-200">
-                                <div className="flex items-center justify-between mb-2">
-                                    <label className="flex items-center space-x-2 cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
-                                            className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500"
-                                            checked={!!selectedPersonalization[option.id]}
-                                            onChange={() => toggleOption(option)}
-                                        />
-                                        <span className="font-bold text-sm text-slate-800">{option.name}</span>
-                                    </label>
-                                    <span className="text-xs text-blue-600 font-bold">+ € {option.price_adjustment.toFixed(2)}</span>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {personalizationOptions.map(option => {
+                            const isSelected = !!selectedPersonalization[option.id];
+                            return (
+                                <div key={option.id} className="flex flex-col">
+                                    <button 
+                                        className={`border rounded p-2 text-center hover:border-blue-500 bg-white h-24 flex flex-col items-center justify-center transition-all ${isSelected ? 'border-blue-600 ring-1 ring-blue-600' : 'border-slate-200'}`}
+                                        onClick={() => toggleOption(option)}
+                                    >
+                                        <div className="text-2xl mb-1">
+                                            {option.type === 'text' && '🔤'}
+                                            {option.type === 'number' && '🔢'}
+                                            {option.type === 'logo' && '🛡️'}
+                                        </div>
+                                        <div className="text-[10px] font-bold leading-tight px-1">{option.name}</div>
+                                        <div className="text-[10px] text-slate-500 mt-1">+ € {option.price_adjustment.toFixed(2)}</div>
+                                    </button>
+                                    
+                                    {/* Input Field below button if selected */}
+                                    {isSelected && (option.type === 'text' || option.type === 'number') && (
+                                        <div className="mt-2 animate-in fade-in slide-in-from-top-1">
+                                            <input 
+                                                type={option.type === 'number' ? 'number' : 'text'}
+                                                placeholder={option.type === 'number' ? "Nummer" : "Text"}
+                                                className="w-full border border-blue-300 rounded p-1.5 text-xs text-center focus:ring-1 focus:ring-blue-500 outline-none"
+                                                value={typeof selectedPersonalization[option.id] === 'string' ? selectedPersonalization[option.id] as string : ''}
+                                                onChange={(e) => setOptionValue(option.id, e.target.value)}
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
-                                
-                                {selectedPersonalization[option.id] && (
-                                    <div className="pl-6 animate-in fade-in slide-in-from-top-1">
-                                        {option.type === 'text' && (
-                                            <input 
-                                                type="text" 
-                                                placeholder="Text eingeben..." 
-                                                className="w-full border border-slate-300 rounded p-2 text-sm"
-                                                value={typeof selectedPersonalization[option.id] === 'string' ? selectedPersonalization[option.id] as string : ''}
-                                                onChange={(e) => setOptionValue(option.id, e.target.value)}
-                                            />
-                                        )}
-                                        {option.type === 'number' && (
-                                            <input 
-                                                type="number" 
-                                                placeholder="Nummer eingeben..." 
-                                                className="w-full border border-slate-300 rounded p-2 text-sm"
-                                                value={typeof selectedPersonalization[option.id] === 'string' ? selectedPersonalization[option.id] as string : ''}
-                                                onChange={(e) => setOptionValue(option.id, e.target.value)}
-                                            />
-                                        )}
-                                        {option.type === 'logo' && (
-                                            <div className="text-xs text-slate-500 italic">
-                                                Logo wird automatisch hinzugefügt.
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             )}
