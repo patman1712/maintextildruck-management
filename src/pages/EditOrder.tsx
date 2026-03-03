@@ -345,7 +345,7 @@ export default function EditOrder() {
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: "preview" | "print" | "vector" | "internal" | "photoshop") => {
     if (e.target.files && e.target.files.length > 0) {
-      const newFiles = Array.from(e.target.files).map(f => ({ name: f.name, type, file: f }));
+      const newFiles = Array.from(e.target.files).map(f => ({ name: f.name, type, file: f, quantity: type === 'print' ? 1 : undefined }));
       setFiles([...files, ...newFiles]);
     }
   };
@@ -365,7 +365,7 @@ export default function EditOrder() {
     setIsDragging(null);
     
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const newFiles = Array.from(e.dataTransfer.files).map(f => ({ name: f.name, type, file: f }));
+      const newFiles = Array.from(e.dataTransfer.files).map(f => ({ name: f.name, type, file: f, quantity: type === 'print' ? 1 : undefined }));
       setFiles([...files, ...newFiles]);
     }
   };
@@ -963,10 +963,26 @@ export default function EditOrder() {
                   <li key={idx} className="flex justify-between items-center text-sm bg-red-50 p-2 rounded border border-red-100 text-red-800">
                     <div className="flex items-center">
                         <span className="truncate max-w-[200px] font-medium">{file.name}</span>
-                        {(file.quantity || 1) > 1 && (
-                            <span className="ml-2 bg-white text-red-800 text-xs px-2 py-0.5 rounded-full font-bold border border-red-100">
-                                {file.quantity}x
-                            </span>
+                        {/* Quantity Input for Print Files */}
+                        {file.type === 'print' && (
+                            <div className="ml-2 flex items-center bg-white rounded border border-red-200 overflow-hidden shrink-0 h-6">
+                                <input 
+                                    type="number" 
+                                    min="1"
+                                    className="w-10 text-center text-xs p-0.5 border-none focus:ring-0 appearance-none h-full"
+                                    value={file.quantity || 1}
+                                    onChange={(e) => {
+                                        const newFiles = [...files];
+                                        const fileIndex = files.indexOf(file);
+                                        if (fileIndex >= 0) {
+                                            newFiles[fileIndex].quantity = parseInt(e.target.value) || 1;
+                                            setFiles(newFiles);
+                                        }
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                                <span className="bg-red-50 text-red-800 px-1 border-l border-red-100 text-[10px] h-full flex items-center justify-center font-bold">x</span>
+                            </div>
                         )}
                     </div>
                     <button type="button" onClick={() => removeFile(files.indexOf(file))} className="text-red-400 hover:text-red-700">

@@ -122,7 +122,7 @@ export default function NewOrder() {
       setShowPreviewSelector(false);
       setSelectedExistingPreviews([]);
   };
-  const [printFiles, setPrintFiles] = useState<{file: File, customName?: string}[]>([]);
+  const [printFiles, setPrintFiles] = useState<{file: File, customName?: string, quantity: number}[]>([]);
   const [vectorFiles, setVectorFiles] = useState<File[]>([]);
   const [internalFiles, setInternalFiles] = useState<File[]>([]);
   const [photoshopFiles, setPhotoshopFiles] = useState<File[]>([]);
@@ -379,7 +379,7 @@ export default function NewOrder() {
       if (type === "preview") {
         setFiles([...files, ...newFiles]);
       } else if (type === "print") {
-        setPrintFiles([...printFiles, ...newFiles.map(f => ({ file: f, customName: "" }))]);
+        setPrintFiles([...printFiles, ...newFiles.map(f => ({ file: f, customName: "", quantity: 1 }))]);
       } else if (type === "vector") {
         setVectorFiles([...vectorFiles, ...newFiles]);
       } else if (type === "internal") {
@@ -423,7 +423,7 @@ export default function NewOrder() {
       if (type === "preview") {
         setFiles([...files, ...newFiles]);
       } else if (type === "print") {
-        setPrintFiles([...printFiles, ...newFiles.map(f => ({ file: f, customName: "" }))]);
+        setPrintFiles([...printFiles, ...newFiles.map(f => ({ file: f, customName: "", quantity: 1 }))]);
       } else if (type === "vector") {
         setVectorFiles([...vectorFiles, ...newFiles]);
       } else if (type === "internal") {
@@ -483,7 +483,8 @@ export default function NewOrder() {
                 type: 'print' as const, 
                 url: f.path,
                 thumbnail: f.thumbnail,
-                customName: printFiles[i]?.customName || ""
+                customName: printFiles[i]?.customName || "",
+                quantity: printFiles[i]?.quantity || 1
             }))];
           }
           if (data.files.vector) {
@@ -1195,17 +1196,33 @@ export default function NewOrder() {
                         <X size={16} />
                         </button>
                     </div>
-                    <input 
-                        type="text" 
-                        placeholder="Titel vergeben (optional)" 
-                        className="w-full text-xs border border-red-200 rounded p-1 focus:ring-red-500 focus:border-red-500"
-                        value={item.customName || ""}
-                        onChange={(e) => {
-                            const newFiles = [...printFiles];
-                            newFiles[idx].customName = e.target.value;
-                            setPrintFiles(newFiles);
-                        }}
-                    />
+                    <div className="flex gap-2">
+                        <input 
+                            type="text" 
+                            placeholder="Titel vergeben (optional)" 
+                            className="w-full text-xs border border-red-200 rounded p-1 focus:ring-red-500 focus:border-red-500"
+                            value={item.customName || ""}
+                            onChange={(e) => {
+                                const newFiles = [...printFiles];
+                                newFiles[idx].customName = e.target.value;
+                                setPrintFiles(newFiles);
+                            }}
+                        />
+                        <div className="flex items-center bg-white rounded border border-red-200 overflow-hidden shrink-0 w-16">
+                            <input 
+                                type="number" 
+                                min="1"
+                                className="w-full text-center text-xs p-1 border-none focus:ring-0 appearance-none"
+                                value={item.quantity || 1}
+                                onChange={(e) => {
+                                    const newFiles = [...printFiles];
+                                    newFiles[idx].quantity = parseInt(e.target.value) || 1;
+                                    setPrintFiles(newFiles);
+                                }}
+                            />
+                            <span className="bg-gray-50 text-gray-500 px-1 border-l border-red-100 text-[10px] h-full flex items-center justify-center">x</span>
+                        </div>
+                    </div>
                   </li>
                 ))}
               </ul>
