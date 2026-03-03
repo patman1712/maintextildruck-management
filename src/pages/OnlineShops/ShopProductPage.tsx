@@ -145,29 +145,24 @@ const ShopProductPage: React.FC = () => {
   const hasSelectedPersonalization = Object.values(selectedPersonalization).some(v => !!v);
 
   const displayedImages = images.filter((img: any) => {
-      // Standard images always shown? Or only if no personalization selected?
-      // User said: "standard soll ausgeblendet werden wenn es eine personalisierung gibt"
-      // -> If personalization selected, hide standard images? Or just show the personalized one?
-      // Usually you want to keep standard images (front/side) and ADD the personalized one (back).
-      // But user said "standard soll ausgeblendet werden". Let's try strict mode.
+      // Standard images
+      if (!img.personalization_option_id) {
+          // Hide standard images if ANY personalization with a linked image is active
+          // First, find if any currently selected option has a linked image
+          const activeOptionIds = Object.keys(selectedPersonalization).filter(k => !!selectedPersonalization[k]);
+          
+          const hasActiveLinkedImage = images.some((i: any) => 
+              i.personalization_option_id && activeOptionIds.includes(i.personalization_option_id)
+          );
+          
+          if (hasActiveLinkedImage) return false; // Hide standard image
+          return true; // Show standard image
+      } 
       
-      if (img.personalization_option_id) {
-          // This is a personalized image. Show only if this specific option is selected.
+      // Personalized images
+      else {
+          // Show only if this specific option is selected
           return !!selectedPersonalization[img.personalization_option_id];
-      } else {
-          // This is a standard image.
-          // Hide if any personalization is selected AND that personalization has a linked image?
-          // Or just hide always if any personalization is selected?
-          // "die sollen dann ausgeblendet werden wenn die mit einer personalisierung ausgewählt werden"
-          
-          // Let's check if the currently selected personalization HAS a linked image.
-          // If yes, hide standard images. If no (e.g. option selected but no image for it), keep standard images.
-          const activePersonalizationIds = Object.keys(selectedPersonalization).filter(k => !!selectedPersonalization[k]);
-          const hasActivePersonalizedImage = images.some((i: any) => i.personalization_option_id && activePersonalizationIds.includes(i.personalization_option_id));
-          
-          if (hasActivePersonalizedImage) return false;
-          
-          return true;
       }
   });
 
