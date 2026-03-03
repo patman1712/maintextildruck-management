@@ -65,9 +65,15 @@ const ShopProductPage: React.FC = () => {
   // If product.variants is undefined, it defaults to {}.
   // If product.variants is null or empty string, we should treat it as no variants.
   // The backend might return null for variants column.
-  const variants = (product.variants && typeof product.variants === 'string') 
-      ? JSON.parse(product.variants) 
-      : (product.variants || {});
+  let variants = {};
+  try {
+      variants = (product.variants && typeof product.variants === 'string') 
+          ? JSON.parse(product.variants) 
+          : (product.variants || {});
+  } catch (e) {
+      console.error("Failed to parse variants JSON", e);
+      variants = {};
+  }
   
   const variantKeys = Object.keys(variants);
   const hasVariants = variantKeys.length > 0;
