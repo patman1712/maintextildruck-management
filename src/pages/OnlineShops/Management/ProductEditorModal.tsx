@@ -8,10 +8,11 @@ interface ProductEditorModalProps {
   onClose: () => void;
   assignment: ShopProductAssignment & { product_name?: string, product_number?: string, manufacturer_info?: string, description?: string, size?: string, color?: string };
   product?: Product; // The base product details
+  shopId: string;
   onSave: (id: string, updates: any) => Promise<void>;
 }
 
-const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose, assignment, product, onSave }) => {
+const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose, assignment, product, shopId, onSave }) => {
   if (!isOpen) return null;
 
   const [formData, setFormData] = useState({
@@ -21,6 +22,19 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     manufacturer_info: assignment.manufacturer_info || '',
     size: assignment.size || '', 
   });
+
+  const [shopVariables, setShopVariables] = useState<any[]>([]);
+
+  useEffect(() => {
+      if (shopId) {
+          fetch(`/api/variables/shop/${shopId}`)
+              .then(res => res.json())
+              .then(data => {
+                  if (data.success) setShopVariables(data.data);
+              })
+              .catch(err => console.error(err));
+      }
+  }, [shopId]);
 
   // Handle Price Input with comma/dot support
   const [priceInput, setPriceInput] = useState((assignment.price || 0).toFixed(2));
@@ -138,6 +152,17 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                         <button onClick={() => applySizePreset(sizePresets.kids)} className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded">Kinder</button>
                         <button onClick={() => applySizePreset(sizePresets.adults)} className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded">Erwachsene</button>
                         <button onClick={() => applySizePreset(sizePresets.unisex)} className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded">Unisex (XXS-5XL)</button>
+                        
+                        {/* Dynamic Presets from Variables */}
+                        {shopVariables.filter((v: any) => v.type === 'size').map((v: any) => (
+                            <button 
+                                key={v.id} 
+                                onClick={() => applySizePreset(v.values)} 
+                                className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded flex items-center"
+                            >
+                                <span className="mr-1">★</span> {v.name}
+                            </button>
+                        ))}
                     </div>
                     <input 
                         type="text" 

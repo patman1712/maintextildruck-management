@@ -228,6 +228,27 @@ db.exec(`
 `);
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS product_variables (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL, -- 'size' or 'color'
+    values TEXT NOT NULL, -- JSON string or comma-separated
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS shop_variable_assignments (
+    id TEXT PRIMARY KEY,
+    shop_id TEXT NOT NULL,
+    variable_id TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE,
+    FOREIGN KEY(variable_id) REFERENCES product_variables(id) ON DELETE CASCADE
+  )
+`);
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS shop_product_assignments (
     id TEXT PRIMARY KEY,
     shop_id TEXT NOT NULL,

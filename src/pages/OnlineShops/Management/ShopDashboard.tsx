@@ -451,6 +451,7 @@ const ShopDashboard: React.FC = () => {
         <ProductEditorModal 
             isOpen={!!editorAssignment}
             assignment={editorAssignment}
+            shopId={shopId!}
             onClose={() => setEditorAssignment(null)}
             onSave={handleUpdateProduct}
         />
