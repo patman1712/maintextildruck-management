@@ -1,13 +1,13 @@
 
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { ShoppingCart, Search, Menu, User, X, ChevronRight, Star, ChevronDown } from 'lucide-react';
-import { Shop, Product, ShopCategory } from '../../store';
+import { useParams, Outlet, Link, useLocation } from 'react-router-dom';
+import { ShoppingCart, Search, Menu, User, ChevronDown } from 'lucide-react';
+import { Shop, ShopCategory } from '../../store';
 
-const ShopFrontend: React.FC = () => {
+const ShopLayout: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>();
+  const location = useLocation();
   const [shop, setShop] = useState<Shop | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,17 +24,10 @@ const ShopFrontend: React.FC = () => {
           setShop(data.data);
           
           // Fetch categories
-          const catRes = await fetch(`/api/shop-management/${data.data.id}/categories`);
+          const catRes = await fetch(`/api/shops/${data.data.id}/categories`);
           const catData = await catRes.json();
           if (catData.success) {
             setCategories(catData.data);
-          }
-
-          // Fetch products
-          const prodRes = await fetch(`/api/products/customer/${data.data.customer_id}`);
-          const prodData = await prodRes.json();
-          if (prodData.success) {
-            setProducts(prodData.data);
           }
         } else {
           setError('Shop nicht gefunden');
@@ -61,6 +54,9 @@ const ShopFrontend: React.FC = () => {
   const topLevelCategories = categories.filter(c => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order);
   const getSubCategories = (parentId: string) => categories.filter(c => c.parent_id === parentId).sort((a, b) => a.sort_order - b.sort_order);
 
+  // Use resolved shop slug or ID for links
+  const shopBaseUrl = `/shop/${shopId}`; // shopId param from URL is usually the slug or ID used in route
+
   return (
     <div className="font-sans text-slate-800 bg-white min-h-screen flex flex-col">
       {/* Announcement Bar */}
@@ -77,7 +73,7 @@ const ShopFrontend: React.FC = () => {
           </button>
 
           {/* Logo */}
-          <div className="flex-shrink-0 flex items-center justify-center lg:justify-start flex-1 lg:flex-none">
+          <Link to={shopBaseUrl} className="flex-shrink-0 flex items-center justify-center lg:justify-start flex-1 lg:flex-none">
             {shop.logo_url ? (
               <img src={shop.logo_url} alt={shop.name} className="h-12 w-auto object-contain" />
             ) : (
@@ -85,7 +81,7 @@ const ShopFrontend: React.FC = () => {
                 {shop.name}
               </span>
             )}
-          </div>
+          </Link>
 
           {/* Desktop Nav - Mega Menu */}
           <nav className="hidden lg:flex items-center space-x-8 mx-8 h-full">
@@ -100,13 +96,13 @@ const ShopFrontend: React.FC = () => {
                         onMouseEnter={() => setHoveredCategory(cat.id)}
                         onMouseLeave={() => setHoveredCategory(null)}
                     >
-                        <a 
-                            href={`#${cat.slug}`} 
+                        <Link 
+                            to={`${shopBaseUrl}/category/${cat.slug}`} 
                             className="font-bold text-sm uppercase tracking-wide text-slate-700 hover:text-red-600 transition-colors py-8 flex items-center"
                         >
                             {cat.name}
                             {hasSub && <ChevronDown size={14} className="ml-1 opacity-50" />}
-                        </a>
+                        </Link>
 
                         {/* Mega Menu Dropdown */}
                         {hasSub && (
@@ -119,16 +115,16 @@ const ShopFrontend: React.FC = () => {
                                                     <img src={sub.image_url} alt={sub.name} className="w-full h-full object-cover" />
                                                 </div>
                                             ) : null}
-                                            <a href={`#${sub.slug}`} className="font-bold text-slate-800 hover:text-red-600 block">
+                                            <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="font-bold text-slate-800 hover:text-red-600 block">
                                                 {sub.name}
-                                            </a>
+                                            </Link>
                                             {/* Level 3 Categories (if any) */}
                                             <ul className="space-y-1">
                                                 {getSubCategories(sub.id).map(lvl3 => (
                                                     <li key={lvl3.id}>
-                                                        <a href={`#${lvl3.slug}`} className="text-sm text-slate-500 hover:text-slate-800">
+                                                        <Link to={`${shopBaseUrl}/category/${lvl3.slug}`} className="text-sm text-slate-500 hover:text-slate-800">
                                                             {lvl3.name}
-                                                        </a>
+                                                        </Link>
                                                     </li>
                                                 ))}
                                             </ul>
@@ -142,8 +138,8 @@ const ShopFrontend: React.FC = () => {
             })}
             {!topLevelCategories.length && (
                  <>
-                    <a href="#" className="font-bold text-sm uppercase tracking-wide text-slate-700 hover:text-red-600 transition-colors">Neuheiten</a>
-                    <a href="#" className="font-bold text-sm uppercase tracking-wide text-slate-700 hover:text-red-600 transition-colors">Sale</a>
+                    <Link to={`${shopBaseUrl}/new`} className="font-bold text-sm uppercase tracking-wide text-slate-700 hover:text-red-600 transition-colors">Neuheiten</Link>
+                    <Link to={`${shopBaseUrl}/sale`} className="font-bold text-sm uppercase tracking-wide text-slate-700 hover:text-red-600 transition-colors">Sale</Link>
                  </>
             )}
           </nav>
@@ -164,77 +160,11 @@ const ShopFrontend: React.FC = () => {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <div className="relative bg-slate-900 h-[500px] flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 opacity-40 bg-cover bg-center" style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1518609878373-06d740f60d8b?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80)' }}></div>
-        <div className="relative z-10 text-center text-white px-4">
-          <h1 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter mb-4">
-            Neue Kollektion
-          </h1>
-          <p className="text-xl md:text-2xl font-medium mb-8 max-w-2xl mx-auto opacity-90">
-            Entdecke die neuen Styles für die kommende Saison.
-          </p>
-          <button 
-            style={{ backgroundColor: primaryColor, color: secondaryColor }}
-            className="px-8 py-4 font-bold uppercase tracking-widest text-sm hover:opacity-90 transition-opacity transform hover:scale-105 duration-200"
-          >
-            Jetzt Shoppen
-          </button>
-        </div>
-      </div>
-
-      {/* Product Grid */}
-      <main className="container mx-auto px-4 py-16 flex-grow">
-        <div className="flex items-end justify-between mb-8">
-          <h2 className="text-3xl font-black uppercase italic text-slate-800">Highlights</h2>
-          <a href="#" className="text-sm font-bold uppercase text-slate-500 hover:text-slate-800 flex items-center">
-            Alle anzeigen <ChevronRight size={16} />
-          </a>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {products.length > 0 ? products.map(product => (
-                <div key={product.id} className="group cursor-pointer">
-                    <div className="relative aspect-[3/4] bg-slate-100 mb-4 overflow-hidden">
-                        {product.files && product.files.length > 0 && (product.files[0].thumbnail_url || product.files[0].file_url) ? (
-                            <img 
-                                src={product.files[0].thumbnail_url || product.files[0].file_url} 
-                                alt={product.name}
-                                className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
-                            />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                <span className="text-4xl font-bold opacity-20">NO IMAGE</span>
-                            </div>
-                        )}
-                        <div className="absolute top-4 left-4 bg-white px-2 py-1 text-xs font-bold uppercase tracking-wider">Neu</div>
-                        <button className="absolute bottom-4 right-4 bg-white p-3 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0 hover:bg-red-600 hover:text-white">
-                            <ShoppingCart size={20} />
-                        </button>
-                    </div>
-                    <h3 className="font-bold text-lg leading-tight mb-1 group-hover:text-red-600 transition-colors">{product.name}</h3>
-                    <p className="text-sm text-slate-500 mb-2">{product.product_number}</p>
-                    <div className="flex items-center justify-between">
-                        <span className="font-bold text-lg">€ 29,95</span>
-                        <div className="flex text-yellow-400">
-                            <Star size={14} fill="currentColor" />
-                            <Star size={14} fill="currentColor" />
-                            <Star size={14} fill="currentColor" />
-                            <Star size={14} fill="currentColor" />
-                            <Star size={14} fill="currentColor" />
-                        </div>
-                    </div>
-                </div>
-            )) : (
-                <div className="col-span-full text-center py-20 text-slate-400">
-                    <p>Keine Produkte gefunden.</p>
-                </div>
-            )}
-        </div>
-      </main>
+      {/* Main Content */}
+      <Outlet context={{ shop, categories, primaryColor, secondaryColor }} />
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-white pt-16 pb-8">
+      <footer className="bg-slate-900 text-white pt-16 pb-8 mt-auto">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
             <div>
@@ -289,4 +219,4 @@ const ShopFrontend: React.FC = () => {
   );
 };
 
-export default ShopFrontend;
+export default ShopLayout;

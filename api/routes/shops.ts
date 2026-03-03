@@ -42,6 +42,82 @@ router.get('/:id', (req, res) => {
   }
 });
 
+// Get public categories for a shop
+router.get('/:id/categories', (req, res) => {
+  try {
+    const { id } = req.params;
+    let shopId = id;
+    
+    // Resolve slug if needed
+    if (!id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
+        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(id) as { id: string } | undefined;
+        if (!shop) return res.status(404).json({ success: false, error: 'Shop not found' });
+        shopId = shop.id;
+    }
+
+    const categories = db.prepare('SELECT * FROM shop_categories WHERE shop_id = ? ORDER BY sort_order ASC').all(shopId);
+    res.json({ success: true, data: categories });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get public products for a shop
+router.get('/:id/products', (req, res) => {
+  try {
+    const { id } = req.params;
+    let shopId = id;
+
+    // Resolve slug if needed
+    if (!id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
+        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(id) as { id: string } | undefined;
+        if (!shop) return res.status(404).json({ success: false, error: 'Shop not found' });
+        shopId = shop.id;
+    }
+
+    // Join with customer_products to get details, and shop_categories for filtering
+    const products = db.prepare(`
+      SELECT 
+        spa.id as assignment_id,
+        spa.price,
+        spa.is_featured,
+        spa.category_id,
+        spa.sort_order,
+        cp.id as product_id,
+        cp.name,
+        cp.product_number,
+        cp.description,
+        cp.color,
+        cp.size,
+        sc.name as category_name,
+        sc.slug as category_slug
+      FROM shop_product_assignments spa
+      JOIN customer_products cp ON spa.product_id = cp.id
+      LEFT JOIN shop_categories sc ON spa.category_id = sc.id
+      WHERE spa.shop_id = ?
+      ORDER BY spa.sort_order ASC, cp.name ASC
+    `).all(shopId);
+
+    // Fetch files for these products
+    const productIds = products.map((p: any) => p.product_id);
+    if (productIds.length > 0) {
+        const placeholders = productIds.map(() => '?').join(',');
+        const files = db.prepare(`SELECT * FROM customer_product_files WHERE product_id IN (${placeholders})`).all(...productIds);
+        
+        // Attach files to products
+        products.forEach((p: any) => {
+            p.files = files.filter((f: any) => f.product_id === p.product_id);
+        });
+    } else {
+        products.forEach((p: any) => p.files = []);
+    }
+
+    res.json({ success: true, data: products });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Create new shop
 router.post('/', (req, res) => {
   try {

@@ -24,7 +24,9 @@ import ImageVector from "@/pages/ImageVector";
 import FAQ from "@/pages/FAQ";
 import OnlineShops from "@/pages/OnlineShops/OnlineShops";
 import ShopDashboard from "@/pages/OnlineShops/Management/ShopDashboard";
-import ShopFrontend from "@/pages/OnlineShops/ShopFrontend";
+import ShopLayout from "@/pages/OnlineShops/ShopLayout";
+import ShopHome from "@/pages/OnlineShops/ShopHome";
+import ShopCategoryPage from "@/pages/OnlineShops/ShopCategoryPage";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
 import { useEffect, useRef, useState } from "react";
@@ -84,7 +86,10 @@ export default function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/proof/:token" element={<PublicOrderProof />} />
-        <Route path="/shop/:shopId" element={<ShopFrontend />} />
+        <Route path="/shop/:shopId" element={<ShopLayout />}>
+          <Route index element={<ShopHome />} />
+          <Route path="category/:categorySlug" element={<ShopCategoryPage />} />
+        </Route>
         
         <Route path="/dashboard" element={
           <ProtectedRoute>
