@@ -235,6 +235,7 @@ db.exec(`
     category_id TEXT,
     price DECIMAL(10, 2),
     is_featured BOOLEAN DEFAULT 0,
+    personalization_enabled BOOLEAN DEFAULT 0,
     sort_order INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE,
@@ -387,6 +388,19 @@ try {
   if (!hasParentId) {
     console.log('Migrating database: Adding parent_id to shop_categories table');
     db.exec('ALTER TABLE shop_categories ADD COLUMN parent_id TEXT');
+  }
+
+  const shopProductAssignmentCols = db.prepare("PRAGMA table_info(shop_product_assignments)").all() as any[];
+  const hasPersonalizationEnabled = shopProductAssignmentCols.some(col => col.name === 'personalization_enabled');
+  if (!hasPersonalizationEnabled) {
+    console.log('Migrating database: Adding personalization_enabled to shop_product_assignments table');
+    db.exec('ALTER TABLE shop_product_assignments ADD COLUMN personalization_enabled BOOLEAN DEFAULT 0');
+  }
+
+  const hasManufacturerInfo = customerProductCols.some(col => col.name === 'manufacturer_info');
+  if (!hasManufacturerInfo) {
+    console.log('Migrating database: Adding manufacturer_info to customer_products table');
+    db.exec('ALTER TABLE customer_products ADD COLUMN manufacturer_info TEXT');
   }
 } catch (error) {
   console.error('Migration error:', error);

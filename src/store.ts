@@ -99,6 +99,10 @@ export interface Product {
   product_number?: string;
   customer_id?: string; // Add customer_id link
   supplier_id?: string; // Often used as customerId link in this app context
+  manufacturer_info?: string; // NEW
+  description?: string; // NEW
+  size?: string; // NEW
+  color?: string; // NEW
   files: { 
     file_url?: string; url?: string; 
     file_name?: string; name?: string;
@@ -143,6 +147,7 @@ export interface ShopProductAssignment {
   category_id?: string;
   price?: number;
   is_featured: boolean;
+  personalization_enabled?: boolean; // NEW
   sort_order: number;
 }
 

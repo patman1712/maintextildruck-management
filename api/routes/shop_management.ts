@@ -69,7 +69,7 @@ router.get('/:shopId/products', (req, res) => {
   try {
     const { shopId } = req.params;
     const products = db.prepare(`
-      SELECT spa.*, cp.name as product_name, cp.product_number, sc.name as category_name
+      SELECT spa.*, cp.name as product_name, cp.product_number, cp.manufacturer_info, cp.description, cp.size, cp.color, sc.name as category_name
       FROM shop_product_assignments spa
       JOIN customer_products cp ON spa.product_id = cp.id
       LEFT JOIN shop_categories sc ON spa.category_id = sc.id
@@ -95,9 +95,9 @@ router.post('/:shopId/products', (req, res) => {
     }
 
     db.prepare(`
-      INSERT INTO shop_product_assignments (id, shop_id, product_id, category_id, price, is_featured, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, shopId, product_id, category_id, price, is_featured ? 1 : 0, sort_order || 0);
+      INSERT INTO shop_product_assignments (id, shop_id, product_id, category_id, price, is_featured, personalization_enabled, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, shopId, product_id, category_id, price, is_featured ? 1 : 0, 0, sort_order || 0);
 
     const assignment = db.prepare('SELECT * FROM shop_product_assignments WHERE id = ?').get(id);
     res.json({ success: true, data: assignment });
@@ -109,16 +109,27 @@ router.post('/:shopId/products', (req, res) => {
 router.put('/:shopId/products/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { category_id, price, is_featured, sort_order } = req.body;
+    const { category_id, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size } = req.body;
 
+    // Update assignment
     db.prepare(`
       UPDATE shop_product_assignments 
-      SET category_id = ?, price = ?, is_featured = ?, sort_order = ?
+      SET category_id = ?, price = ?, is_featured = ?, personalization_enabled = ?, sort_order = ?
       WHERE id = ?
-    `).run(category_id, price, is_featured ? 1 : 0, sort_order, id);
+    `).run(category_id, price, is_featured ? 1 : 0, personalization_enabled ? 1 : 0, sort_order, id);
 
-    const assignment = db.prepare('SELECT * FROM shop_product_assignments WHERE id = ?').get(id);
-    res.json({ success: true, data: assignment });
+    // Update product details (manufacturer_info, description, size)
+    const assignment = db.prepare('SELECT product_id FROM shop_product_assignments WHERE id = ?').get(id) as { product_id: string };
+    if (assignment) {
+        db.prepare(`
+            UPDATE customer_products 
+            SET manufacturer_info = ?, description = ?, size = ?
+            WHERE id = ?
+        `).run(manufacturer_info || null, description || null, size || null, assignment.product_id);
+    }
+
+    const updatedAssignment = db.prepare('SELECT * FROM shop_product_assignments WHERE id = ?').get(id);
+    res.json({ success: true, data: updatedAssignment });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

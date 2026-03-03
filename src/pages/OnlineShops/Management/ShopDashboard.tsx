@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2 } from 'lucide-react';
+import ProductEditorModal from './ProductEditorModal';
 
 const ShopDashboard: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>();
@@ -17,6 +18,9 @@ const ShopDashboard: React.FC = () => {
   const [newCategory, setNewCategory] = useState({ name: '', slug: '', parent_id: '' });
   const [assignProductSearch, setAssignProductSearch] = useState('');
   const [showProductModal, setShowProductModal] = useState(false);
+  
+  // Editor Modal
+  const [editorAssignment, setEditorAssignment] = useState<any | null>(null);
 
   useEffect(() => {
     if (shopId) {
@@ -122,7 +126,13 @@ const ShopDashboard: React.FC = () => {
             category_id: payload.category_id,
             price: payload.price,
             is_featured: payload.is_featured,
-            sort_order: payload.sort_order
+            personalization_enabled: payload.personalization_enabled,
+            sort_order: payload.sort_order,
+            // Also update product details if provided in updates
+            manufacturer_info: updates.manufacturer_info,
+            description: updates.description,
+            size: updates.size,
+            color: updates.color
         })
       });
       setShopProducts(shopProducts.map(p => p.id === id ? { ...p, ...updates } : p));
@@ -375,6 +385,9 @@ const ShopDashboard: React.FC = () => {
                                         />
                                     </div>
 
+                                    <button onClick={() => setEditorAssignment(sp)} className="text-slate-400 hover:text-blue-600">
+                                        <Edit2 size={18} />
+                                    </button>
                                     <button onClick={() => handleRemoveProduct(sp.id)} className="text-slate-400 hover:text-red-600">
                                         <Trash2 size={18} />
                                     </button>
@@ -431,6 +444,16 @@ const ShopDashboard: React.FC = () => {
                 </div>
             </div>
         </div>
+      )}
+
+      {/* Editor Modal */}
+      {editorAssignment && (
+        <ProductEditorModal 
+            isOpen={!!editorAssignment}
+            assignment={editorAssignment}
+            onClose={() => setEditorAssignment(null)}
+            onSave={handleUpdateProduct}
+        />
       )}
     </div>
   );
