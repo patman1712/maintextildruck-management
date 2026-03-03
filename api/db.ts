@@ -221,7 +221,9 @@ db.exec(`
     image_url TEXT,
     sort_order INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE
+    parent_id TEXT, -- For nested categories
+    FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE,
+    FOREIGN KEY(parent_id) REFERENCES shop_categories(id) ON DELETE SET NULL
   )
 `);
 
@@ -372,6 +374,13 @@ try {
     console.log('Migrating database: Adding color/size to customer_products table');
     db.exec('ALTER TABLE customer_products ADD COLUMN color TEXT');
     db.exec('ALTER TABLE customer_products ADD COLUMN size TEXT');
+  }
+
+  const shopCategoryCols = db.prepare("PRAGMA table_info(shop_categories)").all() as any[];
+  const hasParentId = shopCategoryCols.some(col => col.name === 'parent_id');
+  if (!hasParentId) {
+    console.log('Migrating database: Adding parent_id to shop_categories table');
+    db.exec('ALTER TABLE shop_categories ADD COLUMN parent_id TEXT');
   }
 } catch (error) {
   console.error('Migration error:', error);

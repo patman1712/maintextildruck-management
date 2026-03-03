@@ -1,17 +1,19 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ShoppingCart, Search, Menu, User, X, ChevronRight, Star } from 'lucide-react';
-import { Shop, Product } from '../../store';
+import { ShoppingCart, Search, Menu, User, X, ChevronRight, Star, ChevronDown } from 'lucide-react';
+import { Shop, Product, ShopCategory } from '../../store';
 
 const ShopFrontend: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>();
   const [shop, setShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchShop = async () => {
@@ -20,10 +22,15 @@ const ShopFrontend: React.FC = () => {
         const data = await res.json();
         if (data.success) {
           setShop(data.data);
-          // Fetch products for this shop (filtered by customer_id)
-          // For now, we'll fetch all products and filter client-side, or use a specific endpoint
-          // Ideally: /api/products?customer_id=...
-          // But let's just use a placeholder or try to fetch products associated with this customer
+          
+          // Fetch categories
+          const catRes = await fetch(`/api/shop-management/${data.data.id}/categories`);
+          const catData = await catRes.json();
+          if (catData.success) {
+            setCategories(catData.data);
+          }
+
+          // Fetch products
           const prodRes = await fetch(`/api/products/customer/${data.data.customer_id}`);
           const prodData = await prodRes.json();
           if (prodData.success) {
@@ -49,6 +56,10 @@ const ShopFrontend: React.FC = () => {
 
   const primaryColor = shop.primary_color || '#000000';
   const secondaryColor = shop.secondary_color || '#ffffff';
+
+  // Helper to build category tree
+  const topLevelCategories = categories.filter(c => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order);
+  const getSubCategories = (parentId: string) => categories.filter(c => c.parent_id === parentId).sort((a, b) => a.sort_order - b.sort_order);
 
   return (
     <div className="font-sans text-slate-800 bg-white min-h-screen flex flex-col">
@@ -76,13 +87,65 @@ const ShopFrontend: React.FC = () => {
             )}
           </div>
 
-          {/* Desktop Nav */}
-          <nav className="hidden lg:flex items-center space-x-8 mx-8 font-bold text-sm uppercase tracking-wide text-slate-700">
-            <a href="#" className="hover:text-red-600 transition-colors">Neuheiten</a>
-            <a href="#" className="hover:text-red-600 transition-colors">Männer</a>
-            <a href="#" className="hover:text-red-600 transition-colors">Frauen</a>
-            <a href="#" className="hover:text-red-600 transition-colors">Kinder</a>
-            <a href="#" className="hover:text-red-600 transition-colors text-red-600">Sale</a>
+          {/* Desktop Nav - Mega Menu */}
+          <nav className="hidden lg:flex items-center space-x-8 mx-8 h-full">
+            {topLevelCategories.map(cat => {
+                const subCats = getSubCategories(cat.id);
+                const hasSub = subCats.length > 0;
+                
+                return (
+                    <div 
+                        key={cat.id} 
+                        className="h-full flex items-center relative group"
+                        onMouseEnter={() => setHoveredCategory(cat.id)}
+                        onMouseLeave={() => setHoveredCategory(null)}
+                    >
+                        <a 
+                            href={`#${cat.slug}`} 
+                            className="font-bold text-sm uppercase tracking-wide text-slate-700 hover:text-red-600 transition-colors py-8 flex items-center"
+                        >
+                            {cat.name}
+                            {hasSub && <ChevronDown size={14} className="ml-1 opacity-50" />}
+                        </a>
+
+                        {/* Mega Menu Dropdown */}
+                        {hasSub && (
+                            <div className="absolute top-full left-0 w-[600px] bg-white shadow-xl border-t border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50 -ml-4 rounded-b-lg overflow-hidden">
+                                <div className="grid grid-cols-3 gap-6 p-8">
+                                    {subCats.map(sub => (
+                                        <div key={sub.id} className="space-y-2">
+                                            {sub.image_url ? (
+                                                <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden mb-3">
+                                                    <img src={sub.image_url} alt={sub.name} className="w-full h-full object-cover" />
+                                                </div>
+                                            ) : null}
+                                            <a href={`#${sub.slug}`} className="font-bold text-slate-800 hover:text-red-600 block">
+                                                {sub.name}
+                                            </a>
+                                            {/* Level 3 Categories (if any) */}
+                                            <ul className="space-y-1">
+                                                {getSubCategories(sub.id).map(lvl3 => (
+                                                    <li key={lvl3.id}>
+                                                        <a href={`#${lvl3.slug}`} className="text-sm text-slate-500 hover:text-slate-800">
+                                                            {lvl3.name}
+                                                        </a>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+            {!topLevelCategories.length && (
+                 <>
+                    <a href="#" className="font-bold text-sm uppercase tracking-wide text-slate-700 hover:text-red-600 transition-colors">Neuheiten</a>
+                    <a href="#" className="font-bold text-sm uppercase tracking-wide text-slate-700 hover:text-red-600 transition-colors">Sale</a>
+                 </>
+            )}
           </nav>
 
           {/* Icons */}

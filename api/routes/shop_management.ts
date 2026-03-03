@@ -20,13 +20,13 @@ router.get('/:shopId/categories', (req, res) => {
 router.post('/:shopId/categories', (req, res) => {
   try {
     const { shopId } = req.params;
-    const { name, slug, description, image_url, sort_order } = req.body;
+    const { name, slug, description, image_url, sort_order, parent_id } = req.body;
     const id = crypto.randomUUID();
 
     db.prepare(`
-      INSERT INTO shop_categories (id, shop_id, name, slug, description, image_url, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, shopId, name, slug, description, image_url, sort_order || 0);
+      INSERT INTO shop_categories (id, shop_id, name, slug, description, image_url, sort_order, parent_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, shopId, name, slug, description, image_url, sort_order || 0, parent_id || null);
 
     const category = db.prepare('SELECT * FROM shop_categories WHERE id = ?').get(id);
     res.json({ success: true, data: category });
@@ -38,13 +38,13 @@ router.post('/:shopId/categories', (req, res) => {
 router.put('/:shopId/categories/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { name, slug, description, image_url, sort_order } = req.body;
+    const { name, slug, description, image_url, sort_order, parent_id } = req.body;
 
     db.prepare(`
       UPDATE shop_categories 
-      SET name = ?, slug = ?, description = ?, image_url = ?, sort_order = ?
+      SET name = ?, slug = ?, description = ?, image_url = ?, sort_order = ?, parent_id = ?
       WHERE id = ?
-    `).run(name, slug, description, image_url, sort_order, id);
+    `).run(name, slug, description, image_url, sort_order, parent_id || null, id);
 
     const category = db.prepare('SELECT * FROM shop_categories WHERE id = ?').get(id);
     res.json({ success: true, data: category });

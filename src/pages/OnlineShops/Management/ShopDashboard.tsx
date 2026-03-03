@@ -14,7 +14,7 @@ const ShopDashboard: React.FC = () => {
   const [shopProducts, setShopProducts] = useState<(ShopProductAssignment & { product_name?: string, product_number?: string, category_name?: string })[]>([]);
   
   // Forms
-  const [newCategory, setNewCategory] = useState({ name: '', slug: '' });
+  const [newCategory, setNewCategory] = useState({ name: '', slug: '', parent_id: '' });
   const [assignProductSearch, setAssignProductSearch] = useState('');
   const [showProductModal, setShowProductModal] = useState(false);
 
@@ -57,13 +57,14 @@ const ShopDashboard: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             name: newCategory.name,
-            slug: newCategory.slug || newCategory.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+            slug: newCategory.slug || newCategory.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            parent_id: newCategory.parent_id || null
         })
       });
       const data = await res.json();
       if (data.success) {
           setCategories([...categories, data.data]);
-          setNewCategory({ name: '', slug: '' });
+          setNewCategory({ name: '', slug: '', parent_id: '' });
       }
     } catch (e) { console.error(e); }
   };
@@ -258,15 +259,27 @@ const ShopDashboard: React.FC = () => {
 
             {activeTab === 'categories' && (
                 <div>
-                    <div className="flex mb-6 space-x-4">
-                        <input 
-                            type="text" 
-                            placeholder="Neue Kategorie Name"
-                            className="flex-1 border border-slate-300 rounded-lg p-2"
-                            value={newCategory.name}
-                            onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
-                        />
-                        <button onClick={handleAddCategory} className="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700">
+                    <div className="flex mb-6 space-x-4 items-end">
+                        <div className="flex-1 space-y-2">
+                             <input 
+                                type="text" 
+                                placeholder="Neue Kategorie Name"
+                                className="w-full border border-slate-300 rounded-lg p-2"
+                                value={newCategory.name}
+                                onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                            />
+                            <select
+                                className="w-full border border-slate-300 rounded-lg p-2 text-sm text-slate-600"
+                                value={newCategory.parent_id}
+                                onChange={(e) => setNewCategory({ ...newCategory, parent_id: e.target.value })}
+                            >
+                                <option value="">Keine Überkategorie (Hauptkategorie)</option>
+                                {categories.filter(c => !c.parent_id).map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <button onClick={handleAddCategory} className="bg-slate-800 text-white px-4 py-2 h-10 rounded-lg hover:bg-slate-700 mb-0.5">
                             Hinzufügen
                         </button>
                     </div>
@@ -275,14 +288,31 @@ const ShopDashboard: React.FC = () => {
                         {categories.length === 0 ? (
                             <p className="text-slate-500 italic">Keine Kategorien vorhanden.</p>
                         ) : (
-                            categories.map(cat => (
-                                <div key={cat.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                    <span className="font-medium text-slate-800">{cat.name}</span>
-                                    <div className="flex items-center space-x-2">
-                                        <span className="text-xs text-slate-400 font-mono bg-white px-2 py-1 rounded border border-slate-200">/{cat.slug}</span>
-                                        <button onClick={() => handleDeleteCategory(cat.id)} className="text-slate-400 hover:text-red-600 p-1">
-                                            <Trash2 size={18} />
-                                        </button>
+                            // Render hierarchically
+                            categories.filter(c => !c.parent_id).map(cat => (
+                                <div key={cat.id} className="space-y-2">
+                                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                        <span className="font-bold text-slate-800">{cat.name}</span>
+                                        <div className="flex items-center space-x-2">
+                                            <span className="text-xs text-slate-400 font-mono bg-white px-2 py-1 rounded border border-slate-200">/{cat.slug}</span>
+                                            <button onClick={() => handleDeleteCategory(cat.id)} className="text-slate-400 hover:text-red-600 p-1">
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {/* Subcategories */}
+                                    <div className="pl-8 space-y-2 border-l-2 border-slate-100 ml-4">
+                                        {categories.filter(sub => sub.parent_id === cat.id).map(sub => (
+                                             <div key={sub.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100 shadow-sm">
+                                                <span className="font-medium text-slate-600">{sub.name}</span>
+                                                <div className="flex items-center space-x-2">
+                                                    <span className="text-xs text-slate-400 font-mono bg-slate-50 px-2 py-0.5 rounded">/{sub.slug}</span>
+                                                    <button onClick={() => handleDeleteCategory(sub.id)} className="text-slate-300 hover:text-red-600 p-1">
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                             ))

@@ -132,6 +132,8 @@ export interface ShopCategory {
   description?: string;
   image_url?: string;
   sort_order: number;
+  parent_id?: string | null;
+  children?: ShopCategory[]; // For UI tree structure
 }
 
 export interface ShopProductAssignment {
