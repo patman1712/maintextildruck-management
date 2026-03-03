@@ -19,9 +19,23 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     personalization_enabled: assignment.personalization_enabled || false,
     description: assignment.description || '',
     manufacturer_info: assignment.manufacturer_info || '',
-    size: assignment.size || '', // Just a string for now, could be JSON or comma separated
-    // color: assignment.color || ''
+    size: assignment.size || '', 
   });
+
+  // Handle Price Input with comma/dot support
+  const [priceInput, setPriceInput] = useState((assignment.price || 0).toFixed(2));
+
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setPriceInput(val);
+    
+    // Convert comma to dot for parsing
+    const normalized = val.replace(',', '.');
+    const num = parseFloat(normalized);
+    if (!isNaN(num)) {
+        setFormData(prev => ({ ...prev, price: num }));
+    }
+  };
 
   const [saving, setSaving] = useState(false);
 
@@ -31,6 +45,23 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     setSaving(false);
     onClose();
   };
+
+  // Preset Sizes
+  const sizePresets = {
+    kids: "98/104, 110/116, 122/128, 134/146, 152/164",
+    adults: "XS, S, M, L, XL, XXL, 3XL",
+    unisex: "XXS, XS, S, M, L, XL, XXL, 3XL, 4XL, 5XL"
+  };
+
+  const applySizePreset = (preset: string) => {
+    setFormData(prev => ({ ...prev, size: preset }));
+  };
+
+  // Images
+  // Use passed assignment files if available (need to ensure ShopDashboard fetches them)
+  // The assignment type in props needs to be updated to include files
+  const images = (assignment as any).files || [];
+  const mainImage = images.length > 0 ? (images[0].file_url || images[0].thumbnail_url) : null;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 overflow-y-auto">
@@ -49,19 +80,29 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
         {/* Content - Two Column Layout mimicking Frontend */}
         <div className="flex-1 overflow-y-auto p-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            {/* Left Column: Images (Placeholder for now, read-only mostly) */}
+            {/* Left Column: Images */}
             <div className="flex flex-col-reverse lg:flex-row gap-4">
-               {/* Thumbnails Placeholder */}
+               {/* Thumbnails */}
                <div className="flex lg:flex-col gap-4">
-                  {[1, 2, 3].map(i => (
-                      <div key={i} className="w-20 h-20 bg-slate-50 border border-slate-200 rounded flex items-center justify-center text-slate-300">
-                          <ImageIcon size={20} />
+                  {images.length > 0 ? images.map((img: any, idx: number) => (
+                      <div key={idx} className="w-20 h-20 bg-slate-50 border border-slate-200 rounded flex items-center justify-center overflow-hidden">
+                          <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
                       </div>
-                  ))}
+                  )) : (
+                    [1, 2, 3].map(i => (
+                        <div key={i} className="w-20 h-20 bg-slate-50 border border-slate-200 rounded flex items-center justify-center text-slate-300">
+                            <ImageIcon size={20} />
+                        </div>
+                    ))
+                  )}
                </div>
-               {/* Main Image Placeholder */}
-               <div className="flex-1 bg-slate-50 aspect-[3/4] rounded-lg border border-slate-200 flex items-center justify-center text-slate-300 relative group">
-                    <span className="font-bold">Hauptbild</span>
+               {/* Main Image */}
+               <div className="flex-1 bg-slate-50 aspect-[3/4] rounded-lg border border-slate-200 flex items-center justify-center text-slate-300 relative group overflow-hidden">
+                    {mainImage ? (
+                        <img src={mainImage} className="w-full h-full object-cover" />
+                    ) : (
+                        <span className="font-bold">Hauptbild</span>
+                    )}
                     <button className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-slate-600">
                         Ändern (Coming Soon)
                     </button>
@@ -82,11 +123,10 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                     <div className="flex items-center">
                         <span className="text-2xl font-bold mr-2">€</span>
                         <input 
-                            type="number" 
-                            step="0.01"
+                            type="text" 
                             className="text-2xl font-bold bg-white border border-slate-300 rounded px-3 py-1 w-32 focus:ring-2 focus:ring-blue-500 outline-none"
-                            value={formData.price}
-                            onChange={(e) => setFormData({...formData, price: parseFloat(e.target.value)})}
+                            value={priceInput}
+                            onChange={handlePriceChange}
                         />
                     </div>
                 </div>
@@ -94,6 +134,11 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                 {/* Sizes */}
                 <div>
                     <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Verfügbare Größen</label>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                        <button onClick={() => applySizePreset(sizePresets.kids)} className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded">Kinder</button>
+                        <button onClick={() => applySizePreset(sizePresets.adults)} className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded">Erwachsene</button>
+                        <button onClick={() => applySizePreset(sizePresets.unisex)} className="text-xs bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded">Unisex (XXS-5XL)</button>
+                    </div>
                     <input 
                         type="text" 
                         className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none"
