@@ -194,6 +194,23 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS shops (
+    id TEXT PRIMARY KEY,
+    customer_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    domain_slug TEXT UNIQUE,
+    logo_url TEXT,
+    primary_color TEXT DEFAULT '#000000',
+    secondary_color TEXT DEFAULT '#ffffff',
+    template TEXT DEFAULT 'standard',
+    dhl_config TEXT, -- JSON
+    paypal_config TEXT, -- JSON
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(customer_id) REFERENCES customers(id)
+  )
+`);
+
 // Migration: Add customer_id if it doesn't exist (for existing databases)
 try {
   const columns = db.prepare("PRAGMA table_info(orders)").all() as any[];

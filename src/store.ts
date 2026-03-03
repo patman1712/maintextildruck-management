@@ -110,12 +110,27 @@ export interface Product {
   created_at?: string;
 }
 
+export interface Shop {
+  id: string;
+  customer_id: string;
+  name: string;
+  domain_slug: string;
+  logo_url?: string;
+  primary_color: string;
+  secondary_color: string;
+  template: string;
+  dhl_config?: any;
+  paypal_config?: any;
+  created_at: string;
+}
+
 interface AppState {
   orders: Order[];
   customers: Customer[];
   products: Product[]; // Add products to state
   users: User[];
   suppliers: Supplier[];
+  shops: Shop[];
   currentUser: User | null;
   loading: boolean;
   menuSettings: Record<string, boolean>;
@@ -134,11 +149,14 @@ interface AppState {
   addCustomer: (customer: Customer) => Promise<void>;
   addUser: (user: Partial<User>) => Promise<void>;
   addSupplier: (supplier: Supplier) => Promise<void>;
+  addShop: (shop: Partial<Shop>) => Promise<void>;
   
   updateCustomer: (id: string, updatedCustomer: Partial<Customer>) => Promise<void>;
   updateOrder: (id: string, updatedOrder: Partial<Order>) => Promise<void>;
   updateUser: (id: string, updatedUser: Partial<User>) => Promise<void>;
   updateSupplier: (id: string, updatedSupplier: Partial<Supplier>) => Promise<void>;
+  updateShop: (id: string, updatedShop: Partial<Shop>) => Promise<void>;
+  deleteShop: (id: string) => Promise<void>;
   
   addOrderItem: (orderId: string, item: Omit<OrderItem, 'id' | 'orderId' | 'status'>) => Promise<void>;
   updateOrderItem: (orderId: string, itemId: string, updates: Partial<OrderItem>) => Promise<void>;
@@ -158,6 +176,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   users: [],
   suppliers: [],
   products: [],
+  shops: [],
   menuSettings: {},
   logoUrl: null,
   faviconUrl: null,
@@ -201,6 +220,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       
       const suppliersRes = await fetch('/api/suppliers');
       const suppliersData = await suppliersRes.json();
+
+      const shopsRes = await fetch('/api/shops');
+      const shopsData = await shopsRes.json();
 
       // Fetch ALL products for preview generator
       const productsRes = await fetch('/api/products'); // Need to implement this endpoint or fetch per customer?
@@ -289,11 +311,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         email: s.email
       }));
 
+      const mappedShops: Shop[] = shopsData.data || [];
+
       if (customersData.success && ordersData.success) {
         set({ 
           customers: mappedCustomers, 
           orders: mappedOrders,
           suppliers: mappedSuppliers,
+          shops: mappedShops,
           products: allProducts
         });
       }
@@ -393,6 +418,53 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     } catch (error) {
       console.error('Error adding supplier:', error);
+    }
+  },
+
+  addShop: async (shop) => {
+    try {
+      const res = await fetch('/api/shops', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(shop)
+      });
+      const data = await res.json();
+      if (data.success) {
+          set((state) => ({ shops: [...state.shops, data.data] }));
+      }
+    } catch (error) {
+      console.error('Error adding shop:', error);
+    }
+  },
+
+  updateShop: async (id, updatedShop) => {
+    try {
+      const res = await fetch(`/api/shops/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedShop)
+      });
+      const data = await res.json();
+      if (data.success) {
+        set((state) => ({
+            shops: state.shops.map((s) => (s.id === id ? { ...s, ...data.data } : s))
+        }));
+      }
+    } catch (error) {
+      console.error('Error updating shop:', error);
+    }
+  },
+
+  deleteShop: async (id) => {
+    try {
+      await fetch(`/api/shops/${id}`, {
+        method: 'DELETE',
+      });
+      set((state) => ({
+        shops: state.shops.filter((s) => s.id !== id)
+      }));
+    } catch (error) {
+      console.error('Error deleting shop:', error);
     }
   },
 

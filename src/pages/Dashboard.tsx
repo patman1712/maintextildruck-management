@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle, ChevronDown, ChevronRight, Image as ImageIcon, Shirt, RefreshCw } from "lucide-react";
+import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle, ChevronDown, ChevronRight, Image as ImageIcon, Shirt, RefreshCw, ShoppingBag, ExternalLink } from "lucide-react";
 import { useAppStore } from "@/store";
 
 interface MenuItem {
@@ -66,6 +66,7 @@ export default function DashboardLayout() {
   const location = useLocation();
   const menuSettings = useAppStore((state) => state.menuSettings);
   const logoUrl = useAppStore((state) => state.logoUrl);
+  const shops = useAppStore((state) => state.shops);
   const fetchSettings = useAppStore((state) => state.fetchSettings);
 
   useEffect(() => {
@@ -155,6 +156,28 @@ export default function DashboardLayout() {
                     onClick={() => setMobileMenuOpen(false)} 
                     menuSettings={{}}
                 />
+                
+                <div className="pt-4 mt-2 border-t border-red-800/50">
+                    {(sidebarOpen || mobileMenuOpen) && <p className="px-4 text-xs font-bold text-red-300 uppercase mb-2 animate-in fade-in">Onlineshops</p>}
+                    <NavItem 
+                        item={{ id: 'shops_manage', label: 'Verwaltung', to: '/dashboard/shops', icon: ShoppingBag }} 
+                        isOpen={sidebarOpen || mobileMenuOpen} 
+                        onClick={() => setMobileMenuOpen(false)} 
+                        menuSettings={{}}
+                    />
+                    {shops.map(shop => (
+                         <Link
+                            key={shop.id}
+                            to={`/shop/${shop.domain_slug}`}
+                            target="_blank"
+                            className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group text-red-100 hover:bg-white/10 hover:text-white`}
+                            title={!sidebarOpen && !mobileMenuOpen ? shop.name : undefined}
+                        >
+                            <span className="text-red-300 group-hover:text-white min-w-[24px]"><ExternalLink size={20} /></span>
+                            {(sidebarOpen || mobileMenuOpen) && <span className="font-medium whitespace-nowrap text-sm truncate">{shop.name}</span>}
+                        </Link>
+                    ))}
+                </div>
              </>
           )}
         </nav>
