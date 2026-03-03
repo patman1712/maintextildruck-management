@@ -1,3 +1,34 @@
+# Maintextildruck Management
+
+This is the management application for Maintextildruck.
+
+## Tech Stack
+- React
+- TypeScript
+- Vite
+- Better-SQLite3
+- Express
+- Tailwind CSS
+
+## Deployment
+This application is deployed on Railway/Vercel.
+
+## Development
+```bash
+npm install
+npm run dev
+```
+
+## Features
+- Order Management
+- Customer Management
+- Online Shop Product Management
+- File Management (Print & View)
+- Shopware Integration
+
+---
+Original template below:
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
