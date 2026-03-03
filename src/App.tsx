@@ -27,6 +27,7 @@ import ShopDashboard from "@/pages/OnlineShops/Management/ShopDashboard";
 import ShopLayout from "@/pages/OnlineShops/ShopLayout";
 import ShopHome from "@/pages/OnlineShops/ShopHome";
 import ShopCategoryPage from "@/pages/OnlineShops/ShopCategoryPage";
+import ShopProductPage from "@/pages/OnlineShops/ShopProductPage";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
 import { useEffect, useRef, useState } from "react";
@@ -89,6 +90,7 @@ export default function App() {
         <Route path="/shop/:shopId" element={<ShopLayout />}>
           <Route index element={<ShopHome />} />
           <Route path="category/:categorySlug" element={<ShopCategoryPage />} />
+          <Route path="product/:productId" element={<ShopProductPage />} />
         </Route>
         
         <Route path="/dashboard" element={

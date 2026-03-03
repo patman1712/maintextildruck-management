@@ -155,11 +155,11 @@ const ShopCategoryPage: React.FC = () => {
                     <div className="col-span-full py-20 text-center text-slate-400">Keine Produkte in dieser Kategorie gefunden.</div>
                 ) : (
                     products.map(product => (
-                        <div key={product.assignment_id} className="group relative">
+                        <Link to={`/shop/${shopId}/product/${product.product_id}`} key={product.assignment_id} className="group relative block">
                             {/* Product Card */}
                             <div className="relative bg-white transition-all duration-300">
                                 {/* Wishlist Icon */}
-                                <button className="absolute top-2 left-2 z-20 p-2 text-slate-400 hover:text-red-600 transition-colors">
+                                <button className="absolute top-2 left-2 z-20 p-2 text-slate-400 hover:text-red-600 transition-colors" onClick={(e) => e.preventDefault()}>
                                     <Heart size={20} />
                                 </button>
 
@@ -218,7 +218,7 @@ const ShopCategoryPage: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        </Link>
                     ))
                 )}
             </div>

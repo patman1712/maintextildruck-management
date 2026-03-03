@@ -67,7 +67,7 @@ const ShopHome: React.FC = () => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {products.length > 0 ? products.map(product => (
-                <div key={product.assignment_id} className="group cursor-pointer">
+                <Link to={`/shop/${shopId}/product/${product.product_id}`} key={product.assignment_id} className="group cursor-pointer block">
                     <div className="relative aspect-[3/4] bg-slate-100 mb-4 overflow-hidden">
                         {product.files && product.files.length > 0 && (product.files[0].thumbnail_url || product.files[0].file_url) ? (
                             <img 
@@ -81,7 +81,7 @@ const ShopHome: React.FC = () => {
                             </div>
                         )}
                         <div className="absolute top-4 left-4 bg-white px-2 py-1 text-xs font-bold uppercase tracking-wider">Neu</div>
-                        <button className="absolute bottom-4 right-4 bg-white p-3 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0 hover:bg-red-600 hover:text-white">
+                        <button className="absolute bottom-4 right-4 bg-white p-3 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all translate-y-4 group-hover:translate-y-0 hover:bg-red-600 hover:text-white" onClick={(e) => e.preventDefault()}>
                             <ShoppingCart size={20} />
                         </button>
                     </div>
@@ -97,7 +97,7 @@ const ShopHome: React.FC = () => {
                             <Star size={14} fill="currentColor" />
                         </div>
                     </div>
-                </div>
+                </Link>
             )) : (
                 <div className="col-span-full text-center py-20 text-slate-400">
                     <p>{loading ? 'Lade Produkte...' : 'Keine Produkte gefunden.'}</p>
