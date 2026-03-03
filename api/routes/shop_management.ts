@@ -77,10 +77,26 @@ router.get('/:shopId/products', (req, res) => {
       ORDER BY spa.sort_order ASC
     `).all(shopId) as any[];
 
-    // Fetch files for each product (simple N+1 for now, or could use GROUP_CONCAT but JSON structure is safer here)
-    // Given the low number of shop products usually, this is acceptable for now.
+    // Fetch files for each product. 
+    // Logic: If there are entries in shop_product_images, use ONLY those.
+    // If NO entries in shop_product_images, fallback to ALL customer_product_files (legacy behavior).
     const productsWithFiles = products.map(p => {
-        const files = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at DESC').all(p.product_id);
+        const assignedImages = db.prepare(`
+            SELECT cpf.* 
+            FROM shop_product_images spi
+            JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
+            WHERE spi.shop_product_assignment_id = ?
+            ORDER BY spi.sort_order ASC, spi.created_at ASC
+        `).all(p.id) as any[];
+
+        let files = [];
+        if (assignedImages.length > 0) {
+            files = assignedImages;
+        } else {
+            // Fallback: Get all files from the base product
+            files = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at DESC').all(p.product_id);
+        }
+
         if (p.variants) {
             try {
                 p.variants = JSON.parse(p.variants);
@@ -178,6 +194,65 @@ router.delete('/:shopId/products/:id', (req, res) => {
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// --- Shop Product Images ---
+
+router.get('/:shopId/products/:assignmentId/images', (req, res) => {
+    try {
+        const { assignmentId } = req.params;
+        
+        // Get currently assigned images
+        const assignedImages = db.prepare(`
+            SELECT cpf.*, spi.id as assignment_image_id, spi.sort_order
+            FROM shop_product_images spi
+            JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
+            WHERE spi.shop_product_assignment_id = ?
+            ORDER BY spi.sort_order ASC
+        `).all(assignmentId);
+
+        // Get all available images for the base product
+        const assignment = db.prepare('SELECT product_id FROM shop_product_assignments WHERE id = ?').get(assignmentId) as { product_id: string };
+        if (!assignment) return res.status(404).json({ success: false, error: 'Assignment not found' });
+
+        const allImages = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at DESC').all(assignment.product_id);
+
+        res.json({ success: true, data: { assigned: assignedImages, available: allImages } });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/:shopId/products/:assignmentId/images', (req, res) => {
+    try {
+        const { assignmentId } = req.params;
+        const { file_id } = req.body;
+        const id = crypto.randomUUID();
+
+        // Check if already assigned
+        const exists = db.prepare('SELECT id FROM shop_product_images WHERE shop_product_assignment_id = ? AND customer_product_file_id = ?').get(assignmentId, file_id);
+        if (exists) return res.json({ success: true, message: 'Already assigned' });
+
+        db.prepare(`
+            INSERT INTO shop_product_images (id, shop_product_assignment_id, customer_product_file_id, sort_order)
+            VALUES (?, ?, ?, 0)
+        `).run(id, assignmentId, file_id);
+
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.delete('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
+    try {
+        const { assignmentId, fileId } = req.params;
+        // Delete the assignment link, NOT the file itself
+        db.prepare('DELETE FROM shop_product_images WHERE shop_product_assignment_id = ? AND customer_product_file_id = ?').run(assignmentId, fileId);
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 export default router;

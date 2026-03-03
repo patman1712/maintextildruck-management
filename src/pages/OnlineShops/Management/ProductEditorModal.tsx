@@ -156,10 +156,85 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
   };
 
   // Images
-  // Use passed assignment files if available (need to ensure ShopDashboard fetches them)
-  // The assignment type in props needs to be updated to include files
-  const images = (assignment as any).files || [];
-  const mainImage = images.length > 0 ? (images[0].file_url || images[0].thumbnail_url) : null;
+  const [currentImages, setCurrentImages] = useState<any[]>([]);
+  const [availableImages, setAvailableImages] = useState<any[]>([]);
+  
+  useEffect(() => {
+      fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images`)
+          .then(res => res.json())
+          .then(data => {
+              if (data.success) {
+                  setCurrentImages(data.data.assigned);
+                  setAvailableImages(data.data.available);
+              }
+          })
+          .catch(err => console.error(err));
+  }, [shopId, assignment.id]);
+
+  const handleAddImage = async (fileId: string) => {
+      try {
+          const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ file_id: fileId })
+          });
+          const data = await res.json();
+          if (data.success) {
+              // Refresh images
+              const assigned = availableImages.find(img => img.id === fileId);
+              if (assigned) {
+                  setCurrentImages([...currentImages, assigned]);
+              }
+          }
+      } catch (e) { console.error(e); }
+  };
+
+  const handleRemoveImage = async (fileId: string) => {
+      try {
+          const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
+              method: 'DELETE'
+          });
+          const data = await res.json();
+          if (data.success) {
+              setCurrentImages(currentImages.filter(img => img.id !== fileId));
+          }
+      } catch (e) { console.error(e); }
+  };
+
+  // Upload handler
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (!e.target.files || e.target.files.length === 0) return;
+      
+      const file = e.target.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+      // We need to know the product_id to associate the file with
+      // The assignment object might not have it directly if it's a join result, 
+      // but usually assignment.product_id is present.
+      // Wait, we don't have a direct upload endpoint for shop management yet that handles customer_product_files
+      // We should use the existing customer product file upload endpoint or create a new one.
+      // Let's assume we can upload to `/api/products/:id/files`
+      
+      try {
+          // We need the base product ID
+          const productId = assignment.product_id; 
+          const res = await fetch(`/api/products/${productId}/files`, {
+              method: 'POST',
+              body: formData
+          });
+          const data = await res.json();
+          
+          if (data.success) {
+              // After upload, automatically assign it to the shop product
+              await handleAddImage(data.data.id);
+              
+              // Refresh available images list too
+              setAvailableImages([data.data, ...availableImages]);
+          }
+      } catch (e) { console.error(e); }
+  };
+
+  const mainImage = currentImages.length > 0 ? (currentImages[0].file_url || currentImages[0].thumbnail_url) : null;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 overflow-y-auto">
@@ -179,32 +254,65 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
         <div className="flex-1 overflow-y-auto p-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
             {/* Left Column: Images */}
-            <div className="flex flex-col-reverse lg:flex-row gap-4">
-               {/* Thumbnails */}
-               <div className="flex lg:flex-col gap-4">
-                  {images.length > 0 ? images.map((img: any, idx: number) => (
-                      <div key={idx} className="w-20 h-20 bg-slate-50 border border-slate-200 rounded flex items-center justify-center overflow-hidden">
-                          <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
-                      </div>
-                  )) : (
-                    [1, 2, 3].map(i => (
-                        <div key={i} className="w-20 h-20 bg-slate-50 border border-slate-200 rounded flex items-center justify-center text-slate-300">
-                            <ImageIcon size={20} />
-                        </div>
-                    ))
-                  )}
-               </div>
+            <div className="flex flex-col gap-4">
                {/* Main Image */}
-               <div className="flex-1 bg-slate-50 aspect-[3/4] rounded-lg border border-slate-200 flex items-center justify-center text-slate-300 relative group overflow-hidden">
+               <div className="w-full bg-slate-50 aspect-[3/4] rounded-lg border border-slate-200 flex items-center justify-center text-slate-300 relative group overflow-hidden">
                     {mainImage ? (
                         <img src={mainImage} className="w-full h-full object-cover" />
                     ) : (
-                        <span className="font-bold">Hauptbild</span>
+                        <div className="flex flex-col items-center">
+                            <ImageIcon size={48} className="mb-2 opacity-50" />
+                            <span className="font-bold">Kein Bild</span>
+                        </div>
                     )}
-                    <button className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-slate-600">
-                        Ändern (Coming Soon)
-                    </button>
+                    
+                    {/* Drag & Drop Overlay */}
+                    <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer">
+                        <Plus size={32} className="mb-2" />
+                        <span className="font-bold">Bild hinzufügen</span>
+                        <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+                    </label>
                </div>
+
+               {/* Thumbnails List */}
+               <div className="space-y-2">
+                   <p className="text-xs font-bold uppercase text-slate-500">Aktive Bilder (Shop)</p>
+                   <div className="grid grid-cols-4 gap-2">
+                      {currentImages.map((img: any, idx: number) => (
+                          <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden">
+                              <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
+                              <button 
+                                  onClick={() => handleRemoveImage(img.id)}
+                                  className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700"
+                                  title="Aus Shop entfernen"
+                              >
+                                  <Trash2 size={12} />
+                              </button>
+                          </div>
+                      ))}
+                      <label className="aspect-square bg-slate-100 border border-dashed border-slate-300 rounded flex items-center justify-center text-slate-400 hover:bg-slate-200 hover:text-slate-600 cursor-pointer transition-colors">
+                          <Plus size={20} />
+                          <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+                      </label>
+                   </div>
+               </div>
+
+               {/* Available Images (from Customer Product) */}
+               {availableImages.filter(img => !currentImages.some(c => c.id === img.id)).length > 0 && (
+                   <div className="space-y-2 pt-4 border-t border-slate-100">
+                       <p className="text-xs font-bold uppercase text-slate-500">Verfügbare Bilder (Kunde)</p>
+                       <div className="grid grid-cols-4 gap-2 opacity-60 hover:opacity-100 transition-opacity">
+                          {availableImages.filter(img => !currentImages.some(c => c.id === img.id)).map((img: any, idx: number) => (
+                              <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden cursor-pointer" onClick={() => handleAddImage(img.id)}>
+                                  <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
+                                  <div className="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 flex items-center justify-center">
+                                      <Plus size={20} className="text-white drop-shadow-md" />
+                                  </div>
+                              </div>
+                          ))}
+                       </div>
+                   </div>
+               )}
             </div>
 
             {/* Right Column: Edit Fields */}

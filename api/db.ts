@@ -275,6 +275,18 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS shop_product_images (
+    id TEXT PRIMARY KEY,
+    shop_product_assignment_id TEXT NOT NULL,
+    customer_product_file_id TEXT NOT NULL,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(shop_product_assignment_id) REFERENCES shop_product_assignments(id) ON DELETE CASCADE,
+    FOREIGN KEY(customer_product_file_id) REFERENCES customer_product_files(id) ON DELETE CASCADE
+  )
+`);
+
 // Add variants column to shop_product_assignments
 try {
   const shopProductAssignmentCols = db.prepare("PRAGMA table_info(shop_product_assignments)").all() as any[];
