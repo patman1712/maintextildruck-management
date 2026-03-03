@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useOutletContext, useParams, Link } from 'react-router-dom';
-import { ShoppingCart, Heart, ChevronRight, Info, Plus, Minus, Check } from 'lucide-react';
+import { ShoppingCart, Heart, ChevronRight, Info, Plus, Minus, Check, Shirt, User, Hash, Shield } from 'lucide-react';
 import { Shop, ShopCategory, Product } from '../../store';
 
 interface ShopContext {
@@ -270,19 +270,24 @@ const ShopProductPage: React.FC = () => {
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {personalizationOptions.map(option => {
                             const isSelected = !!selectedPersonalization[option.id];
+                            
+                            // Determine Icon based on name or type
+                            let Icon = Shirt; // Default
+                            if (option.type === 'number') Icon = Hash;
+                            else if (option.type === 'logo') Icon = Shield;
+                            else if (option.name.toLowerCase().includes('name')) Icon = User;
+                            
                             return (
                                 <div key={option.id} className="flex flex-col">
                                     <button 
-                                        className={`border rounded p-2 text-center hover:border-blue-500 bg-white h-24 flex flex-col items-center justify-center transition-all ${isSelected ? 'border-blue-600 ring-1 ring-blue-600' : 'border-slate-200'}`}
+                                        className={`border rounded-lg p-3 text-center hover:border-blue-500 bg-white h-24 flex flex-col items-center justify-center transition-all ${isSelected ? 'border-blue-600 ring-2 ring-blue-100 shadow-sm' : 'border-slate-200 text-slate-500'}`}
                                         onClick={() => toggleOption(option)}
                                     >
-                                        <div className="text-2xl mb-1">
-                                            {option.type === 'text' && '🔤'}
-                                            {option.type === 'number' && '🔢'}
-                                            {option.type === 'logo' && '🛡️'}
+                                        <div className={`mb-2 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`}>
+                                            <Icon size={24} strokeWidth={1.5} />
                                         </div>
-                                        <div className="text-[10px] font-bold leading-tight px-1">{option.name}</div>
-                                        <div className="text-[10px] text-slate-500 mt-1">+ € {option.price_adjustment.toFixed(2)}</div>
+                                        <div className={`text-xs font-bold leading-tight px-1 ${isSelected ? 'text-slate-800' : 'text-slate-600'}`}>{option.name}</div>
+                                        <div className="text-[10px] text-slate-400 mt-1 font-medium">+ € {option.price_adjustment.toFixed(2)}</div>
                                     </button>
                                     
                                     {/* Input Field below button if selected */}
@@ -291,7 +296,7 @@ const ShopProductPage: React.FC = () => {
                                             <input 
                                                 type={option.type === 'number' ? 'number' : 'text'}
                                                 placeholder={option.type === 'number' ? "Nummer" : "Text"}
-                                                className="w-full border border-blue-300 rounded p-1.5 text-xs text-center focus:ring-1 focus:ring-blue-500 outline-none"
+                                                className="w-full border border-blue-300 rounded p-2 text-sm text-center focus:ring-2 focus:ring-blue-200 outline-none shadow-sm"
                                                 value={typeof selectedPersonalization[option.id] === 'string' ? selectedPersonalization[option.id] as string : ''}
                                                 onChange={(e) => setOptionValue(option.id, e.target.value)}
                                                 onClick={(e) => e.stopPropagation()}
