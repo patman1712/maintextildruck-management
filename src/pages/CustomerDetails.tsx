@@ -1002,8 +1002,21 @@ export default function CustomerDetails() {
       return dateB - dateA;
   });
 
+  // Products filtered by search
+  const allProductsCombined = products.filter(p => 
+      (p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
+      (p.product_number && p.product_number.toLowerCase().includes(productSearch.toLowerCase()))) &&
+      p.product_number !== 'FREISTELLER'
+  );
+
   const filteredPrintFilesForAssign = printFiles.filter(f => 
       (f.customName || f.name).toLowerCase().includes(fileSearch.toLowerCase())
+  );
+
+  const shopwareProducts = products.filter(p => 
+      (p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
+      (p.product_number && p.product_number.toLowerCase().includes(productSearch.toLowerCase()))) &&
+      p.source === 'shopware'
   );
 
   const filteredProducts = products.filter(p => 
@@ -1011,12 +1024,6 @@ export default function CustomerDetails() {
       (p.product_number && p.product_number.toLowerCase().includes(productSearch.toLowerCase()))) &&
       p.product_number !== 'FREISTELLER' && // Filter out Freisteller dummy products from the main list
       p.source !== 'shopware' // Only show manual products in the main list
-  );
-
-  const shopwareProducts = products.filter(p => 
-      (p.name.toLowerCase().includes(productSearch.toLowerCase()) || 
-      (p.product_number && p.product_number.toLowerCase().includes(productSearch.toLowerCase()))) &&
-      p.source === 'shopware'
   );
 
   return (
@@ -1119,16 +1126,7 @@ export default function CustomerDetails() {
             >
                 <div className="flex items-center">
                     <Package size={16} className="mr-2" />
-                    Artikel ({filteredProducts.length})
-                </div>
-            </button>
-            <button
-                onClick={() => setActiveTab('online_products')}
-                className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'online_products' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-            >
-                <div className="flex items-center">
-                    <ShoppingBag size={16} className="mr-2" />
-                    Online Artikel ({shopwareProducts.length})
+                    Artikel ({allProductsCombined.length})
                 </div>
             </button>
             <button
