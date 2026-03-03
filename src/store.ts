@@ -97,19 +97,22 @@ export interface Product {
   id: string;
   name: string;
   product_number?: string;
-  customer_id?: string; // Add customer_id link
-  supplier_id?: string; // Often used as customerId link in this app context
-  manufacturer_info?: string; // NEW
-  description?: string; // NEW
-  size?: string; // NEW
-  color?: string; // NEW
+  source?: 'shopware' | 'manual'; // Added source
+  customer_id?: string;
+  supplier_id?: string;
+  manufacturer_info?: string;
+  description?: string;
+  size?: string;
+  color?: string;
   files: { 
+    id?: string; // Added id
     file_url?: string; url?: string; 
     file_name?: string; name?: string;
     thumbnail_url?: string; thumbnail?: string;
     customName?: string;
-    type?: 'preview' | 'print' | 'vector' | 'internal' | 'photoshop';
+    type?: 'preview' | 'print' | 'vector' | 'internal' | 'photoshop' | string; // Allow string for compatibility
     created_at?: string;
+    quantity?: number; // Added quantity
   }[];
   created_at?: string;
 }

@@ -1,28 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useAppStore, Order, ShopProductAssignment } from "@/store";
+import { useAppStore, Order, ShopProductAssignment, Product } from "@/store";
 import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon, Copy, Layers, Globe } from "lucide-react";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import CustomerOnlineShopProducts from "@/components/CustomerOnlineShopProducts";
-
-interface Product {
-    id: string;
-    name: string;
-    product_number: string;
-    source: 'shopware' | 'manual';
-    supplier_id?: string;
-    size?: string;
-    color?: string;
-    created_at?: string;
-    files: {
-        id: string;
-        file_url: string;
-        file_name: string;
-        thumbnail_url?: string;
-        type?: string;
-        quantity?: number;
-    }[];
-}
 
 export default function CustomerDetails() {
   const { id } = useParams<{ id: string }>();
@@ -613,7 +594,8 @@ export default function CustomerDetails() {
     }
   };
 
-  const handleRemoveFile = async (fileId: string, productContext?: Product) => {
+  const handleRemoveFile = async (fileId: string | undefined, productContext?: Product) => {
+      if (!fileId) return;
       // Use provided product context or fall back to editingProduct
       const product = productContext || editingProduct;
       
@@ -1725,8 +1707,8 @@ export default function CustomerDetails() {
                                     <div className="mb-3">
                                         <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Ansichten / Vorschau</div>
                                         <div className="flex flex-wrap gap-3">
-                                            {product.files.filter(f => f.type === 'view').map(file => (
-                                                <div key={file.id} className="relative group w-20">
+                                            {product.files.filter(f => f.type === 'view').map((file, i) => (
+                                                <div key={file.id || i} className="relative group w-20">
                                                     <div className="h-20 w-20 bg-gray-50 rounded border border-gray-200 overflow-hidden flex items-center justify-center relative">
                                                         <img 
                                                             src={file.thumbnail_url || file.file_url} 
@@ -1754,8 +1736,8 @@ export default function CustomerDetails() {
                                     <div className="mb-3">
                                         <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Druckdaten</div>
                                         <div className="flex flex-wrap gap-3">
-                                            {product.files.filter(f => f.type !== 'view').map(file => (
-                                                <div key={file.id} className="relative group w-20">
+                                            {product.files.filter(f => f.type !== 'view').map((file, i) => (
+                                                <div key={file.id || i} className="relative group w-20">
                                                     <div className="h-20 w-20 bg-gray-50 rounded border border-gray-200 overflow-hidden flex items-center justify-center relative">
                                                         {(file.thumbnail_url || file.file_url) ? (
                                                             <img 
@@ -1963,8 +1945,8 @@ export default function CustomerDetails() {
 
                                     {product.files && product.files.filter(f => f.type === 'view').length > 0 ? (
                                         <div className="flex flex-wrap gap-2">
-                                            {product.files.filter(f => f.type === 'view').map(file => (
-                                                <div key={file.id} className="relative group w-14 h-14">
+                                            {product.files.filter(f => f.type === 'view').map((file, i) => (
+                                                <div key={file.id || i} className="relative group w-14 h-14">
                                                     <div className="h-14 w-14 bg-white rounded border border-gray-200 overflow-hidden flex items-center justify-center relative shadow-sm">
                                                         <img 
                                                             src={file.thumbnail_url || file.file_url} 
@@ -2014,8 +1996,8 @@ export default function CustomerDetails() {
 
                                     {product.files && product.files.filter(f => f.type !== 'view').length > 0 ? (
                                         <div className="flex flex-wrap gap-2">
-                                            {product.files.filter(f => f.type !== 'view').map(file => (
-                                                <div key={file.id} className="relative group w-14 h-14">
+                                            {product.files.filter(f => f.type !== 'view').map((file, i) => (
+                                                <div key={file.id || i} className="relative group w-14 h-14">
                                                     <div className="h-14 w-14 bg-white rounded border border-gray-200 overflow-hidden flex items-center justify-center relative shadow-sm">
                                                         {(file.thumbnail_url || file.file_url) ? (
                                                             <img 
