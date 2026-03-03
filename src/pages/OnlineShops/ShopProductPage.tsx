@@ -402,10 +402,36 @@ const ShopProductPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Total Price */}
-            <div className="mb-6">
-                <div className="text-xs font-bold uppercase text-slate-500 mb-1">Gesamtpreis:</div>
-                <div className="text-3xl font-bold">€ {(currentPrice + calculatePersonalizationPrice()).toFixed(2)}</div>
+            {/* Quantity and Total Price */}
+            <div className="mb-6 flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-100">
+                <div className="flex items-center">
+                    <span className="font-bold text-sm uppercase mr-4">Menge:</span>
+                    <div className="flex items-center bg-white rounded border border-slate-200">
+                        <button 
+                            className="p-2 hover:bg-slate-100 text-slate-600"
+                            onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                        >
+                            <Minus size={16} />
+                        </button>
+                        <input 
+                            type="number" 
+                            className="w-12 text-center border-x border-slate-200 py-2 text-sm font-bold outline-none"
+                            value={quantity}
+                            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                        />
+                        <button 
+                            className="p-2 hover:bg-slate-100 text-slate-600"
+                            onClick={() => setQuantity(quantity + 1)}
+                        >
+                            <Plus size={16} />
+                        </button>
+                    </div>
+                </div>
+                
+                <div className="text-right">
+                    <div className="text-xs font-bold uppercase text-slate-500 mb-1">Gesamtpreis:</div>
+                    <div className="text-3xl font-bold">€ {((currentPrice + calculatePersonalizationPrice()) * quantity).toFixed(2)}</div>
+                </div>
             </div>
 
             {/* Add to Cart */}
