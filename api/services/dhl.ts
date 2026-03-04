@@ -131,15 +131,15 @@ export class DhlClient {
 
     public async checkConnection() {
         const scenarios = [
-            // Scenario 1: Standard Auth (User/Pass)
-            { name: 'Standard (User/Pass)', url: 'https://cig.dhl.de/services/production/soap', encoding: 'utf8' as BufferEncoding, devId: false },
+            // Scenario 1: Standard CIG (The one failing with 401)
+            { name: 'CIG Standard', url: 'https://cig.dhl.de/services/production/soap', auth: true },
             
-            // Scenario 2: Legacy Endpoint (often has different auth rules)
-            { name: 'Legacy (User/Pass)', url: 'https://cig.dhl.de/soap', encoding: 'utf8' as BufferEncoding, devId: false },
+            // Scenario 2: Intraship (The "Grandfather" endpoint - often works without DevID)
+            { name: 'Intraship Legacy', url: 'https://intraship.dhl.de/ws/1_0/ISService/DE/is_1_0_de.wsdl', auth: true },
             
-            // Scenario 3: Internetversand (Public Endpoint - NO Basic Auth required usually)
-            // This endpoint is for "Business Customer Shipping" without CIG Gateway
-            { name: 'Internetversand (Public)', url: 'https://internetversand.dhl.de/services/production/soap', encoding: 'utf8' as BufferEncoding, devId: false }
+            // Scenario 3: CIG with "dhl.de" Host Header trick
+            // Sometimes the Gateway just wants a different Host header to route internally
+            { name: 'CIG with Host Trick', url: 'https://cig.dhl.de/services/production/soap', auth: true, customHost: 'dhl.de' }
         ];
 
         const body = `
@@ -173,10 +173,14 @@ export class DhlClient {
                     'Connection': 'Keep-Alive'
                 };
 
-                // For Internetversand, we DO NOT send Authorization header by default
-                // For CIG, we DO send it
-                if (!scenario.name.includes('Internetversand')) {
-                    headers['Authorization'] = this.getAuthHeader(scenario.encoding, scenario.devId);
+                // Apply Host Header Trick if needed
+                if (scenario.customHost) {
+                    headers['Host'] = scenario.customHost;
+                }
+
+                // Always send Auth for CIG
+                if (scenario.auth) {
+                    headers['Authorization'] = this.getAuthHeader();
                 }
 
                 const response = await fetch(this.endpoint, {
@@ -195,15 +199,14 @@ export class DhlClient {
                 if (response.status === 401) {
                      errors.push(`[${scenario.name}] 401 Unauthorized`);
                 } else if (response.status === 404) {
-                     errors.push(`[${scenario.name}] 404 Not Found (Falsche URL)`);
+                     errors.push(`[${scenario.name}] 404 Not Found`);
                 } else {
                      errors.push(`[${scenario.name}] Fehler ${response.status}`);
                 }
 
             } catch (e: any) {
-                // If ENOTFOUND (DNS error), it means the URL is wrong/offline
                 if (e.message.includes('ENOTFOUND')) {
-                    errors.push(`[${scenario.name}] DNS-Fehler (Server nicht gefunden)`);
+                    errors.push(`[${scenario.name}] DNS-Fehler`);
                 } else {
                     errors.push(`[${scenario.name}] Systemfehler: ${e.message}`);
                 }
