@@ -400,7 +400,7 @@ router.post('/shipping/test-config', async (req, res) => {
 
     const authHeader = Buffer.from(`${dhl_user}:${dhl_signature}`).toString('base64');
 
-    const response = await fetch('https://cig.dhl.de/services/production/soap', {
+    const response = await fetch('https://cig.dhl.de/services/production/shipping/v3/soap', {
         method: 'POST',
         headers: {
             'Authorization': `Basic ${authHeader}`,
@@ -412,6 +412,13 @@ router.post('/shipping/test-config', async (req, res) => {
 
     const xmlResponse = await response.text();
     console.log('DHL Test Response:', xmlResponse);
+
+    if (!response.ok) {
+        let testError = `HTTP Fehler ${response.status}`;
+        if (response.status === 401) testError = "Anmeldung fehlgeschlagen (401). Benutzername oder Signatur sind nicht korrekt.";
+        if (response.status === 403) testError = "Zugriff verweigert (403). Der Account ist nicht für den Webservice freigeschaltet.";
+        throw new Error(testError);
+    }
 
     if (xmlResponse.includes('<majorRelease>') || xmlResponse.includes('ok') || xmlResponse.includes('OK')) {
         res.json({ 
@@ -591,7 +598,7 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
 
         const authHeader = Buffer.from(`${config.dhl_user}:${config.dhl_signature}`).toString('base64');
 
-        const response = await fetch('https://cig.dhl.de/services/production/soap', {
+        const response = await fetch('https://cig.dhl.de/services/production/shipping/v3/soap', {
             method: 'POST',
             headers: {
                 'Authorization': `Basic ${authHeader}`,
@@ -602,6 +609,19 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         });
 
         const xmlResponse = await response.text();
+        
+        if (!response.ok) {
+            console.error(`DHL API HTTP Error ${response.status}:`, xmlResponse);
+            let httpError = `HTTP Fehler ${response.status}`;
+            if (response.status === 401) httpError = "Authentifizierung fehlgeschlagen (401). Bitte prüfen Sie Benutzername und Signatur.";
+            if (response.status === 403) httpError = "Zugriff verweigert (403). Ihr Account hat eventuell keine Berechtigung für diesen Webservice.";
+            
+            // Include raw response for debugging if it's short
+            if (xmlResponse && xmlResponse.length < 500) {
+                httpError += ` - Server Antwort: ${xmlResponse.replace(/<[^>]+>/g, ' ').trim()}`;
+            }
+            throw new Error(httpError);
+        }
         
         // Basic XML Parsing (without heavy libraries)
         if (xmlResponse.includes('<statusText>ok</statusText>') || xmlResponse.includes('<statusText>OK</statusText>')) {
