@@ -420,24 +420,17 @@ router.post('/shipping/test-config', async (req, res) => {
             'Connection': 'Keep-Alive'
         };
         
+        // FORCE Basic Auth immediately because "Shipping Realm" requires it upfront
+        const auth = Buffer.from(`${dhl_user}:${dhl_signature}`, 'utf8').toString('base64');
+        headers['Authorization'] = `Basic ${auth}`;
+        
         try {
-            console.log('DHL Test: Sende XML-Anfrage ohne Basic Auth an CIG...');
-            let res = await fetch('https://cig.dhl.de/services/production/soap', {
+            console.log('DHL Test: Sende SOFORT Basic Auth an CIG (Shipping Realm)...');
+            const res = await fetch('https://cig.dhl.de/services/production/soap', {
                 method: 'POST',
                 headers,
                 body: xml
             });
-
-            // If Gateway demands Basic Auth (401), we provide it as fallback
-            if (res.status === 401) {
-                console.log('Gateway verlangt Basic Auth (401). Sende Fallback...');
-                const authHeader = Buffer.from(`${dhl_user}:${dhl_signature}`, 'utf8').toString('base64');
-                res = await fetch('https://cig.dhl.de/services/production/soap', {
-                    method: 'POST',
-                    headers: { ...headers, 'Authorization': `Basic ${authHeader}` },
-                    body: xml
-                });
-            }
 
             const text = await res.text();
             return { status: res.status, text, ok: res.ok, authMethod: res.headers.get('www-authenticate') };
@@ -448,6 +441,7 @@ router.post('/shipping/test-config', async (req, res) => {
 
     console.log(`Debug DHL Test für: ${dhl_user}...`);
     
+    // Single attempt with forced Auth
     let result = await tryRequest(soapRequest);
 
     const xmlResponse = result.text;
