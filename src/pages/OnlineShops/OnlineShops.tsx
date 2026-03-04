@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store';
-import { ShoppingBag, Plus, Edit, Trash2, ExternalLink, Palette, Truck, CreditCard, Sliders, Save, X } from 'lucide-react';
+import { ShoppingBag, Plus, Edit, Trash2, ExternalLink, Palette, Truck, CreditCard, Sliders, Save, X, MapPin } from 'lucide-react';
 
 const OnlineShops: React.FC = () => {
   const { shops, customers, addShop, updateShop, deleteShop } = useAppStore();
@@ -16,6 +16,20 @@ const OnlineShops: React.FC = () => {
   // --- PERSONALIZATION STATE ---
   const [personalizations, setPersonalizations] = useState<any[]>([]);
   const [editingPersonalization, setEditingPersonalization] = useState<any | null>(null);
+
+  // --- GLOBAL SHIPPING STATE ---
+  const [globalShippingConfig, setGlobalShippingConfig] = useState<any>({
+    dhl_user: '',
+    dhl_signature: '',
+    dhl_ekp: '',
+    dhl_participation: '01',
+    sender_name: 'Maintextildruck',
+    sender_street: '',
+    sender_house_number: '',
+    sender_zip: '',
+    sender_city: '',
+    sender_country: 'DEU'
+  });
 
   const fetchVariables = async () => {
       try {
@@ -33,10 +47,31 @@ const OnlineShops: React.FC = () => {
       } catch (e) { console.error(e); }
   };
 
+  const fetchGlobalShippingConfig = async () => {
+    try {
+        const res = await fetch('/api/shop-management/shipping/global-config');
+        const data = await res.json();
+        if (data.success && data.data) setGlobalShippingConfig(data.data);
+    } catch (e) { console.error(e); }
+  };
+
   useEffect(() => {
       fetchVariables();
       fetchPersonalizations();
+      fetchGlobalShippingConfig();
   }, []);
+
+  const handleSaveGlobalShippingConfig = async () => {
+    try {
+      const res = await fetch('/api/shop-management/shipping/global-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(globalShippingConfig)
+      });
+      const data = await res.json();
+      if (data.success) alert('Globale DHL Versand-Einstellungen gespeichert!');
+    } catch (e) { console.error(e); }
+  };
 
   const handleSaveVariable = async () => {
       if (!editingVariable || !editingVariable.name || !editingVariable.values) return;
@@ -409,6 +444,134 @@ const OnlineShops: React.FC = () => {
                         Keine Personalisierungs-Optionen vorhanden.
                     </div>
                 )}
+            </div>
+
+            <h2 className="text-lg font-semibold text-slate-700 mt-12 mb-4 border-b pb-2 flex items-center justify-between">
+                <div className="flex items-center">
+                    <Truck size={20} className="mr-2" />
+                    Globaler DHL Versand (Alle Shops)
+                </div>
+                <button 
+                    onClick={handleSaveGlobalShippingConfig}
+                    className="text-sm bg-green-600 text-white px-4 py-1 rounded hover:bg-green-700 flex items-center"
+                >
+                    <Save size={16} className="mr-2" /> Speichern
+                </button>
+            </h2>
+            <p className="text-sm text-gray-600 mb-6">
+                Hinterlegen Sie hier Ihre DHL Zugangsdaten, die standardmäßig für alle Shops verwendet werden sollen. 
+                Sie können diese bei Bedarf in den einzelnen Shops überschreiben.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Global API Credentials */}
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+                    <div className="flex items-center space-x-3 mb-2">
+                        <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                            <Truck size={20} />
+                        </div>
+                        <h4 className="font-bold text-slate-800">DHL API Zugangsdaten</h4>
+                    </div>
+                    
+                    <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">DHL Benutzername (App-ID)</label>
+                        <input 
+                            type="text" 
+                            className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                            value={globalShippingConfig.dhl_user}
+                            onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, dhl_user: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">DHL Signatur (Passwort)</label>
+                        <input 
+                            type="password" 
+                            className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                            value={globalShippingConfig.dhl_signature}
+                            onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, dhl_signature: e.target.value })}
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Abrechnungsnummer (EKP)</label>
+                            <input 
+                                type="text" 
+                                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                                value={globalShippingConfig.dhl_ekp}
+                                onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, dhl_ekp: e.target.value })}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Teilnahme</label>
+                            <input 
+                                type="text" 
+                                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                                value={globalShippingConfig.dhl_participation}
+                                onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, dhl_participation: e.target.value })}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Global Sender Info */}
+                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+                    <div className="flex items-center space-x-3 mb-2">
+                        <div className="p-2 bg-green-50 text-green-600 rounded-lg">
+                            <MapPin size={20} />
+                        </div>
+                        <h4 className="font-bold text-slate-800">Standard Absenderadresse</h4>
+                    </div>
+
+                    <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Firma / Name</label>
+                        <input 
+                            type="text" 
+                            className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                            value={globalShippingConfig.sender_name}
+                            onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, sender_name: e.target.value })}
+                        />
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="col-span-2">
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Straße</label>
+                            <input 
+                                type="text" 
+                                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                                value={globalShippingConfig.sender_street}
+                                onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, sender_street: e.target.value })}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Nr.</label>
+                            <input 
+                                type="text" 
+                                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                                value={globalShippingConfig.sender_house_number}
+                                onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, sender_house_number: e.target.value })}
+                            />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">PLZ</label>
+                            <input 
+                                type="text" 
+                                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                                value={globalShippingConfig.sender_zip}
+                                onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, sender_zip: e.target.value })}
+                            />
+                        </div>
+                        <div className="col-span-2">
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Stadt</label>
+                            <input 
+                                type="text" 
+                                className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                                value={globalShippingConfig.sender_city}
+                                onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, sender_city: e.target.value })}
+                            />
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
       )}

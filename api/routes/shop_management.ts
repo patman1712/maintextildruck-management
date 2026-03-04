@@ -320,6 +320,42 @@ router.delete('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
 
 // --- Shop Shipping ---
 
+router.get('/shipping/global-config', (req, res) => {
+  try {
+    const config = db.prepare('SELECT * FROM global_shipping_config WHERE id = "main"').get();
+    res.json({ success: true, data: config || null });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/shipping/global-config', (req, res) => {
+  try {
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
+
+    db.prepare(`
+      INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
+      VALUES ("main", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        dhl_user = excluded.dhl_user,
+        dhl_signature = excluded.dhl_signature,
+        dhl_ekp = excluded.dhl_ekp,
+        dhl_participation = excluded.dhl_participation,
+        sender_name = excluded.sender_name,
+        sender_street = excluded.sender_street,
+        sender_house_number = excluded.sender_house_number,
+        sender_zip = excluded.sender_zip,
+        sender_city = excluded.sender_city,
+        sender_country = excluded.sender_country,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country);
+
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.get('/:shopId/shipping-config', (req, res) => {
   try {
     const { shopId } = req.params;
@@ -372,10 +408,16 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
 
     if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
 
-    // 2. Get Shipping Config
-    const config = db.prepare('SELECT * FROM shop_shipping_config WHERE shop_id = ?').get(shopId) as any;
+    // 2. Get Shipping Config (Check Shop-specific first, then Global)
+    let config = db.prepare('SELECT * FROM shop_shipping_config WHERE shop_id = ?').get(shopId) as any;
+    
     if (!config || !config.dhl_user) {
-        return res.status(400).json({ success: false, error: 'DHL Konfiguration fehlt oder unvollständig.' });
+        // Fallback to Global Config
+        config = db.prepare('SELECT * FROM global_shipping_config WHERE id = "main"').get() as any;
+    }
+
+    if (!config || !config.dhl_user) {
+        return res.status(400).json({ success: false, error: 'DHL Konfiguration fehlt oder unvollständig (weder im Shop noch global hinterlegt).' });
     }
 
     // 3. Mock DHL API Call (In production, replace with actual SOAP/REST call)
