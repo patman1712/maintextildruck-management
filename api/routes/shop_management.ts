@@ -410,51 +410,59 @@ router.post('/shipping/test-config', async (req, res) => {
   </soapenv:Body>
 </soapenv:Envelope>`;
 
-    const tryRequest = async (xml: string, useBasicAuth: boolean) => {
+    const tryRequest = async (xml: string) => {
+        // We use EXACT headers as required by DHL Gateway
         const headers: any = {
-            'Content-Type': 'text/xml; charset=utf-8',
-            'SOAPAction': '""',
-            'User-Agent': 'PHP-SOAP/7.4.33'
+            'Content-Type': 'text/xml;charset=UTF-8',
+            'SOAPAction': 'urn:getVersion',
+            'User-Agent': 'PHP-SOAP/7.4.33',
+            'Host': 'cig.dhl.de',
+            'Connection': 'Keep-Alive'
         };
-        if (useBasicAuth) {
-            // Ensure precise UTF-8 encoding for special characters like !
-            const auth = Buffer.from(`${dhl_user}:${dhl_signature}`, 'utf8').toString('base64');
-            headers['Authorization'] = `Basic ${auth}`;
-        }
         
         try {
-            const res = await fetch('https://cig.dhl.de/services/production/soap', {
+            console.log('DHL Test: Sende XML-Anfrage ohne Basic Auth an CIG...');
+            let res = await fetch('https://cig.dhl.de/services/production/soap', {
                 method: 'POST',
                 headers,
                 body: xml
             });
+
+            // If Gateway demands Basic Auth (401), we provide it as fallback
+            if (res.status === 401) {
+                console.log('Gateway verlangt Basic Auth (401). Sende Fallback...');
+                const authHeader = Buffer.from(`${dhl_user}:${dhl_signature}`, 'utf8').toString('base64');
+                res = await fetch('https://cig.dhl.de/services/production/soap', {
+                    method: 'POST',
+                    headers: { ...headers, 'Authorization': `Basic ${authHeader}` },
+                    body: xml
+                });
+            }
+
             const text = await res.text();
-            return { status: res.status, text, ok: res.ok };
+            return { status: res.status, text, ok: res.ok, authMethod: res.headers.get('www-authenticate') };
         } catch (e: any) {
             return { status: 500, text: e.message, ok: false };
         }
     };
 
-    console.log(`DHL Verbindungstest (Multi-Auth) für: ${dhl_user}...`);
+    console.log(`Debug DHL Test für: ${dhl_user}...`);
     
-    // Attempt 1: Standard XML + Basic Auth (Common for most systems)
-    let result = await tryRequest(soapRequest, true);
-    
-    // Attempt 2: If 401, try ONLY XML Auth (Common for some older/specific DHL accounts)
-    if (result.status === 401) {
-        console.log('Attempt 1 (Basic Auth) failed with 401, trying Attempt 2 (XML only)...');
-        result = await tryRequest(soapRequest, false);
-    }
+    let result = await tryRequest(soapRequest);
 
     const xmlResponse = result.text;
     if (result.ok && (xmlResponse.includes('majorRelease') || xmlResponse.includes('ok') || xmlResponse.includes('OK'))) {
         return res.json({ success: true, message: 'Verbindung erfolgreich!' });
     } else {
-        // Detailed error reporting for the user
-        let errorHint = xmlResponse.length < 1000 ? xmlResponse.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : 'Unbekannter Fehler';
+        // Clean up response for display
+        let errorHint = xmlResponse.length < 1500 ? xmlResponse.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : 'Unbekannter Fehler';
+        
+        // If we still get 401, we show what the server actually wants
+        let debugInfo = result.status === 401 ? ` (Server verlangt: ${result.authMethod || 'keine Angabe'})` : '';
+        
         return res.status(result.status || 500).json({ 
             success: false, 
-            error: `DHL Fehler (${result.status}): "${errorHint.substring(0, 150)}..."` 
+            error: `Anmeldung abgelehnt (${result.status})${debugInfo}. Antwort: "${errorHint.substring(0, 150)}..."` 
         });
     }
   } catch (error: any) {
