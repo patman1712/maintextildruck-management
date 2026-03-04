@@ -47,6 +47,69 @@ export class DhlClient {
         return `Basic ${buffer.toString('base64')}`;
     }
 
+    private async sendSoapRequest(action: string, bodyContent: string) {
+        // Manually construct headers to override default behavior
+        const authHeader = this.getAuthHeader();
+        const soapEnvelope = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:cis="http://dhl.de/webservice/cisbase" xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0">
+   <soapenv:Header>
+      <cis:Authentification>
+         <cis:user>${escapeXml(this.user)}</cis:user>
+         <cis:signature>${escapeXml(this.signature)}</cis:signature>
+      </cis:Authentification>
+   </soapenv:Header>
+   <soapenv:Body>
+      ${bodyContent}
+   </soapenv:Body>
+</soapenv:Envelope>`;
+
+        const headers: any = {
+            'Content-Type': 'text/xml;charset=UTF-8',
+            'SOAPAction': action,
+            'User-Agent': 'Shopware/6.4.20.0',
+            'Connection': 'Keep-Alive',
+            'Authorization': authHeader
+        };
+
+        await logDebug('REQUEST_HEADERS', headers);
+        await logDebug('REQUEST_BODY', soapEnvelope);
+
+        try {
+            const response = await fetch(this.endpoint, {
+                method: 'POST',
+                headers,
+                body: soapEnvelope
+            });
+
+            const responseText = await response.text();
+            
+            await logDebug('RESPONSE_STATUS', response.status);
+            await logDebug('RESPONSE_HEADERS', response.headers);
+            await logDebug('RESPONSE_BODY', responseText);
+
+            if (!response.ok) {
+                // If 401, try to extract specific realm error
+                if (response.status === 401) {
+                    const wwwAuth = response.headers.get('www-authenticate');
+                    throw new Error(`DHL Login abgelehnt (401). Server verlangt: ${wwwAuth || 'Unbekannt'}. Prüfen Sie Benutzer/Passwort.`);
+                }
+                
+                // Try to parse SOAP Fault
+                const faultMatch = responseText.match(/<faultstring>(.*?)<\/faultstring>/);
+                if (faultMatch) {
+                    throw new Error(`DHL API Fehler: ${faultMatch[1]}`);
+                }
+                
+                throw new Error(`HTTP Fehler ${response.status}: ${responseText.substring(0, 200)}`);
+            }
+
+            return responseText;
+        } catch (error: any) {
+            await logDebug('REQUEST_ERROR', error.message);
+            throw error;
+        }
+    }
+
     public async checkConnection() {
         const scenarios = [
             { name: 'CIG Standard (UTF8)', url: 'https://cig.dhl.de/services/production/soap', auth: true, encoding: 'utf8' as BufferEncoding },
@@ -68,7 +131,13 @@ export class DhlClient {
                 await logDebug('TRY_SCENARIO', scenario.name);
                 this.endpoint = scenario.url;
                 
-                // Manually construct headers to override default behavior
+                // Use the shared sendSoapRequest logic, but override headers inside it or reimplement here if needed
+                // Actually, sendSoapRequest uses this.endpoint, so we just set it above.
+                // But wait, sendSoapRequest uses this.getAuthHeader() which uses UTF-8 by default.
+                // We need to pass the encoding to sendSoapRequest or update getAuthHeader temporarily.
+                
+                // Let's just reimplement the fetch here to be explicit for the test
+                
                 const authHeader = this.getAuthHeader(scenario.encoding);
                 const soapEnvelope = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:cis="http://dhl.de/webservice/cisbase" xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0">
