@@ -449,6 +449,18 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
 
     if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
 
+    // 1.1 Cleanup old label/error files for this order
+    try {
+        const files = await fs.readdir(LABELS_DIR);
+        for (const file of files) {
+            if (file.includes(`_${order.order_number}_`)) {
+                await fs.remove(path.join(LABELS_DIR, file));
+            }
+        }
+    } catch (cleanupErr) {
+        console.warn('Cleanup of old labels failed:', cleanupErr);
+    }
+
     // 2. Get Shipping Config (Check Shop-specific first, then Global)
     let config = db.prepare('SELECT * FROM shop_shipping_config WHERE shop_id = ?').get(shopId) as any;
     
@@ -528,12 +540,12 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
             </Address>
           </Shipper>
           <Receiver>
-            <cis:name1>${`${order.first_name || ''} ${order.last_name || ''}`.trim() || order.customer_name}</cis:name1>
+            <cis:name1>${`${order.first_name || ''} ${order.last_name || ''}`.trim().substring(0, 35) || order.customer_name.substring(0, 35)}</cis:name1>
             <Address>
-              <cis:streetName>${receiverAddr.street}</cis:streetName>
-              <cis:streetNumber>${receiverAddr.number}</cis:streetNumber>
+              <cis:streetName>${receiverAddr.street.substring(0, 35)}</cis:streetName>
+              <cis:streetNumber>${receiverAddr.number.substring(0, 10)}</cis:streetNumber>
               <cis:zip>${order.zip || ''}</cis:zip>
-              <cis:city>${order.city || ''}</cis:city>
+              <cis:city>${order.city ? order.city.substring(0, 35) : ''}</cis:city>
               <cis:Origin>
                 <cis:countryISOCode>DE</cis:countryISOCode>
               </cis:Origin>
@@ -618,22 +630,52 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
 
     } catch (e: any) {
         errorMessage = e.message;
-        console.error('DHL SOAP API Error:', e);
+        console.error('DHL SOAP API Error Detail:', e);
         
-        // FALLBACK to Draft Label
-        console.log("Erstelle Entwurfs-Label aufgrund von SOAP-Fehler...");
-        trackingNumber = `DRAFT-${order.order_number}`;
+        // FALLBACK to Draft Label with ERROR MESSAGE
+        console.log(`Erstelle Entwurfs-Label aufgrund von SOAP-Fehler: ${errorMessage}`);
+        trackingNumber = `ERROR-${Date.now()}`; // Unique ID for the error state
+        
         const pdfDoc = await PDFDocument.create();
-        const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+        const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+        const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const page = pdfDoc.addPage([400, 600]);
-        page.drawText('DHL ENTWURF', { x: 50, y: 550, size: 30, font, color: rgb(0.8, 0, 0) });
-        page.drawText('KEIN GÜLTIGES VERSANDLABEL', { x: 50, y: 520, size: 14, font, color: rgb(1, 0, 0) });
-        page.drawText(`Grund: ${errorMessage}`, { x: 50, y: 500, size: 10 });
-        page.drawText(`Bestellung: #${order.order_number}`, { x: 50, y: 460, size: 12, font });
+        
+        page.drawText('DHL FEHLER-PROTOKOLL', { x: 50, y: 550, size: 20, font: fontBold, color: rgb(0.8, 0, 0) });
+        page.drawText('DIES IST KEIN VERSANDLABEL', { x: 50, y: 525, size: 12, font: fontBold, color: rgb(1, 0, 0) });
+        
+        page.drawText('FEHLERMELDUNG VON DHL:', { x: 50, y: 490, size: 10, font: fontBold });
+        
+        // Wrap text for long error messages
+        const errorText = errorMessage || 'Keine detaillierte Fehlermeldung empfangen.';
+        const words = errorText.split(' ');
+        let line = '';
+        let y = 475;
+        for (const word of words) {
+            if ((line + word).length > 50) {
+                page.drawText(line, { x: 50, y, size: 9, font: fontRegular });
+                line = word + ' ';
+                y -= 12;
+            } else {
+                line += word + ' ';
+            }
+        }
+        page.drawText(line, { x: 50, y, size: 9, font: fontRegular });
+
+        page.drawText('BESTELLDATEN:', { x: 50, y: y - 30, size: 10, font: fontBold });
+        page.drawText(`Bestellung: #${order.order_number}`, { x: 50, y: y - 45, size: 9 });
+        page.drawText(`Empfänger: ${order.customer_name}`, { x: 50, y: y - 57, size: 9 });
+        page.drawText(`Adresse: ${order.customer_address}`, { x: 50, y: y - 69, size: 9 });
+        
+        page.drawText('HINWEIS:', { x: 50, y: 100, size: 10, font: fontBold });
+        page.drawText('Bitte prüfen Sie Ihre DHL-Zugangsdaten (EKP, Benutzer, Signatur)', { x: 50, y: 85, size: 8 });
+        page.drawText('und die Empfängeradresse auf Korrektheit.', { x: 50, y: 73, size: 8 });
+
         const pdfBytes = await pdfDoc.save();
-        const fileName = `draft_${order.order_number}_${Date.now()}.pdf`;
+        const fileName = `error_${order.order_number}_${Date.now()}.pdf`;
         const filePath = path.join(LABELS_DIR, fileName);
         await fs.writeFile(filePath, pdfBytes);
+        
         labelUrl = `/labels/${fileName}`;
         success = false;
     }

@@ -221,14 +221,21 @@ const ShopDashboard: React.FC = () => {
         alert('DHL Label erfolgreich erstellt!');
         fetchShopOrders();
         if (selectedOrder?.id === order.id) {
-          setSelectedOrder({ ...selectedOrder, tracking_number: data.trackingNumber, label_url: data.labelUrl });
+          setSelectedOrder({ ...selectedOrder, tracking_number: data.trackingNumber, label_url: data.labelUrl, status: 'shipped' });
         }
       } else {
-        alert('Fehler beim Erstellen des DHL Labels: ' + data.error);
+        // If an error label was generated, offer to open it
+        if (data.labelUrl) {
+            if (confirm(`${data.error}\n\nMöchten Sie das Fehler-Protokoll (PDF) öffnen?`)) {
+                window.open(data.labelUrl, '_blank');
+            }
+        } else {
+            alert('Fehler beim Erstellen des DHL Labels: ' + data.error);
+        }
       }
-    } catch (e) { 
+    } catch (e: any) { 
       console.error(e);
-      alert('Ein technischer Fehler ist aufgetreten.');
+      alert('Ein technischer Fehler ist aufgetreten: ' + e.message);
     } finally {
       setIsCreatingLabel(false);
     }
