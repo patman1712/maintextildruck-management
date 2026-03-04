@@ -460,7 +460,7 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
     const mockLabelUrl = `https://mock-dhl-labels.com/label_${order.order_number}.pdf`;
 
     // 4. Update Order with Tracking Info
-    db.prepare('UPDATE orders SET tracking_number = ?, label_url = ?, status = "shipped" WHERE id = ?')
+    db.prepare("UPDATE orders SET tracking_number = ?, label_url = ?, status = 'shipped' WHERE id = ?")
       .run(mockTrackingNumber, mockLabelUrl, orderId);
 
     res.json({ 
