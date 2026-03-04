@@ -21,6 +21,7 @@ const ShopDashboard: React.FC = () => {
   
   // Editor Modal
   const [editorAssignment, setEditorAssignment] = useState<any | null>(null);
+  const [isCreateMode, setIsCreateMode] = useState(false); // Track create mode
 
   useEffect(() => {
     if (shopId) {
@@ -109,6 +110,19 @@ const ShopDashboard: React.FC = () => {
       await fetch(`/api/shop-management/${shopId}/products/${id}`, { method: 'DELETE' });
       setShopProducts(shopProducts.filter(p => p.id !== id));
     } catch (e) { console.error(e); }
+  };
+
+  const handleCreateProduct = (newAssignment: any) => {
+    // Add new assignment to list immediately
+    setShopProducts(prev => [newAssignment, ...prev]);
+    // Also we might want to switch to edit mode for this new product immediately?
+    // For now, let's just close the create modal (which ProductEditorModal does)
+    // and optionally open it in edit mode.
+    // ProductEditorModal calls onClose internally.
+    
+    // Open in edit mode to allow image upload immediately
+    setIsCreateMode(false);
+    setEditorAssignment(newAssignment);
   };
 
   const handleUpdateProduct = async (id: string, updates: any) => {
@@ -411,12 +425,25 @@ const ShopDashboard: React.FC = () => {
                     <h3 className="font-bold text-lg">Produkt hinzufügen</h3>
                     <button onClick={() => setShowProductModal(false)}><X size={20} className="text-slate-400" /></button>
                 </div>
-                <div className="p-4 border-b">
+                <div className="p-4 border-b bg-gray-50">
+                    {/* Create New Button */}
+                    <button 
+                        onClick={() => {
+                            setShowProductModal(false);
+                            setIsCreateMode(true);
+                            setEditorAssignment({}); // Empty object triggers create mode logic
+                        }}
+                        className="w-full bg-white border-2 border-dashed border-blue-300 text-blue-600 p-3 rounded-lg flex items-center justify-center hover:bg-blue-50 transition-colors mb-4 font-bold"
+                    >
+                        <Plus size={20} className="mr-2" />
+                        Neues manuelles Produkt erstellen
+                    </button>
+
                     <div className="relative">
                         <Search size={18} className="absolute left-3 top-2.5 text-slate-400" />
                         <input 
                             type="text" 
-                            placeholder="Produkt suchen..."
+                            placeholder="Vorhandenes Produkt suchen..."
                             className="w-full pl-10 border border-slate-300 rounded-lg p-2"
                             value={assignProductSearch}
                             onChange={(e) => setAssignProductSearch(e.target.value)}
@@ -449,13 +476,18 @@ const ShopDashboard: React.FC = () => {
       )}
 
       {/* Editor Modal */}
-      {editorAssignment && (
+      {(editorAssignment || isCreateMode) && (
         <ProductEditorModal 
-            isOpen={!!editorAssignment}
-            assignment={editorAssignment}
+            isOpen={!!editorAssignment || isCreateMode}
+            assignment={isCreateMode ? undefined : editorAssignment}
             shopId={shopId!}
-            onClose={() => setEditorAssignment(null)}
+            customerId={shop.customer_id} // Pass customer ID for manual product creation
+            onClose={() => {
+                setEditorAssignment(null);
+                setIsCreateMode(false);
+            }}
             onSave={handleUpdateProduct}
+            onCreate={handleCreateProduct}
         />
       )}
     </div>
