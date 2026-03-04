@@ -41,15 +41,36 @@ export class DhlClient {
         this.endpoint = 'https://cig.dhl.de/services/production/soap';
     }
 
-    private getAuthHeader() {
-        // Standard Basic Auth header with UTF-8 support
+    private getAuthHeader(encoding: BufferEncoding = 'utf8') {
         const authString = `${this.user}:${this.signature}`;
-        const buffer = Buffer.from(authString, 'utf8');
+        const buffer = Buffer.from(authString, encoding);
         return `Basic ${buffer.toString('base64')}`;
     }
 
-    private async sendSoapRequest(action: string, bodyContent: string) {
-        const soapEnvelope = `<?xml version="1.0" encoding="UTF-8"?>
+    public async checkConnection() {
+        const scenarios = [
+            { name: 'CIG Standard (UTF8)', url: 'https://cig.dhl.de/services/production/soap', auth: true, encoding: 'utf8' as BufferEncoding },
+            { name: 'CIG Standard (Latin1)', url: 'https://cig.dhl.de/services/production/soap', auth: true, encoding: 'latin1' as BufferEncoding },
+            { name: 'CIG Legacy (No Path)', url: 'https://cig.dhl.de/soap', auth: true, encoding: 'utf8' as BufferEncoding },
+            { name: 'Internetversand (Direct)', url: 'https://internetversand.dhl.de/services/production/soap', auth: true, encoding: 'utf8' as BufferEncoding }
+        ];
+
+        const body = `
+      <ns:GetVersionRequest>
+         <majorRelease>3</majorRelease>
+         <minorRelease>1</minorRelease>
+      </ns:GetVersionRequest>`;
+        
+        let lastError = '';
+
+        for (const scenario of scenarios) {
+            try {
+                await logDebug('TRY_SCENARIO', scenario.name);
+                this.endpoint = scenario.url;
+                
+                // Manually construct headers to override default behavior
+                const authHeader = this.getAuthHeader(scenario.encoding);
+                const soapEnvelope = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:cis="http://dhl.de/webservice/cisbase" xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0">
    <soapenv:Header>
       <cis:Authentification>
@@ -57,72 +78,43 @@ export class DhlClient {
          <cis:signature>${escapeXml(this.signature)}</cis:signature>
       </cis:Authentification>
    </soapenv:Header>
-   <soapenv:Body>
-      ${bodyContent}
-   </soapenv:Body>
+   <soapenv:Body>${body}</soapenv:Body>
 </soapenv:Envelope>`;
 
-        const headers: any = {
-            'Content-Type': 'text/xml;charset=UTF-8',
-            'SOAPAction': action,
-            'User-Agent': 'Shopware/6.4.20.0 (compatible; PHP-SOAP/7.4.33)',
-            'Host': 'cig.dhl.de',
-            'Connection': 'Keep-Alive',
-            'Authorization': this.getAuthHeader() // Always send Basic Auth for "Shipping Realm"
-        };
+                const headers: any = {
+                    'Content-Type': 'text/xml;charset=UTF-8',
+                    'SOAPAction': 'urn:getVersion',
+                    'User-Agent': 'Shopware/6.4.20.0',
+                    'Connection': 'Keep-Alive',
+                    'Authorization': authHeader
+                };
 
-        await logDebug('REQUEST_HEADERS', headers);
-        await logDebug('REQUEST_BODY', soapEnvelope);
+                const response = await fetch(this.endpoint, {
+                    method: 'POST',
+                    headers,
+                    body: soapEnvelope
+                });
 
-        try {
-            const response = await fetch(this.endpoint, {
-                method: 'POST',
-                headers,
-                body: soapEnvelope
-            });
+                const text = await response.text();
+                await logDebug(`RESPONSE_${scenario.name}`, { status: response.status, text: text.substring(0, 200) });
 
-            const responseText = await response.text();
-            
-            await logDebug('RESPONSE_STATUS', response.status);
-            await logDebug('RESPONSE_HEADERS', response.headers);
-            await logDebug('RESPONSE_BODY', responseText);
-
-            if (!response.ok) {
-                // If 401, try to extract specific realm error
+                if (response.ok && (text.includes('majorRelease') || text.includes('ok'))) {
+                    return { success: true, message: `Verbindung erfolgreich (${scenario.name})!` };
+                }
+                
                 if (response.status === 401) {
-                    const wwwAuth = response.headers.get('www-authenticate');
-                    throw new Error(`DHL Login abgelehnt (401). Server verlangt: ${wwwAuth || 'Unbekannt'}. Prüfen Sie Benutzer/Passwort.`);
+                    lastError = `Anmeldung abgelehnt (${scenario.name}). Server: ${response.headers.get('www-authenticate')}`;
+                } else {
+                    lastError = `Fehler ${response.status} (${scenario.name})`;
                 }
-                
-                // Try to parse SOAP Fault
-                const faultMatch = responseText.match(/<faultstring>(.*?)<\/faultstring>/);
-                if (faultMatch) {
-                    throw new Error(`DHL API Fehler: ${faultMatch[1]}`);
-                }
-                
-                throw new Error(`HTTP Fehler ${response.status}: ${responseText.substring(0, 200)}`);
+
+            } catch (e: any) {
+                lastError = `Fehler: ${e.message}`;
+                await logDebug(`ERROR_${scenario.name}`, e.message);
             }
-
-            return responseText;
-        } catch (error: any) {
-            await logDebug('REQUEST_ERROR', error.message);
-            throw error;
         }
-    }
 
-    public async checkConnection() {
-        const body = `
-      <ns:GetVersionRequest>
-         <majorRelease>3</majorRelease>
-         <minorRelease>1</minorRelease>
-      </ns:GetVersionRequest>`;
-        
-        const response = await this.sendSoapRequest('urn:getVersion', body);
-        
-        if (response.includes('majorRelease') || response.includes('ok') || response.includes('OK')) {
-            return { success: true, message: 'Verbindung erfolgreich hergestellt.' };
-        }
-        throw new Error('Keine gültige Antwort von DHL erhalten.');
+        throw new Error(lastError || 'Alle Verbindungsversuche fehlgeschlagen.');
     }
 
     public async createLabel(order: any, sender: any) {
