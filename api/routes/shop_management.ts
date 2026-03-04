@@ -401,14 +401,12 @@ router.post('/shipping/test-config', async (req, res) => {
     const authHeader = Buffer.from(`${dhl_user}:${dhl_signature}`).toString('base64');
     const body = soapRequest;
 
-    const response = await fetch('https://cig.dhl.de/services/production/shipping/v3/soap', {
+    const response = await fetch('https://cig.dhl.de/services/production/soap', {
         method: 'POST',
         headers: {
             'Authorization': `Basic ${authHeader}`,
             'Content-Type': 'text/xml; charset=utf-8',
-            'SOAPAction': '""',
-            'Content-Length': Buffer.byteLength(body).toString(),
-            'User-Agent': 'Shopware/6.0' // Simulate a known working user agent
+            'SOAPAction': '""'
         },
         body: body
     });
@@ -602,14 +600,12 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         const authHeader = Buffer.from(`${config.dhl_user}:${config.dhl_signature}`).toString('base64');
         const body = soapRequest;
 
-        const response = await fetch('https://cig.dhl.de/services/production/shipping/v3/soap', {
+        const response = await fetch('https://cig.dhl.de/services/production/soap', {
             method: 'POST',
             headers: {
                 'Authorization': `Basic ${authHeader}`,
                 'Content-Type': 'text/xml; charset=utf-8',
-                'SOAPAction': '""',
-                'Content-Length': Buffer.byteLength(body).toString(),
-                'User-Agent': 'Shopware/6.0'
+                'SOAPAction': '""'
             },
             body: body
         });
@@ -630,7 +626,7 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         }
         
         // Basic XML Parsing (without heavy libraries)
-        if (xmlResponse.includes('<statusText>ok</statusText>') || xmlResponse.includes('<statusText>OK</statusText>')) {
+        if (xmlResponse.includes('<statusText>ok</statusText>') || xmlResponse.includes('<statusText>OK</statusText>') || xmlResponse.includes('majorRelease')) {
             const shipNumMatch = xmlResponse.match(/<shipmentNumber>(.*?)<\/shipmentNumber>/);
             const labelUrlMatch = xmlResponse.match(/<labelUrl>(.*?)<\/labelUrl>/);
             
