@@ -114,8 +114,7 @@ export class DhlClient {
         const scenarios = [
             { name: 'CIG Standard (UTF8)', url: 'https://cig.dhl.de/services/production/soap', auth: true, encoding: 'utf8' as BufferEncoding },
             { name: 'CIG Standard (Latin1)', url: 'https://cig.dhl.de/services/production/soap', auth: true, encoding: 'latin1' as BufferEncoding },
-            { name: 'CIG Legacy (No Path)', url: 'https://cig.dhl.de/soap', auth: true, encoding: 'utf8' as BufferEncoding },
-            { name: 'Internetversand (Direct)', url: 'https://internetversand.dhl.de/services/production/soap', auth: true, encoding: 'utf8' as BufferEncoding }
+            { name: 'CIG Legacy (No Path)', url: 'https://cig.dhl.de/soap', auth: true, encoding: 'utf8' as BufferEncoding }
         ];
 
         const body = `
@@ -124,19 +123,12 @@ export class DhlClient {
          <minorRelease>1</minorRelease>
       </ns:GetVersionRequest>`;
         
-        let lastError = '';
+        let errors: string[] = [];
 
         for (const scenario of scenarios) {
             try {
                 await logDebug('TRY_SCENARIO', scenario.name);
                 this.endpoint = scenario.url;
-                
-                // Use the shared sendSoapRequest logic, but override headers inside it or reimplement here if needed
-                // Actually, sendSoapRequest uses this.endpoint, so we just set it above.
-                // But wait, sendSoapRequest uses this.getAuthHeader() which uses UTF-8 by default.
-                // We need to pass the encoding to sendSoapRequest or update getAuthHeader temporarily.
-                
-                // Let's just reimplement the fetch here to be explicit for the test
                 
                 const authHeader = this.getAuthHeader(scenario.encoding);
                 const soapEnvelope = `<?xml version="1.0" encoding="UTF-8"?>
@@ -172,18 +164,19 @@ export class DhlClient {
                 }
                 
                 if (response.status === 401) {
-                    lastError = `Anmeldung abgelehnt (${scenario.name}). Server: ${response.headers.get('www-authenticate')}`;
+                    errors.push(`[${scenario.name}] Anmeldung abgelehnt (401). Server: ${response.headers.get('www-authenticate')}`);
                 } else {
-                    lastError = `Fehler ${response.status} (${scenario.name})`;
+                    errors.push(`[${scenario.name}] Fehler ${response.status}`);
                 }
 
             } catch (e: any) {
-                lastError = `Fehler: ${e.message}`;
+                errors.push(`[${scenario.name}] Systemfehler: ${e.message}`);
                 await logDebug(`ERROR_${scenario.name}`, e.message);
             }
         }
 
-        throw new Error(lastError || 'Alle Verbindungsversuche fehlgeschlagen.');
+        // Return ALL errors to see what happened
+        throw new Error(errors.join(' | ') || 'Alle Verbindungsversuche fehlgeschlagen.');
     }
 
     public async createLabel(order: any, sender: any) {
