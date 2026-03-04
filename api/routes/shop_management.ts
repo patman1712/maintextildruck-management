@@ -428,11 +428,22 @@ router.post('/shipping/test-config', async (req, res) => {
         
         try {
             console.log('DHL Test: Sende SOFORT Basic Auth an CIG (Shipping Realm)...');
-            const res = await fetch('https://cig.dhl.de/services/production/soap', {
+            let res = await fetch('https://cig.dhl.de/services/production/soap', {
                 method: 'POST',
                 headers,
                 body: xml
             });
+
+            // If 401, retry WITHOUT Basic Auth (some accounts are blocked if Auth header is present)
+            if (res.status === 401) {
+                console.log('401 mit Basic Auth. Versuche OHNE Auth Header (XML-Only)...');
+                delete headers['Authorization'];
+                res = await fetch('https://cig.dhl.de/services/production/soap', {
+                    method: 'POST',
+                    headers,
+                    body: xml
+                });
+            }
 
             const text = await res.text();
             
