@@ -322,7 +322,7 @@ router.delete('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
 
 router.get('/shipping/global-config', (req, res) => {
   try {
-    const config = db.prepare('SELECT * FROM global_shipping_config WHERE id = "main"').get();
+    const config = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get();
     res.json({ success: true, data: config || null });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -334,7 +334,7 @@ router.post('/shipping/global-config', (req, res) => {
     const { dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
 
     // Check if record exists
-    const existing = db.prepare('SELECT id FROM global_shipping_config WHERE id = "main"').get();
+    const existing = db.prepare("SELECT id FROM global_shipping_config WHERE id = 'main'").get();
 
     if (existing) {
       db.prepare(`
@@ -343,16 +343,16 @@ router.post('/shipping/global-config', (req, res) => {
             sender_name = ?, sender_street = ?, sender_house_number = ?, 
             sender_zip = ?, sender_city = ?, sender_country = ?, 
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = "main"
+        WHERE id = 'main'
       `).run(dhl_user, dhl_signature, dhl_ekp, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
     } else {
       db.prepare(`
         INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
-        VALUES ("main", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(dhl_user, dhl_signature, dhl_ekp, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
     }
 
-    const updatedConfig = db.prepare('SELECT * FROM global_shipping_config WHERE id = "main"').get();
+    const updatedConfig = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get();
     res.json({ success: true, data: updatedConfig });
   } catch (error: any) {
     console.error('Error saving global shipping config:', error);
@@ -446,7 +446,7 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
     
     if (!config || !config.dhl_user) {
         // Fallback to Global Config
-        config = db.prepare('SELECT * FROM global_shipping_config WHERE id = "main"').get() as any;
+        config = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get() as any;
     }
 
     if (!config || !config.dhl_user) {
