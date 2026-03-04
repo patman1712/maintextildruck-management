@@ -376,22 +376,51 @@ router.post('/shipping/test-config', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Unvollständige Daten für den Test.' });
     }
 
-    // Simulate DHL API Auth Test
-    console.log(`Testing DHL Connection for user: ${dhl_user}...`);
+    console.log(`Echter DHL Verbindungstest für: ${dhl_user}...`);
     
-    // In a real scenario, you would make a small request to DHL (e.g. getVersion or getManifest)
-    // For now, we simulate a delay and then success.
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    // Use getVersion to test basic connectivity and soap structure
+    // Note: getVersion doesn't always require full auth, but it's a good first step
+    const soapRequest = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" 
+                  xmlns:cis="http://dhl.de/webservice/cisbase" 
+                  xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0">
+  <soapenv:Header>
+    <cis:Authentification>
+      <cis:user>${dhl_user}</cis:user>
+      <cis:signature>${dhl_signature}</cis:signature>
+    </cis:Authentification>
+  </soapenv:Header>
+  <soapenv:Body>
+    <ns:GetVersionRequest>
+      <majorRelease>3</majorRelease>
+      <minorRelease>1</minorRelease>
+    </ns:GetVersionRequest>
+  </soapenv:Body>
+</soapenv:Envelope>`;
 
-    // Simple validation logic for mock purposes
-    if (dhl_user.length < 3 || dhl_signature.length < 3) {
-        throw new Error('Ungültige Anmeldedaten. Bitte prüfen Sie Benutzername und Signatur.');
-    }
-
-    res.json({ 
-        success: true, 
-        message: 'Verbindung zum DHL Geschäftsportal erfolgreich hergestellt!' 
+    const response = await fetch('https://cig.dhl.de/services/production/soap', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'text/xml;charset=UTF-8',
+            'SOAPAction': 'urn:getVersion'
+        },
+        body: soapRequest
     });
+
+    const xmlResponse = await response.text();
+    console.log('DHL Test Response:', xmlResponse);
+
+    if (xmlResponse.includes('<majorRelease>') || xmlResponse.includes('ok') || xmlResponse.includes('OK')) {
+        res.json({ 
+            success: true, 
+            message: 'Verbindung zum DHL-Server erfolgreich hergestellt!' 
+        });
+    } else {
+        // Try to find faultstring
+        const faultMatch = xmlResponse.match(/<faultstring>(.*?)<\/faultstring>/i);
+        const errorMsg = faultMatch ? faultMatch[1] : 'Die Anmeldung wurde von DHL abgelehnt.';
+        throw new Error(errorMsg);
+    }
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -610,7 +639,7 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
             const statusMessageMatch = xmlResponse.match(/<statusMessage>(.*?)<\/statusMessage>/i);
             const faultStringMatch = xmlResponse.match(/<faultstring>(.*?)<\/faultstring>/i);
             
-            let dhlError = 'Unbekannter DHL Fehler';
+            let dhlError = '';
             if (statusMessageMatch && statusMessageMatch[1]) {
                 dhlError = statusMessageMatch[1];
             } else if (statusTextMatch && statusTextMatch[1]) {
@@ -623,6 +652,13 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
                 if (statusMatch) {
                     dhlError = statusMatch[1].replace(/<[^>]+>/g, ' ').trim();
                 }
+            }
+            
+            // If we still have no error text, it might be a login error or structural error
+            if (!dhlError || dhlError.toLowerCase() === 'ok') {
+                if (xmlResponse.includes('Login failed')) dhlError = 'Anmeldung fehlgeschlagen (Login failed).';
+                else if (xmlResponse.includes('Authentication failed')) dhlError = 'Authentifizierung fehlgeschlagen.';
+                else dhlError = `Unbekannter DHL Fehler (Antwort-Länge: ${xmlResponse.length} Zeichen).`;
             }
             
             throw new Error(dhlError);
