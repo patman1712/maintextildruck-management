@@ -393,12 +393,11 @@ router.post('/shipping/test-config', async (req, res) => {
 
     console.log(`Echter DHL Verbindungstest für: ${dhl_user}...`);
     
-    // Use getVersion to test basic connectivity and soap structure
-    // We use the most standard XML structure possible
-    const soapRequest = `<?xml version="1.0" encoding="UTF-8"?>
+    // Attempt 1: Standard DHL XML (Spelled Authentification with 'f')
+    const soapRequest1 = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" 
-                  xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0" 
-                  xmlns:cis="http://dhl.de/webservice/cisbase">
+                  xmlns:cis="http://dhl.de/webservice/cisbase" 
+                  xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0">
   <soapenv:Header>
     <cis:Authentification>
       <cis:user>${escapeXml(dhl_user)}</cis:user>
@@ -407,52 +406,68 @@ router.post('/shipping/test-config', async (req, res) => {
   </soapenv:Header>
   <soapenv:Body>
     <ns:GetVersionRequest>
-      <majorRelease>3</majorRelease>
-      <minorRelease>1</minorRelease>
+      <ns:Version>
+        <majorRelease>3</majorRelease>
+        <minorRelease>1</minorRelease>
+      </ns:Version>
     </ns:GetVersionRequest>
   </soapenv:Body>
 </soapenv:Envelope>`;
 
-    let body = soapRequest;
-    
-    // Attempt 1: ONLY XML Auth (No HTTP Basic Auth)
-    // Some DHL accounts fail if double-auth is present
-    console.log(`DHL Test (Attempt 1: XML Auth only) for: ${dhl_user}...`);
-    let response = await fetch('https://cig.dhl.de/services/production/soap', {
-        method: 'POST',
-        headers: {
+    // Attempt 2: Alternative spelling (Authentication with 'v')
+    const soapRequest2 = soapRequest1.replace(/Authentification/g, 'Authentication');
+
+    const tryRequest = async (xml: string, useBasicAuth: boolean) => {
+        const headers: any = {
             'Content-Type': 'text/xml; charset=utf-8',
-            'SOAPAction': '""',
-            'User-Agent': 'PHP-SOAP/7.4.33' // Many DHL gateways are optimized for PHP-SOAP
-        },
-        body: body
-    });
-
-    let xmlResponse = await response.text();
-    console.log('DHL Test Response (Attempt 1):', response.status, xmlResponse.substring(0, 200));
-
-    // Attempt 2: If 401, try WITH HTTP Basic Auth
-    if (response.status === 401) {
-        console.log('401 detected, trying with HTTP Basic Auth...');
-        const authHeader = Buffer.from(`${dhl_user}:${dhl_signature}`).toString('base64');
-        response = await fetch('https://cig.dhl.de/services/production/soap', {
+            'SOAPAction': '""'
+        };
+        if (useBasicAuth) {
+            headers['Authorization'] = `Basic ${Buffer.from(`${dhl_user}:${dhl_signature}`).toString('base64')}`;
+        }
+        
+        const res = await fetch('https://cig.dhl.de/services/production/soap', {
             method: 'POST',
-            headers: {
-                'Authorization': `Basic ${authHeader}`,
-                'Content-Type': 'text/xml; charset=utf-8',
-                'SOAPAction': '""',
-                'User-Agent': 'PHP-SOAP/7.4.33'
-            },
-            body: body
+            headers,
+            body: xml
         });
-        xmlResponse = await response.text();
-        console.log('DHL Test Response (Attempt 2):', response.status, xmlResponse.substring(0, 200));
+        return { status: res.status, text: await res.text(), ok: res.ok };
+    };
+
+    console.log(`Starte mehrstufigen DHL-Test für: ${dhl_user}...`);
+    
+    // Step 1: XML 'f' + No Basic Auth
+    let result = await tryRequest(soapRequest1, false);
+    
+    // Step 2: XML 'f' + Basic Auth
+    if (result.status === 401) {
+        console.log('Versuch 2: XML (f) + Basic Auth...');
+        result = await tryRequest(soapRequest1, true);
+    }
+    
+    // Step 3: XML 'v' + No Basic Auth
+    if (result.status === 401) {
+        console.log('Versuch 3: XML (v) + No Basic Auth...');
+        result = await tryRequest(soapRequest2, false);
+    }
+    
+    // Step 4: XML 'v' + Basic Auth
+    if (result.status === 401) {
+        console.log('Versuch 4: XML (v) + Basic Auth...');
+        result = await tryRequest(soapRequest2, true);
     }
 
-    if (!response.ok) {
-        let testError = `HTTP Fehler ${response.status}`;
-        if (response.status === 401) testError = "Anmeldung fehlgeschlagen (401). DHL akzeptiert die Kombination aus Benutzer und Passwort nicht. Bitte prüfen Sie, ob Sie das 'Webservice-Passwort' (Signatur) verwenden.";
-        if (response.status === 403) testError = "Zugriff verweigert (403). Der Account ist nicht für diesen Webservice freigeschaltet.";
+    const xmlResponse = result.text;
+    if (result.ok && (xmlResponse.includes('majorRelease') || xmlResponse.includes('ok') || xmlResponse.includes('OK'))) {
+        res.json({ 
+            success: true, 
+            message: 'Verbindung zum DHL-Server erfolgreich hergestellt!' 
+        });
+    } else {
+        let testError = `HTTP Fehler ${result.status}`;
+        if (result.status === 401) {
+            testError = "Anmeldung fehlgeschlagen (401). DHL lehnt die Zugangsdaten ab. Bitte prüfen Sie, ob in Shopware eventuell ein anderer Benutzername (z.B. mit Endung _01) verwendet wird.";
+        }
         throw new Error(testError);
     }
 
@@ -573,10 +588,10 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         const billingNumber = `${config.dhl_ekp}${config.dhl_participation || '01'}01`;
 
         // XML Payload for DHL GKV SOAP API v3.0
-        const soapRequest = `<?xml version="1.0" encoding="UTF-8"?>
+        const soapRequest1 = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" 
-                  xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0" 
-                  xmlns:cis="http://dhl.de/webservice/cisbase">
+                  xmlns:cis="http://dhl.de/webservice/cisbase" 
+                  xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0">
   <soapenv:Header>
     <cis:Authentification>
       <cis:user>${escapeXml(config.dhl_user)}</cis:user>
@@ -632,52 +647,39 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
   </soapenv:Body>
 </soapenv:Envelope>`;
 
-        const body = soapRequest;
+        const soapRequest2 = soapRequest1.replace(/Authentification/g, 'Authentication');
 
-        let response = await fetch('https://cig.dhl.de/services/production/soap', {
-            method: 'POST',
-            headers: {
+        const tryShipment = async (xml: string, useBasicAuth: boolean) => {
+            const headers: any = {
                 'Content-Type': 'text/xml; charset=utf-8',
-                'SOAPAction': '""',
-                'User-Agent': 'PHP-SOAP/7.4.33'
-            },
-            body: body
-        });
-
-        let xmlResponse = await response.text();
-        
-        // If 401, try WITH HTTP Basic Auth
-        if (response.status === 401) {
-            console.log('401 detected, trying with HTTP Basic Auth...');
-            const authHeader = Buffer.from(`${config.dhl_user}:${config.dhl_signature}`).toString('base64');
-            response = await fetch('https://cig.dhl.de/services/production/soap', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Basic ${authHeader}`,
-                    'Content-Type': 'text/xml; charset=utf-8',
-                    'SOAPAction': '""',
-                    'User-Agent': 'PHP-SOAP/7.4.33'
-                },
-                body: body
-            });
-            xmlResponse = await response.text();
-        }
-        
-        if (!response.ok) {
-            console.error(`DHL API HTTP Error ${response.status}:`, xmlResponse);
-            let httpError = `HTTP Fehler ${response.status}`;
-            if (response.status === 401) httpError = "Authentifizierung fehlgeschlagen (401). DHL akzeptiert die Kombination aus Benutzer und Passwort nicht.";
-            if (response.status === 403) httpError = "Zugriff verweigert (403). Ihr Account hat eventuell keine Berechtigung für diesen Webservice.";
-            
-            // Include raw response for debugging if it's short
-            if (xmlResponse && xmlResponse.length < 500) {
-                httpError += ` - Server Antwort: ${xmlResponse.replace(/<[^>]+>/g, ' ').trim()}`;
+                'SOAPAction': '""'
+            };
+            if (useBasicAuth) {
+                headers['Authorization'] = `Basic ${Buffer.from(`${config.dhl_user}:${config.dhl_signature}`).toString('base64')}`;
             }
-            throw new Error(httpError);
-        }
+            const res = await fetch('https://cig.dhl.de/services/production/soap', {
+                method: 'POST',
+                headers,
+                body: xml
+            });
+            return { status: res.status, text: await res.text(), ok: res.ok };
+        };
+
+        // Step 1: XML 'f' + No Basic Auth
+        let result = await tryShipment(soapRequest1, false);
+
+        // Step 2: XML 'f' + Basic Auth
+        if (result.status === 401) result = await tryShipment(soapRequest1, true);
+
+        // Step 3: XML 'v' + No Basic Auth
+        if (result.status === 401) result = await tryShipment(soapRequest2, false);
+
+        // Step 4: XML 'v' + Basic Auth
+        if (result.status === 401) result = await tryShipment(soapRequest2, true);
+
+        const xmlResponse = result.text;
         
-        // Basic XML Parsing (without heavy libraries)
-        if (xmlResponse.includes('<statusText>ok</statusText>') || xmlResponse.includes('<statusText>OK</statusText>') || xmlResponse.includes('majorRelease')) {
+        if (result.ok && (xmlResponse.includes('<statusText>ok</statusText>') || xmlResponse.includes('<statusText>OK</statusText>') || xmlResponse.includes('majorRelease'))) {
             const shipNumMatch = xmlResponse.match(/<shipmentNumber>(.*?)<\/shipmentNumber>/);
             const labelUrlMatch = xmlResponse.match(/<labelUrl>(.*?)<\/labelUrl>/);
             
