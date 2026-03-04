@@ -6,6 +6,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { DATA_DIR } from '../db.js';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { DhlClient } from '../services/dhl.js';
 
 const router = Router();
 
@@ -391,90 +392,10 @@ router.post('/shipping/test-config', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Unvollständige Daten für den Test.' });
     }
 
-    // Attempt 1: The most standard DHL XML structure
-    const soapRequest = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" 
-                  xmlns:cis="http://dhl.de/webservice/cisbase" 
-                  xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0">
-  <soapenv:Header>
-    <cis:Authentification>
-      <cis:user>${escapeXml(dhl_user)}</cis:user>
-      <cis:signature>${escapeXml(dhl_signature)}</cis:signature>
-    </cis:Authentification>
-  </soapenv:Header>
-  <soapenv:Body>
-    <ns:GetVersionRequest>
-      <majorRelease>3</majorRelease>
-      <minorRelease>1</minorRelease>
-    </ns:GetVersionRequest>
-  </soapenv:Body>
-</soapenv:Envelope>`;
+    const client = new DhlClient(dhl_user, dhl_signature, dhl_ekp);
+    const result = await client.checkConnection();
+    res.json(result);
 
-    const tryRequest = async (xml: string) => {
-        // We use EXACT headers as required by DHL Gateway
-        const headers: any = {
-            'Content-Type': 'text/xml;charset=UTF-8',
-            'SOAPAction': 'urn:getVersion',
-            'User-Agent': 'Shopware/6.4.20.0', // Spoof exact Shopware User-Agent
-            'Host': 'cig.dhl.de',
-            'Connection': 'Keep-Alive'
-        };
-        
-        // FORCE Basic Auth immediately because "Shipping Realm" requires it upfront
-        // IMPORTANT: Shopware often uses the API User here, not the System User!
-        // We try to be as generic as possible to pass the gateway
-        const auth = Buffer.from(`${dhl_user}:${dhl_signature}`, 'utf8').toString('base64');
-        headers['Authorization'] = `Basic ${auth}`;
-        
-        try {
-            console.log('DHL Test: Sende SOFORT Basic Auth an CIG (Shipping Realm)...');
-            let res = await fetch('https://cig.dhl.de/services/production/soap', {
-                method: 'POST',
-                headers,
-                body: xml
-            });
-
-            // If 401, retry WITHOUT Basic Auth (some accounts are blocked if Auth header is present)
-            if (res.status === 401) {
-                console.log('401 mit Basic Auth. Versuche OHNE Auth Header (XML-Only)...');
-                delete headers['Authorization'];
-                res = await fetch('https://cig.dhl.de/services/production/soap', {
-                    method: 'POST',
-                    headers,
-                    body: xml
-                });
-            }
-
-            const text = await res.text();
-            
-            // If we get 401 again, it's 100% wrong credentials for Basic Auth
-            // But we pass the result anyway to show the error
-            return { status: res.status, text, ok: res.ok, authMethod: res.headers.get('www-authenticate') };
-        } catch (e: any) {
-            return { status: 500, text: e.message, ok: false };
-        }
-    };
-
-    console.log(`Debug DHL Test für: ${dhl_user}...`);
-    
-    // Single attempt with forced Auth
-    let result = await tryRequest(soapRequest);
-
-    const xmlResponse = result.text;
-    if (result.ok && (xmlResponse.includes('majorRelease') || xmlResponse.includes('ok') || xmlResponse.includes('OK'))) {
-        return res.json({ success: true, message: 'Verbindung erfolgreich!' });
-    } else {
-        // Clean up response for display
-        let errorHint = xmlResponse.length < 1500 ? xmlResponse.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : 'Unbekannter Fehler';
-        
-        // If we still get 401, we show what the server actually wants
-        let debugInfo = result.status === 401 ? ` (Server verlangt: ${result.authMethod || 'keine Angabe'})` : '';
-        
-        return res.status(result.status || 500).json({ 
-            success: false, 
-            error: `Anmeldung abgelehnt (${result.status})${debugInfo}. Antwort: "${errorHint.substring(0, 150)}..."` 
-        });
-    }
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -556,260 +477,86 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         return res.status(400).json({ success: false, error: 'DHL Konfiguration fehlt oder unvollständig (weder im Shop noch global hinterlegt).' });
     }
 
-    // 3. Attempt REAL DHL API Call (SOAP via XML)
-    let trackingNumber = '';
-    let labelUrl = '';
-    let success = false;
-    let errorMessage = '';
-
     try {
-        console.log(`Versuche ECHTES DHL Label für Bestellung ${order.order_number} via SOAP...`);
+        const client = new DhlClient(config.dhl_user, config.dhl_signature, config.dhl_ekp);
         
-        const splitAddress = (fullAddress: string) => {
-            const match = fullAddress.match(/^(.+?)\s+(\d+[a-zA-Z]*)$/);
-            if (match) return { street: match[1], number: match[2] };
-            return { street: fullAddress, number: '1' };
+        // Prepare Sender Address
+        const sender = {
+            company: config.sender_name,
+            street: config.sender_street,
+            street_number: config.sender_house_number,
+            zip: config.sender_zip,
+            city: config.sender_city,
+            country: config.sender_country
         };
 
-        const receiverAddr = splitAddress(order.street || order.customer_address || '');
-        const senderAddr = {
-            street: config.sender_street || '',
-            number: config.sender_house_number || ''
-        };
-
-        const today = new Date().toISOString().split('T')[0];
-        const billingNumber = `${config.dhl_ekp}${config.dhl_participation || '01'}01`;
-
-        // XML Payload for DHL GKV SOAP API v3.0
-        const soapRequest1 = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" 
-                  xmlns:cis="http://dhl.de/webservice/cisbase" 
-                  xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0">
-  <soapenv:Header>
-    <cis:Authentification>
-      <cis:user>${escapeXml(config.dhl_user)}</cis:user>
-      <cis:signature>${escapeXml(config.dhl_signature)}</cis:signature>
-    </cis:Authentification>
-  </soapenv:Header>
-  <soapenv:Body>
-    <ns:CreateShipmentOrderRequest>
-      <ns:Version>
-        <majorRelease>3</majorRelease>
-        <minorRelease>1</minorRelease>
-      </ns:Version>
-      <ShipmentOrder>
-        <sequenceNumber>${order.order_number}</sequenceNumber>
-        <Shipment>
-          <ShipmentDetails>
-            <product>V01PAK</product>
-            <cis:accountNumber>${billingNumber}</cis:accountNumber>
-            <shipmentDate>${today}</shipmentDate>
-            <ShipmentItem>
-              <weightInKG>${order.weight || 1.0}</weightInKG>
-            </ShipmentItem>
-          </ShipmentDetails>
-          <Shipper>
-            <Name>
-              <cis:name1>${escapeXml(config.sender_name || 'Maintextildruck')}</cis:name1>
-            </Name>
-            <Address>
-              <cis:streetName>${escapeXml(senderAddr.street)}</cis:streetName>
-              <cis:streetNumber>${escapeXml(senderAddr.number)}</cis:streetNumber>
-              <cis:zip>${escapeXml(config.sender_zip)}</cis:zip>
-              <cis:city>${escapeXml(config.sender_city)}</cis:city>
-              <cis:Origin>
-                <cis:countryISOCode>DE</cis:countryISOCode>
-              </cis:Origin>
-            </Address>
-          </Shipper>
-          <Receiver>
-            <cis:name1>${escapeXml(`${order.first_name || ''} ${order.last_name || ''}`.trim().substring(0, 35) || order.customer_name.substring(0, 35))}</cis:name1>
-            <Address>
-              <cis:streetName>${escapeXml(receiverAddr.street.substring(0, 35))}</cis:streetName>
-              <cis:streetNumber>${escapeXml(receiverAddr.number.substring(0, 10))}</cis:streetNumber>
-              <cis:zip>${escapeXml(order.zip || '')}</cis:zip>
-              <cis:city>${escapeXml(order.city ? order.city.substring(0, 35) : '')}</cis:city>
-              <cis:Origin>
-                <cis:countryISOCode>DE</cis:countryISOCode>
-              </cis:Origin>
-            </Address>
-          </Receiver>
-        </Shipment>
-      </ShipmentOrder>
-    </ns:CreateShipmentOrderRequest>
-  </soapenv:Body>
-</soapenv:Envelope>`;
-
-        const soapRequest2 = soapRequest1.replace(/Authentification/g, 'Authentication');
-
-        const tryShipment = async (xml: string) => {
-            const headers: any = {
-                'Content-Type': 'text/xml; charset=utf-8',
-                'SOAPAction': '""'
-            };
-            const res = await fetch('https://cig.dhl.de/services/production/soap', {
-                method: 'POST',
-                headers,
-                body: xml
-            });
-            const text = await res.text();
-            let status = res.status;
-            let ok = res.ok;
-
-            // Fallback to Basic Auth if 401
-            if (status === 401) {
-                const authHeader = Buffer.from(`${config.dhl_user}:${config.dhl_signature}`, 'utf8').toString('base64');
-                const resAuth = await fetch('https://cig.dhl.de/services/production/soap', {
-                    method: 'POST',
-                    headers: { ...headers, 'Authorization': `Basic ${authHeader}` },
-                    body: xml
-                });
-                return { status: resAuth.status, text: await resAuth.text(), ok: resAuth.ok };
-            }
-
-            return { status, text, ok };
-        };
-
-        let result = await tryShipment(soapRequest1);
-        const xmlResponse = result.text;
+        // Create Label
+        const result = await client.createLabel(order, sender);
         
-        if (result.ok && (xmlResponse.includes('<statusText>ok</statusText>') || xmlResponse.includes('<statusText>OK</statusText>') || xmlResponse.includes('majorRelease'))) {
-            const shipNumMatch = xmlResponse.match(/<shipmentNumber>(.*?)<\/shipmentNumber>/);
-            const labelUrlMatch = xmlResponse.match(/<labelUrl>(.*?)<\/labelUrl>/);
-            
-            if (shipNumMatch) {
-                trackingNumber = shipNumMatch[1];
+        // Update order status
+        const labelPath = path.join(LABELS_DIR, `label_${order.order_number}_${Date.now()}.pdf`);
+        
+        // In a real scenario, we would download the PDF from the URL provided by DHL
+        // For now, we store the URL or try to fetch it
+        // Since createLabel returns a URL, we can try to download it
+        if (result.labelUrl) {
+            try {
+                const pdfRes = await fetch(result.labelUrl);
+                const pdfBuffer = await pdfRes.arrayBuffer();
+                await fs.writeFile(labelPath, Buffer.from(pdfBuffer));
                 
-                if (labelUrlMatch) {
-                    // DHL often returns a URL in SOAP. We fetch it and save it locally.
-                    const labelRes = await fetch(labelUrlMatch[1]);
-                    const pdfBuffer = await labelRes.arrayBuffer();
-                    const fileName = `label_${order.order_number}_${trackingNumber}.pdf`;
-                    const filePath = path.join(LABELS_DIR, fileName);
-                    await fs.writeFile(filePath, Buffer.from(pdfBuffer));
-                    labelUrl = `/labels/${fileName}`;
-                    success = true;
-                } else {
-                    // Check if label is base64 in response
-                    const labelDataMatch = xmlResponse.match(/<labelData>(.*?)<\/labelData>/);
-                    if (labelDataMatch) {
-                        const pdfBuffer = Buffer.from(labelDataMatch[1], 'base64');
-                        const fileName = `label_${order.order_number}_${trackingNumber}.pdf`;
-                        const filePath = path.join(LABELS_DIR, fileName);
-                        await fs.writeFile(filePath, pdfBuffer);
-                        labelUrl = `/labels/${fileName}`;
-                        success = true;
-                    } else {
-                        throw new Error('Keine Label-Daten (URL oder Base64) in der Antwort gefunden.');
-                    }
-                }
-            } else {
-                throw new Error('Keine Sendungsnummer in der Antwort gefunden.');
+                // Return local URL
+                const localUrl = `/labels/${path.basename(labelPath)}`;
+                
+                // Update Order
+                db.prepare(`
+                    UPDATE orders 
+                    SET status = 'shipped', 
+                        tracking_number = ?, 
+                        label_url = ?, 
+                        shipped_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                `).run(result.trackingNumber, localUrl, orderId);
+
+                res.json({ 
+                    success: true, 
+                    trackingNumber: result.trackingNumber, 
+                    labelUrl: localUrl 
+                });
+            } catch (downloadErr) {
+                console.error('Failed to download label PDF:', downloadErr);
+                // Fallback: Return the DHL URL directly
+                res.json({ 
+                    success: true, 
+                    trackingNumber: result.trackingNumber, 
+                    labelUrl: result.labelUrl 
+                });
             }
         } else {
-            // Detailed Error Parsing
-            console.error('DHL SOAP Error Response:', xmlResponse);
-            
-            const statusTextMatch = xmlResponse.match(/<statusText>(.*?)<\/statusText>/i);
-            const statusMessageMatch = xmlResponse.match(/<statusMessage>(.*?)<\/statusMessage>/i);
-            const faultStringMatch = xmlResponse.match(/<faultstring>(.*?)<\/faultstring>/i);
-            
-            let dhlError = '';
-            if (statusMessageMatch && statusMessageMatch[1]) {
-                dhlError = statusMessageMatch[1];
-            } else if (statusTextMatch && statusTextMatch[1]) {
-                dhlError = statusTextMatch[1];
-            } else if (faultStringMatch && faultStringMatch[1]) {
-                dhlError = faultStringMatch[1];
-            } else {
-                // Last resort: extract everything between status tags if they exist
-                const statusMatch = xmlResponse.match(/<Status>([\s\S]*?)<\/Status>/i);
-                if (statusMatch) {
-                    dhlError = statusMatch[1].replace(/<[^>]+>/g, ' ').trim();
-                }
-            }
-            
-            // If we still have no error text, it might be a login error or structural error
-            if (!dhlError || dhlError.toLowerCase() === 'ok') {
-                if (xmlResponse.includes('Login failed')) dhlError = 'Anmeldung fehlgeschlagen (Login failed).';
-                else if (xmlResponse.includes('Authentication failed')) dhlError = 'Authentifizierung fehlgeschlagen.';
-                else dhlError = `Unbekannter DHL Fehler (Antwort-Länge: ${xmlResponse.length} Zeichen).`;
-            }
-            
-            throw new Error(dhlError);
+            throw new Error('Keine Label-URL von DHL erhalten.');
         }
 
-    } catch (e: any) {
-        errorMessage = e.message;
-        console.error('DHL SOAP API Error Detail:', e);
+    } catch (dhlError: any) {
+        console.error('DHL Creation Error:', dhlError);
         
-        // FALLBACK to Draft Label with ERROR MESSAGE
-        console.log(`Erstelle Entwurfs-Label aufgrund von SOAP-Fehler: ${errorMessage}`);
-        trackingNumber = `ERROR-${Date.now()}`; // Unique ID for the error state
+        // Generate Error PDF
+        const errorDoc = await PDFDocument.create();
+        const page = errorDoc.addPage([400, 600]);
+        const font = await errorDoc.embedFont(StandardFonts.Helvetica);
         
-        const pdfDoc = await PDFDocument.create();
-        const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-        const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-        const page = pdfDoc.addPage([400, 600]);
+        page.drawText('DHL FEHLER-PROTOKOLL', { x: 50, y: 550, size: 18, font, color: rgb(0.8, 0, 0) });
+        page.drawText(`Fehler: ${dhlError.message}`, { x: 50, y: 500, size: 10, font, maxWidth: 300 });
         
-        page.drawText('DHL FEHLER-PROTOKOLL', { x: 50, y: 550, size: 20, font: fontBold, color: rgb(0.8, 0, 0) });
-        page.drawText('DIES IST KEIN VERSANDLABEL', { x: 50, y: 525, size: 12, font: fontBold, color: rgb(1, 0, 0) });
+        const pdfBytes = await errorDoc.save();
+        const errorFilename = `error_${order.order_number}_${Date.now()}.pdf`;
+        await fs.writeFile(path.join(LABELS_DIR, errorFilename), pdfBytes);
         
-        page.drawText('FEHLERMELDUNG VON DHL:', { x: 50, y: 490, size: 10, font: fontBold });
-        
-        // Wrap text for long error messages
-        const errorText = errorMessage || 'Keine detaillierte Fehlermeldung empfangen.';
-        const words = errorText.split(' ');
-        let line = '';
-        let y = 475;
-        for (const word of words) {
-            if ((line + word).length > 50) {
-                page.drawText(line, { x: 50, y, size: 9, font: fontRegular });
-                line = word + ' ';
-                y -= 12;
-            } else {
-                line += word + ' ';
-            }
-        }
-        page.drawText(line, { x: 50, y, size: 9, font: fontRegular });
-
-        page.drawText('BESTELLDATEN:', { x: 50, y: y - 30, size: 10, font: fontBold });
-        page.drawText(`Bestellung: #${order.order_number}`, { x: 50, y: y - 45, size: 9 });
-        page.drawText(`Empfänger: ${order.customer_name}`, { x: 50, y: y - 57, size: 9 });
-        page.drawText(`Adresse: ${order.customer_address}`, { x: 50, y: y - 69, size: 9 });
-        
-        page.drawText('HINWEIS:', { x: 50, y: 100, size: 10, font: fontBold });
-        page.drawText('Bitte prüfen Sie Ihre DHL-Zugangsdaten (EKP, Benutzer, Signatur)', { x: 50, y: 85, size: 8 });
-        page.drawText('und die Empfängeradresse auf Korrektheit.', { x: 50, y: 73, size: 8 });
-
-        const pdfBytes = await pdfDoc.save();
-        const fileName = `error_${order.order_number}_${Date.now()}.pdf`;
-        const filePath = path.join(LABELS_DIR, fileName);
-        await fs.writeFile(filePath, pdfBytes);
-        
-        labelUrl = `/labels/${fileName}`;
-        success = false;
-    }
-
-    if (!success) {
-        // Return 200 but with success:false so the frontend can show the error but still maybe provide the draft?
-        // Actually, let's return 400 so the alert triggers.
-        return res.status(400).json({ 
+        res.json({ 
             success: false, 
-            error: `DHL API Fehler: ${errorMessage}. Ein Entwurfs-Label wurde zur Korrektur erstellt.`,
-            labelUrl: labelUrl
+            error: dhlError.message,
+            labelUrl: `/labels/${errorFilename}`
         });
     }
-
-    // 4. Update Order with Tracking Info
-    db.prepare("UPDATE orders SET tracking_number = ?, label_url = ?, status = 'shipped' WHERE id = ?")
-      .run(trackingNumber, labelUrl, orderId);
-
-    res.json({ 
-        success: true, 
-        trackingNumber: trackingNumber,
-        labelUrl: labelUrl
-    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
