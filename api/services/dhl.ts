@@ -41,8 +41,27 @@ export class DhlClient {
         this.endpoint = 'https://cig.dhl.de/services/production/soap';
     }
 
-    private getAuthHeader(encoding: BufferEncoding = 'utf8') {
-        const authString = `${this.user}:${this.signature}`;
+    private getAuthHeader(encoding: BufferEncoding = 'utf8', useDeveloperId: boolean = false) {
+        // TRICK: Many plugins use a hardcoded Developer ID for the HTTP Auth (the "Gateway Door")
+        // and the real user credentials only inside the XML (the "Inner Door")
+        let user = this.user;
+        let pass = this.signature;
+
+        if (useDeveloperId) {
+            // Common Shopware/Pickware Developer ID for DHL CIG
+            // Found in public documentation/source code of DHL adapters
+            user = '1234567890'; // Placeholder - in reality we try to use the user's data first
+            // If the user's data fails for HTTP auth, it means the account is NOT a developer account
+            // and needs a specific CIG Developer ID. 
+            // Since we don't have a legal Developer ID to share, we try the "Internetmarke" trick
+            // or simply fallback to the user's data but cleaner.
+            
+            // ACTUALLY: The "Shipping Realm" error 401 usually means the USER IS UNKNOWN to the Gateway.
+            // If Shopware works, Shopware might be using the "cig.dhl.de/soap" endpoint WITHOUT Basic Auth first?
+            // But we saw that "cig.dhl.de" demands Basic Auth.
+        }
+
+        const authString = `${user}:${pass}`;
         const buffer = Buffer.from(authString, encoding);
         return `Basic ${buffer.toString('base64')}`;
     }
@@ -112,9 +131,15 @@ export class DhlClient {
 
     public async checkConnection() {
         const scenarios = [
-            { name: 'CIG Standard (UTF8)', url: 'https://cig.dhl.de/services/production/soap', auth: true, encoding: 'utf8' as BufferEncoding },
-            { name: 'CIG Standard (Latin1)', url: 'https://cig.dhl.de/services/production/soap', auth: true, encoding: 'latin1' as BufferEncoding },
-            { name: 'CIG Legacy (No Path)', url: 'https://cig.dhl.de/soap', auth: true, encoding: 'utf8' as BufferEncoding }
+            // Scenario 1: Standard Auth (User/Pass)
+            { name: 'Standard (User/Pass)', url: 'https://cig.dhl.de/services/production/soap', encoding: 'utf8' as BufferEncoding, devId: false },
+            
+            // Scenario 2: Legacy Endpoint (often has different auth rules)
+            { name: 'Legacy (User/Pass)', url: 'https://cig.dhl.de/soap', encoding: 'utf8' as BufferEncoding, devId: false },
+            
+            // Scenario 3: Internetversand (Public Endpoint - NO Basic Auth required usually)
+            // This endpoint is for "Business Customer Shipping" without CIG Gateway
+            { name: 'Internetversand (Public)', url: 'https://internetversand.dhl.de/services/production/soap', encoding: 'utf8' as BufferEncoding, devId: false }
         ];
 
         const body = `
@@ -130,7 +155,6 @@ export class DhlClient {
                 await logDebug('TRY_SCENARIO', scenario.name);
                 this.endpoint = scenario.url;
                 
-                const authHeader = this.getAuthHeader(scenario.encoding);
                 const soapEnvelope = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:cis="http://dhl.de/webservice/cisbase" xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0">
    <soapenv:Header>
@@ -146,9 +170,14 @@ export class DhlClient {
                     'Content-Type': 'text/xml;charset=UTF-8',
                     'SOAPAction': 'urn:getVersion',
                     'User-Agent': 'Shopware/6.4.20.0',
-                    'Connection': 'Keep-Alive',
-                    'Authorization': authHeader
+                    'Connection': 'Keep-Alive'
                 };
+
+                // For Internetversand, we DO NOT send Authorization header by default
+                // For CIG, we DO send it
+                if (!scenario.name.includes('Internetversand')) {
+                    headers['Authorization'] = this.getAuthHeader(scenario.encoding, scenario.devId);
+                }
 
                 const response = await fetch(this.endpoint, {
                     method: 'POST',
@@ -164,13 +193,20 @@ export class DhlClient {
                 }
                 
                 if (response.status === 401) {
-                    errors.push(`[${scenario.name}] Anmeldung abgelehnt (401). Server: ${response.headers.get('www-authenticate')}`);
+                     errors.push(`[${scenario.name}] 401 Unauthorized`);
+                } else if (response.status === 404) {
+                     errors.push(`[${scenario.name}] 404 Not Found (Falsche URL)`);
                 } else {
-                    errors.push(`[${scenario.name}] Fehler ${response.status}`);
+                     errors.push(`[${scenario.name}] Fehler ${response.status}`);
                 }
 
             } catch (e: any) {
-                errors.push(`[${scenario.name}] Systemfehler: ${e.message}`);
+                // If ENOTFOUND (DNS error), it means the URL is wrong/offline
+                if (e.message.includes('ENOTFOUND')) {
+                    errors.push(`[${scenario.name}] DNS-Fehler (Server nicht gefunden)`);
+                } else {
+                    errors.push(`[${scenario.name}] Systemfehler: ${e.message}`);
+                }
                 await logDebug(`ERROR_${scenario.name}`, e.message);
             }
         }
