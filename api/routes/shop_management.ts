@@ -461,20 +461,19 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         return res.status(400).json({ success: false, error: 'DHL Konfiguration fehlt oder unvollständig (weder im Shop noch global hinterlegt).' });
     }
 
-    // 3. Attempt REAL DHL API Call (REST)
+    // 3. Attempt REAL DHL API Call (SOAP via XML)
     let trackingNumber = '';
     let labelUrl = '';
     let success = false;
     let errorMessage = '';
 
     try {
-        console.log(`Versuche ECHTES DHL Label für Bestellung ${order.order_number} zu erstellen...`);
+        console.log(`Versuche ECHTES DHL Label für Bestellung ${order.order_number} via SOAP...`);
         
-        // Helper to split street and house number if needed
         const splitAddress = (fullAddress: string) => {
             const match = fullAddress.match(/^(.+?)\s+(\d+[a-zA-Z]*)$/);
             if (match) return { street: match[1], number: match[2] };
-            return { street: fullAddress, number: '1' }; // Fallback
+            return { street: fullAddress, number: '1' };
         };
 
         const receiverAddr = splitAddress(order.street || order.customer_address || '');
@@ -483,134 +482,134 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
             number: config.sender_house_number || ''
         };
 
-        // Construct DHL REST API Request (GKV REST v2)
-        // Note: This uses the CIG (Customer Integration Gateway) REST API
-        const dhlRequest = {
-            shipments: [{
-                shipmentDetails: {
-                    product: 'V01PAK', // DHL Paket
-                    accountNumber: `${config.dhl_ekp}${config.dhl_participation || '01'}01`, // EKP + Participation + 01
-                    shipmentDate: new Date().toISOString().split('T')[0],
-                    shipmentItem: {
-                        weightInKG: order.weight || 1.0
-                    }
-                },
-                shipper: {
-                    name1: config.sender_name || 'Maintextildruck',
-                    address: {
-                        streetName: senderAddr.street,
-                        streetNumber: senderAddr.number,
-                        zip: config.sender_zip,
-                        city: config.sender_city,
-                        origin: { countryISOCode: config.sender_country || 'DEU' }
-                    }
-                },
-                receiver: {
-                    name1: `${order.first_name || ''} ${order.last_name || ''}`.trim() || order.customer_name,
-                    address: {
-                        streetName: receiverAddr.street,
-                        streetNumber: receiverAddr.number,
-                        zip: order.zip || '',
-                        city: order.city || '',
-                        origin: { countryISOCode: 'DEU' }
-                    },
-                    communication: {
-                        email: order.email || '',
-                        phone: order.phone || ''
-                    }
-                }
-            }]
-        };
+        const today = new Date().toISOString().split('T')[0];
+        const billingNumber = `${config.dhl_ekp}${config.dhl_participation || '01'}01`;
 
-        // Authentication for DHL REST API V2
-        // Required: Basic Auth (User:Pass) + dhl-api-key header
-        const auth = Buffer.from(`${config.dhl_user}:${config.dhl_signature}`).toString('base64');
-        
-        const response = await fetch('https://api-eu.dhl.com/parcel/de/shipping/v2/shipments', {
+        // XML Payload for DHL GKV SOAP API v3.0
+        const soapRequest = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" 
+                  xmlns:cis="http://dhl.de/webservice/cisbase" 
+                  xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0">
+  <soapenv:Header>
+    <cis:Authentification>
+      <cis:user>${config.dhl_user}</cis:user>
+      <cis:signature>${config.dhl_signature}</cis:signature>
+    </cis:Authentification>
+  </soapenv:Header>
+  <soapenv:Body>
+    <ns:CreateShipmentOrderRequest>
+      <ns:Version>
+        <majorRelease>3</majorRelease>
+        <minorRelease>1</minorRelease>
+      </ns:Version>
+      <ShipmentOrder>
+        <sequenceNumber>${order.order_number}</sequenceNumber>
+        <Shipment>
+          <ShipmentDetails>
+            <product>V01PAK</product>
+            <cis:accountNumber>${billingNumber}</cis:accountNumber>
+            <shipmentDate>${today}</shipmentDate>
+            <ShipmentItem>
+              <weightInKG>${order.weight || 1.0}</weightInKG>
+            </ShipmentItem>
+          </ShipmentDetails>
+          <Shipper>
+            <Name>
+              <cis:name1>${config.sender_name || 'Maintextildruck'}</cis:name1>
+            </Name>
+            <Address>
+              <cis:streetName>${senderAddr.street}</cis:streetName>
+              <cis:streetNumber>${senderAddr.number}</cis:streetNumber>
+              <cis:zip>${config.sender_zip}</cis:zip>
+              <cis:city>${config.sender_city}</cis:city>
+              <cis:Origin>
+                <cis:countryISOCode>DE</cis:countryISOCode>
+              </cis:Origin>
+            </Address>
+          </Shipper>
+          <Receiver>
+            <cis:name1>${(order.first_name || '' + ' ' + order.last_name || '').trim() || order.customer_name}</cis:name1>
+            <Address>
+              <cis:streetName>${receiverAddr.street}</cis:streetName>
+              <cis:streetNumber>${receiverAddr.number}</cis:streetNumber>
+              <cis:zip>${order.zip || ''}</cis:zip>
+              <cis:city>${order.city || ''}</cis:city>
+              <cis:Origin>
+                <cis:countryISOCode>DE</cis:countryISOCode>
+              </cis:Origin>
+            </Address>
+          </Receiver>
+        </Shipment>
+      </ShipmentOrder>
+    </ns:CreateShipmentOrderRequest>
+  </soapenv:Body>
+</soapenv:Envelope>`;
+
+        const response = await fetch('https://cig.dhl.de/services/production/soap', {
             method: 'POST',
             headers: {
-                'Authorization': `Basic ${auth}`,
-                'dhl-api-key': config.dhl_api_key || '',
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Content-Type': 'text/xml;charset=UTF-8',
+                'SOAPAction': 'urn:createShipmentOrder'
             },
-            body: JSON.stringify(dhlRequest)
+            body: soapRequest
         });
 
-        // Check if response is JSON
-        const contentType = response.headers.get('content-type');
-        let result: any;
+        const xmlResponse = await response.text();
         
-        if (contentType && contentType.includes('application/json')) {
-            result = await response.json();
-        } else {
-            const text = await response.text();
-            console.error('DHL API returned non-JSON response:', text);
-            throw new Error(`DHL API antwortete mit einem ungültigen Format (HTTP ${response.status}). Bitte prüfen Sie Ihre API-Zugangsdaten und den API-Key.`);
-        }
-
-        if (response.ok && result.shipments && result.shipments[0].status.statusCode === 200) {
-            const shipment = result.shipments[0];
-            trackingNumber = shipment.shipmentNumber;
+        // Basic XML Parsing (without heavy libraries)
+        if (xmlResponse.includes('<statusText>ok</statusText>') || xmlResponse.includes('<statusText>OK</statusText>')) {
+            const shipNumMatch = xmlResponse.match(/<shipmentNumber>(.*?)<\/shipmentNumber>/);
+            const labelUrlMatch = xmlResponse.match(/<labelUrl>(.*?)<\/labelUrl>/);
             
-            // DHL returns label as base64 in labelData
-            const labelBase64 = shipment.labelData;
-            if (labelBase64) {
-                const pdfBuffer = Buffer.from(labelBase64, 'base64');
-                const fileName = `label_${order.order_number}_${trackingNumber}.pdf`;
-                const filePath = path.join(LABELS_DIR, fileName);
+            if (shipNumMatch) {
+                trackingNumber = shipNumMatch[1];
                 
-                await fs.writeFile(filePath, pdfBuffer);
-                labelUrl = `/labels/${fileName}`;
-                success = true;
-            } else {
-                throw new Error('Keine Label-Daten von DHL empfangen.');
+                if (labelUrlMatch) {
+                    // DHL often returns a URL in SOAP. We fetch it and save it locally.
+                    const labelRes = await fetch(labelUrlMatch[1]);
+                    const pdfBuffer = await labelRes.arrayBuffer();
+                    const fileName = `label_${order.order_number}_${trackingNumber}.pdf`;
+                    const filePath = path.join(LABELS_DIR, fileName);
+                    await fs.writeFile(filePath, Buffer.from(pdfBuffer));
+                    labelUrl = `/labels/${fileName}`;
+                    success = true;
+                } else {
+                    // Check if label is base64 in response
+                    const labelDataMatch = xmlResponse.match(/<labelData>(.*?)<\/labelData>/);
+                    if (labelDataMatch) {
+                        const pdfBuffer = Buffer.from(labelDataMatch[1], 'base64');
+                        const fileName = `label_${order.order_number}_${trackingNumber}.pdf`;
+                        const filePath = path.join(LABELS_DIR, fileName);
+                        await fs.writeFile(filePath, pdfBuffer);
+                        labelUrl = `/labels/${fileName}`;
+                        success = true;
+                    }
+                }
             }
         } else {
-            // Handle DHL Error
-            const dhlError = result.shipments?.[0]?.status?.statusText || result.message || 'Unbekannter DHL API Fehler';
-            throw new Error(dhlError);
+            const errorMatch = xmlResponse.match(/<statusText>(.*?)<\/statusText>/);
+            throw new Error(errorMatch ? errorMatch[1] : 'Unbekannter DHL SOAP Fehler');
         }
 
     } catch (e: any) {
         errorMessage = e.message;
-        console.error('DHL API Error:', e);
+        console.error('DHL SOAP API Error:', e);
         
-        // FALLBACK: If API fails (e.g. wrong credentials), we create a high-quality "Draft" label
-        // so the user can see what's wrong but the system doesn't just crash.
-        // BUT we inform them it's a draft.
-        
-        console.log("Erstelle Entwurfs-Label aufgrund von API-Fehler...");
-        
+        // FALLBACK to Draft Label
+        console.log("Erstelle Entwurfs-Label aufgrund von SOAP-Fehler...");
         trackingNumber = `DRAFT-${order.order_number}`;
-        
         const pdfDoc = await PDFDocument.create();
         const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
         const page = pdfDoc.addPage([400, 600]);
-        
         page.drawText('DHL ENTWURF', { x: 50, y: 550, size: 30, font, color: rgb(0.8, 0, 0) });
         page.drawText('KEIN GÜLTIGES VERSANDLABEL', { x: 50, y: 520, size: 14, font, color: rgb(1, 0, 0) });
         page.drawText(`Grund: ${errorMessage}`, { x: 50, y: 500, size: 10 });
-        
         page.drawText(`Bestellung: #${order.order_number}`, { x: 50, y: 460, size: 12, font });
-        
-        page.drawText('ABSENDER:', { x: 50, y: 420, size: 10, font });
-        page.drawText(`${config.sender_name || 'Maintextildruck'}`, { x: 50, y: 405, size: 10 });
-        page.drawText(`${config.sender_street} ${config.sender_house_number}`, { x: 50, y: 390, size: 10 });
-        page.drawText(`${config.sender_zip} ${config.sender_city}`, { x: 50, y: 375, size: 10 });
-        
-        page.drawText('EMPFÄNGER:', { x: 50, y: 330, size: 10, font });
-        page.drawText(`${order.first_name || ''} ${order.last_name || ''}`.trim() || order.customer_name, { x: 50, y: 315, size: 10 });
-        page.drawText(`${order.street || order.customer_address}`, { x: 50, y: 300, size: 10 });
-        page.drawText(`${order.zip || ''} ${order.city || ''}`, { x: 50, y: 285, size: 10 });
-
         const pdfBytes = await pdfDoc.save();
         const fileName = `draft_${order.order_number}_${Date.now()}.pdf`;
         const filePath = path.join(LABELS_DIR, fileName);
         await fs.writeFile(filePath, pdfBytes);
-        
         labelUrl = `/labels/${fileName}`;
-        // We set success to false here so the API response reflects the failure
         success = false;
     }
 
