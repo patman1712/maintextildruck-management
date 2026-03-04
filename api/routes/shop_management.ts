@@ -393,7 +393,7 @@ router.post('/shipping/test-config', async (req, res) => {
 
     console.log(`Echter DHL Verbindungstest für: ${dhl_user}...`);
     
-    // Attempt 1: Standard DHL XML (Spelled Authentification with 'f')
+    // Attempt 1: Standard DHL XML (Version tag is NOT used in GetVersion)
     const soapRequest1 = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" 
                   xmlns:cis="http://dhl.de/webservice/cisbase" 
@@ -406,69 +406,60 @@ router.post('/shipping/test-config', async (req, res) => {
   </soapenv:Header>
   <soapenv:Body>
     <ns:GetVersionRequest>
-      <ns:Version>
-        <majorRelease>3</majorRelease>
-        <minorRelease>1</minorRelease>
-      </ns:Version>
+      <majorRelease>3</majorRelease>
+      <minorRelease>1</minorRelease>
     </ns:GetVersionRequest>
   </soapenv:Body>
 </soapenv:Envelope>`;
 
-    // Attempt 2: Alternative spelling (Authentication with 'v')
-    const soapRequest2 = soapRequest1.replace(/Authentification/g, 'Authentication');
+    // Attempt 2: With Version tag (used in some other requests)
+    const soapRequest2 = soapRequest1.replace('<ns:GetVersionRequest>', '<ns:GetVersionRequest><ns:Version>').replace('</ns:GetVersionRequest>', '</ns:Version></ns:GetVersionRequest>');
 
     const tryRequest = async (xml: string, useBasicAuth: boolean) => {
         const headers: any = {
             'Content-Type': 'text/xml; charset=utf-8',
-            'SOAPAction': '""'
+            'SOAPAction': '""',
+            'User-Agent': 'PHP-SOAP/7.4.33'
         };
         if (useBasicAuth) {
             headers['Authorization'] = `Basic ${Buffer.from(`${dhl_user}:${dhl_signature}`).toString('base64')}`;
         }
         
-        const res = await fetch('https://cig.dhl.de/services/production/soap', {
-            method: 'POST',
-            headers,
-            body: xml
-        });
-        return { status: res.status, text: await res.text(), ok: res.ok };
+        try {
+            const res = await fetch('https://cig.dhl.de/services/production/soap', {
+                method: 'POST',
+                headers,
+                body: xml
+            });
+            const text = await res.text();
+            return { status: res.status, text, ok: res.ok };
+        } catch (e: any) {
+            return { status: 500, text: e.message, ok: false };
+        }
     };
 
-    console.log(`Starte mehrstufigen DHL-Test für: ${dhl_user}...`);
+    console.log(`Debug DHL Test für: ${dhl_user}...`);
     
-    // Step 1: XML 'f' + No Basic Auth
-    let result = await tryRequest(soapRequest1, false);
-    
-    // Step 2: XML 'f' + Basic Auth
+    // We try the 2 most likely variants
+    let result = await tryRequest(soapRequest1, true); // Basic Auth + XML
     if (result.status === 401) {
-        console.log('Versuch 2: XML (f) + Basic Auth...');
-        result = await tryRequest(soapRequest1, true);
-    }
-    
-    // Step 3: XML 'v' + No Basic Auth
-    if (result.status === 401) {
-        console.log('Versuch 3: XML (v) + No Basic Auth...');
-        result = await tryRequest(soapRequest2, false);
-    }
-    
-    // Step 4: XML 'v' + Basic Auth
-    if (result.status === 401) {
-        console.log('Versuch 4: XML (v) + Basic Auth...');
-        result = await tryRequest(soapRequest2, true);
+        result = await tryRequest(soapRequest1, false); // Only XML
     }
 
     const xmlResponse = result.text;
-    if (result.ok && (xmlResponse.includes('majorRelease') || xmlResponse.includes('ok') || xmlResponse.includes('OK'))) {
-        res.json({ 
-            success: true, 
-            message: 'Verbindung zum DHL-Server erfolgreich hergestellt!' 
-        });
+    if (result.ok && (xmlResponse.includes('majorRelease') || xmlResponse.includes('ok'))) {
+        res.json({ success: true, message: 'Verbindung erfolgreich!' });
     } else {
-        let testError = `HTTP Fehler ${result.status}`;
+        // Detailed error reporting for the user
+        let errorHint = xmlResponse.length < 500 ? xmlResponse.replace(/<[^>]+>/g, ' ').trim() : 'Unbekannter Fehler';
         if (result.status === 401) {
-            testError = "Anmeldung fehlgeschlagen (401). DHL lehnt die Zugangsdaten ab. Bitte prüfen Sie, ob in Shopware eventuell ein anderer Benutzername (z.B. mit Endung _01) verwendet wird.";
+            res.status(401).json({ 
+                success: false, 
+                error: `Anmeldung abgelehnt (401). Antwort vom Server: "${errorHint.substring(0, 100)}..."` 
+            });
+        } else {
+            res.status(result.status).json({ success: false, error: `Fehler ${result.status}: ${errorHint.substring(0, 100)}` });
         }
-        throw new Error(testError);
     }
 
     if (xmlResponse.includes('<majorRelease>') || xmlResponse.includes('ok') || xmlResponse.includes('OK')) {
@@ -652,7 +643,8 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         const tryShipment = async (xml: string, useBasicAuth: boolean) => {
             const headers: any = {
                 'Content-Type': 'text/xml; charset=utf-8',
-                'SOAPAction': '""'
+                'SOAPAction': '""',
+                'User-Agent': 'PHP-SOAP/7.4.33'
             };
             if (useBasicAuth) {
                 headers['Authorization'] = `Basic ${Buffer.from(`${config.dhl_user}:${config.dhl_signature}`).toString('base64')}`;
@@ -662,20 +654,15 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
                 headers,
                 body: xml
             });
-            return { status: res.status, text: await res.text(), ok: res.ok };
+            const text = await res.text();
+            return { status: res.status, text, ok: res.ok };
         };
 
-        // Step 1: XML 'f' + No Basic Auth
-        let result = await tryShipment(soapRequest1, false);
+        // Step 1: XML 'f' + Basic Auth
+        let result = await tryShipment(soapRequest1, true);
 
-        // Step 2: XML 'f' + Basic Auth
-        if (result.status === 401) result = await tryShipment(soapRequest1, true);
-
-        // Step 3: XML 'v' + No Basic Auth
-        if (result.status === 401) result = await tryShipment(soapRequest2, false);
-
-        // Step 4: XML 'v' + Basic Auth
-        if (result.status === 401) result = await tryShipment(soapRequest2, true);
+        // Step 2: XML 'f' + No Basic Auth (Fallback)
+        if (result.status === 401) result = await tryShipment(soapRequest1, false);
 
         const xmlResponse = result.text;
         
