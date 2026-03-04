@@ -506,8 +506,12 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                    {filteredCurrentFiles.map((file: any) => (
                                        <div key={file.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded hover:shadow-sm">
                                            <div className="flex items-center space-x-3 overflow-hidden">
-                                               <div className="h-10 w-10 bg-slate-100 rounded flex items-center justify-center text-slate-500 flex-shrink-0">
-                                                   <FileText size={20} />
+                                               <div className="h-10 w-10 bg-slate-100 rounded flex items-center justify-center text-slate-500 flex-shrink-0 overflow-hidden border border-slate-200">
+                                                   {file.thumbnail_url ? (
+                                                       <img src={file.thumbnail_url} className="h-full w-full object-cover" />
+                                                   ) : (
+                                                       <FileText size={20} />
+                                                   )}
                                                </div>
                                                <div className="truncate">
                                                    <p className="font-bold text-sm text-slate-800 truncate">{file.file_name}</p>
@@ -557,8 +561,12 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                        {filteredAvailableFiles.map((file: any) => (
                                            <div key={file.id} className="flex items-center justify-between p-2 bg-slate-50 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-200" onClick={() => handleAddFile(file.id)}>
                                                <div className="flex items-center space-x-3 overflow-hidden">
-                                                   <div className="h-8 w-8 bg-white rounded flex items-center justify-center text-slate-400 border border-slate-200 flex-shrink-0">
-                                                       <FileText size={14} />
+                                                   <div className="h-8 w-8 bg-white rounded flex items-center justify-center text-slate-400 border border-slate-200 flex-shrink-0 overflow-hidden">
+                                                       {file.thumbnail_url ? (
+                                                           <img src={file.thumbnail_url} className="h-full w-full object-cover" />
+                                                       ) : (
+                                                           <FileText size={14} />
+                                                       )}
                                                    </div>
                                                    <div className="truncate">
                                                        <p className="font-medium text-xs text-slate-700 truncate">{file.file_name}</p>
