@@ -178,4 +178,15 @@ router.put('/:shopId/profile/:customerId', async (req, res) => {
   }
 });
 
+// Admin: Delete a customer
+router.delete('/:shopId/admin/:customerId', (req, res) => {
+  try {
+    const { customerId } = req.params;
+    db.prepare('DELETE FROM shop_customers WHERE id = ?').run(customerId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;

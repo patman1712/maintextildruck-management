@@ -165,6 +165,21 @@ const ShopDashboard: React.FC = () => {
     } catch (e) { console.error(e); }
   };
 
+  const handleDeleteCustomer = async (customerId: string) => {
+    if (!confirm('Kunden wirklich löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.')) return;
+    try {
+      const res = await fetch(`/api/shop-customers/${shopId}/admin/${customerId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShopCustomers(shopCustomers.filter(c => c.id !== customerId));
+      } else {
+        alert(data.error || 'Fehler beim Löschen des Kunden.');
+      }
+    } catch (e) { console.error(e); }
+  };
+
   if (!shop) return <div className="p-8">Lade Shop...</div>;
 
   // Filter products available to add (belonging to customer, not yet assigned)
@@ -446,6 +461,7 @@ const ShopDashboard: React.FC = () => {
                                     <th className="py-4 px-4 font-bold">Kontakt</th>
                                     <th className="py-4 px-4 font-bold">Adresse</th>
                                     <th className="py-4 px-4 font-bold">Registriert am</th>
+                                    <th className="py-4 px-4 font-bold">Aktionen</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
@@ -500,6 +516,15 @@ const ShopDashboard: React.FC = () => {
                                                 <Calendar size={14} className="mr-2 opacity-50" />
                                                 {new Date(customer.created_at).toLocaleDateString('de-DE')}
                                             </div>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <button 
+                                                onClick={() => handleDeleteCustomer(customer.id)} 
+                                                className="text-slate-300 hover:text-red-600 transition-colors p-2 rounded-lg hover:bg-red-50"
+                                                title="Kunde löschen"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
