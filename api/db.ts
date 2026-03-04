@@ -138,31 +138,6 @@ db.exec(`
     user_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-
-  CREATE TABLE IF NOT EXISTS color_codes (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    hex_code TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS shop_customers (
-    id TEXT PRIMARY KEY,
-    shop_id TEXT NOT NULL,
-    email TEXT NOT NULL,
-    password TEXT NOT NULL,
-    first_name TEXT,
-    last_name TEXT,
-    company TEXT,
-    street TEXT,
-    zip TEXT,
-    city TEXT,
-    phone TEXT,
-    data_privacy_accepted BOOLEAN DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE,
-    UNIQUE(shop_id, email)
-  );
 `);
 
 // Seed initial admin user if no users exist
@@ -521,6 +496,34 @@ try {
   } catch (e) {
       console.error('Migration error (view type):', e);
   }
+
+  // Create new tables that depend on others
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS color_codes (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      hex_code TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS shop_customers (
+      id TEXT PRIMARY KEY,
+      shop_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      password TEXT NOT NULL,
+      first_name TEXT,
+      last_name TEXT,
+      company TEXT,
+      street TEXT,
+      zip TEXT,
+      city TEXT,
+      phone TEXT,
+      data_privacy_accepted BOOLEAN DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE,
+      UNIQUE(shop_id, email)
+    );
+  `);
 
 } catch (error) {
   console.error('Migration error:', error);
