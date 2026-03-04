@@ -10,6 +10,7 @@ const ShopOrderDetailPage: React.FC = () => {
   const { primaryColor } = useOutletContext<{ primaryColor: string }>();
   const [order, setOrder] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -27,8 +28,32 @@ const ShopOrderDetailPage: React.FC = () => {
       }
     };
 
+    const fetchOptions = async () => {
+        try {
+            const res = await fetch('/api/personalization');
+            const data = await res.json();
+            if (data.success) setPersonalizationOptions(data.data);
+        } catch (e) { console.error(e); }
+    };
+
     fetchOrder();
+    fetchOptions();
   }, [shopId, orderId, currentCustomer]);
+
+  const formatPersonalization = (notes: string) => {
+    if (!notes) return '';
+    return notes.split('|').map(part => {
+        const [id, value] = part.split(':');
+        if (!id || !value) return part;
+        const option = personalizationOptions.find(o => o.id === id);
+        if (option) {
+            if (value === 'true') return option.name;
+            if (value === 'false') return '';
+            return `${option.name}: ${value}`;
+        }
+        return part;
+    }).filter(p => !!p).join(', ');
+  };
 
   if (loading) return <div className="container mx-auto p-20 text-center">Lade Bestelldetails...</div>;
   if (!order) return <div className="container mx-auto p-20 text-center text-red-500 font-bold">Bestellung nicht gefunden.</div>;
@@ -86,6 +111,7 @@ const ShopOrderDetailPage: React.FC = () => {
                           {item.size && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase">Größe: {item.size}</span>}
                           {item.color && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase">Farbe: {item.color}</span>}
                         </div>
+                        {item.notes && <div className="text-[10px] text-blue-600 font-medium mt-2 italic">Personalisierung: {formatPersonalization(item.notes)}</div>}
                       </div>
                     </div>
                     <div className="text-right">

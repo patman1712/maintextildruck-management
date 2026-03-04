@@ -16,6 +16,7 @@ const ShopDashboard: React.FC = () => {
   const [shopCustomers, setShopCustomers] = useState<any[]>([]);
   const [shopOrders, setShopOrders] = useState<any[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
   
   // Forms
   const [newCategory, setNewCategory] = useState({ name: '', slug: '', parent_id: '' });
@@ -34,8 +35,17 @@ const ShopDashboard: React.FC = () => {
       fetchShopProducts();
       fetchShopCustomers();
       fetchShopOrders();
+      fetchPersonalizationOptions();
     }
   }, [shopId, shops]);
+
+  const fetchPersonalizationOptions = async () => {
+    try {
+      const res = await fetch('/api/personalization');
+      const data = await res.json();
+      if (data.success) setPersonalizationOptions(data.data);
+    } catch (e) { console.error(e); }
+  };
 
   const fetchShopOrders = async () => {
     try {
@@ -212,6 +222,25 @@ const ShopDashboard: React.FC = () => {
   };
 
   if (!shop) return <div className="p-8">Lade Shop...</div>;
+
+  const formatPersonalization = (notes: string) => {
+    if (!notes) return '';
+    
+    // Split multiple options separated by '|'
+    return notes.split('|').map(part => {
+        const [id, value] = part.split(':');
+        if (!id || !value) return part;
+        
+        const option = personalizationOptions.find(o => o.id === id);
+        if (option) {
+            // Handle boolean values (true/false as strings)
+            if (value === 'true') return option.name;
+            if (value === 'false') return '';
+            return `${option.name}: ${value}`;
+        }
+        return part;
+    }).filter(p => !!p).join(', ');
+  };
 
   // Filter products available to add (belonging to customer, not yet assigned)
   const customerProducts = products.filter(p => p.customer_id === shop.customer_id);
@@ -751,7 +780,7 @@ const ShopDashboard: React.FC = () => {
                                                 {item.size && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Größe: {item.size}</span>}
                                                 {item.color && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Farbe: {item.color}</span>}
                                             </div>
-                                            {item.notes && <div className="text-[10px] text-blue-600 font-medium mt-1 italic">Personalisierung: {item.notes}</div>}
+                                            {item.notes && <div className="text-[10px] text-blue-600 font-medium mt-1 italic">Personalisierung: {formatPersonalization(item.notes)}</div>}
                                         </td>
                                         <td className="px-6 py-4 text-center font-bold text-slate-700">{item.quantity}</td>
                                         <td className="px-6 py-4 text-right text-slate-600">{item.price?.toFixed(2).replace('.', ',')} €</td>
