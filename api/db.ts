@@ -499,6 +499,32 @@ try {
     db.exec('ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT "pending"');
   }
 
+  const hasTrackingNumber = orderCols.some(col => col.name === 'tracking_number');
+  if (!hasTrackingNumber) {
+    console.log('Migrating database: Adding tracking_number and label_url to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN tracking_number TEXT');
+    db.exec('ALTER TABLE orders ADD COLUMN label_url TEXT');
+  }
+
+  // New table for shipping configuration
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS shop_shipping_config (
+      shop_id TEXT PRIMARY KEY,
+      dhl_user TEXT,
+      dhl_signature TEXT,
+      dhl_ekp TEXT,
+      dhl_participation TEXT DEFAULT '01',
+      sender_name TEXT,
+      sender_street TEXT,
+      sender_house_number TEXT,
+      sender_zip TEXT,
+      sender_city TEXT,
+      sender_country TEXT DEFAULT 'DEU',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE
+    )
+  `);
+
   // Migration for Order Items price
   const orderItemCols = db.prepare("PRAGMA table_info(order_items)").all() as any[];
   const hasPrice = orderItemCols.some(col => col.name === 'price');

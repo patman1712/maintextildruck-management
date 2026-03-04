@@ -318,4 +318,84 @@ router.delete('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
     }
 });
 
+// --- Shop Shipping ---
+
+router.get('/:shopId/shipping-config', (req, res) => {
+  try {
+    const { shopId } = req.params;
+    const config = db.prepare('SELECT * FROM shop_shipping_config WHERE shop_id = ?').get(shopId);
+    res.json({ success: true, data: config || null });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/:shopId/shipping-config', (req, res) => {
+  try {
+    const { shopId } = req.params;
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
+
+    db.prepare(`
+      INSERT INTO shop_shipping_config (shop_id, dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(shop_id) DO UPDATE SET
+        dhl_user = excluded.dhl_user,
+        dhl_signature = excluded.dhl_signature,
+        dhl_ekp = excluded.dhl_ekp,
+        dhl_participation = excluded.dhl_participation,
+        sender_name = excluded.sender_name,
+        sender_street = excluded.sender_street,
+        sender_house_number = excluded.sender_house_number,
+        sender_zip = excluded.sender_zip,
+        sender_city = excluded.sender_city,
+        sender_country = excluded.sender_country
+    `).run(shopId, dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country);
+
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/:shopId/shipping/create-label', async (req, res) => {
+  try {
+    const { shopId } = req.params;
+    const { orderId } = req.body;
+
+    // 1. Get Order Details
+    const order = db.prepare(`
+        SELECT o.*, sc.first_name, sc.last_name, sc.street, sc.zip, sc.city, sc.phone, sc.email
+        FROM orders o
+        LEFT JOIN shop_customers sc ON o.shop_customer_id = sc.id
+        WHERE o.id = ?
+    `).get(orderId) as any;
+
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+
+    // 2. Get Shipping Config
+    const config = db.prepare('SELECT * FROM shop_shipping_config WHERE shop_id = ?').get(shopId) as any;
+    if (!config || !config.dhl_user) {
+        return res.status(400).json({ success: false, error: 'DHL Konfiguration fehlt oder unvollständig.' });
+    }
+
+    // 3. Mock DHL API Call (In production, replace with actual SOAP/REST call)
+    // We simulate a successful label creation
+    console.log(`Simulating DHL Label Creation for Order ${order.order_number}...`);
+    const mockTrackingNumber = `00340434${Math.floor(Math.random() * 1000000000).toString().padStart(12, '0')}`;
+    const mockLabelUrl = `https://mock-dhl-labels.com/label_${order.order_number}.pdf`;
+
+    // 4. Update Order with Tracking Info
+    db.prepare('UPDATE orders SET tracking_number = ?, label_url = ?, status = "shipped" WHERE id = ?')
+      .run(mockTrackingNumber, mockLabelUrl, orderId);
+
+    res.json({ 
+        success: true, 
+        trackingNumber: mockTrackingNumber,
+        labelUrl: mockLabelUrl
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;
