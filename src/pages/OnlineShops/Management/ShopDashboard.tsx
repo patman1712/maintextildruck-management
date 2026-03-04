@@ -10,10 +10,12 @@ const ShopDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { shops, updateShop, products } = useAppStore();
   const [shop, setShop] = useState<Shop | null>(null);
-  const [activeTab, setActiveTab] = useState<'general' | 'design' | 'categories' | 'products' | 'customers'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'design' | 'categories' | 'products' | 'customers' | 'orders'>('general');
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [shopProducts, setShopProducts] = useState<(ShopProductAssignment & { product_name?: string, product_number?: string, category_name?: string })[]>([]);
   const [shopCustomers, setShopCustomers] = useState<any[]>([]);
+  const [shopOrders, setShopOrders] = useState<any[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   
   // Forms
   const [newCategory, setNewCategory] = useState({ name: '', slug: '', parent_id: '' });
@@ -31,8 +33,17 @@ const ShopDashboard: React.FC = () => {
       fetchCategories();
       fetchShopProducts();
       fetchShopCustomers();
+      fetchShopOrders();
     }
   }, [shopId, shops]);
+
+  const fetchShopOrders = async () => {
+    try {
+      const res = await fetch(`/api/shop-customers/${shopId}/admin/orders`);
+      const data = await res.json();
+      if (data.success) setShopOrders(data.data);
+    } catch (e) { console.error(e); }
+  };
 
   const fetchShopCustomers = async () => {
     try {
@@ -240,6 +251,12 @@ const ShopDashboard: React.FC = () => {
                 className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'customers' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
             >
                 <Users size={16} className="mr-2" /> Kunden
+            </button>
+            <button 
+                onClick={() => setActiveTab('orders')}
+                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'orders' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+                <ShoppingBag size={16} className="mr-2" /> Bestellungen
             </button>
         </div>
 
@@ -539,8 +556,174 @@ const ShopDashboard: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {activeTab === 'orders' && (
+                <div>
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-bold text-lg">Shop Bestellungen ({shopOrders.length})</h3>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-slate-100 text-slate-400 text-xs uppercase tracking-widest">
+                                    <th className="py-4 px-4 font-bold">Bestellung</th>
+                                    <th className="py-4 px-4 font-bold">Kunde</th>
+                                    <th className="py-4 px-4 font-bold">Status</th>
+                                    <th className="py-4 px-4 font-bold">Betrag</th>
+                                    <th className="py-4 px-4 font-bold">Datum</th>
+                                    <th className="py-4 px-4 font-bold">Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {shopOrders.map(order => (
+                                    <tr key={order.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="py-4 px-4 font-bold text-slate-800">
+                                            #{order.order_number}
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <div className="text-sm font-medium text-slate-700">{order.customer_name}</div>
+                                            <div className="text-xs text-slate-400">{order.customer_email}</div>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${order.status === 'active' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-600'}`}>
+                                                {order.status === 'active' ? 'In Bearbeitung' : order.status}
+                                            </span>
+                                        </td>
+                                        <td className="py-4 px-4 font-bold text-slate-800">
+                                            {order.total_amount?.toFixed(2).replace('.', ',')} €
+                                        </td>
+                                        <td className="py-4 px-4 text-xs text-slate-500">
+                                            {new Date(order.created_at).toLocaleDateString('de-DE')}
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <button 
+                                                onClick={async () => {
+                                                    const res = await fetch(`/api/shop-customers/${shopId}/orders/${order.shop_customer_id || 'guest'}/${order.id}`);
+                                                    const data = await res.json();
+                                                    if (data.success) setSelectedOrder(data.data);
+                                                }}
+                                                className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg text-sm font-bold"
+                                            >
+                                                Details
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {shopOrders.length === 0 && (
+                            <div className="py-20 text-center text-slate-400 italic">
+                                Keine Bestellungen vorhanden.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
       </div>
+
+      {/* Order Details Modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+                <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+                    <div>
+                        <h3 className="font-black uppercase italic tracking-tighter text-xl">Bestellung #{selectedOrder.order_number}</h3>
+                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">
+                            {new Date(selectedOrder.created_at).toLocaleString('de-DE')}
+                        </p>
+                    </div>
+                    <button onClick={() => setSelectedOrder(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                        <X size={20} className="text-slate-500" />
+                    </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 mb-12">
+                        <div className="space-y-6">
+                            <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">Kundeninformationen</h4>
+                            <div className="space-y-2">
+                                <p className="font-bold text-slate-800">{selectedOrder.customer_name}</p>
+                                <p className="text-sm text-slate-600 flex items-center"><Mail size={14} className="mr-2 opacity-50" /> {selectedOrder.customer_email}</p>
+                                {selectedOrder.customer_phone && <p className="text-sm text-slate-600 flex items-center"><Phone size={14} className="mr-2 opacity-50" /> {selectedOrder.customer_phone}</p>}
+                                <p className="text-sm text-slate-600 flex items-start mt-4">
+                                    <MapPin size={14} className="mr-2 mt-1 opacity-50" />
+                                    <span className="whitespace-pre-line">{selectedOrder.customer_address}</span>
+                                </p>
+                            </div>
+                        </div>
+                        <div className="space-y-6">
+                            <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">Zahlung & Status</h4>
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-500 font-medium">Zahlungsmethode:</span>
+                                    <span className="font-bold text-slate-800">{selectedOrder.payment_method}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-500 font-medium">Status:</span>
+                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${selectedOrder.status === 'active' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}>
+                                        {selectedOrder.status === 'active' ? 'In Bearbeitung' : selectedOrder.status}
+                                    </span>
+                                </div>
+                                <div className="pt-4 border-t border-slate-50 space-y-2">
+                                    <div className="flex justify-between text-sm text-slate-500">
+                                        <span>Zwischensumme:</span>
+                                        <span>{(selectedOrder.total_amount - selectedOrder.shipping_costs).toFixed(2).replace('.', ',')} €</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm text-slate-500">
+                                        <span>Versandkosten:</span>
+                                        <span>{selectedOrder.shipping_costs?.toFixed(2).replace('.', ',')} €</span>
+                                    </div>
+                                    <div className="flex justify-between text-xl font-black text-slate-900 pt-2">
+                                        <span>Gesamtsumme:</span>
+                                        <span>{selectedOrder.total_amount?.toFixed(2).replace('.', ',')} €</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2 mb-6">Bestellte Artikel</h4>
+                    <div className="bg-slate-50 rounded-2xl overflow-hidden border border-slate-100">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="text-[10px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200/50">
+                                    <th className="px-6 py-4">Artikel</th>
+                                    <th className="px-6 py-4 text-center">Anzahl</th>
+                                    <th className="px-6 py-4 text-right">Einzelpreis</th>
+                                    <th className="px-6 py-4 text-right">Summe</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200/50">
+                                {selectedOrder.items?.map((item: any) => (
+                                    <tr key={item.id}>
+                                        <td className="px-6 py-4">
+                                            <div className="font-bold text-slate-800">{item.item_name}</div>
+                                            <div className="flex gap-2 mt-1">
+                                                {item.size && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Größe: {item.size}</span>}
+                                                {item.color && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Farbe: {item.color}</span>}
+                                            </div>
+                                            {item.notes && <div className="text-[10px] text-blue-600 font-medium mt-1 italic">Personalisierung: {item.notes}</div>}
+                                        </td>
+                                        <td className="px-6 py-4 text-center font-bold text-slate-700">{item.quantity}</td>
+                                        <td className="px-6 py-4 text-right text-slate-600">{item.price?.toFixed(2).replace('.', ',')} €</td>
+                                        <td className="px-6 py-4 text-right font-black text-slate-900">{(item.quantity * item.price).toFixed(2).replace('.', ',')} €</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div className="p-6 bg-slate-50 border-t flex justify-end">
+                    <button onClick={() => setSelectedOrder(null)} className="px-8 py-3 bg-slate-800 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-700 transition-all">
+                        Schließen
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* Product Assign Modal */}
       {showProductModal && (

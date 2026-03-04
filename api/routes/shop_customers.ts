@@ -279,6 +279,23 @@ router.post('/:shopId/orders', async (req, res) => {
   }
 });
 
+// Admin: Get all orders for a specific shop
+router.get('/:shopId/admin/orders', (req, res) => {
+  try {
+    const { shopId: rawShopId } = req.params;
+    const shopId = resolveShopId(rawShopId);
+
+    if (!shopId) {
+        return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+    }
+
+    const orders = db.prepare('SELECT * FROM orders WHERE shop_id = ? ORDER BY created_at DESC').all(shopId);
+    res.json({ success: true, data: orders });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Admin: Delete a customer
 router.delete('/:shopId/admin/:customerId', (req, res) => {
   try {
