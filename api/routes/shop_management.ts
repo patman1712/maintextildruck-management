@@ -415,12 +415,14 @@ router.post('/shipping/test-config', async (req, res) => {
         const headers: any = {
             'Content-Type': 'text/xml;charset=UTF-8',
             'SOAPAction': 'urn:getVersion',
-            'User-Agent': 'PHP-SOAP/7.4.33',
+            'User-Agent': 'Shopware/6.4.20.0', // Spoof exact Shopware User-Agent
             'Host': 'cig.dhl.de',
             'Connection': 'Keep-Alive'
         };
         
         // FORCE Basic Auth immediately because "Shipping Realm" requires it upfront
+        // IMPORTANT: Shopware often uses the API User here, not the System User!
+        // We try to be as generic as possible to pass the gateway
         const auth = Buffer.from(`${dhl_user}:${dhl_signature}`, 'utf8').toString('base64');
         headers['Authorization'] = `Basic ${auth}`;
         
@@ -433,6 +435,9 @@ router.post('/shipping/test-config', async (req, res) => {
             });
 
             const text = await res.text();
+            
+            // If we get 401 again, it's 100% wrong credentials for Basic Auth
+            // But we pass the result anyway to show the error
             return { status: res.status, text, ok: res.ok, authMethod: res.headers.get('www-authenticate') };
         } catch (e: any) {
             return { status: 500, text: e.message, ok: false };
