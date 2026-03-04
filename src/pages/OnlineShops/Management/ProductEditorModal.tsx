@@ -33,6 +33,12 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     variants: assignment?.variants ? (typeof assignment.variants === 'string' ? JSON.parse(assignment.variants) : assignment.variants) : {}
   });
 
+  // Edit Data for Existing Product (Edit Mode)
+  const [editData, setEditData] = useState({
+    name: assignment?.product_name || '',
+    productNumber: assignment?.product_number || ''
+  });
+
   // Form Data for New Manual Product (Create Mode only)
   const [createData, setCreateData] = useState({
     name: '',
@@ -201,8 +207,36 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     } else {
         // Update existing assignment
         if (assignment) {
+            // Also update basic product info if changed
+            if (editData.name !== assignment.product_name || editData.productNumber !== assignment.product_number) {
+                // We need to update the base product too. The API endpoint handles this if we pass the fields?
+                // Currently `PUT /api/shop-management/:shopId/products/:id` updates assignment and some product details (desc, manuf, size).
+                // Let's check if it updates name/number. It seems `customer_products` table has name/number.
+                // We might need to ensure the API endpoint supports updating name/number or call product update separately.
+                
+                // Let's call product update separately to be safe/clean if assignment endpoint doesn't support it fully or for separation of concerns.
+                // Actually, the assignment endpoint might be the best place if we want atomic-like behavior, but let's check API.
+                // Looking at `api/routes/shop_management.ts`, the PUT updates `customer_products` for manuf, desc, size. It does NOT update name/number.
+                // So we should call the product update endpoint.
+                
+                try {
+                    await fetch(`/api/products/${assignment.product_id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: editData.name,
+                            productNumber: editData.productNumber
+                        })
+                    });
+                } catch (e) {
+                    console.error("Failed to update base product info", e);
+                }
+            }
+
             await onSave(assignment.id, {
                 ...formData,
+                product_name: editData.name, // Optimistic update for UI
+                product_number: editData.productNumber, // Optimistic update for UI
                 personalization_options: selectedPersonalizationIds
             });
             onClose();
@@ -569,9 +603,25 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                         </div>
                     </div>
                 ) : (
-                    <div>
-                        <h1 className="text-3xl font-black uppercase italic tracking-tighter text-slate-800 mb-2">{assignment?.product_name}</h1>
-                        <p className="text-xs text-slate-400">Produktname wird aus dem Stammartikel übernommen.</p>
+                    <div className="space-y-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Produktname</label>
+                            <input 
+                                type="text" 
+                                className="w-full text-xl font-black uppercase italic tracking-tighter text-slate-800 border border-slate-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={editData.name}
+                                onChange={(e) => setEditData({...editData, name: e.target.value})}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Artikelnummer</label>
+                            <input 
+                                type="text" 
+                                className="w-full text-sm font-mono border border-slate-300 rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={editData.productNumber}
+                                onChange={(e) => setEditData({...editData, productNumber: e.target.value})}
+                            />
+                        </div>
                     </div>
                 )}
 
