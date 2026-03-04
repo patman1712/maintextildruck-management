@@ -461,63 +461,159 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         return res.status(400).json({ success: false, error: 'DHL Konfiguration fehlt oder unvollständig (weder im Shop noch global hinterlegt).' });
     }
 
-    // 3. Attempt DHL API Call (REST)
+    // 3. Attempt REAL DHL API Call (REST)
     let trackingNumber = '';
     let labelUrl = '';
     let success = false;
     let errorMessage = '';
 
     try {
-        console.log(`Versuche DHL Label für Bestellung ${order.order_number} zu erstellen...`);
+        console.log(`Versuche ECHTES DHL Label für Bestellung ${order.order_number} zu erstellen...`);
         
-        // --- REAL DHL API BRIDGE (SIMULATED OR ACTUAL) ---
-        // For production, we would use the DHL Business Customer Shipping API (Verfahren 01)
-        // Since we want to provide a real file to the user now, we'll generate a PDF locally
-        // but we'll include the API structure so it can be enabled with real keys.
-        
-        // Mocking a successful response from DHL for now, but with a REAL LOCAL PDF FILE
-        trackingNumber = `00340434${Math.floor(1000000000 + Math.random() * 9000000000)}`;
-        
-        // Generate a real PDF file
-        const pdfDoc = await PDFDocument.create();
-        const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-        const page = pdfDoc.addPage([400, 600]);
-        
-        page.drawText('DHL PAKET', { x: 50, y: 550, size: 30, font, color: rgb(0.8, 0, 0) });
-        page.drawText(`Sendungsnummer: ${trackingNumber}`, { x: 50, y: 500, size: 14, font });
-        page.drawText(`Bestellung: #${order.order_number}`, { x: 50, y: 480, size: 12 });
-        
-        page.drawText('ABSENDER:', { x: 50, y: 440, size: 10, font });
-        page.drawText(`${config.sender_name || 'Maintextildruck'}`, { x: 50, y: 425, size: 10 });
-        page.drawText(`${config.sender_street} ${config.sender_house_number}`, { x: 50, y: 410, size: 10 });
-        page.drawText(`${config.sender_zip} ${config.sender_city}`, { x: 50, y: 395, size: 10 });
-        
-        page.drawText('EMPFÄNGER:', { x: 50, y: 350, size: 10, font });
-        page.drawText(`${order.customer_name}`, { x: 50, y: 335, size: 10 });
-        page.drawText(`${order.customer_address}`, { x: 50, y: 320, size: 10 });
-        
-        // Draw a fake barcode
-        page.drawRectangle({ x: 50, y: 100, width: 300, height: 100, color: rgb(0, 0, 0) });
-        page.drawText('|||| ||| || ||||| ||| || ||||', { x: 70, y: 140, size: 20, color: rgb(1, 1, 1) });
+        // Helper to split street and house number if needed
+        const splitAddress = (fullAddress: string) => {
+            const match = fullAddress.match(/^(.+?)\s+(\d+[a-zA-Z]*)$/);
+            if (match) return { street: match[1], number: match[2] };
+            return { street: fullAddress, number: '1' }; // Fallback
+        };
 
-        const pdfBytes = await pdfDoc.save();
-        const fileName = `label_${order.order_number}_${Date.now()}.pdf`;
-        const filePath = path.join(LABELS_DIR, fileName);
+        const receiverAddr = splitAddress(order.street || order.customer_address || '');
+        const senderAddr = {
+            street: config.sender_street || '',
+            number: config.sender_house_number || ''
+        };
+
+        // Construct DHL REST API Request (GKV REST v2)
+        // Note: This uses the CIG (Customer Integration Gateway) REST API
+        const dhlRequest = {
+            shipments: [{
+                shipmentDetails: {
+                    product: 'V01PAK', // DHL Paket
+                    accountNumber: `${config.dhl_ekp}${config.dhl_participation || '01'}01`, // EKP + Participation + 01
+                    shipmentDate: new Date().toISOString().split('T')[0],
+                    shipmentItem: {
+                        weightInKG: order.weight || 1.0
+                    }
+                },
+                shipper: {
+                    name1: config.sender_name || 'Maintextildruck',
+                    address: {
+                        streetName: senderAddr.street,
+                        streetNumber: senderAddr.number,
+                        zip: config.sender_zip,
+                        city: config.sender_city,
+                        origin: { countryISOCode: config.sender_country || 'DEU' }
+                    }
+                },
+                receiver: {
+                    name1: `${order.first_name || ''} ${order.last_name || ''}`.trim() || order.customer_name,
+                    address: {
+                        streetName: receiverAddr.street,
+                        streetNumber: receiverAddr.number,
+                        zip: order.zip || '',
+                        city: order.city || '',
+                        origin: { countryISOCode: 'DEU' }
+                    },
+                    communication: {
+                        email: order.email || '',
+                        phone: order.phone || ''
+                    }
+                }
+            }]
+        };
+
+        // Authentication for CIG REST API
+        // Typically Basic Auth with App-ID:App-Token, but many integrations 
+        // use the BKP credentials directly in specific ways.
+        // We'll attempt the most common REST implementation.
         
-        await fs.writeFile(filePath, pdfBytes);
+        const auth = Buffer.from(`${config.dhl_user}:${config.dhl_signature}`).toString('base64');
         
-        // The URL needs to be accessible from the frontend
-        // Assuming the server is running on the same host
-        labelUrl = `/labels/${fileName}`;
-        success = true;
+        const response = await fetch('https://cig.dhl.de/services/rest/shipping/v2/shipments', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(dhlRequest)
+        });
+
+        const result = await response.json() as any;
+
+        if (response.ok && result.shipments && result.shipments[0].status.statusCode === 200) {
+            const shipment = result.shipments[0];
+            trackingNumber = shipment.shipmentNumber;
+            
+            // DHL returns label as base64 in labelData
+            const labelBase64 = shipment.labelData;
+            if (labelBase64) {
+                const pdfBuffer = Buffer.from(labelBase64, 'base64');
+                const fileName = `label_${order.order_number}_${trackingNumber}.pdf`;
+                const filePath = path.join(LABELS_DIR, fileName);
+                
+                await fs.writeFile(filePath, pdfBuffer);
+                labelUrl = `/labels/${fileName}`;
+                success = true;
+            } else {
+                throw new Error('Keine Label-Daten von DHL empfangen.');
+            }
+        } else {
+            // Handle DHL Error
+            const dhlError = result.shipments?.[0]?.status?.statusText || result.message || 'Unbekannter DHL API Fehler';
+            throw new Error(dhlError);
+        }
 
     } catch (e: any) {
         errorMessage = e.message;
         console.error('DHL API Error:', e);
+        
+        // FALLBACK: If API fails (e.g. wrong credentials), we create a high-quality "Draft" label
+        // so the user can see what's wrong but the system doesn't just crash.
+        // BUT we inform them it's a draft.
+        
+        console.log("Erstelle Entwurfs-Label aufgrund von API-Fehler...");
+        
+        trackingNumber = `DRAFT-${order.order_number}`;
+        
+        const pdfDoc = await PDFDocument.create();
+        const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+        const page = pdfDoc.addPage([400, 600]);
+        
+        page.drawText('DHL ENTWURF', { x: 50, y: 550, size: 30, font, color: rgb(0.8, 0, 0) });
+        page.drawText('KEIN GÜLTIGES VERSANDLABEL', { x: 50, y: 520, size: 14, font, color: rgb(1, 0, 0) });
+        page.drawText(`Grund: ${errorMessage}`, { x: 50, y: 500, size: 10 });
+        
+        page.drawText(`Bestellung: #${order.order_number}`, { x: 50, y: 460, size: 12, font });
+        
+        page.drawText('ABSENDER:', { x: 50, y: 420, size: 10, font });
+        page.drawText(`${config.sender_name || 'Maintextildruck'}`, { x: 50, y: 405, size: 10 });
+        page.drawText(`${config.sender_street} ${config.sender_house_number}`, { x: 50, y: 390, size: 10 });
+        page.drawText(`${config.sender_zip} ${config.sender_city}`, { x: 50, y: 375, size: 10 });
+        
+        page.drawText('EMPFÄNGER:', { x: 50, y: 330, size: 10, font });
+        page.drawText(`${order.first_name || ''} ${order.last_name || ''}`.trim() || order.customer_name, { x: 50, y: 315, size: 10 });
+        page.drawText(`${order.street || order.customer_address}`, { x: 50, y: 300, size: 10 });
+        page.drawText(`${order.zip || ''} ${order.city || ''}`, { x: 50, y: 285, size: 10 });
+
+        const pdfBytes = await pdfDoc.save();
+        const fileName = `draft_${order.order_number}_${Date.now()}.pdf`;
+        const filePath = path.join(LABELS_DIR, fileName);
+        await fs.writeFile(filePath, pdfBytes);
+        
+        labelUrl = `/labels/${fileName}`;
+        // We set success to false here so the API response reflects the failure
+        success = false;
     }
 
     if (!success) {
-        return res.status(500).json({ success: false, error: `Fehler beim Erstellen des DHL Labels: ${errorMessage}` });
+        // Return 200 but with success:false so the frontend can show the error but still maybe provide the draft?
+        // Actually, let's return 400 so the alert triggers.
+        return res.status(400).json({ 
+            success: false, 
+            error: `DHL API Fehler: ${errorMessage}. Ein Entwurfs-Label wurde zur Korrektur erstellt.`,
+            labelUrl: labelUrl
+        });
     }
 
     // 4. Update Order with Tracking Info
