@@ -165,6 +165,7 @@ db.exec(`
     file_url TEXT NOT NULL,
     file_name TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    weight DECIMAL(10, 3) DEFAULT 0,
     FOREIGN KEY(customer_id) REFERENCES customers(id)
   )
 `);
@@ -477,6 +478,12 @@ try {
   if (!hasManufacturerInfo) {
     console.log('Migrating database: Adding manufacturer_info to customer_products table');
     db.exec('ALTER TABLE customer_products ADD COLUMN manufacturer_info TEXT');
+  }
+
+  const hasWeight = customerProductCols.some(col => col.name === 'weight');
+  if (!hasWeight) {
+    console.log('Migrating database: Adding weight to customer_products table');
+    db.exec('ALTER TABLE customer_products ADD COLUMN weight DECIMAL(10, 3) DEFAULT 0');
   }
 
   // Migration for Shop Orders

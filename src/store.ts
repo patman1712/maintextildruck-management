@@ -104,6 +104,7 @@ export interface Product {
   description?: string;
   size?: string;
   color?: string;
+  weight?: number;
   files: { 
     id?: string; // Added id
     file_url?: string; url?: string; 
@@ -152,6 +153,7 @@ export interface ShopProductAssignment {
   is_featured: boolean;
   personalization_enabled?: boolean; // NEW
   sort_order: number;
+  weight?: number;
   variants?: string; // JSON string storing variant config: { "Size": { "S": { price: 10 }, "M": { price: 10 } }, "Color": ... }
 }
 

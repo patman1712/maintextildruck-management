@@ -140,7 +140,7 @@ router.post('/:shopId/products', (req, res) => {
 router.put('/:shopId/products/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { category_id, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size, variants, personalization_options } = req.body;
+    const { category_id, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size, variants, personalization_options, weight } = req.body;
 
     // Update assignment
     db.prepare(`
@@ -158,14 +158,14 @@ router.put('/:shopId/products/:id', (req, res) => {
         id
     );
 
-    // Update product details (manufacturer_info, description, size)
+    // Update product details (manufacturer_info, description, size, weight)
     const assignment = db.prepare('SELECT product_id FROM shop_product_assignments WHERE id = ?').get(id) as { product_id: string };
     if (assignment) {
         db.prepare(`
             UPDATE customer_products 
-            SET manufacturer_info = ?, description = ?, size = ?
+            SET manufacturer_info = ?, description = ?, size = ?, weight = ?
             WHERE id = ?
-        `).run(manufacturer_info || null, description || null, size || null, assignment.product_id);
+        `).run(manufacturer_info || null, description || null, size || null, weight || 0, assignment.product_id);
     }
 
     const updatedAssignment = db.prepare('SELECT * FROM shop_product_assignments WHERE id = ?').get(id);

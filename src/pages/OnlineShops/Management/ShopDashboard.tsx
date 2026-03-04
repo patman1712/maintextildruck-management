@@ -167,6 +167,7 @@ const ShopDashboard: React.FC = () => {
             manufacturer_info: updates.manufacturer_info,
             description: updates.description,
             size: updates.size,
+            weight: updates.weight,
             color: updates.color,
             variants: updates.variants !== undefined ? updates.variants : payload.variants,
             personalization_options: updates.personalization_options !== undefined ? updates.personalization_options : payload.personalization_options
@@ -444,7 +445,14 @@ const ShopDashboard: React.FC = () => {
                                     </div>
                                     <div>
                                         <h4 className="font-bold text-slate-800">{sp.product_name}</h4>
-                                        <p className="text-xs text-slate-500">{sp.product_number}</p>
+                                        <div className="flex items-center space-x-2">
+                                            <p className="text-xs text-slate-500">{sp.product_number}</p>
+                                            {sp.weight > 0 && (
+                                                <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">
+                                                    {sp.weight.toFixed(3)} kg
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex items-center space-x-6">

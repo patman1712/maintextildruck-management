@@ -7,7 +7,7 @@ interface ProductEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   // Assignment is optional for "Create Mode"
-  assignment?: ShopProductAssignment & { product_name?: string, product_number?: string, manufacturer_info?: string, description?: string, size?: string, color?: string };
+  assignment?: ShopProductAssignment & { product_name?: string, product_number?: string, manufacturer_info?: string, description?: string, size?: string, color?: string, weight?: number };
   product?: Product; // The base product details
   shopId: string;
   customerId?: string; // Required for creating new manual products
@@ -30,6 +30,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     description: assignment?.description || '',
     manufacturer_info: assignment?.manufacturer_info || '',
     size: assignment?.size || '', 
+    weight: assignment?.weight || 0,
     variants: assignment?.variants ? (typeof assignment.variants === 'string' ? JSON.parse(assignment.variants) : assignment.variants) : {}
   });
 
@@ -42,7 +43,8 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
   // Form Data for New Manual Product (Create Mode only)
   const [createData, setCreateData] = useState({
     name: '',
-    productNumber: ''
+    productNumber: '',
+    weight: 0
   });
 
   const [shopVariables, setShopVariables] = useState<any[]>([]);
@@ -164,7 +166,8 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                     productNumber: createData.productNumber,
                     description: formData.description,
                     manufacturer_info: formData.manufacturer_info,
-                    size: formData.size
+                    size: formData.size,
+                    weight: createData.weight || formData.weight
                 })
             });
             const prodData = await prodRes.json();
@@ -663,17 +666,39 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                     </div>
                 )}
 
-                {/* Price */}
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                    <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Verkaufspreis (Brutto)</label>
-                    <div className="flex items-center">
-                        <span className="text-2xl font-bold mr-2">€</span>
-                        <input 
-                            type="text" 
-                            className="text-2xl font-bold bg-white border border-slate-300 rounded px-3 py-1 w-32 focus:ring-2 focus:ring-blue-500 outline-none"
-                            value={priceInput}
-                            onChange={handlePriceChange}
-                        />
+                {/* Price & Weight */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Verkaufspreis (Brutto)</label>
+                        <div className="flex items-center">
+                            <span className="text-2xl font-bold mr-2">€</span>
+                            <input 
+                                type="text" 
+                                className="text-2xl font-bold bg-white border border-slate-300 rounded px-3 py-1 w-full focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={priceInput}
+                                onChange={handlePriceChange}
+                            />
+                        </div>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Gewicht (kg)</label>
+                        <div className="flex items-center">
+                            <input 
+                                type="number" 
+                                step="0.001"
+                                min="0"
+                                className="text-2xl font-bold bg-white border border-slate-300 rounded px-3 py-1 w-full focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={isCreateMode ? createData.weight : formData.weight}
+                                onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    if (isCreateMode) {
+                                        setCreateData({ ...createData, weight: val });
+                                    } else {
+                                        setFormData({ ...formData, weight: val });
+                                    }
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
 
