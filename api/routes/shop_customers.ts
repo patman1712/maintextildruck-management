@@ -145,6 +145,12 @@ router.put('/:shopId/profile/:customerId', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Kunde nicht gefunden.' });
     }
 
+    const { 
+      email, first_name, last_name, 
+      company, street, zip, city, phone,
+      password 
+    } = req.body;
+
     // Update basic info
     let query = `
       UPDATE shop_customers 
