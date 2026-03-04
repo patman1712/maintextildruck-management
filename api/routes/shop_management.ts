@@ -419,10 +419,12 @@ router.post('/shipping/test-config', async (req, res) => {
         const headers: any = {
             'Content-Type': 'text/xml; charset=utf-8',
             'SOAPAction': '""',
-            'User-Agent': 'PHP-SOAP/7.4.33'
+            'User-Agent': 'PHP-SOAP/7.4.33',
+            'Accept-Charset': 'utf-8'
         };
         if (useBasicAuth) {
-            headers['Authorization'] = `Basic ${Buffer.from(`${dhl_user}:${dhl_signature}`).toString('base64')}`;
+            // Ensure UTF-8 for Basic Auth (crucial for special characters like !)
+            headers['Authorization'] = `Basic ${Buffer.from(`${dhl_user}:${dhl_signature}`, 'utf8').toString('base64')}`;
         }
         
         try {
@@ -440,25 +442,33 @@ router.post('/shipping/test-config', async (req, res) => {
 
     console.log(`Debug DHL Test für: ${dhl_user}...`);
     
-    // We try the 2 most likely variants
-    let result = await tryRequest(soapRequest1, true); // Basic Auth + XML
+    // We try multiple variants because DHL is very picky about the combination
+    let result = await tryRequest(soapRequest1, true); // Attempt 1: Standard XML + Basic Auth
+    
     if (result.status === 401) {
-        result = await tryRequest(soapRequest1, false); // Only XML
+        console.log('Attempt 1 failed, trying Variant 2 (Alternative XML spelling)...');
+        result = await tryRequest(soapRequest2, true);
+    }
+    
+    if (result.status === 401) {
+        console.log('Attempt 2 failed, trying Variant 3 (XML only, no Basic Auth)...');
+        result = await tryRequest(soapRequest1, false);
     }
 
     const xmlResponse = result.text;
-    if (result.ok && (xmlResponse.includes('majorRelease') || xmlResponse.includes('ok'))) {
+    if (result.ok && (xmlResponse.includes('majorRelease') || xmlResponse.includes('ok') || xmlResponse.includes('OK'))) {
         res.json({ success: true, message: 'Verbindung erfolgreich!' });
     } else {
         // Detailed error reporting for the user
-        let errorHint = xmlResponse.length < 500 ? xmlResponse.replace(/<[^>]+>/g, ' ').trim() : 'Unbekannter Fehler';
+        // We clean up the response text to show the real error
+        let errorHint = xmlResponse.length < 1000 ? xmlResponse.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : 'Unbekannter Fehler';
         if (result.status === 401) {
             res.status(401).json({ 
                 success: false, 
-                error: `Anmeldung abgelehnt (401). Antwort vom Server: "${errorHint.substring(0, 100)}..."` 
+                error: `Anmeldung abgelehnt (401). Server meldet: "${errorHint.substring(0, 150)}..."` 
             });
         } else {
-            res.status(result.status).json({ success: false, error: `Fehler ${result.status}: ${errorHint.substring(0, 100)}` });
+            res.status(result.status).json({ success: false, error: `Fehler ${result.status}: ${errorHint.substring(0, 150)}` });
         }
     }
 
