@@ -197,7 +197,7 @@ router.get('/:shopId/orders/:customerId/:orderId', async (req, res) => {
     if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
 
     const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
-    res.json({ success: true, data: { ...order, items } });
+    res.json({ success: true, data: { ...(order as any), items } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
