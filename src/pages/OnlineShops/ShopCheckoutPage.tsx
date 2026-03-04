@@ -37,9 +37,11 @@ const ShopCheckoutPage: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState('PayPal');
 
   const handlePlaceOrder = async () => {
+    console.log('Place order clicked');
     setLoading(true);
     setError(null);
     try {
+      console.log('Sending order request...', { shopId, customerId: currentCustomer?.id, itemsCount: cart.length });
       const res = await fetch(`/api/shop-customers/${shopId}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -53,14 +55,20 @@ const ShopCheckoutPage: React.FC = () => {
         })
       });
       const data = await res.json();
+      console.log('Order response:', data);
       if (data.success) {
         setOrderComplete(true);
         clearCart();
       } else {
-        setError(data.error || 'Fehler beim Aufgeben der Bestellung.');
+        const errorMsg = data.error || 'Fehler beim Aufgeben der Bestellung.';
+        setError(errorMsg);
+        alert(errorMsg);
       }
-    } catch (err) {
-      setError('Ein technischer Fehler ist aufgetreten.');
+    } catch (err: any) {
+      console.error('Order error:', err);
+      const errorMsg = 'Ein technischer Fehler ist aufgetreten: ' + err.message;
+      setError(errorMsg);
+      alert(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -170,7 +178,10 @@ const ShopCheckoutPage: React.FC = () => {
 
               <div className="flex justify-end pt-8">
                 <button 
-                  onClick={() => setStep(2)}
+                  onClick={() => {
+                    console.log('Moving to step 2');
+                    setStep(2);
+                  }}
                   className="px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all flex items-center group"
                   style={{ backgroundColor: primaryColor }}
                 >
@@ -190,7 +201,7 @@ const ShopCheckoutPage: React.FC = () => {
 
               <div className="grid gap-4">
                 <label className="flex items-center p-6 border-2 border-slate-100 rounded-2xl cursor-pointer hover:border-blue-100 hover:bg-blue-50/20 transition-all group">
-                  <input type="radio" name="payment" className="w-5 h-5 text-blue-600" defaultChecked />
+                  <input type="radio" name="payment" className="w-5 h-5 text-blue-600" checked={paymentMethod === 'PayPal'} onChange={() => setPaymentMethod('PayPal')} />
                   <div className="ml-4 flex-1">
                     <div className="font-black uppercase italic tracking-tighter text-slate-800">PayPal</div>
                     <div className="text-xs text-slate-500 font-medium">Bezahle sicher und schnell mit deinem PayPal Konto.</div>
@@ -198,7 +209,7 @@ const ShopCheckoutPage: React.FC = () => {
                   <div className="w-12 h-8 bg-slate-100 rounded-md flex items-center justify-center font-black italic text-blue-800 text-[10px]">PP</div>
                 </label>
                 <label className="flex items-center p-6 border-2 border-slate-100 rounded-2xl cursor-pointer hover:border-slate-200 transition-all">
-                  <input type="radio" name="payment" className="w-5 h-5 text-slate-600" />
+                  <input type="radio" name="payment" className="w-5 h-5 text-slate-600" checked={paymentMethod === 'Vorkasse'} onChange={() => setPaymentMethod('Vorkasse')} />
                   <div className="ml-4 flex-1">
                     <div className="font-black uppercase italic tracking-tighter text-slate-800">Vorkasse</div>
                     <div className="text-xs text-slate-500 font-medium">Überweise direkt auf unser Bankkonto. Deine Bestellung wird nach Zahlungseingang produziert.</div>
@@ -215,7 +226,10 @@ const ShopCheckoutPage: React.FC = () => {
                   <span>Zurück zur Adresse</span>
                 </button>
                 <button 
-                  onClick={() => setStep(3)}
+                  onClick={() => {
+                    console.log('Moving to step 3');
+                    setStep(3);
+                  }}
                   className="px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all flex items-center group"
                   style={{ backgroundColor: primaryColor }}
                 >
@@ -232,6 +246,13 @@ const ShopCheckoutPage: React.FC = () => {
                 <ShoppingBag size={24} className="text-slate-400" />
                 <h2 className="text-xl font-black uppercase italic tracking-tight">Bestellung abschließen</h2>
               </div>
+
+              {error && (
+                <div className="bg-red-50 text-red-700 p-4 rounded-xl border border-red-100 font-bold text-sm flex items-center">
+                  <div className="w-2 h-2 rounded-full bg-red-500 mr-3 animate-pulse"></div>
+                  {error}
+                </div>
+              )}
 
               <div className="bg-slate-50 p-6 rounded-2xl space-y-4">
                   <div className="flex items-center justify-between">
@@ -262,11 +283,21 @@ const ShopCheckoutPage: React.FC = () => {
                 </button>
                 <button 
                   onClick={handlePlaceOrder}
-                  className="px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all flex items-center group"
+                  disabled={loading}
+                  className="px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all flex items-center group disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ backgroundColor: primaryColor }}
                 >
-                  <CheckCircle size={18} className="mr-2" />
-                  <span>Kostenpflichtig bestellen</span>
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-3"></div>
+                      <span>Wird verarbeitet...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle size={18} className="mr-2" />
+                      <span>Kostenpflichtig bestellen</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

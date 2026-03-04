@@ -208,6 +208,9 @@ router.post('/:shopId/orders', async (req, res) => {
   try {
     const { shopId: rawShopId } = req.params;
     const shopId = resolveShopId(rawShopId);
+    
+    console.log(`[Order] Placing order for Shop: ${rawShopId} -> ${shopId}`);
+
     if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
 
     const { 
@@ -218,6 +221,12 @@ router.post('/:shopId/orders', async (req, res) => {
       totalAmount,
       shippingCosts
     } = req.body;
+
+    console.log(`[Order] Data: Customer=${customerId}, Items=${items?.length}, Total=${totalAmount}`);
+
+    if (!address || !address.firstName || !address.lastName) {
+        return res.status(400).json({ success: false, error: 'Bitte füllen Sie alle Pflichtfelder der Adresse aus.' });
+    }
 
     const orderId = crypto.randomUUID();
     const orderNumber = `${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;

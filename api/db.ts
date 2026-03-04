@@ -492,6 +492,14 @@ try {
     db.exec('ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT "pending"');
   }
 
+  // Migration for Order Items price
+  const orderItemCols = db.prepare("PRAGMA table_info(order_items)").all() as any[];
+  const hasPrice = orderItemCols.some(col => col.name === 'price');
+  if (!hasPrice) {
+    console.log('Migrating database: Adding price to order_items table');
+    db.exec('ALTER TABLE order_items ADD COLUMN price DECIMAL(10, 2)');
+  }
+
   // Migration: Fix file types for shop images
   // Previously all files were 'print'. We want shop images to be 'view'.
   // We assume all files currently assigned to shops are images.
