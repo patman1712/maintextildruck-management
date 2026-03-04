@@ -225,11 +225,24 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
              return img;
         });
 
-        // Get all available images for the base product
+        // Get all available images for the customer (across all their products)
         const assignment = db.prepare('SELECT product_id FROM shop_product_assignments WHERE id = ?').get(assignmentId) as { product_id: string };
         if (!assignment) return res.status(404).json({ success: false, error: 'Assignment not found' });
 
-        const allImages = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at DESC').all(assignment.product_id);
+        const product = db.prepare('SELECT customer_id FROM customer_products WHERE id = ?').get(assignment.product_id) as { customer_id: string };
+
+        let allImages = [];
+        if (product && product.customer_id) {
+             allImages = db.prepare(`
+                SELECT cpf.*, cp.name as product_origin_name
+                FROM customer_product_files cpf
+                JOIN customer_products cp ON cpf.product_id = cp.id
+                WHERE cp.customer_id = ?
+                ORDER BY cpf.created_at DESC
+             `).all(product.customer_id);
+        } else {
+             allImages = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at DESC').all(assignment.product_id);
+        }
 
         res.json({ success: true, data: { assigned: assignedImagesParsed, available: allImages } });
     } catch (error: any) {

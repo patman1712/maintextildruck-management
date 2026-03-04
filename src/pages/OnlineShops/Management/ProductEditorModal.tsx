@@ -548,7 +548,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                {activeTab === 'view' ? (
                                    <div className="grid grid-cols-4 gap-2 opacity-60 hover:opacity-100 transition-opacity">
                                       {filteredAvailableFiles.map((img: any, idx: number) => (
-                                          <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden cursor-pointer" onClick={() => handleAddFile(img.id)}>
+                                          <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden cursor-pointer" onClick={() => handleAddFile(img.id)} title={img.product_origin_name ? `Aus: ${img.product_origin_name}` : ''}>
                                               <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
                                               <div className="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 flex items-center justify-center">
                                                   <Plus size={20} className="text-white drop-shadow-md" />
@@ -570,6 +570,9 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                    </div>
                                                    <div className="truncate">
                                                        <p className="font-medium text-xs text-slate-700 truncate">{file.file_name}</p>
+                                                       {file.product_origin_name && (
+                                                           <p className="text-[10px] text-slate-400 truncate">aus: {file.product_origin_name}</p>
+                                                       )}
                                                    </div>
                                                </div>
                                                <Plus size={16} className="text-blue-600" />
