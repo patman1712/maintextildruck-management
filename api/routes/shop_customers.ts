@@ -9,7 +9,16 @@ const router = Router();
 // Register a new customer for a shop
 router.post('/:shopId/register', async (req, res) => {
   try {
-    const { shopId } = req.params;
+    const { shopId: rawShopId } = req.params;
+    let shopId = rawShopId;
+
+    // Resolve slug to UUID if needed
+    if (!rawShopId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
+        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(rawShopId) as { id: string } | undefined;
+        if (!shop) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+        shopId = shop.id;
+    }
+
     const { 
       email, password, first_name, last_name, 
       company, street, zip, city, phone, 
@@ -49,7 +58,16 @@ router.post('/:shopId/register', async (req, res) => {
 // Login for a shop customer
 router.post('/:shopId/login', async (req, res) => {
   try {
-    const { shopId } = req.params;
+    const { shopId: rawShopId } = req.params;
+    let shopId = rawShopId;
+
+    // Resolve slug to UUID if needed
+    if (!rawShopId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
+        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(rawShopId) as { id: string } | undefined;
+        if (!shop) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+        shopId = shop.id;
+    }
+
     const { email, password } = req.body;
 
     const customer = db.prepare('SELECT * FROM shop_customers WHERE shop_id = ? AND email = ?').get(shopId, email) as any;
@@ -68,7 +86,16 @@ router.post('/:shopId/login', async (req, res) => {
 // Admin: Get all customers for a specific shop
 router.get('/:shopId/admin/list', (req, res) => {
   try {
-    const { shopId } = req.params;
+    const { shopId: rawShopId } = req.params;
+    let shopId = rawShopId;
+
+    // Resolve slug to UUID if needed
+    if (!rawShopId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
+        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(rawShopId) as { id: string } | undefined;
+        if (!shop) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+        shopId = shop.id;
+    }
+
     const customers = db.prepare('SELECT id, email, first_name, last_name, company, street, zip, city, phone, created_at FROM shop_customers WHERE shop_id = ? ORDER BY created_at DESC').all(shopId);
     res.json({ success: true, data: customers });
   } catch (error: any) {
