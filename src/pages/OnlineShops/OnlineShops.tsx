@@ -70,8 +70,16 @@ const OnlineShops: React.FC = () => {
         body: JSON.stringify(globalShippingConfig)
       });
       const data = await res.json();
-      if (data.success) alert('Globale DHL Versand-Einstellungen gespeichert!');
-    } catch (e) { console.error(e); }
+      if (data.success) {
+        if (data.data) setGlobalShippingConfig(data.data);
+        alert('Globale DHL Versand-Einstellungen gespeichert!');
+      } else {
+        alert('Fehler beim Speichern: ' + (data.error || 'Unbekannter Fehler'));
+      }
+    } catch (e: any) {
+      console.error(e);
+      alert('Netzwerkfehler beim Speichern: ' + e.message);
+    }
   };
 
   const handleTestDHLConnection = async () => {

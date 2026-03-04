@@ -333,25 +333,29 @@ router.post('/shipping/global-config', (req, res) => {
   try {
     const { dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
 
-    db.prepare(`
-      INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
-      VALUES ("main", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        dhl_user = excluded.dhl_user,
-        dhl_signature = excluded.dhl_signature,
-        dhl_ekp = excluded.dhl_ekp,
-        dhl_participation = excluded.dhl_participation,
-        sender_name = excluded.sender_name,
-        sender_street = excluded.sender_street,
-        sender_house_number = excluded.sender_house_number,
-        sender_zip = excluded.sender_zip,
-        sender_city = excluded.sender_city,
-        sender_country = excluded.sender_country,
-        updated_at = CURRENT_TIMESTAMP
-    `).run(dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country);
+    // Check if record exists
+    const existing = db.prepare('SELECT id FROM global_shipping_config WHERE id = "main"').get();
 
-    res.json({ success: true });
+    if (existing) {
+      db.prepare(`
+        UPDATE global_shipping_config 
+        SET dhl_user = ?, dhl_signature = ?, dhl_ekp = ?, dhl_participation = ?, 
+            sender_name = ?, sender_street = ?, sender_house_number = ?, 
+            sender_zip = ?, sender_city = ?, sender_country = ?, 
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = "main"
+      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
+    } else {
+      db.prepare(`
+        INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
+        VALUES ("main", ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
+    }
+
+    const updatedConfig = db.prepare('SELECT * FROM global_shipping_config WHERE id = "main"').get();
+    res.json({ success: true, data: updatedConfig });
   } catch (error: any) {
+    console.error('Error saving global shipping config:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

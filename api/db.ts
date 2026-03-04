@@ -595,8 +595,22 @@ try {
       FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE,
       UNIQUE(shop_id, email)
     );
-  `);
 
+    CREATE TABLE IF NOT EXISTS global_shipping_config (
+      id TEXT PRIMARY KEY,
+      dhl_user TEXT,
+      dhl_signature TEXT,
+      dhl_ekp TEXT,
+      dhl_participation TEXT DEFAULT '01',
+      sender_name TEXT,
+      sender_street TEXT,
+      sender_house_number TEXT,
+      sender_zip TEXT,
+      sender_city TEXT,
+      sender_country TEXT DEFAULT 'DEU',
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 } catch (error) {
   console.error('Migration error:', error);
 }
