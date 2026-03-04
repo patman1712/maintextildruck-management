@@ -398,10 +398,11 @@ router.post('/shipping/test-config', async (req, res) => {
   </soapenv:Body>
 </soapenv:Envelope>`;
 
-    const authHeader = Buffer.from(`${dhl_user}:${dhl_signature}`).toString('base64');
-    const body = soapRequest;
+    // Try with both HTTP Basic Auth and XML Auth (Shopware style)
+    let authHeader = Buffer.from(`${dhl_user}:${dhl_signature}`).toString('base64');
+    let body = soapRequest;
 
-    const response = await fetch('https://cig.dhl.de/services/production/soap', {
+    let response = await fetch('https://cig.dhl.de/services/production/soap', {
         method: 'POST',
         headers: {
             'Authorization': `Basic ${authHeader}`,
@@ -411,13 +412,28 @@ router.post('/shipping/test-config', async (req, res) => {
         body: body
     });
 
-    const xmlResponse = await response.text();
-    console.log('DHL Test Response:', xmlResponse);
+    let xmlResponse = await response.text();
+    console.log('DHL Test Response (Attempt 1):', xmlResponse);
+
+    // If 401, try WITHOUT HTTP Basic Auth (only XML Auth)
+    if (response.status === 401) {
+        console.log('401 detected, trying without HTTP Basic Auth...');
+        response = await fetch('https://cig.dhl.de/services/production/soap', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'SOAPAction': '""'
+            },
+            body: body
+        });
+        xmlResponse = await response.text();
+        console.log('DHL Test Response (Attempt 2 - No Basic Auth):', xmlResponse);
+    }
 
     if (!response.ok) {
         let testError = `HTTP Fehler ${response.status}`;
-        if (response.status === 401) testError = "Anmeldung fehlgeschlagen (401). Benutzername oder Signatur sind nicht korrekt.";
-        if (response.status === 403) testError = "Zugriff verweigert (403). Der Account ist nicht für den Webservice freigeschaltet.";
+        if (response.status === 401) testError = "Anmeldung fehlgeschlagen (401). DHL akzeptiert die Kombination aus Benutzer und Passwort nicht. Bitte prüfen Sie, ob Sie das 'Webservice-Passwort' (Signatur) verwenden.";
+        if (response.status === 403) testError = "Zugriff verweigert (403). Der Account ist nicht für diesen Webservice freigeschaltet.";
         throw new Error(testError);
     }
 
@@ -600,7 +616,7 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         const authHeader = Buffer.from(`${config.dhl_user}:${config.dhl_signature}`).toString('base64');
         const body = soapRequest;
 
-        const response = await fetch('https://cig.dhl.de/services/production/soap', {
+        let response = await fetch('https://cig.dhl.de/services/production/soap', {
             method: 'POST',
             headers: {
                 'Authorization': `Basic ${authHeader}`,
@@ -610,12 +626,26 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
             body: body
         });
 
-        const xmlResponse = await response.text();
+        let xmlResponse = await response.text();
+        
+        // If 401, try WITHOUT HTTP Basic Auth (only XML Auth)
+        if (response.status === 401) {
+            console.log('401 detected, trying without HTTP Basic Auth...');
+            response = await fetch('https://cig.dhl.de/services/production/soap', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'text/xml; charset=utf-8',
+                    'SOAPAction': '""'
+                },
+                body: body
+            });
+            xmlResponse = await response.text();
+        }
         
         if (!response.ok) {
             console.error(`DHL API HTTP Error ${response.status}:`, xmlResponse);
             let httpError = `HTTP Fehler ${response.status}`;
-            if (response.status === 401) httpError = "Authentifizierung fehlgeschlagen (401). Bitte prüfen Sie Benutzername und Signatur.";
+            if (response.status === 401) httpError = "Authentifizierung fehlgeschlagen (401). DHL akzeptiert die Kombination aus Benutzer und Passwort nicht.";
             if (response.status === 403) httpError = "Zugriff verweigert (403). Ihr Account hat eventuell keine Berechtigung für diesen Webservice.";
             
             // Include raw response for debugging if it's short
