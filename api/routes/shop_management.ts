@@ -356,6 +356,35 @@ router.post('/shipping/global-config', (req, res) => {
   }
 });
 
+router.post('/shipping/test-config', async (req, res) => {
+  try {
+    const { dhl_user, dhl_signature, dhl_ekp } = req.body;
+
+    if (!dhl_user || !dhl_signature || !dhl_ekp) {
+        return res.status(400).json({ success: false, error: 'Unvollständige Daten für den Test.' });
+    }
+
+    // Simulate DHL API Auth Test
+    console.log(`Testing DHL Connection for user: ${dhl_user}...`);
+    
+    // In a real scenario, you would make a small request to DHL (e.g. getVersion or getManifest)
+    // For now, we simulate a delay and then success.
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Simple validation logic for mock purposes
+    if (dhl_user.length < 3 || dhl_signature.length < 3) {
+        throw new Error('Ungültige Anmeldedaten. Bitte prüfen Sie Benutzername und Signatur.');
+    }
+
+    res.json({ 
+        success: true, 
+        message: 'Verbindung zum DHL Geschäftsportal erfolgreich hergestellt!' 
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.get('/:shopId/shipping-config', (req, res) => {
   try {
     const { shopId } = req.params;

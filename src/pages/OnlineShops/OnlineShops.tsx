@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store';
-import { ShoppingBag, Plus, Edit, Trash2, ExternalLink, Palette, Truck, CreditCard, Sliders, Save, X, MapPin } from 'lucide-react';
+import { ShoppingBag, Plus, Edit, Trash2, ExternalLink, Palette, Truck, CreditCard, Sliders, Save, X, MapPin, RefreshCw, Zap } from 'lucide-react';
 
 const OnlineShops: React.FC = () => {
   const { shops, customers, addShop, updateShop, deleteShop } = useAppStore();
@@ -18,6 +18,7 @@ const OnlineShops: React.FC = () => {
   const [editingPersonalization, setEditingPersonalization] = useState<any | null>(null);
 
   // --- GLOBAL SHIPPING STATE ---
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [globalShippingConfig, setGlobalShippingConfig] = useState<any>({
     dhl_user: '',
     dhl_signature: '',
@@ -71,6 +72,27 @@ const OnlineShops: React.FC = () => {
       const data = await res.json();
       if (data.success) alert('Globale DHL Versand-Einstellungen gespeichert!');
     } catch (e) { console.error(e); }
+  };
+
+  const handleTestDHLConnection = async () => {
+    setIsTestingConnection(true);
+    try {
+        const res = await fetch('/api/shop-management/shipping/test-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(globalShippingConfig)
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert(data.message);
+        } else {
+            alert('Fehler: ' + data.error);
+        }
+    } catch (e: any) {
+        alert('Verbindung fehlgeschlagen: ' + e.message);
+    } finally {
+        setIsTestingConnection(false);
+    }
   };
 
   const handleSaveVariable = async () => {
@@ -451,12 +473,34 @@ const OnlineShops: React.FC = () => {
                     <Truck size={20} className="mr-2" />
                     Globaler DHL Versand (Alle Shops)
                 </div>
-                <button 
-                    onClick={handleSaveGlobalShippingConfig}
-                    className="text-sm bg-green-600 text-white px-4 py-1 rounded hover:bg-green-700 flex items-center"
-                >
-                    <Save size={16} className="mr-2" /> Speichern
-                </button>
+                <div className="flex space-x-2">
+                    <button 
+                        onClick={handleTestDHLConnection}
+                        disabled={isTestingConnection}
+                        className={`text-sm px-4 py-1 rounded flex items-center border transition-all ${
+                            isTestingConnection 
+                            ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' 
+                            : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
+                        }`}
+                    >
+                        {isTestingConnection ? (
+                            <>
+                                <RefreshCw size={16} className="mr-2 animate-spin" />
+                                Testet...
+                            </>
+                        ) : (
+                            <>
+                                <Zap size={16} className="mr-2" /> Verbindung testen
+                            </>
+                        )}
+                    </button>
+                    <button 
+                        onClick={handleSaveGlobalShippingConfig}
+                        className="text-sm bg-green-600 text-white px-4 py-1 rounded hover:bg-green-700 flex items-center"
+                    >
+                        <Save size={16} className="mr-2" /> Speichern
+                    </button>
+                </div>
             </h2>
             <p className="text-sm text-gray-600 mb-6">
                 Hinterlegen Sie hier Ihre DHL Zugangsdaten, die standardmäßig für alle Shops verwendet werden sollen. 
