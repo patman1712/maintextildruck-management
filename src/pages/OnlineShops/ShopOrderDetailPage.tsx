@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useOutletContext } from 'react-router-dom';
-import { ArrowLeft, Package, Calendar, CreditCard, MapPin, Truck, CheckCircle, Clock } from 'lucide-react';
+import { ArrowLeft, Package, Calendar, CreditCard, MapPin, Truck, CheckCircle, Clock, X } from 'lucide-react';
 import { useShopStore } from '../../shopStore';
 
 const ShopOrderDetailPage: React.FC = () => {

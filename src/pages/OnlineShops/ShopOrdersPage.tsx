@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useOutletContext } from 'react-router-dom';
-import { ShoppingBag, ChevronRight, Package, Calendar, Clock, ArrowRight } from 'lucide-react';
+import { ShoppingBag, ChevronRight, Package, Calendar, Clock, ArrowRight, CheckCircle, X } from 'lucide-react';
 import { useShopStore } from '../../shopStore';
 
 const ShopOrdersPage: React.FC = () => {
