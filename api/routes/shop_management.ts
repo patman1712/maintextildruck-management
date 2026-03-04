@@ -13,6 +13,21 @@ const router = Router();
 const LABELS_DIR = path.join(DATA_DIR, 'shipping_labels');
 fs.ensureDirSync(LABELS_DIR);
 
+// Helper to escape XML special characters
+const escapeXml = (unsafe: string) => {
+    if (!unsafe) return '';
+    return unsafe.replace(/[<>&"']/g, (c) => {
+        switch (c) {
+            case '<': return '&lt;';
+            case '>': return '&gt;';
+            case '&': return '&amp;';
+            case '"': return '&quot;';
+            case "'": return '&apos;';
+            default: return c;
+        }
+    });
+};
+
 // --- Shop Categories ---
 
 router.get('/:shopId/categories', (req, res) => {
@@ -382,18 +397,18 @@ router.post('/shipping/test-config', async (req, res) => {
     // Note: getVersion doesn't always require full auth, but it's a good first step
     const soapRequest = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" 
-                  xmlns:cis="http://dhl.de/webservice/cisbase" 
-                  xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0">
+                  xmlns:cis="http://www.dhl.de/webservice/cisbase" 
+                  xmlns:ns="http://www.dhl.de/webservices/businesscustomershipping/3.0">
   <soapenv:Header>
     <cis:Authentification>
-      <cis:user>${dhl_user}</cis:user>
-      <cis:signature>${dhl_signature}</cis:signature>
+      <cis:user>${escapeXml(dhl_user)}</cis:user>
+      <cis:signature>${escapeXml(dhl_signature)}</cis:signature>
     </cis:Authentification>
   </soapenv:Header>
   <soapenv:Body>
     <ns:GetVersionRequest>
       <majorRelease>3</majorRelease>
-      <minorRelease>1</minorRelease>
+      <minorRelease>0</minorRelease>
     </ns:GetVersionRequest>
   </soapenv:Body>
 </soapenv:Envelope>`;
@@ -402,10 +417,11 @@ router.post('/shipping/test-config', async (req, res) => {
     let authHeader = Buffer.from(`${dhl_user}:${dhl_signature}`).toString('base64');
     let body = soapRequest;
 
-    let response = await fetch('https://cig.dhl.de/services/production/soap', {
+    let response = await fetch('https://cig.dhl.de/services/production/shipping/v3.0/soap', {
         method: 'POST',
         headers: {
             'Authorization': `Basic ${authHeader}`,
+            'X-EKP': dhl_ekp,
             'Content-Type': 'text/xml; charset=utf-8',
             'SOAPAction': '""'
         },
@@ -416,19 +432,20 @@ router.post('/shipping/test-config', async (req, res) => {
     console.log('DHL Test Response (Attempt 1):', xmlResponse);
 
     // If 401, try WITHOUT HTTP Basic Auth (only XML Auth)
-    if (response.status === 401) {
-        console.log('401 detected, trying without HTTP Basic Auth...');
-        response = await fetch('https://cig.dhl.de/services/production/soap', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'text/xml; charset=utf-8',
-                'SOAPAction': '""'
-            },
-            body: body
-        });
-        xmlResponse = await response.text();
-        console.log('DHL Test Response (Attempt 2 - No Basic Auth):', xmlResponse);
-    }
+     if (response.status === 401) {
+         console.log('401 detected, trying without HTTP Basic Auth...');
+         response = await fetch('https://cig.dhl.de/services/production/shipping/v3.0/soap', {
+             method: 'POST',
+             headers: {
+                 'X-EKP': dhl_ekp,
+                 'Content-Type': 'text/xml; charset=utf-8',
+                 'SOAPAction': '""'
+             },
+             body: body
+         });
+         xmlResponse = await response.text();
+         console.log('DHL Test Response (Attempt 2 - No Basic Auth):', xmlResponse);
+     }
 
     if (!response.ok) {
         let testError = `HTTP Fehler ${response.status}`;
@@ -556,19 +573,19 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         // XML Payload for DHL GKV SOAP API v3.0
         const soapRequest = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" 
-                  xmlns:cis="http://dhl.de/webservice/cisbase" 
-                  xmlns:ns="http://dhl.de/webservices/businesscustomershipping/3.0">
+                  xmlns:cis="http://www.dhl.de/webservice/cisbase" 
+                  xmlns:ns="http://www.dhl.de/webservices/businesscustomershipping/3.0">
   <soapenv:Header>
     <cis:Authentification>
-      <cis:user>${config.dhl_user}</cis:user>
-      <cis:signature>${config.dhl_signature}</cis:signature>
+      <cis:user>${escapeXml(config.dhl_user)}</cis:user>
+      <cis:signature>${escapeXml(config.dhl_signature)}</cis:signature>
     </cis:Authentification>
   </soapenv:Header>
   <soapenv:Body>
     <ns:CreateShipmentOrderRequest>
       <ns:Version>
         <majorRelease>3</majorRelease>
-        <minorRelease>1</minorRelease>
+        <minorRelease>0</minorRelease>
       </ns:Version>
       <ShipmentOrder>
         <sequenceNumber>${order.order_number}</sequenceNumber>
@@ -583,25 +600,25 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
           </ShipmentDetails>
           <Shipper>
             <Name>
-              <cis:name1>${config.sender_name || 'Maintextildruck'}</cis:name1>
+              <cis:name1>${escapeXml(config.sender_name || 'Maintextildruck')}</cis:name1>
             </Name>
             <Address>
-              <cis:streetName>${senderAddr.street}</cis:streetName>
-              <cis:streetNumber>${senderAddr.number}</cis:streetNumber>
-              <cis:zip>${config.sender_zip}</cis:zip>
-              <cis:city>${config.sender_city}</cis:city>
+              <cis:streetName>${escapeXml(senderAddr.street)}</cis:streetName>
+              <cis:streetNumber>${escapeXml(senderAddr.number)}</cis:streetNumber>
+              <cis:zip>${escapeXml(config.sender_zip)}</cis:zip>
+              <cis:city>${escapeXml(config.sender_city)}</cis:city>
               <cis:Origin>
                 <cis:countryISOCode>DE</cis:countryISOCode>
               </cis:Origin>
             </Address>
           </Shipper>
           <Receiver>
-            <cis:name1>${`${order.first_name || ''} ${order.last_name || ''}`.trim().substring(0, 35) || order.customer_name.substring(0, 35)}</cis:name1>
+            <cis:name1>${escapeXml(`${order.first_name || ''} ${order.last_name || ''}`.trim().substring(0, 35) || order.customer_name.substring(0, 35))}</cis:name1>
             <Address>
-              <cis:streetName>${receiverAddr.street.substring(0, 35)}</cis:streetName>
-              <cis:streetNumber>${receiverAddr.number.substring(0, 10)}</cis:streetNumber>
-              <cis:zip>${order.zip || ''}</cis:zip>
-              <cis:city>${order.city ? order.city.substring(0, 35) : ''}</cis:city>
+              <cis:streetName>${escapeXml(receiverAddr.street.substring(0, 35))}</cis:streetName>
+              <cis:streetNumber>${escapeXml(receiverAddr.number.substring(0, 10))}</cis:streetNumber>
+              <cis:zip>${escapeXml(order.zip || '')}</cis:zip>
+              <cis:city>${escapeXml(order.city ? order.city.substring(0, 35) : '')}</cis:city>
               <cis:Origin>
                 <cis:countryISOCode>DE</cis:countryISOCode>
               </cis:Origin>
@@ -616,10 +633,11 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         const authHeader = Buffer.from(`${config.dhl_user}:${config.dhl_signature}`).toString('base64');
         const body = soapRequest;
 
-        let response = await fetch('https://cig.dhl.de/services/production/soap', {
+        let response = await fetch('https://cig.dhl.de/services/production/shipping/v3.0/soap', {
             method: 'POST',
             headers: {
                 'Authorization': `Basic ${authHeader}`,
+                'X-EKP': config.dhl_ekp,
                 'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': '""'
             },
@@ -631,9 +649,10 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         // If 401, try WITHOUT HTTP Basic Auth (only XML Auth)
         if (response.status === 401) {
             console.log('401 detected, trying without HTTP Basic Auth...');
-            response = await fetch('https://cig.dhl.de/services/production/soap', {
+            response = await fetch('https://cig.dhl.de/services/production/shipping/v3.0/soap', {
                 method: 'POST',
                 headers: {
+                    'X-EKP': config.dhl_ekp,
                     'Content-Type': 'text/xml; charset=utf-8',
                     'SOAPAction': '""'
                 },
