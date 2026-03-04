@@ -103,4 +103,47 @@ router.get('/:shopId/admin/list', (req, res) => {
   }
 });
 
+// Update shop customer profile
+router.put('/:shopId/profile/:customerId', async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const { 
+      email, first_name, last_name, 
+      company, street, zip, city, phone,
+      password 
+    } = req.body;
+
+    // Check if customer exists
+    const existing = db.prepare('SELECT id FROM shop_customers WHERE id = ?').get(customerId);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Kunde nicht gefunden.' });
+    }
+
+    // Update basic info
+    let query = `
+      UPDATE shop_customers 
+      SET email = ?, first_name = ?, last_name = ?, company = ?, 
+          street = ?, zip = ?, city = ?, phone = ?
+    `;
+    const params = [email, first_name, last_name, company, street, zip, city, phone];
+
+    // Update password if provided
+    if (password && password.trim() !== '') {
+      const hashedPassword = bcrypt.hashSync(password, 10);
+      query += `, password = ?`;
+      params.push(hashedPassword);
+    }
+
+    query += ` WHERE id = ?`;
+    params.push(customerId);
+
+    db.prepare(query).run(...params);
+
+    const updated = db.prepare('SELECT id, shop_id, email, first_name, last_name, company, street, zip, city, phone FROM shop_customers WHERE id = ?').get(customerId);
+    res.json({ success: true, data: updated });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;

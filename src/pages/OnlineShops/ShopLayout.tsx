@@ -164,6 +164,10 @@ const ShopLayout: React.FC = () => {
                   <div className="px-3 py-2 border-b border-slate-50 mb-1">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Mein Konto</p>
                   </div>
+                  <Link to={`${shopBaseUrl}/profile`} className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg transition-colors font-medium">
+                    <User size={16} />
+                    <span>Profil bearbeiten</span>
+                  </Link>
                   <button onClick={logout} className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium">
                     <LogOut size={16} />
                     <span>Abmelden</span>
