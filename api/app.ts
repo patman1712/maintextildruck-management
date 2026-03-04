@@ -258,6 +258,7 @@ app.get('/api/debug/shopware-list', async (req, res) => {
 // Serve uploads
 app.use('/uploads', express.static(UPLOAD_DIR))
 app.use('/downloads', express.static(DOWNLOADS_DIR))
+app.use('/labels', express.static(path.join(path.dirname(UPLOAD_DIR), 'shipping_labels')))
 
 const START_TIME = Date.now();
 

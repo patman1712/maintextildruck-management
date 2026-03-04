@@ -161,7 +161,27 @@ const ShopOrderDetailPage: React.FC = () => {
                   <div className="ml-6">
                     <div className="font-black text-slate-800 text-sm uppercase tracking-tight">Versand</div>
                     <div className="text-xs text-slate-400 mt-0.5">
-                      {order.status === 'shipped' ? 'Dein Paket hat unser Lager verlassen!' : 'Sobald dein Paket unser Lager verlässt, erhältst du eine E-Mail.'}
+                      {order.status === 'shipped' ? (
+                        <div className="space-y-2">
+                          <p>Dein Paket hat unser Lager verlassen!</p>
+                          {order.tracking_number && (
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 mt-2">
+                              <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Sendungsverfolgung</p>
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono font-bold text-slate-700">{order.tracking_number}</span>
+                                <a 
+                                  href={`https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${order.tracking_number}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 font-bold"
+                                >
+                                  Verfolgen
+                                </a>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : 'Sobald dein Paket unser Lager verlässt, erhältst du eine E-Mail.'}
                     </div>
                   </div>
                 </div>
