@@ -233,13 +233,29 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
 
         let allImages = [];
         if (product && product.customer_id) {
-             allImages = db.prepare(`
-                SELECT cpf.*, cp.name as product_origin_name
+             // 1. Get files from customer_product_files (associated with products)
+             const productFiles = db.prepare(`
+                SELECT cpf.id, cpf.file_url, cpf.file_name, cpf.thumbnail_url, cpf.type, cpf.created_at, cp.name as product_origin_name
                 FROM customer_product_files cpf
                 JOIN customer_products cp ON cpf.product_id = cp.id
                 WHERE cp.customer_id = ?
-                ORDER BY cpf.created_at DESC
-             `).all(product.customer_id);
+             `).all(product.customer_id) as any[];
+
+             // 2. Get files from files table (direct uploads / orders)
+             const directFiles = db.prepare(`
+                SELECT id, path as file_url, name as file_name, thumbnail as thumbnail_url, type, created_at
+                FROM files
+                WHERE customer_id = ?
+             `).all(product.customer_id) as any[];
+
+             // Add origin context for direct files
+             const directFilesWithOrigin = directFiles.map(f => ({
+                 ...f,
+                 product_origin_name: 'Direkter Upload / Auftrag'
+             }));
+
+             // Combine both sources
+             allImages = [...productFiles, ...directFilesWithOrigin].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         } else {
              allImages = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at DESC').all(assignment.product_id);
         }
