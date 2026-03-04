@@ -419,16 +419,16 @@ router.post('/shipping/test-config', async (req, res) => {
         const headers: any = {
             'Content-Type': 'text/xml; charset=utf-8',
             'SOAPAction': '""',
-            'User-Agent': 'PHP-SOAP/7.4.33',
-            'Accept-Charset': 'utf-8'
+            'User-Agent': 'PHP-SOAP/7.4.33'
         };
         if (useBasicAuth) {
-            // Ensure UTF-8 for Basic Auth (crucial for special characters like !)
             headers['Authorization'] = `Basic ${Buffer.from(`${dhl_user}:${dhl_signature}`, 'utf8').toString('base64')}`;
         }
         
         try {
-            const res = await fetch('https://cig.dhl.de/services/production/soap', {
+            // Use the direct internetversand endpoint which is often used by standalone systems
+            // and doesn't require a CIG developer account
+            const res = await fetch('https://internetversand.dhl.de/services/production/shipping/3.1/soap', {
                 method: 'POST',
                 headers,
                 body: xml
@@ -657,9 +657,9 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
                 'User-Agent': 'PHP-SOAP/7.4.33'
             };
             if (useBasicAuth) {
-                headers['Authorization'] = `Basic ${Buffer.from(`${config.dhl_user}:${config.dhl_signature}`).toString('base64')}`;
+                headers['Authorization'] = `Basic ${Buffer.from(`${config.dhl_user}:${config.dhl_signature}`, 'utf8').toString('base64')}`;
             }
-            const res = await fetch('https://cig.dhl.de/services/production/soap', {
+            const res = await fetch('https://internetversand.dhl.de/services/production/shipping/3.1/soap', {
                 method: 'POST',
                 headers,
                 body: xml
