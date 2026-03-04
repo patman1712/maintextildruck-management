@@ -400,12 +400,12 @@ router.post('/shipping/test-config', async (req, res) => {
 
     const authHeader = Buffer.from(`${dhl_user}:${dhl_signature}`).toString('base64');
 
-    const response = await fetch('https://cig.dhl.de/services/production/shipping/v3/soap', {
+    const response = await fetch('https://cig.dhl.de/services/production/shipping/v3', {
         method: 'POST',
         headers: {
             'Authorization': `Basic ${authHeader}`,
             'Content-Type': 'text/xml;charset=UTF-8',
-            'SOAPAction': 'urn:getVersion'
+            'SOAPAction': '""'
         },
         body: soapRequest
     });
@@ -598,12 +598,12 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
 
         const authHeader = Buffer.from(`${config.dhl_user}:${config.dhl_signature}`).toString('base64');
 
-        const response = await fetch('https://cig.dhl.de/services/production/shipping/v3/soap', {
+        const response = await fetch('https://cig.dhl.de/services/production/shipping/v3', {
             method: 'POST',
             headers: {
                 'Authorization': `Basic ${authHeader}`,
                 'Content-Type': 'text/xml;charset=UTF-8',
-                'SOAPAction': 'urn:createShipmentOrder'
+                'SOAPAction': '""'
             },
             body: soapRequest
         });
