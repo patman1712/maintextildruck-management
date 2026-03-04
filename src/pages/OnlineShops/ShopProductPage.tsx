@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useOutletContext, useParams, Link } from 'react-router-dom';
 import { ShoppingCart, Heart, ChevronRight, Info, Plus, Minus, Check, Shirt, User, Hash, Shield } from 'lucide-react';
 import { Shop, ShopCategory, Product } from '../../store';
+import { useShopStore, CartItem } from '../../shopStore';
 
 interface ShopContext {
   shop: Shop;
@@ -245,6 +246,42 @@ const ShopProductPage: React.FC = () => {
 
   const isPersonalizationEnabled = product.personalization_enabled === 1 || product.personalization_enabled === true;
 
+  const handleAddToCart = () => {
+    if (!selectedSize) return;
+
+    const totalPrice = currentPrice + calculatePersonalizationPrice();
+    
+    // Create a unique ID for this specific product + options combo
+    const personalizationString = Object.entries(selectedPersonalization)
+      .filter(([_, v]) => !!v)
+      .map(([k, v]) => `${k}:${v}`)
+      .sort()
+      .join('|');
+    
+    const cartItemId = `${product.product_id}-${selectedVariantId || 'std'}-${selectedSize}-${personalizationString}`;
+
+    const cartItem: CartItem = {
+      id: cartItemId,
+      productId: product.product_id,
+      name: product.name,
+      price: totalPrice,
+      quantity: quantity,
+      image: mainImage || undefined,
+      size: selectedSize,
+      color: selectedVariantId ? variants[selectedVariantId]?.name : undefined,
+      personalization: personalizationString || undefined
+    };
+
+    useShopStore.getState().addToCart(cartItem);
+    
+    // Trigger a brief success animation or just open the cart sidebar? 
+    // The user mentioned "wenn man auf den Warenkorb klickt soll eine sidebar aufgehen", 
+    // but usually adding also opens it or shows a notification.
+    // I'll assume adding just updates the count for now, or I can try to find a way to open the sidebar.
+    // Since ShopLayout manages the sidebar state, I'd need a way to communicate.
+    // For now, let's just add it.
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Breadcrumbs */}
@@ -436,7 +473,8 @@ const ShopProductPage: React.FC = () => {
 
             {/* Add to Cart */}
             <button 
-                className="w-full bg-slate-900 text-white py-4 font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors flex items-center justify-center space-x-2 mb-4"
+                onClick={handleAddToCart}
+                className="w-full bg-slate-900 text-white py-4 font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors flex items-center justify-center space-x-2 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={!selectedSize}
             >
                 <ShoppingCart size={20} />

@@ -32,6 +32,8 @@ import ShopProductPage from "@/pages/OnlineShops/ShopProductPage";
 import ShopLogin from "@/pages/OnlineShops/ShopLogin";
 import ShopRegister from "@/pages/OnlineShops/ShopRegister";
 import ShopProfile from "@/pages/OnlineShops/ShopProfile";
+import ShopCartPage from "@/pages/OnlineShops/ShopCartPage";
+import ShopCheckoutPage from "@/pages/OnlineShops/ShopCheckoutPage";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
 import { useEffect, useRef, useState } from "react";
@@ -98,6 +100,8 @@ export default function App() {
           <Route path="login" element={<ShopLogin />} />
           <Route path="register" element={<ShopRegister />} />
           <Route path="profile" element={<ShopProfile />} />
+          <Route path="cart" element={<ShopCartPage />} />
+          <Route path="checkout" element={<ShopCheckoutPage />} />
         </Route>
         
         <Route path="/dashboard" element={
