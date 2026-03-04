@@ -410,16 +410,19 @@ router.post('/shipping/test-config', async (req, res) => {
   </soapenv:Body>
 </soapenv:Envelope>`;
 
-    const tryRequest = async (xml: string) => {
-        // We use NO HTTP Basic Auth first, as many DHL accounts only use XML Auth
-        // This avoids the 401 from the gateway
+    const tryRequest = async (xml: string, useBasicAuth: boolean) => {
         const headers: any = {
             'Content-Type': 'text/xml; charset=utf-8',
-            'SOAPAction': '""'
+            'SOAPAction': '""',
+            'User-Agent': 'PHP-SOAP/7.4.33'
         };
+        if (useBasicAuth) {
+            // Ensure precise UTF-8 encoding for special characters like !
+            const auth = Buffer.from(`${dhl_user}:${dhl_signature}`, 'utf8').toString('base64');
+            headers['Authorization'] = `Basic ${auth}`;
+        }
         
         try {
-            // Using the base endpoint which is the most compatible
             const res = await fetch('https://cig.dhl.de/services/production/soap', {
                 method: 'POST',
                 headers,
@@ -432,36 +435,22 @@ router.post('/shipping/test-config', async (req, res) => {
         }
     };
 
-    console.log(`DHL Test für: ${dhl_user}...`);
+    console.log(`DHL Verbindungstest (Multi-Auth) für: ${dhl_user}...`);
     
-    let result = await tryRequest(soapRequest);
-
-    // If 401, only then try with Basic Auth as a fallback
+    // Attempt 1: Standard XML + Basic Auth (Common for most systems)
+    let result = await tryRequest(soapRequest, true);
+    
+    // Attempt 2: If 401, try ONLY XML Auth (Common for some older/specific DHL accounts)
     if (result.status === 401) {
-        console.log('401 detected, trying with HTTP Basic Auth fallback...');
-        const authHeader = Buffer.from(`${dhl_user}:${dhl_signature}`, 'utf8').toString('base64');
-        const headersWithAuth = {
-            'Content-Type': 'text/xml; charset=utf-8',
-            'SOAPAction': '""',
-            'Authorization': `Basic ${authHeader}`
-        };
-        try {
-            const res = await fetch('https://cig.dhl.de/services/production/soap', {
-                method: 'POST',
-                headers: headersWithAuth,
-                body: soapRequest
-            });
-            const text = await res.text();
-            result = { status: res.status, text, ok: res.ok };
-        } catch (e: any) {
-            result = { status: 500, text: e.message, ok: false };
-        }
+        console.log('Attempt 1 (Basic Auth) failed with 401, trying Attempt 2 (XML only)...');
+        result = await tryRequest(soapRequest, false);
     }
 
     const xmlResponse = result.text;
     if (result.ok && (xmlResponse.includes('majorRelease') || xmlResponse.includes('ok') || xmlResponse.includes('OK'))) {
         return res.json({ success: true, message: 'Verbindung erfolgreich!' });
     } else {
+        // Detailed error reporting for the user
         let errorHint = xmlResponse.length < 1000 ? xmlResponse.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : 'Unbekannter Fehler';
         return res.status(result.status || 500).json({ 
             success: false, 
