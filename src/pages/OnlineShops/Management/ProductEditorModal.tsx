@@ -355,14 +355,44 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       }
   });
 
-  const filteredAvailableFiles = availableFiles.filter(f => {
-       // Only show available files that match current tab type
-       if (activeTab === 'view') {
-           return (f.type === 'view' || f.type === 'preview' || (!f.type && f.thumbnail_url)) && !currentFiles.some(c => c.id === f.id);
-       } else {
-           return (['print', 'vector', 'photoshop', 'internal'].includes(f.type) || (!f.type && !f.thumbnail_url)) && !currentFiles.some(c => c.id === f.id);
-       }
-  });
+  const filteredAvailableFiles = React.useMemo(() => {
+    // 1. Filter by type
+    const rawFiltered = availableFiles.filter(f => {
+        if (activeTab === 'view') {
+            return f.type === 'view' || f.type === 'preview' || (!f.type && f.thumbnail_url);
+        } else {
+            return ['print', 'vector', 'photoshop', 'internal'].includes(f.type) || (!f.type && !f.thumbnail_url);
+        }
+    });
+
+    // 2. Deduplicate by URL and check against current files
+    const uniqueMap = new Map();
+    
+    rawFiltered.forEach(f => {
+        // Skip if this specific file ID is already assigned
+        if (currentFiles.some(c => c.id === f.id)) return;
+        
+        // Also skip if ANY file with this URL is already assigned
+        if (f.file_url && currentFiles.some(c => c.file_url === f.file_url)) return;
+
+        const key = f.file_url;
+        if (!key) return; // Should not happen given schema
+
+        if (!uniqueMap.has(key)) {
+            uniqueMap.set(key, { 
+                ...f, 
+                origin_names: f.product_origin_name ? [f.product_origin_name] : [] 
+            });
+        } else {
+            const existing = uniqueMap.get(key);
+            if (f.product_origin_name && !existing.origin_names.includes(f.product_origin_name)) {
+                existing.origin_names.push(f.product_origin_name);
+            }
+        }
+    });
+
+    return Array.from(uniqueMap.values());
+  }, [availableFiles, currentFiles, activeTab]);
 
   const mainImage = currentFiles.find(f => f.type === 'view' || f.type === 'preview' || f.thumbnail_url)?.file_url;
 
@@ -548,7 +578,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                {activeTab === 'view' ? (
                                    <div className="grid grid-cols-4 gap-2 opacity-60 hover:opacity-100 transition-opacity">
                                       {filteredAvailableFiles.map((img: any, idx: number) => (
-                                          <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden cursor-pointer" onClick={() => handleAddFile(img.id)} title={img.product_origin_name ? `Aus: ${img.product_origin_name}` : ''}>
+                                          <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden cursor-pointer" onClick={() => handleAddFile(img.id)} title={img.origin_names && img.origin_names.length > 0 ? `Aus: ${img.origin_names.join(', ')}` : ''}>
                                               <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
                                               <div className="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 flex items-center justify-center">
                                                   <Plus size={20} className="text-white drop-shadow-md" />
@@ -570,8 +600,10 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                    </div>
                                                    <div className="truncate">
                                                        <p className="font-medium text-xs text-slate-700 truncate">{file.file_name}</p>
-                                                       {file.product_origin_name && (
-                                                           <p className="text-[10px] text-slate-400 truncate">aus: {file.product_origin_name}</p>
+                                                       {file.origin_names && file.origin_names.length > 0 && (
+                                                           <p className="text-[10px] text-slate-400 truncate" title={file.origin_names.join(', ')}>
+                                                               aus: {file.origin_names.join(', ')}
+                                                           </p>
                                                        )}
                                                    </div>
                                                </div>
