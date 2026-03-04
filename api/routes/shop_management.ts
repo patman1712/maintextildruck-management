@@ -426,9 +426,8 @@ router.post('/shipping/test-config', async (req, res) => {
         }
         
         try {
-            // Use the direct internetversand endpoint which is often used by standalone systems
-            // and doesn't require a CIG developer account
-            const res = await fetch('https://internetversand.dhl.de/services/production/shipping/3.1/soap', {
+            // Revert to CIG endpoint which actually responded
+            const res = await fetch('https://cig.dhl.de/services/production/shipping/3.1/soap', {
                 method: 'POST',
                 headers,
                 body: xml
@@ -457,31 +456,14 @@ router.post('/shipping/test-config', async (req, res) => {
 
     const xmlResponse = result.text;
     if (result.ok && (xmlResponse.includes('majorRelease') || xmlResponse.includes('ok') || xmlResponse.includes('OK'))) {
-        res.json({ success: true, message: 'Verbindung erfolgreich!' });
+        return res.json({ success: true, message: 'Verbindung erfolgreich!' });
     } else {
         // Detailed error reporting for the user
-        // We clean up the response text to show the real error
         let errorHint = xmlResponse.length < 1000 ? xmlResponse.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : 'Unbekannter Fehler';
-        if (result.status === 401) {
-            res.status(401).json({ 
-                success: false, 
-                error: `Anmeldung abgelehnt (401). Server meldet: "${errorHint.substring(0, 150)}..."` 
-            });
-        } else {
-            res.status(result.status).json({ success: false, error: `Fehler ${result.status}: ${errorHint.substring(0, 150)}` });
-        }
-    }
-
-    if (xmlResponse.includes('<majorRelease>') || xmlResponse.includes('ok') || xmlResponse.includes('OK')) {
-        res.json({ 
-            success: true, 
-            message: 'Verbindung zum DHL-Server erfolgreich hergestellt!' 
+        return res.status(result.status || 500).json({ 
+            success: false, 
+            error: `Anmeldung abgelehnt (${result.status}). Server meldet: "${errorHint.substring(0, 150)}..."` 
         });
-    } else {
-        // Try to find faultstring
-        const faultMatch = xmlResponse.match(/<faultstring>(.*?)<\/faultstring>/i);
-        const errorMsg = faultMatch ? faultMatch[1] : 'Die Anmeldung wurde von DHL abgelehnt.';
-        throw new Error(errorMsg);
     }
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -659,7 +641,7 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
             if (useBasicAuth) {
                 headers['Authorization'] = `Basic ${Buffer.from(`${config.dhl_user}:${config.dhl_signature}`, 'utf8').toString('base64')}`;
             }
-            const res = await fetch('https://internetversand.dhl.de/services/production/shipping/3.1/soap', {
+            const res = await fetch('https://cig.dhl.de/services/production/shipping/3.1/soap', {
                 method: 'POST',
                 headers,
                 body: xml
