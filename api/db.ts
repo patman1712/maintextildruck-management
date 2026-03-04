@@ -600,6 +600,7 @@ try {
       id TEXT PRIMARY KEY,
       dhl_user TEXT,
       dhl_signature TEXT,
+      dhl_api_key TEXT,
       dhl_ekp TEXT,
       dhl_participation TEXT DEFAULT '01',
       sender_name TEXT,

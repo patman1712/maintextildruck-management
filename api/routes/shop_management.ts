@@ -339,7 +339,7 @@ router.get('/shipping/global-config', (req, res) => {
 
 router.post('/shipping/global-config', (req, res) => {
   try {
-    const { dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
+    const { dhl_user, dhl_signature, dhl_api_key, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
 
     // Check if record exists
     const existing = db.prepare("SELECT id FROM global_shipping_config WHERE id = 'main'").get();
@@ -347,17 +347,17 @@ router.post('/shipping/global-config', (req, res) => {
     if (existing) {
       db.prepare(`
         UPDATE global_shipping_config 
-        SET dhl_user = ?, dhl_signature = ?, dhl_ekp = ?, dhl_participation = ?, 
+        SET dhl_user = ?, dhl_signature = ?, dhl_api_key = ?, dhl_ekp = ?, dhl_participation = ?, 
             sender_name = ?, sender_street = ?, sender_house_number = ?, 
             sender_zip = ?, sender_city = ?, sender_country = ?, 
             updated_at = CURRENT_TIMESTAMP
         WHERE id = 'main'
-      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
+      `).run(dhl_user, dhl_signature, dhl_api_key, dhl_ekp, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
     } else {
       db.prepare(`
-        INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
-        VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
+        INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_api_key, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
+        VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(dhl_user, dhl_signature, dhl_api_key, dhl_ekp, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
     }
 
     const updatedConfig = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get();
@@ -522,24 +522,32 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
             }]
         };
 
-        // Authentication for CIG REST API
-        // Typically Basic Auth with App-ID:App-Token, but many integrations 
-        // use the BKP credentials directly in specific ways.
-        // We'll attempt the most common REST implementation.
-        
+        // Authentication for DHL REST API V2
+        // Required: Basic Auth (User:Pass) + dhl-api-key header
         const auth = Buffer.from(`${config.dhl_user}:${config.dhl_signature}`).toString('base64');
         
-        const response = await fetch('https://cig.dhl.de/services/rest/shipping/v2/shipments', {
+        const response = await fetch('https://api-eu.dhl.com/parcel/de/shipping/v2/shipments', {
             method: 'POST',
             headers: {
                 'Authorization': `Basic ${auth}`,
+                'dhl-api-key': config.dhl_api_key || '',
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
             body: JSON.stringify(dhlRequest)
         });
 
-        const result = await response.json() as any;
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        let result: any;
+        
+        if (contentType && contentType.includes('application/json')) {
+            result = await response.json();
+        } else {
+            const text = await response.text();
+            console.error('DHL API returned non-JSON response:', text);
+            throw new Error(`DHL API antwortete mit einem ungültigen Format (HTTP ${response.status}). Bitte prüfen Sie Ihre API-Zugangsdaten und den API-Key.`);
+        }
 
         if (response.ok && result.shipments && result.shipments[0].status.statusCode === 200) {
             const shipment = result.shipments[0];

@@ -19,12 +19,13 @@ const OnlineShops: React.FC = () => {
 
   // --- GLOBAL SHIPPING STATE ---
   const [isTestingConnection, setIsTestingConnection] = useState(false);
-  const [globalShippingConfig, setGlobalShippingConfig] = useState<any>({
+  const [globalShippingConfig, setGlobalShippingConfig] = useState({
     dhl_user: '',
     dhl_signature: '',
+    dhl_api_key: '',
     dhl_ekp: '',
     dhl_participation: '01',
-    sender_name: 'Maintextildruck',
+    sender_name: '',
     sender_street: '',
     sender_house_number: '',
     sender_zip: '',
@@ -526,21 +527,33 @@ const OnlineShops: React.FC = () => {
                     </div>
                     
                     <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">DHL Benutzername (App-ID)</label>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">DHL API Benutzer</label>
                         <input 
                             type="text" 
                             className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
                             value={globalShippingConfig.dhl_user}
                             onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, dhl_user: e.target.value })}
+                            placeholder="z.B. user-name"
                         />
                     </div>
                     <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">DHL Signatur (Passwort)</label>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">DHL API Passwort (Signature)</label>
                         <input 
                             type="password" 
                             className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
                             value={globalShippingConfig.dhl_signature}
                             onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, dhl_signature: e.target.value })}
+                            placeholder="••••••••"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">DHL API-Key (Developer Portal)</label>
+                        <input 
+                            type="text" 
+                            className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                            value={globalShippingConfig.dhl_api_key}
+                            onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, dhl_api_key: e.target.value })}
+                            placeholder="Ihr 32-stelliger API-Key aus dem DHL Developer Portal"
                         />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
