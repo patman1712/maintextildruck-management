@@ -6,24 +6,39 @@ import bcrypt from 'bcryptjs';
 
 const router = Router();
 
+// Helper to resolve shopId from either ID or Slug
+const resolveShopId = (idOrSlug: string): string | null => {
+    // Try finding by ID first
+    let shop = db.prepare('SELECT id FROM shops WHERE id = ?').get(idOrSlug) as { id: string } | undefined;
+    if (shop) return shop.id;
+
+    // Try finding by Slug
+    shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(idOrSlug) as { id: string } | undefined;
+    if (shop) return shop.id;
+
+    return null;
+};
+
 // Register a new customer for a shop
 router.post('/:shopId/register', async (req, res) => {
   try {
     const { shopId: rawShopId } = req.params;
-    let shopId = rawShopId;
+    const shopId = resolveShopId(rawShopId);
+    
+    console.log(`[Register] Resolving ShopID: ${rawShopId} -> ${shopId}`);
 
-    // Resolve slug to UUID if needed
-    if (!rawShopId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
-        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(rawShopId) as { id: string } | undefined;
-        if (!shop) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
-        shopId = shop.id;
+    if (!shopId) {
+        console.error(`[Register] Shop not found for: ${rawShopId}`);
+        return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
     }
 
     const { 
-      email, password, first_name, last_name, 
+      email: rawEmail, password, first_name, last_name, 
       company, street, zip, city, phone, 
       data_privacy_accepted 
     } = req.body;
+
+    const email = rawEmail?.toLowerCase().trim();
 
     if (!email || !password || !data_privacy_accepted) {
       return res.status(400).json({ success: false, error: 'E-Mail, Passwort und Datenschutz-Zustimmung sind erforderlich.' });
@@ -38,6 +53,8 @@ router.post('/:shopId/register', async (req, res) => {
     const id = crypto.randomUUID();
     const hashedPassword = bcrypt.hashSync(password, 10);
 
+    console.log(`[Register] Creating customer: ${email} for shop: ${shopId}`);
+
     db.prepare(`
       INSERT INTO shop_customers (
         id, shop_id, email, password, first_name, last_name, 
@@ -51,6 +68,7 @@ router.post('/:shopId/register', async (req, res) => {
     const customer = db.prepare('SELECT id, shop_id, email, first_name, last_name, company, street, zip, city, phone FROM shop_customers WHERE id = ?').get(id);
     res.json({ success: true, data: customer });
   } catch (error: any) {
+    console.error(`[Register] Error: ${error.message}`);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -59,26 +77,37 @@ router.post('/:shopId/register', async (req, res) => {
 router.post('/:shopId/login', async (req, res) => {
   try {
     const { shopId: rawShopId } = req.params;
-    let shopId = rawShopId;
+    const shopId = resolveShopId(rawShopId);
 
-    // Resolve slug to UUID if needed
-    if (!rawShopId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
-        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(rawShopId) as { id: string } | undefined;
-        if (!shop) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
-        shopId = shop.id;
+    console.log(`[Login] Resolving ShopID: ${rawShopId} -> ${shopId}`);
+
+    if (!shopId) {
+        console.error(`[Login] Shop not found for: ${rawShopId}`);
+        return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
     }
 
-    const { email, password } = req.body;
+    const { email: rawEmail, password } = req.body;
+    const email = rawEmail?.toLowerCase().trim();
+
+    console.log(`[Login] Attempt for email: ${email} in shop: ${shopId}`);
 
     const customer = db.prepare('SELECT * FROM shop_customers WHERE shop_id = ? AND email = ?').get(shopId, email) as any;
     
-    if (!customer || !bcrypt.compareSync(password, customer.password)) {
+    if (!customer) {
+      console.warn(`[Login] Customer not found: ${email}`);
       return res.status(401).json({ success: false, error: 'Ungültige E-Mail oder Passwort.' });
     }
 
+    if (!bcrypt.compareSync(password, customer.password)) {
+      console.warn(`[Login] Password mismatch: ${email}`);
+      return res.status(401).json({ success: false, error: 'Ungültige E-Mail oder Passwort.' });
+    }
+
+    console.log(`[Login] Success: ${email}`);
     const { password: _, ...customerInfo } = customer;
     res.json({ success: true, data: customerInfo });
   } catch (error: any) {
+    console.error(`[Login] Error: ${error.message}`);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -87,13 +116,10 @@ router.post('/:shopId/login', async (req, res) => {
 router.get('/:shopId/admin/list', (req, res) => {
   try {
     const { shopId: rawShopId } = req.params;
-    let shopId = rawShopId;
+    const shopId = resolveShopId(rawShopId);
 
-    // Resolve slug to UUID if needed
-    if (!rawShopId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
-        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(rawShopId) as { id: string } | undefined;
-        if (!shop) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
-        shopId = shop.id;
+    if (!shopId) {
+        return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
     }
 
     const customers = db.prepare('SELECT id, email, first_name, last_name, company, street, zip, city, phone, created_at FROM shop_customers WHERE shop_id = ? ORDER BY created_at DESC').all(shopId);
@@ -106,12 +132,12 @@ router.get('/:shopId/admin/list', (req, res) => {
 // Update shop customer profile
 router.put('/:shopId/profile/:customerId', async (req, res) => {
   try {
-    const { customerId } = req.params;
-    const { 
-      email, first_name, last_name, 
-      company, street, zip, city, phone,
-      password 
-    } = req.body;
+    const { shopId: rawShopId, customerId } = req.params;
+    const shopId = resolveShopId(rawShopId);
+
+    if (!shopId) {
+        return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+    }
 
     // Check if customer exists
     const existing = db.prepare('SELECT id FROM shop_customers WHERE id = ?').get(customerId);
