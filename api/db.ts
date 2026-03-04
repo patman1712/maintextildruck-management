@@ -138,6 +138,13 @@ db.exec(`
     user_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS color_codes (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    hex_code TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Seed initial admin user if no users exist

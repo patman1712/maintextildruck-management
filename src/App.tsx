@@ -21,6 +21,7 @@ import PreviewGenerator from "@/pages/PreviewGenerator";
 import AdminSettings from "@/pages/AdminSettings";
 import PublicOrderProof from "@/pages/PublicOrderProof";
 import ImageVector from "@/pages/ImageVector";
+import ColorCodes from "@/pages/ColorCodes";
 import FAQ from "@/pages/FAQ";
 import OnlineShops from "@/pages/OnlineShops/OnlineShops";
 import ShopDashboard from "@/pages/OnlineShops/Management/ShopDashboard";
@@ -116,6 +117,7 @@ export default function App() {
           <Route path="freisteller" element={<BackgroundRemover />} />
           <Route path="preview-generator" element={<PreviewGenerator />} />
           <Route path="vector" element={<ImageVector />} />
+          <Route path="colors" element={<ColorCodes />} />
           <Route path="employees" element={<Employees />} />
           <Route path="shops" element={<OnlineShops />} />
           <Route path="shops/:shopId" element={<ShopDashboard />} />

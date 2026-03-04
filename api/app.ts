@@ -66,6 +66,7 @@ import shopRoutes from './routes/shops.js'
 import shopManagementRoutes from './routes/shop_management.js'
 import variableRoutes from './routes/variables.js'
 import personalizationRoutes from './routes/personalization.js'
+import colorRoutes from './routes/colors.js'
 
 
 const app: express.Application = express()
@@ -96,6 +97,7 @@ app.use('/api/shops', shopRoutes)
 app.use('/api/shop-management', shopManagementRoutes)
 app.use('/api/variables', variableRoutes)
 app.use('/api/personalization', personalizationRoutes)
+app.use('/api/colors', colorRoutes)
 
 // --- DEBUG ROUTE (Temporary) ---
 app.get('/api/debug/shopware-orders', (req, res) => {
