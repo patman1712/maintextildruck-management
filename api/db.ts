@@ -525,24 +525,6 @@ try {
     )
   `);
 
-  // New table for global shipping configuration
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS global_shipping_config (
-      id TEXT PRIMARY KEY,
-      dhl_user TEXT,
-      dhl_signature TEXT,
-      dhl_ekp TEXT,
-      dhl_participation TEXT DEFAULT '01',
-      sender_name TEXT,
-      sender_street TEXT,
-      sender_house_number TEXT,
-      sender_zip TEXT,
-      sender_city TEXT,
-      sender_country TEXT DEFAULT 'DEU',
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
   // Migration for Order Items price
   const orderItemCols = db.prepare("PRAGMA table_info(order_items)").all() as any[];
   const hasPrice = orderItemCols.some(col => col.name === 'price');
@@ -600,7 +582,6 @@ try {
       id TEXT PRIMARY KEY,
       dhl_user TEXT,
       dhl_signature TEXT,
-      dhl_api_key TEXT,
       dhl_ekp TEXT,
       dhl_participation TEXT DEFAULT '01',
       sender_name TEXT,

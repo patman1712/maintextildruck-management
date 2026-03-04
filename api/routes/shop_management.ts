@@ -339,7 +339,7 @@ router.get('/shipping/global-config', (req, res) => {
 
 router.post('/shipping/global-config', (req, res) => {
   try {
-    const { dhl_user, dhl_signature, dhl_api_key, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
 
     // Check if record exists
     const existing = db.prepare("SELECT id FROM global_shipping_config WHERE id = 'main'").get();
@@ -347,17 +347,17 @@ router.post('/shipping/global-config', (req, res) => {
     if (existing) {
       db.prepare(`
         UPDATE global_shipping_config 
-        SET dhl_user = ?, dhl_signature = ?, dhl_api_key = ?, dhl_ekp = ?, dhl_participation = ?, 
+        SET dhl_user = ?, dhl_signature = ?, dhl_ekp = ?, dhl_participation = ?, 
             sender_name = ?, sender_street = ?, sender_house_number = ?, 
             sender_zip = ?, sender_city = ?, sender_country = ?, 
             updated_at = CURRENT_TIMESTAMP
         WHERE id = 'main'
-      `).run(dhl_user, dhl_signature, dhl_api_key, dhl_ekp, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
+      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
     } else {
       db.prepare(`
-        INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_api_key, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
-        VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(dhl_user, dhl_signature, dhl_api_key, dhl_ekp, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
+        INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
+        VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
     }
 
     const updatedConfig = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get();
@@ -528,7 +528,7 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
             </Address>
           </Shipper>
           <Receiver>
-            <cis:name1>${(order.first_name || '' + ' ' + order.last_name || '').trim() || order.customer_name}</cis:name1>
+            <cis:name1>${`${order.first_name || ''} ${order.last_name || ''}`.trim() || order.customer_name}</cis:name1>
             <Address>
               <cis:streetName>${receiverAddr.street}</cis:streetName>
               <cis:streetNumber>${receiverAddr.number}</cis:streetNumber>
@@ -583,12 +583,37 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
                         await fs.writeFile(filePath, pdfBuffer);
                         labelUrl = `/labels/${fileName}`;
                         success = true;
+                    } else {
+                        throw new Error('Keine Label-Daten (URL oder Base64) in der Antwort gefunden.');
                     }
                 }
+            } else {
+                throw new Error('Keine Sendungsnummer in der Antwort gefunden.');
             }
         } else {
-            const errorMatch = xmlResponse.match(/<statusText>(.*?)<\/statusText>/);
-            throw new Error(errorMatch ? errorMatch[1] : 'Unbekannter DHL SOAP Fehler');
+            // Detailed Error Parsing
+            console.error('DHL SOAP Error Response:', xmlResponse);
+            
+            const statusTextMatch = xmlResponse.match(/<statusText>(.*?)<\/statusText>/i);
+            const statusMessageMatch = xmlResponse.match(/<statusMessage>(.*?)<\/statusMessage>/i);
+            const faultStringMatch = xmlResponse.match(/<faultstring>(.*?)<\/faultstring>/i);
+            
+            let dhlError = 'Unbekannter DHL Fehler';
+            if (statusMessageMatch && statusMessageMatch[1]) {
+                dhlError = statusMessageMatch[1];
+            } else if (statusTextMatch && statusTextMatch[1]) {
+                dhlError = statusTextMatch[1];
+            } else if (faultStringMatch && faultStringMatch[1]) {
+                dhlError = faultStringMatch[1];
+            } else {
+                // Last resort: extract everything between status tags if they exist
+                const statusMatch = xmlResponse.match(/<Status>([\s\S]*?)<\/Status>/i);
+                if (statusMatch) {
+                    dhlError = statusMatch[1].replace(/<[^>]+>/g, ' ').trim();
+                }
+            }
+            
+            throw new Error(dhlError);
         }
 
     } catch (e: any) {
