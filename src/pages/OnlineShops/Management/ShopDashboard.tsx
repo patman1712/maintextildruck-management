@@ -176,6 +176,25 @@ const ShopDashboard: React.FC = () => {
     } catch (e) { console.error(e); }
   };
 
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+    try {
+      const res = await fetch(`/api/shop-customers/${shopId}/admin/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShopOrders(shopOrders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+        if (selectedOrder && selectedOrder.id === orderId) {
+            setSelectedOrder({ ...selectedOrder, status: newStatus });
+        }
+      } else {
+        alert(data.error || 'Fehler beim Aktualisieren des Status.');
+      }
+    } catch (e) { console.error(e); }
+  };
+
   const handleDeleteCustomer = async (customerId: string) => {
     if (!confirm('Kunden wirklich löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.')) return;
     try {
@@ -586,9 +605,19 @@ const ShopDashboard: React.FC = () => {
                                             <div className="text-xs text-slate-400">{order.customer_email}</div>
                                         </td>
                                         <td className="py-4 px-4">
-                                            <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${order.status === 'active' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-600'}`}>
-                                                {order.status === 'active' ? 'In Bearbeitung' : order.status}
-                                            </span>
+                                            <select 
+                                                value={order.status} 
+                                                onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                                                className={`px-2 py-1 rounded text-[10px] font-black uppercase outline-none cursor-pointer border-transparent hover:border-slate-200 transition-all ${
+                                                    order.status === 'active' ? 'bg-blue-50 text-blue-600' : 
+                                                    order.status === 'shipped' ? 'bg-green-50 text-green-600' :
+                                                    'bg-slate-100 text-slate-600'
+                                                }`}
+                                            >
+                                                <option value="active">In Bearbeitung</option>
+                                                <option value="shipped">Versendet</option>
+                                                <option value="cancelled">Storniert</option>
+                                            </select>
                                         </td>
                                         <td className="py-4 px-4 font-bold text-slate-800">
                                             {order.total_amount?.toFixed(2).replace('.', ',')} €
@@ -662,9 +691,19 @@ const ShopDashboard: React.FC = () => {
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="text-sm text-slate-500 font-medium">Status:</span>
-                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${selectedOrder.status === 'active' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}>
-                                        {selectedOrder.status === 'active' ? 'In Bearbeitung' : selectedOrder.status}
-                                    </span>
+                                    <select 
+                                        value={selectedOrder.status} 
+                                        onChange={(e) => handleUpdateOrderStatus(selectedOrder.id, e.target.value)}
+                                        className={`px-3 py-1 rounded-full text-[10px] font-black uppercase outline-none cursor-pointer ${
+                                            selectedOrder.status === 'active' ? 'bg-blue-100 text-blue-700' : 
+                                            selectedOrder.status === 'shipped' ? 'bg-green-100 text-green-700' :
+                                            'bg-slate-100 text-slate-700'
+                                        }`}
+                                    >
+                                        <option value="active">In Bearbeitung</option>
+                                        <option value="shipped">Versendet</option>
+                                        <option value="cancelled">Storniert</option>
+                                    </select>
                                 </div>
                                 <div className="pt-4 border-t border-slate-50 space-y-2">
                                     <div className="flex justify-between text-sm text-slate-500">

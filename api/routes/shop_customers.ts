@@ -305,6 +305,23 @@ router.get('/:shopId/admin/orders', (req, res) => {
   }
 });
 
+// Admin: Update order status
+router.put('/:shopId/admin/orders/:orderId/status', (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+        return res.status(400).json({ success: false, error: 'Status ist erforderlich.' });
+    }
+
+    db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, orderId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Admin: Delete a customer
 router.delete('/:shopId/admin/:customerId', (req, res) => {
   try {

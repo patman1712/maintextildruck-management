@@ -81,8 +81,16 @@ const ShopOrdersPage: React.FC = () => {
                     <div className="text-right">
                       <div className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Status</div>
                       <div className="flex items-center font-bold text-sm">
-                        <Clock size={14} className="mr-1.5 text-blue-500" />
-                        {order.status === 'active' ? 'In Bearbeitung' : order.status}
+                        {order.status === 'shipped' ? (
+                          <CheckCircle size={14} className="mr-1.5 text-green-500" />
+                        ) : order.status === 'cancelled' ? (
+                          <X size={14} className="mr-1.5 text-red-500" />
+                        ) : (
+                          <Clock size={14} className="mr-1.5 text-blue-500" />
+                        )}
+                        {order.status === 'active' ? 'In Bearbeitung' : 
+                         order.status === 'shipped' ? 'Versendet' : 
+                         order.status === 'cancelled' ? 'Storniert' : order.status}
                       </div>
                     </div>
                     <div className="text-right">

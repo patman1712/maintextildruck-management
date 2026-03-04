@@ -50,10 +50,18 @@ const ShopOrderDetailPage: React.FC = () => {
               <span className="flex items-center"><Package size={16} className="mr-1.5 opacity-50" /> {order.items?.length} Artikel</span>
             </div>
           </div>
-          <div className="flex items-center bg-blue-50 text-blue-700 px-6 py-3 rounded-2xl border border-blue-100">
-            <Clock size={20} className="mr-2.5" />
+          <div className={`flex items-center px-6 py-3 rounded-2xl border ${
+            order.status === 'shipped' ? 'bg-green-50 text-green-700 border-green-100' : 
+            order.status === 'cancelled' ? 'bg-red-50 text-red-700 border-red-100' :
+            'bg-blue-50 text-blue-700 border-blue-100'
+          }`}>
+            {order.status === 'shipped' ? <CheckCircle size={20} className="mr-2.5" /> : 
+             order.status === 'cancelled' ? <X size={20} className="mr-2.5" /> : 
+             <Clock size={20} className="mr-2.5" />}
             <span className="font-black uppercase tracking-widest text-sm">
-              Status: {order.status === 'active' ? 'In Bearbeitung' : order.status}
+              Status: {order.status === 'active' ? 'In Bearbeitung' : 
+                       order.status === 'shipped' ? 'Versendet' : 
+                       order.status === 'cancelled' ? 'Storniert' : order.status}
             </span>
           </div>
         </div>
@@ -104,21 +112,31 @@ const ShopOrderDetailPage: React.FC = () => {
                   </div>
                 </div>
                 <div className="relative flex items-center">
-                  <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center z-10 shadow-lg shadow-blue-100 animate-pulse">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center z-10 shadow-lg ${
+                    order.status === 'active' ? 'bg-blue-500 text-white shadow-blue-100 animate-pulse' : 
+                    order.status === 'shipped' ? 'bg-green-500 text-white shadow-green-100' : 
+                    'bg-slate-200 text-white'
+                  }`}>
                     <Clock size={16} />
                   </div>
                   <div className="ml-6">
                     <div className="font-black text-slate-800 text-sm uppercase tracking-tight">In Produktion</div>
-                    <div className="text-xs text-slate-400 mt-0.5">Deine Artikel werden nun individuell für dich angefertigt.</div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {order.status === 'shipped' ? 'Die Produktion wurde abgeschlossen.' : 'Deine Artikel werden nun individuell für dich angefertigt.'}
+                    </div>
                   </div>
                 </div>
-                <div className="relative flex items-center opacity-30">
-                  <div className="w-8 h-8 rounded-full bg-slate-200 text-white flex items-center justify-center z-10">
+                <div className={`relative flex items-center ${order.status !== 'shipped' ? 'opacity-30' : ''}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center z-10 shadow-lg ${
+                    order.status === 'shipped' ? 'bg-green-500 text-white shadow-green-100 animate-bounce' : 'bg-slate-200 text-white'
+                  }`}>
                     <Truck size={16} />
                   </div>
                   <div className="ml-6">
                     <div className="font-black text-slate-800 text-sm uppercase tracking-tight">Versand</div>
-                    <div className="text-xs text-slate-400 mt-0.5">Sobald dein Paket unser Lager verlässt, erhältst du eine E-Mail.</div>
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {order.status === 'shipped' ? 'Dein Paket hat unser Lager verlassen!' : 'Sobald dein Paket unser Lager verlässt, erhältst du eine E-Mail.'}
+                    </div>
                   </div>
                 </div>
               </div>
