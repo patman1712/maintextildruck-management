@@ -145,6 +145,24 @@ db.exec(`
     hex_code TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS shop_customers (
+    id TEXT PRIMARY KEY,
+    shop_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    password TEXT NOT NULL,
+    first_name TEXT,
+    last_name TEXT,
+    company TEXT,
+    street TEXT,
+    zip TEXT,
+    city TEXT,
+    phone TEXT,
+    data_privacy_accepted BOOLEAN DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE,
+    UNIQUE(shop_id, email)
+  );
 `);
 
 // Seed initial admin user if no users exist

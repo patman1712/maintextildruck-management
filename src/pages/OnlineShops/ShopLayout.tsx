@@ -1,12 +1,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, Outlet, Link, useLocation } from 'react-router-dom';
-import { ShoppingCart, Search, Menu, User, ChevronDown } from 'lucide-react';
+import { ShoppingCart, Search, Menu, User, ChevronDown, LogOut } from 'lucide-react';
 import { Shop, ShopCategory } from '../../store';
+import { useShopStore } from '../../shopStore';
 
 const ShopLayout: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>();
   const location = useLocation();
+  const { currentCustomer, logout } = useShopStore();
   const [shop, setShop] = useState<Shop | null>(null);
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,9 +151,30 @@ const ShopLayout: React.FC = () => {
             <button className="hover:text-slate-900 hidden sm:block">
               <Search size={22} />
             </button>
-            <button className="hover:text-slate-900 hidden sm:block">
-              <User size={22} />
-            </button>
+            {currentCustomer ? (
+              <div className="relative group">
+                <button className="flex items-center space-x-2 hover:text-slate-900 transition-colors">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: primaryColor }}>
+                    {currentCustomer.first_name?.charAt(0)}{currentCustomer.last_name?.charAt(0)}
+                  </div>
+                  <span className="hidden lg:block text-sm font-bold text-slate-700">{currentCustomer.first_name}</span>
+                  <ChevronDown size={14} className="opacity-50" />
+                </button>
+                <div className="absolute right-0 top-full mt-2 w-48 bg-white shadow-xl rounded-xl border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 p-2">
+                  <div className="px-3 py-2 border-b border-slate-50 mb-1">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Mein Konto</p>
+                  </div>
+                  <button onClick={logout} className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium">
+                    <LogOut size={16} />
+                    <span>Abmelden</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <Link to={`${shopBaseUrl}/login`} className="hover:text-slate-900 transition-colors">
+                <User size={22} />
+              </Link>
+            )}
             <button className="hover:text-slate-900 relative" onClick={() => setCartOpen(true)}>
               <ShoppingCart size={22} />
               <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-bold h-4 w-4 rounded-full flex items-center justify-center">0</span>

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2 } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
 
 const ShopDashboard: React.FC = () => {
@@ -10,9 +10,10 @@ const ShopDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { shops, updateShop, products } = useAppStore();
   const [shop, setShop] = useState<Shop | null>(null);
-  const [activeTab, setActiveTab] = useState<'general' | 'design' | 'categories' | 'products'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'design' | 'categories' | 'products' | 'customers'>('general');
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [shopProducts, setShopProducts] = useState<(ShopProductAssignment & { product_name?: string, product_number?: string, category_name?: string })[]>([]);
+  const [shopCustomers, setShopCustomers] = useState<any[]>([]);
   
   // Forms
   const [newCategory, setNewCategory] = useState({ name: '', slug: '', parent_id: '' });
@@ -29,8 +30,17 @@ const ShopDashboard: React.FC = () => {
       if (foundShop) setShop(foundShop);
       fetchCategories();
       fetchShopProducts();
+      fetchShopCustomers();
     }
   }, [shopId, shops]);
+
+  const fetchShopCustomers = async () => {
+    try {
+      const res = await fetch(`/api/shop-customers/${shopId}/admin/list`);
+      const data = await res.json();
+      if (data.success) setShopCustomers(data.data);
+    } catch (e) { console.error(e); }
+  };
 
   const fetchCategories = async () => {
     try {
@@ -209,6 +219,12 @@ const ShopDashboard: React.FC = () => {
                 className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'products' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
             >
                 <ShoppingBag size={16} className="mr-2" /> Produkte
+            </button>
+            <button 
+                onClick={() => setActiveTab('customers')}
+                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'customers' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+                <Users size={16} className="mr-2" /> Kunden
             </button>
         </div>
 
@@ -411,6 +427,90 @@ const ShopDashboard: React.FC = () => {
                             </div>
                         ))}
                         {shopProducts.length === 0 && <p className="text-center text-slate-500 py-8">Keine Produkte im Shop.</p>}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'customers' && (
+                <div>
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-bold text-lg">Registrierte Kunden ({shopCustomers.length})</h3>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-slate-100 text-slate-400 text-xs uppercase tracking-widest">
+                                    <th className="py-4 px-4 font-bold">Kunde</th>
+                                    <th className="py-4 px-4 font-bold">Unternehmen</th>
+                                    <th className="py-4 px-4 font-bold">Kontakt</th>
+                                    <th className="py-4 px-4 font-bold">Adresse</th>
+                                    <th className="py-4 px-4 font-bold">Registriert am</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                                {shopCustomers.map(customer => (
+                                    <tr key={customer.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="py-4 px-4">
+                                            <div className="flex items-center space-x-3">
+                                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                                                    <User size={20} />
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-slate-800">{customer.first_name} {customer.last_name}</p>
+                                                    <p className="text-xs text-slate-500">{customer.email}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            {customer.company ? (
+                                                <div className="flex items-center text-slate-600">
+                                                    <Building size={14} className="mr-2 opacity-50" />
+                                                    <span className="text-sm">{customer.company}</span>
+                                                </div>
+                                            ) : <span className="text-slate-300 italic text-xs">-</span>}
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <div className="space-y-1">
+                                                <div className="flex items-center text-slate-600">
+                                                    <Mail size={14} className="mr-2 opacity-50" />
+                                                    <span className="text-sm">{customer.email}</span>
+                                                </div>
+                                                {customer.phone && (
+                                                    <div className="flex items-center text-slate-600">
+                                                        <Phone size={14} className="mr-2 opacity-50" />
+                                                        <span className="text-sm">{customer.phone}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            {customer.street ? (
+                                                <div className="flex items-start text-slate-600">
+                                                    <MapPin size={14} className="mr-2 mt-1 opacity-50" />
+                                                    <div className="text-sm">
+                                                        <p>{customer.street}</p>
+                                                        <p>{customer.zip} {customer.city}</p>
+                                                    </div>
+                                                </div>
+                                            ) : <span className="text-slate-300 italic text-xs">-</span>}
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <div className="flex items-center text-slate-400 text-xs">
+                                                <Calendar size={14} className="mr-2 opacity-50" />
+                                                {new Date(customer.created_at).toLocaleDateString('de-DE')}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {shopCustomers.length === 0 && (
+                            <div className="py-20 text-center">
+                                <Users size={40} className="mx-auto text-slate-200 mb-4" />
+                                <p className="text-slate-400 italic">Noch keine Kunden registriert.</p>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
