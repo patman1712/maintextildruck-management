@@ -178,6 +178,107 @@ router.put('/:shopId/profile/:customerId', async (req, res) => {
   }
 });
 
+// Get orders for a shop customer
+router.get('/:shopId/orders/:customerId', async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const orders = db.prepare('SELECT * FROM orders WHERE shop_customer_id = ? ORDER BY created_at DESC').all(customerId);
+    res.json({ success: true, data: orders });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get order details for a shop customer
+router.get('/:shopId/orders/:customerId/:orderId', async (req, res) => {
+  try {
+    const { orderId, customerId } = req.params;
+    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND shop_customer_id = ?').get(orderId, customerId);
+    if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
+
+    const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
+    res.json({ success: true, data: { ...order, items } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Place a new order from a shop
+router.post('/:shopId/orders', async (req, res) => {
+  try {
+    const { shopId: rawShopId } = req.params;
+    const shopId = resolveShopId(rawShopId);
+    if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+
+    const { 
+      customerId, 
+      items, 
+      address, 
+      paymentMethod,
+      totalAmount,
+      shippingCosts
+    } = req.body;
+
+    const orderId = crypto.randomUUID();
+    const orderNumber = `${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // Start transaction
+    const transaction = db.transaction(() => {
+      // 1. Create Order
+      db.prepare(`
+        INSERT INTO orders (
+          id, title, shop_id, shop_customer_id, 
+          customer_name, customer_email, customer_phone, customer_address,
+          order_number, total_amount, shipping_costs, payment_method,
+          status, deadline
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        orderId,
+        `Shop Bestellung ${orderNumber}`,
+        shopId,
+        customerId || null,
+        `${address.firstName} ${address.lastName}`,
+        address.email || '',
+        address.phone || '',
+        `${address.street}, ${address.zip} ${address.city}`,
+        orderNumber,
+        totalAmount,
+        shippingCosts,
+        paymentMethod,
+        'active',
+        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() // Default 14 days
+      );
+
+      // 2. Create Order Items
+      const insertItem = db.prepare(`
+        INSERT INTO order_items (
+          id, order_id, supplier_id, item_name, quantity, price, color, size, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const item of items) {
+        insertItem.run(
+          crypto.randomUUID(),
+          orderId,
+          'manual', // Default or find supplier
+          item.name,
+          item.quantity,
+          item.price,
+          item.color || null,
+          item.size || null,
+          item.personalization || null
+        );
+      }
+    });
+
+    transaction();
+
+    res.json({ success: true, data: { id: orderId, orderNumber } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Admin: Delete a customer
 router.delete('/:shopId/admin/:customerId', (req, res) => {
   try {

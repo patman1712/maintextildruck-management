@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, Outlet, Link, useLocation } from 'react-router-dom';
-import { ShoppingCart, Search, Menu, User, ChevronDown, LogOut, X, Trash2, ArrowRight, ShoppingBag as BagIcon } from 'lucide-react';
+import { ShoppingCart, Search, Menu, User, ChevronDown, LogOut, X, Trash2, ArrowRight, ShoppingBag as BagIcon, ShoppingBag } from 'lucide-react';
 import { Shop, ShopCategory } from '../../store';
 import { useShopStore } from '../../shopStore';
 
@@ -169,6 +169,10 @@ const ShopLayout: React.FC = () => {
                   <Link to={`${shopBaseUrl}/profile`} className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg transition-colors font-medium">
                     <User size={16} />
                     <span>Profil bearbeiten</span>
+                  </Link>
+                  <Link to={`${shopBaseUrl}/orders`} className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg transition-colors font-medium">
+                    <ShoppingBag size={16} />
+                    <span>Meine Bestellungen</span>
                   </Link>
                   <button onClick={logout} className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium">
                     <LogOut size={16} />

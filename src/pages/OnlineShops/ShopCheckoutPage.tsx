@@ -22,11 +22,48 @@ const ShopCheckoutPage: React.FC = () => {
   const total = cartTotal + shipping;
 
   const [orderComplete, setOrderComplete] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [address, setAddress] = useState({
+    firstName: currentCustomer?.first_name || '',
+    lastName: currentCustomer?.last_name || '',
+    company: currentCustomer?.company || '',
+    street: currentCustomer?.street || '',
+    zip: currentCustomer?.zip || '',
+    city: currentCustomer?.city || '',
+    email: currentCustomer?.email || '',
+    phone: currentCustomer?.phone || ''
+  });
+  const [paymentMethod, setPaymentMethod] = useState('PayPal');
 
-  const handlePlaceOrder = () => {
-    // In a real app, this would send data to backend.
-    setOrderComplete(true);
-    clearCart();
+  const handlePlaceOrder = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/shop-customers/${shopId}/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: currentCustomer?.id,
+          items: cart,
+          address,
+          paymentMethod,
+          totalAmount: total,
+          shippingCosts: shipping
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOrderComplete(true);
+        clearCart();
+      } else {
+        setError(data.error || 'Fehler beim Aufgeben der Bestellung.');
+      }
+    } catch (err) {
+      setError('Ein technischer Fehler ist aufgetreten.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (cart.length === 0 && !orderComplete) {
@@ -107,27 +144,27 @@ const ShopCheckoutPage: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Vorname*</label>
-                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" defaultValue={currentCustomer?.first_name} />
+                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.firstName} onChange={e => setAddress({...address, firstName: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nachname*</label>
-                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" defaultValue={currentCustomer?.last_name} />
+                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.lastName} onChange={e => setAddress({...address, lastName: e.target.value})} />
                 </div>
                 <div className="col-span-full space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Firma (Optional)</label>
-                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" defaultValue={currentCustomer?.company} />
+                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.company} onChange={e => setAddress({...address, company: e.target.value})} />
                 </div>
                 <div className="col-span-full space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Straße & Hausnummer*</label>
-                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" defaultValue={currentCustomer?.street} />
+                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.street} onChange={e => setAddress({...address, street: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">PLZ*</label>
-                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" defaultValue={currentCustomer?.zip} />
+                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.zip} onChange={e => setAddress({...address, zip: e.target.value})} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Stadt*</label>
-                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" defaultValue={currentCustomer?.city} />
+                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.city} onChange={e => setAddress({...address, city: e.target.value})} />
                 </div>
               </div>
 

@@ -479,6 +479,19 @@ try {
     db.exec('ALTER TABLE customer_products ADD COLUMN manufacturer_info TEXT');
   }
 
+  // Migration for Shop Orders
+  const orderCols = db.prepare("PRAGMA table_info(orders)").all() as any[];
+  const hasShopId = orderCols.some(col => col.name === 'shop_id');
+  if (!hasShopId) {
+    console.log('Migrating database: Adding shop_id and shop_customer_id to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN shop_id TEXT');
+    db.exec('ALTER TABLE orders ADD COLUMN shop_customer_id TEXT');
+    db.exec('ALTER TABLE orders ADD COLUMN total_amount DECIMAL(10, 2)');
+    db.exec('ALTER TABLE orders ADD COLUMN shipping_costs DECIMAL(10, 2)');
+    db.exec('ALTER TABLE orders ADD COLUMN payment_method TEXT');
+    db.exec('ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT "pending"');
+  }
+
   // Migration: Fix file types for shop images
   // Previously all files were 'print'. We want shop images to be 'view'.
   // We assume all files currently assigned to shops are images.
