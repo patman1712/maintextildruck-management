@@ -501,12 +501,23 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         
         // In a real scenario, we would download the PDF from the URL provided by DHL
         // For now, we store the URL or try to fetch it
-        // Since createLabel returns a URL, we can try to download it
+        // Since createLabel returns a URL or Data URI, we can try to download/save it
         if (result.labelUrl) {
             try {
-                const pdfRes = await fetch(result.labelUrl);
-                const pdfBuffer = await pdfRes.arrayBuffer();
-                await fs.writeFile(labelPath, Buffer.from(pdfBuffer));
+                let pdfBuffer;
+                
+                if (result.labelUrl.startsWith('data:')) {
+                    // Handle Data URI (Base64)
+                    const base64Data = result.labelUrl.split(',')[1];
+                    pdfBuffer = Buffer.from(base64Data, 'base64');
+                } else {
+                    // Handle HTTP URL
+                    const pdfRes = await fetch(result.labelUrl);
+                    const arrayBuffer = await pdfRes.arrayBuffer();
+                    pdfBuffer = Buffer.from(arrayBuffer);
+                }
+
+                await fs.writeFile(labelPath, pdfBuffer);
                 
                 // Return local URL
                 const localUrl = `/labels/${path.basename(labelPath)}`;
@@ -527,8 +538,8 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
                     labelUrl: localUrl 
                 });
             } catch (downloadErr) {
-                console.error('Failed to download label PDF:', downloadErr);
-                // Fallback: Return the DHL URL directly
+                console.error('Failed to save label PDF:', downloadErr);
+                // Fallback: Return the DHL URL/DataURI directly
                 res.json({ 
                     success: true, 
                     trackingNumber: result.trackingNumber, 
