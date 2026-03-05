@@ -40,6 +40,10 @@ const ShopDashboard: React.FC = () => {
   const [assignProductSearch, setAssignProductSearch] = useState('');
   const [showProductModal, setShowProductModal] = useState(false);
   
+  const [showWeightModal, setShowWeightModal] = useState(false);
+  const [manualWeight, setManualWeight] = useState(0);
+  const [pendingLabelOrder, setPendingLabelOrder] = useState<any | null>(null);
+  
   // Editor Modal
   const [editorAssignment, setEditorAssignment] = useState<any | null>(null);
   const [isCreateMode, setIsCreateMode] = useState(false); // Track create mode
@@ -318,23 +322,26 @@ const ShopDashboard: React.FC = () => {
         console.error("Could not calculate default weight", e);
     }
 
-    const weightInput = prompt(`Das berechnete Paketgewicht beträgt laut System ${defaultWeight.toFixed(3)} kg.\n\nSoll das Label so erstellt werden?\n\nFalls nicht, geben Sie bitte das korrekte Gesamtgewicht (in kg) ein:`, defaultWeight.toFixed(3));
-    
-    if (weightInput === null) return; // Cancelled
-    
-    const manualWeight = parseFloat(weightInput.replace(',', '.'));
-    if (isNaN(manualWeight) || manualWeight <= 0) {
-        alert('Ungültiges Gewicht. Bitte geben Sie eine Zahl größer 0 ein.');
-        return;
-    }
+    // Use a simpler prompt for now, as custom styling requires a proper Modal component.
+    // However, the user asked for custom CSS/design for the prompt.
+    // Browser 'prompt' cannot be styled.
+    // I need to replace 'prompt' with a custom state-driven Modal.
+    setShowWeightModal(true);
+    setPendingLabelOrder(order);
+    setManualWeight(defaultWeight);
+  };
 
+  const handleConfirmWeight = async () => {
+    if (!pendingLabelOrder) return;
+    
+    setShowWeightModal(false);
     setIsCreatingLabel(true);
     try {
       const res = await fetch(`/api/shop-management/${shopId}/shipping/create-label`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-            orderId: order.id,
+            orderId: pendingLabelOrder.id,
             manualWeight: manualWeight // Send manual weight
         })
       });
@@ -342,7 +349,7 @@ const ShopDashboard: React.FC = () => {
       if (data.success) {
         alert('DHL Label erfolgreich erstellt!');
         fetchShopOrders();
-        if (selectedOrder?.id === order.id) {
+        if (selectedOrder?.id === pendingLabelOrder.id) {
           setSelectedOrder({ ...selectedOrder, tracking_number: data.trackingNumber, label_url: data.labelUrl, status: 'shipped' });
         }
       } else {
@@ -366,6 +373,7 @@ const ShopDashboard: React.FC = () => {
       alert('Ein technischer Fehler ist aufgetreten: ' + e.message);
     } finally {
       setIsCreatingLabel(false);
+      setPendingLabelOrder(null);
     }
   };
 
@@ -1306,6 +1314,67 @@ const ShopDashboard: React.FC = () => {
                         </div>
                     ))}
                     {availableProducts.length === 0 && <p className="text-center text-slate-500 py-4">Keine passenden Produkte gefunden.</p>}
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Weight Confirmation Modal */}
+      {showWeightModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden transform transition-all">
+                <div className="bg-slate-800 p-4 flex justify-between items-center">
+                    <h3 className="font-bold text-white flex items-center">
+                        <Truck size={20} className="mr-2" /> 
+                        DHL Label erstellen
+                    </h3>
+                    <button onClick={() => setShowWeightModal(false)} className="text-slate-400 hover:text-white transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+                
+                <div className="p-6">
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-6">
+                        <p className="text-sm text-blue-800 font-medium mb-1">Automatische Berechnung:</p>
+                        <p className="text-xs text-blue-600">
+                            Das System hat basierend auf den Artikeln und der Verpackung ein Gewicht von 
+                            <span className="font-bold text-blue-900 mx-1 text-base">{manualWeight.toFixed(3)} kg</span>
+                            ermittelt.
+                        </p>
+                    </div>
+
+                    <label className="block text-sm font-bold text-slate-700 mb-2">
+                        Tatsächliches Versandgewicht (kg)
+                    </label>
+                    <div className="relative">
+                        <input 
+                            type="number" 
+                            step="0.001"
+                            className="w-full border-2 border-slate-200 rounded-lg p-3 text-lg font-bold text-slate-800 focus:border-slate-800 focus:outline-none transition-colors"
+                            value={manualWeight}
+                            onChange={(e) => setManualWeight(parseFloat(e.target.value))}
+                        />
+                        <span className="absolute right-4 top-3.5 text-slate-400 font-bold">kg</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2">
+                        Bitte korrigieren Sie den Wert, falls er von der Realität abweicht. Dieses Gewicht wird final an DHL übermittelt.
+                    </p>
+                </div>
+
+                <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end space-x-3">
+                    <button 
+                        onClick={() => setShowWeightModal(false)}
+                        className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition-colors text-sm"
+                    >
+                        Abbrechen
+                    </button>
+                    <button 
+                        onClick={handleConfirmWeight}
+                        className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-200 text-sm flex items-center"
+                    >
+                        <Truck size={16} className="mr-2" />
+                        Label jetzt kaufen
+                    </button>
                 </div>
             </div>
         </div>
