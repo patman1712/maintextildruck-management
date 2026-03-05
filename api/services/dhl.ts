@@ -133,7 +133,10 @@ export class DhlClient {
         
         const finalBillingNumber = `${this.ekp}01${this.participation}`;
 
-        const today = new Date().toISOString().split('T')[0];
+        // Use tomorrow's date to avoid timezone issues
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const shipmentDate = tomorrow.toISOString().split('T')[0];
 
         // Determine address fields from various possible properties
         const streetRaw = order.shipping_street || order.billing_street || order.street || order.customer_address || '';
@@ -152,12 +155,12 @@ export class DhlClient {
         const shipperStreetNumber = sender.street_number ? String(sender.street_number) : '1';
         const receiverStreetNumber = receiverAddress.number ? String(receiverAddress.number) : '1';
 
-        // Prepare REST JSON Payload
+        // Prepare REST JSON Payload (Back to standard V2 structure with origin object)
         const payload = {
             shipments: [{
                 product: 'V01PAK',
                 billingNumber: finalBillingNumber,
-                shipmentDate: today,
+                shipmentDate: shipmentDate, // Changed to tomorrow
                 shipper: {
                     name1: (sender.company || 'Maintextildruck').substring(0, 35),
                     address: {
@@ -190,40 +193,8 @@ export class DhlClient {
         try {
             await logDebug('REST_REQUEST', payload);
             
-            // Validate first!
-            const validationResponse = await fetch(`${this.endpoint}/orders?validate=true`, { 
-                method: 'POST',
-                headers: {
-                    'Authorization': this.getBasicAuth(),
-                    'dhl-api-key': this.apiKey,
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'Accept-Language': 'de-DE'
-                },
-                body: JSON.stringify(payload)
-            });
-
-            const validationText = await validationResponse.text();
-            let validationData;
-            try {
-                validationData = JSON.parse(validationText);
-            } catch (e) {
-                // If validation crashes, it's a server issue
-                 await logDebug('REST_VALIDATION_RAW', validationText);
-            }
-
-            if (validationData && validationData.shipments && validationData.shipments[0] && validationData.shipments[0].validationMessages) {
-                 const msgs = validationData.shipments[0].validationMessages;
-                 const errors = msgs.filter((m: any) => m.validationState === 'ERROR');
-                 if (errors.length > 0) {
-                     const err = new Error(`Validierungsfehler: ${errors[0].validationMessage}`);
-                     (err as any).payload = payload;
-                     throw err;
-                 }
-            }
-
-            // If validation passed (or crashed but maybe creation works?), try creation
-            const response = await fetch(`${this.endpoint}/orders?docFormat=PDF`, { 
+            // Skip separate validation call as it crashes too. Just try creation.
+            const response = await fetch(`${this.endpoint}/orders?docFormat=PDF&printFormat=A4`, { 
                 method: 'POST',
                 headers: {
                     'Authorization': this.getBasicAuth(),
