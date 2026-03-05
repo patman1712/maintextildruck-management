@@ -205,8 +205,8 @@ export default function InternalOrderView() {
                                 <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4 font-bold text-lg text-gray-900 w-20">{item.quantity}x</td>
                                     <td className="px-6 py-4">
-                                        <div className="font-medium text-gray-900">{item.item_name}</div>
-                                        {item.item_number && <div className="text-xs text-gray-500 font-mono mt-0.5">{item.item_number}</div>}
+                                        <div className="font-medium text-gray-900">{item.itemName}</div>
+                                        {item.itemNumber && <div className="text-xs text-gray-500 font-mono mt-0.5">{item.itemNumber}</div>}
                                     </td>
                                     <td className="px-6 py-4 text-gray-600">
                                         <div className="flex flex-col">
