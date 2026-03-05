@@ -139,6 +139,14 @@ export class DhlClient {
         const receiverStreetFull = order.shipping_street || order.billing_street || '';
         const receiverAddress = this.splitStreet(receiverStreetFull);
 
+        // Ensure weights are valid numbers
+        let weight = parseFloat(order.weight) || 1.0;
+        if (weight <= 0) weight = 1.0;
+
+        // Ensure proper types for street numbers
+        const shipperStreetNumber = sender.street_number ? String(sender.street_number) : '1';
+        const receiverStreetNumber = receiverAddress.number ? String(receiverAddress.number) : '1';
+
         // Prepare REST JSON Payload
         const payload = {
             shipments: [{
@@ -146,27 +154,36 @@ export class DhlClient {
                 billingNumber: finalBillingNumber,
                 shipmentDate: today,
                 shipper: {
-                    name1: sender.company || 'Maintextildruck',
+                    name1: (sender.company || 'Maintextildruck').substring(0, 35),
                     address: {
-                        streetName: sender.street,
-                        streetNumber: sender.street_number,
-                        zipCode: sender.zip,
-                        city: sender.city,
+                        streetName: (sender.street || '').substring(0, 35),
+                        streetNumber: shipperStreetNumber.substring(0, 5),
+                        zipCode: (sender.zip || '').substring(0, 10),
+                        city: (sender.city || '').substring(0, 35),
                         origin: { countryISOCode: 'DEU' }
                     }
                 },
                 receiver: {
-                    name1: `${order.first_name} ${order.last_name}`.trim() || order.customer_name,
+                    name1: (`${order.first_name} ${order.last_name}`.trim() || order.customer_name || 'Kunde').substring(0, 35),
                     address: {
-                        streetName: receiverAddress.name,
-                        streetNumber: receiverAddress.number, 
-                        zipCode: order.shipping_zip || order.billing_zip,
-                        city: order.shipping_city || order.billing_city,
+                        streetName: (receiverAddress.name || '').substring(0, 35),
+                        streetNumber: receiverStreetNumber.substring(0, 5),
+                        zipCode: (order.shipping_zip || order.billing_zip || '').substring(0, 10),
+                        city: (order.shipping_city || order.billing_city || '').substring(0, 35),
                         origin: { countryISOCode: 'DEU' }
                     }
                 },
                 details: {
-                    parcelWeightKG: parseFloat(order.weight) || 1.0
+                    dim: {
+                        uom: 'mm',
+                        height: 100,
+                        length: 200,
+                        width: 150
+                    },
+                    weight: {
+                        uom: 'kg',
+                        value: weight
+                    }
                 }
             }]
         };
@@ -174,7 +191,7 @@ export class DhlClient {
         try {
             await logDebug('REST_REQUEST', payload);
             
-            const response = await fetch(`${this.endpoint}/orders`, {
+            const response = await fetch(`${this.endpoint}/orders?docFormat=PDF&printFormat=A4`, { // Add print params
                 method: 'POST',
                 headers: {
                     'Authorization': this.getBasicAuth(),
