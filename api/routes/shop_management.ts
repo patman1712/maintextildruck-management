@@ -513,12 +513,13 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
 
     for (const item of orderItems) {
         let itemWeight = 0;
+        let product = null;
         
-        // Try to find product via item_number (SKU)
+        // 1. Try to find product via item_number (SKU)
         if (item.item_number) {
             // Find product belonging to the shop's owner (customer)
             // First try strict match with customer_id
-            let product = db.prepare(`
+            product = db.prepare(`
                 SELECT weight, name
                 FROM customer_products 
                 WHERE product_number = ? AND customer_id = ?
@@ -533,15 +534,42 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
                     WHERE product_number = ?
                  `).get(item.item_number) as any;
             }
+        } else {
+             console.log(`- Item "${item.item_name}": No SKU provided in order.`);
+        }
 
-            if (product && product.weight) {
+        // 2. Fallback: Try to find product by NAME if SKU lookup failed or SKU was missing
+        if (!product && item.item_name) {
+             console.log(`- Fallback: Looking up product by Name "${item.item_name}"...`);
+             
+             // Try strict match by name & customer
+             product = db.prepare(`
+                SELECT weight, name
+                FROM customer_products 
+                WHERE name = ? AND customer_id = ?
+             `).get(item.item_name, order.customer_id) as any;
+
+             if (!product) {
+                 // Try global name match
+                 console.log(`- Strict name lookup failed. Trying global name lookup...`);
+                 product = db.prepare(`
+                    SELECT weight, name
+                    FROM customer_products 
+                    WHERE name = ?
+                 `).get(item.item_name) as any;
+             }
+        }
+        
+        if (product) {
+            // Check if weight is set (allow 0, but log it)
+            if (product.weight !== undefined && product.weight !== null) {
                 itemWeight = parseFloat(product.weight);
-                console.log(`- Item "${item.item_name}" (SKU: ${item.item_number}): Found product "${product.name}" with weight ${itemWeight}kg`);
+                console.log(`- Item "${item.item_name}": Found product "${product.name}" with weight ${itemWeight}kg`);
             } else {
-                console.log(`- Item "${item.item_name}" (SKU: ${item.item_number}): Product lookup failed or no weight set.`);
+                console.log(`- Item "${item.item_name}": Product found but has no weight property.`);
             }
         } else {
-             console.log(`- Item "${item.item_name}": No SKU provided.`);
+             console.log(`- Item "${item.item_name}": Product lookup FAILED (SKU: ${item.item_number || 'none'}).`);
         }
         
         totalWeight += (itemWeight * item.quantity);

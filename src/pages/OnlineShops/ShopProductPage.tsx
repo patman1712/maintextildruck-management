@@ -263,6 +263,7 @@ const ShopProductPage: React.FC = () => {
     const cartItem: CartItem = {
       id: cartItemId,
       productId: product.product_id,
+      productNumber: product.product_number,
       name: product.name,
       price: totalPrice,
       quantity: quantity,
