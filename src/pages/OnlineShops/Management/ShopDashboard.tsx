@@ -841,17 +841,32 @@ const ShopDashboard: React.FC = () => {
                         <div className="space-y-4">
                             <h4 className="font-bold text-slate-700 uppercase tracking-widest text-xs border-b pb-2">DHL Zugangsdaten</h4>
                             
-                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center mb-4">
-                                <input 
-                                    type="checkbox" 
-                                    id="dhl_sandbox"
-                                    className="h-4 w-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                                    checked={!!shippingConfig.dhl_sandbox}
-                                    onChange={(e) => setShippingConfig({ ...shippingConfig, dhl_sandbox: e.target.checked })}
-                                />
-                                <label htmlFor="dhl_sandbox" className="ml-3 block text-sm font-bold text-slate-700">
-                                    Sandbox-Modus aktivieren (Testumgebung)
-                                </label>
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex flex-col mb-4">
+                                <div className="flex items-center mb-2">
+                                    <input 
+                                        type="checkbox" 
+                                        id="dhl_sandbox"
+                                        className="h-4 w-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                        checked={!!shippingConfig.dhl_sandbox}
+                                        onChange={(e) => setShippingConfig({ ...shippingConfig, dhl_sandbox: e.target.checked })}
+                                    />
+                                    <label htmlFor="dhl_sandbox" className="ml-3 block text-sm font-bold text-slate-700">
+                                        Sandbox-Modus aktivieren (Testumgebung)
+                                    </label>
+                                </div>
+                                {shippingConfig.dhl_sandbox && (
+                                    <button 
+                                        onClick={() => setShippingConfig({
+                                            ...shippingConfig,
+                                            dhl_user: '2222222222_01',
+                                            dhl_signature: 'pass',
+                                            dhl_ekp: '2222222222'
+                                        })}
+                                        className="text-xs text-blue-600 hover:text-blue-800 underline self-start ml-7"
+                                    >
+                                        Standard DHL Test-Daten laden
+                                    </button>
+                                )}
                             </div>
 
                             <div>

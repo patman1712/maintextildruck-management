@@ -526,17 +526,32 @@ const OnlineShops: React.FC = () => {
                         <h4 className="font-bold text-slate-800">DHL API Zugangsdaten</h4>
                     </div>
                     
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center mb-4">
-                        <input 
-                            type="checkbox" 
-                            id="global_dhl_sandbox"
-                            className="h-4 w-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                            checked={!!globalShippingConfig.dhl_sandbox}
-                            onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, dhl_sandbox: e.target.checked })}
-                        />
-                        <label htmlFor="global_dhl_sandbox" className="ml-3 block text-sm font-bold text-slate-700">
-                            Sandbox-Modus aktivieren (Testumgebung)
-                        </label>
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex flex-col mb-4">
+                        <div className="flex items-center mb-2">
+                            <input 
+                                type="checkbox" 
+                                id="global_dhl_sandbox"
+                                className="h-4 w-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                                checked={!!globalShippingConfig.dhl_sandbox}
+                                onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, dhl_sandbox: e.target.checked })}
+                            />
+                            <label htmlFor="global_dhl_sandbox" className="ml-3 block text-sm font-bold text-slate-700">
+                                Sandbox-Modus aktivieren (Testumgebung)
+                            </label>
+                        </div>
+                        {globalShippingConfig.dhl_sandbox && (
+                            <button 
+                                onClick={() => setGlobalShippingConfig({
+                                    ...globalShippingConfig,
+                                    dhl_user: '2222222222_01',
+                                    dhl_signature: 'pass',
+                                    dhl_ekp: '2222222222'
+                                })}
+                                className="text-xs text-blue-600 hover:text-blue-800 underline self-start ml-7"
+                            >
+                                Standard DHL Test-Daten laden
+                            </button>
+                        )}
                     </div>
 
                     <div>
