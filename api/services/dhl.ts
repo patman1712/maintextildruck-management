@@ -223,28 +223,53 @@ export class DhlClient {
                 throw err;
             }
 
-            if (!data.shipments || !Array.isArray(data.shipments) || data.shipments.length === 0) {
-                 const err = new Error(`Unerwartete Antwort von DHL (keine Sendungsdaten): ${JSON.stringify(data)}`);
-                 (err as any).payload = payload;
-                 throw err;
-            }
-
-            const shipment = data.shipments[0];
-            if (shipment.validationMessages) {
-                // Check if there are hard errors
-                const hardErrors = shipment.validationMessages.filter((m: any) => m.validationState === 'ERROR');
-                if (hardErrors.length > 0) {
-                    const err = new Error(hardErrors[0].validationMessage);
-                    (err as any).payload = payload;
-                    throw err;
+            // Handle different response structures (V2 Standard vs. what we are getting)
+            if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+                const item = data.items[0];
+                
+                // Check specific item status
+                if (item.sstatus && item.sstatus.statusCode !== 200) {
+                     const err = new Error(`Fehler beim Label: ${item.sstatus.title} - ${item.sstatus.detail || ''}`);
+                     (err as any).payload = payload;
+                     throw err;
                 }
+
+                let labelUrl = '';
+                if (item.label && item.label.b64) {
+                    // Convert Base64 to Data URI
+                    labelUrl = `data:application/pdf;base64,${item.label.b64}`;
+                } else if (item.label && item.label.url) {
+                    labelUrl = item.label.url;
+                }
+
+                return {
+                    success: true,
+                    labelUrl: labelUrl,
+                    trackingNumber: item.shipmentNo
+                };
+            }
+            
+            if (data.shipments && Array.isArray(data.shipments) && data.shipments.length > 0) {
+                const shipment = data.shipments[0];
+                if (shipment.validationMessages) {
+                    // Check if there are hard errors
+                    const hardErrors = shipment.validationMessages.filter((m: any) => m.validationState === 'ERROR');
+                    if (hardErrors.length > 0) {
+                        const err = new Error(hardErrors[0].validationMessage);
+                        (err as any).payload = payload;
+                        throw err;
+                    }
+                }
+                return {
+                    success: true,
+                    labelUrl: shipment.label.url,
+                    trackingNumber: shipment.shipmentNumber
+                };
             }
 
-            return {
-                success: true,
-                labelUrl: shipment.label.url,
-                trackingNumber: shipment.shipmentNumber
-            };
+            const err = new Error(`Unerwartete Antwort von DHL (keine Sendungsdaten): ${JSON.stringify(data)}`);
+            (err as any).payload = payload;
+            throw err;
 
         } catch (error: any) {
             await logDebug('REST_EXCEPTION', error.message);
