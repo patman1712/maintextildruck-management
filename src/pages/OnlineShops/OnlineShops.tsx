@@ -121,6 +121,31 @@ const OnlineShops: React.FC = () => {
     }
   };
 
+  const handleTestPayPalConnection = async () => {
+    setIsTestingConnection(true);
+    try {
+        const res = await fetch('/api/paypal/test-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                clientId: globalPaymentConfig.paypal_client_id,
+                clientSecret: globalPaymentConfig.paypal_client_secret,
+                mode: globalPaymentConfig.paypal_mode
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert(data.message);
+        } else {
+            alert('Fehler: ' + data.error);
+        }
+    } catch (e: any) {
+        alert('Verbindung fehlgeschlagen: ' + e.message);
+    } finally {
+        setIsTestingConnection(false);
+    }
+  };
+
   const handleTestDHLConnection = async () => {
     setIsTestingConnection(true);
     try {
@@ -822,6 +847,26 @@ const OnlineShops: React.FC = () => {
                     Globaler PayPal (Alle Shops)
                 </div>
                 <div className="flex space-x-2">
+                    <button 
+                        onClick={handleTestPayPalConnection}
+                        disabled={isTestingConnection}
+                        className={`text-sm px-4 py-1 rounded flex items-center border transition-all ${
+                            isTestingConnection 
+                            ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' 
+                            : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
+                        }`}
+                    >
+                        {isTestingConnection ? (
+                            <>
+                                <RefreshCw size={16} className="mr-2 animate-spin" />
+                                Testet...
+                            </>
+                        ) : (
+                            <>
+                                <Zap size={16} className="mr-2" /> Verbindung testen
+                            </>
+                        )}
+                    </button>
                     <button 
                         onClick={handleSaveGlobalPaymentConfig}
                         className="text-sm bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 flex items-center"

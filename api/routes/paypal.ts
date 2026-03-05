@@ -23,6 +23,28 @@ async function getAccessToken(clientId: string, clientSecret: string, mode: stri
     return data.access_token;
 }
 
+// Test Configuration
+router.post('/test-config', async (req, res) => {
+    try {
+        const { clientId, clientSecret, mode } = req.body;
+        
+        if (!clientId || !clientSecret) {
+            return res.status(400).json({ success: false, error: 'Client ID and Secret are required' });
+        }
+
+        const accessToken = await getAccessToken(clientId, clientSecret, mode || 'sandbox');
+        
+        if (accessToken) {
+            res.json({ success: true, message: 'Verbindung erfolgreich! Token abgerufen.' });
+        } else {
+            res.status(400).json({ success: false, error: 'Kein Access Token erhalten. Bitte Zugangsdaten prüfen.' });
+        }
+    } catch (error: any) {
+        console.error('PayPal Test Config Error:', error);
+        res.status(500).json({ success: false, error: 'Verbindung fehlgeschlagen: ' + error.message });
+    }
+});
+
 // Get Client ID (Public)
 router.get('/config', (req, res) => {
     try {
