@@ -501,9 +501,17 @@ try {
 
   const hasTrackingNumber = orderCols.some(col => col.name === 'tracking_number');
   if (!hasTrackingNumber) {
-    console.log('Migrating database: Adding tracking_number and label_url to orders table');
+    console.log('Migrating database: Adding tracking_number, label_url and shipped_at to orders table');
     db.exec('ALTER TABLE orders ADD COLUMN tracking_number TEXT');
     db.exec('ALTER TABLE orders ADD COLUMN label_url TEXT');
+    db.exec('ALTER TABLE orders ADD COLUMN shipped_at DATETIME');
+  } else {
+    // Check for shipped_at specifically as it might be missing even if tracking_number exists
+    const hasShippedAt = orderCols.some(col => col.name === 'shipped_at');
+    if (!hasShippedAt) {
+         console.log('Migrating database: Adding shipped_at to orders table');
+         db.exec('ALTER TABLE orders ADD COLUMN shipped_at DATETIME');
+    }
   }
 
   // Migration: Add API Key to shipping configs

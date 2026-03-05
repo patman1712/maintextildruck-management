@@ -82,6 +82,9 @@ export interface Order {
   approvalToken?: string;
   approvalComment?: string;
   shopwareOrderId?: string; // Shopware order ID for online orders
+  trackingNumber?: string;
+  labelUrl?: string;
+  shippedAt?: string;
 }
 
 export interface Supplier {
@@ -317,6 +320,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         approvalToken: o.approvalToken,
         approvalComment: o.approvalComment,
         shopwareOrderId: o.shopwareOrderId, // Correctly map from API response (camelCase)
+        trackingNumber: o.tracking_number,
+        labelUrl: o.label_url,
+        shippedAt: o.shipped_at,
         orderItems: (orderItemsData.data || [])
             .filter((i: any) => i.order_id === o.id)
             .map((i: any) => ({
