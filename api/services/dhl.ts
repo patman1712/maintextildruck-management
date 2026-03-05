@@ -223,6 +223,12 @@ export class DhlClient {
                 throw err;
             }
 
+            if (!data.shipments || !Array.isArray(data.shipments) || data.shipments.length === 0) {
+                 const err = new Error(`Unerwartete Antwort von DHL (keine Sendungsdaten): ${JSON.stringify(data)}`);
+                 (err as any).payload = payload;
+                 throw err;
+            }
+
             const shipment = data.shipments[0];
             if (shipment.validationMessages) {
                 // Check if there are hard errors
