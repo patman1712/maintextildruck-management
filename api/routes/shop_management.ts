@@ -544,16 +544,44 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         
         // Generate Error PDF
         const errorDoc = await PDFDocument.create();
-        const page = errorDoc.addPage([400, 600]);
+        const page = errorDoc.addPage([595, 842]); // A4 size
         const font = await errorDoc.embedFont(StandardFonts.Helvetica);
+        const fontBold = await errorDoc.embedFont(StandardFonts.HelveticaBold);
         
-        page.drawText('DHL FEHLER-PROTOKOLL', { x: 50, y: 550, size: 18, font, color: rgb(0.8, 0, 0) });
-        page.drawText(`Fehler: ${dhlError.message}`, { x: 50, y: 500, size: 10, font, maxWidth: 300 });
+        page.drawText('DHL FEHLER-PROTOKOLL', { x: 50, y: 800, size: 18, font: fontBold, color: rgb(0.8, 0, 0) });
+        
+        page.drawText(`Fehler: ${dhlError.message}`, { 
+            x: 50, 
+            y: 770, 
+            size: 12, 
+            font, 
+            maxWidth: 500,
+            lineHeight: 14,
+            color: rgb(0, 0, 0)
+        });
+
+        if (dhlError.payload) {
+            page.drawText('Gesendete Daten (Payload):', { x: 50, y: 700, size: 10, font: fontBold });
+            const payloadStr = JSON.stringify(dhlError.payload, null, 2);
+            
+            // Simple poor man's text wrapping / pagination for payload
+            page.drawText(payloadStr.substring(0, 3000), { 
+                x: 50, 
+                y: 680, 
+                size: 8, 
+                font, 
+                maxWidth: 500,
+                lineHeight: 10,
+                color: rgb(0.2, 0.2, 0.2)
+            });
+        }
         
         const pdfBytes = await errorDoc.save();
         const errorFilename = `error_${order.order_number}_${Date.now()}.pdf`;
         await fs.writeFile(path.join(LABELS_DIR, errorFilename), pdfBytes);
         
+        // Return success=false but include labelUrl (which points to error PDF)
+        // Frontend handles this by offering to open the protocol
         res.json({ 
             success: false, 
             error: dhlError.message,

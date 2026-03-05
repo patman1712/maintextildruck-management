@@ -209,14 +209,18 @@ export class DhlClient {
             } catch (e) {
                 // If not JSON, it's likely a raw HTML error page from 500
                 await logDebug('REST_RESPONSE_RAW', responseText);
-                throw new Error(`DHL Server Fehler (${response.status}): ${responseText.substring(0, 200)}`);
+                const err = new Error(`DHL Server Fehler (${response.status}): ${responseText.substring(0, 200)}`);
+                (err as any).payload = payload;
+                throw err;
             }
 
             await logDebug('REST_RESPONSE', data);
 
             if (!response.ok) {
                 const errorMsg = data.detail || data.title || 'Fehler bei der REST API';
-                throw new Error(errorMsg);
+                const err = new Error(errorMsg);
+                (err as any).payload = payload;
+                throw err;
             }
 
             const shipment = data.shipments[0];
@@ -224,7 +228,9 @@ export class DhlClient {
                 // Check if there are hard errors
                 const hardErrors = shipment.validationMessages.filter((m: any) => m.validationState === 'ERROR');
                 if (hardErrors.length > 0) {
-                    throw new Error(hardErrors[0].validationMessage);
+                    const err = new Error(hardErrors[0].validationMessage);
+                    (err as any).payload = payload;
+                    throw err;
                 }
             }
 
@@ -236,6 +242,7 @@ export class DhlClient {
 
         } catch (error: any) {
             await logDebug('REST_EXCEPTION', error.message);
+            if (!error.payload) error.payload = payload;
             throw error;
         }
     }
