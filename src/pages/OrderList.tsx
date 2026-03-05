@@ -546,6 +546,16 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                         <button 
                           onClick={(e) => {
                             e.stopPropagation();
+                            navigate(`/dashboard/orders/${order.id}/view`);
+                          }}
+                          className="text-gray-400 hover:text-purple-600 transition-colors p-2 hover:bg-purple-50 rounded-full"
+                          title="Digitale Laufzettel-Ansicht"
+                        >
+                          <Eye size={18} />
+                        </button>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
                             navigate(`/dashboard/orders/${order.id}/edit`);
                           }}
                           className="text-gray-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-full"

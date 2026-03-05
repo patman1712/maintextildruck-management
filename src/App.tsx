@@ -21,6 +21,7 @@ import PreviewGenerator from "@/pages/PreviewGenerator";
 import AdminSettings from "@/pages/AdminSettings";
 import PublicOrderProof from "@/pages/PublicOrderProof";
 import ImageVector from "@/pages/ImageVector";
+import InternalOrderView from "@/pages/InternalOrderView";
 import ColorCodes from "@/pages/ColorCodes";
 import FAQ from "@/pages/FAQ";
 import OnlineShops from "@/pages/OnlineShops/OnlineShops";
@@ -121,6 +122,7 @@ export default function App() {
           <Route path="orders/online" element={<OrderList source="online" />} />
           <Route path="orders/online/finished" element={<OrderList filter="completed" source="online" />} />
           <Route path="orders/:id" element={<OrderDetails />} />
+          <Route path="orders/:id/view" element={<InternalOrderView />} />
           <Route path="orders/:id/edit" element={<EditOrder />} />
           <Route path="customers" element={<CustomerList />} />
           <Route path="customers/:id" element={<CustomerDetails />} />
