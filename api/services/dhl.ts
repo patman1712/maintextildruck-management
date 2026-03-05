@@ -135,9 +135,14 @@ export class DhlClient {
 
         const today = new Date().toISOString().split('T')[0];
 
+        // Determine address fields from various possible properties
+        const streetRaw = order.shipping_street || order.billing_street || order.street || order.customer_address || '';
+        const zipRaw = order.shipping_zip || order.billing_zip || order.zip || '';
+        const cityRaw = order.shipping_city || order.billing_city || order.city || '';
+        const countryRaw = order.shipping_country || order.billing_country || order.country || 'DEU';
+
         // Split street and number for receiver
-        const receiverStreetFull = order.shipping_street || order.billing_street || '';
-        const receiverAddress = this.splitStreet(receiverStreetFull);
+        const receiverAddress = this.splitStreet(streetRaw);
 
         // Ensure weights are valid numbers
         let weight = parseFloat(order.weight) || 1.0;
@@ -168,9 +173,9 @@ export class DhlClient {
                     address: {
                         streetName: (receiverAddress.name || '').substring(0, 35),
                         streetNumber: receiverStreetNumber.substring(0, 5),
-                        zipCode: (order.shipping_zip || order.billing_zip || '').substring(0, 10),
-                        city: (order.shipping_city || order.billing_city || '').substring(0, 35),
-                        origin: { countryISOCode: 'DEU' }
+                        zipCode: zipRaw.substring(0, 10),
+                        city: cityRaw.substring(0, 35),
+                        origin: { countryISOCode: countryRaw }
                     }
                 },
                 details: {
