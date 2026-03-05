@@ -23,6 +23,7 @@ const OnlineShops: React.FC = () => {
     dhl_user: '',
     dhl_signature: '',
     dhl_ekp: '',
+    dhl_api_key: '',
     dhl_sandbox: false,
     dhl_participation: '01',
     sender_name: '',
@@ -583,6 +584,16 @@ const OnlineShops: React.FC = () => {
                                 className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
                                 value={globalShippingConfig.dhl_ekp}
                                 onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, dhl_ekp: e.target.value })}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">DHL API-Key (REST API v2) *WICHTIG*</label>
+                            <input 
+                                type="text" 
+                                className="w-full border border-blue-200 bg-blue-50 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all font-mono"
+                                value={globalShippingConfig.dhl_api_key || ''}
+                                onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, dhl_api_key: e.target.value })}
+                                placeholder="Ihr API-Key"
                             />
                         </div>
                         <div>

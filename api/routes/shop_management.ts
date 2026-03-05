@@ -469,16 +469,29 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         console.warn('Cleanup of old labels failed:', cleanupErr);
     }
 
-    // 2. Get Shipping Config (Check Shop-specific first, then Global)
-    let config = db.prepare('SELECT * FROM shop_shipping_config WHERE shop_id = ?').get(shopId) as any;
+    // 2. Get Shipping Config (Merge Shop & Global)
+    const globalConfig = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get() as any || {};
+    const shopConfig = db.prepare('SELECT * FROM shop_shipping_config WHERE shop_id = ?').get(shopId) as any || {};
     
-    if (!config || !config.dhl_user) {
-        // Fallback to Global Config
-        config = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get() as any;
-    }
+    // Merge: Use shop value if present (not null/empty), else global
+    const config: any = {};
+    const keys = [
+        'dhl_user', 'dhl_signature', 'dhl_ekp', 'dhl_api_key', 'dhl_sandbox', 'dhl_participation',
+        'sender_name', 'sender_street', 'sender_house_number', 'sender_zip', 'sender_city', 'sender_country',
+        'packaging_weight'
+    ];
 
-    if (!config.dhl_user || !config.dhl_signature || !config.dhl_ekp) {
-        return res.status(400).json({ success: false, error: 'DHL Zugangsdaten unvollständig.' });
+    keys.forEach(key => {
+        // Use shop config if it has a value (and not an empty string for text fields)
+        if (shopConfig[key] !== null && shopConfig[key] !== undefined && shopConfig[key] !== '') {
+            config[key] = shopConfig[key];
+        } else {
+            config[key] = globalConfig[key];
+        }
+    });
+
+    if (!config.dhl_user || !config.dhl_signature || !config.dhl_ekp || !config.dhl_api_key) {
+        return res.status(400).json({ success: false, error: 'DHL Zugangsdaten unvollständig (User, Pass, EKP, API-Key fehlen).' });
     }
 
     // 3. Calculate Total Weight
@@ -512,7 +525,7 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
     
     // Add packaging weight from config
     if (config.packaging_weight) {
-        totalWeight += parseFloat(config.packaging_weight);
+        totalWeight += parseFloat(String(config.packaging_weight).replace(',', '.'));
     }
     
     // Fallback if weight is still 0 (e.g. no products matched or weights not set)
