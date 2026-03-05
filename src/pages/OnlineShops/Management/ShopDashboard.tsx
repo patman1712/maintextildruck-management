@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
 
 const ShopDashboard: React.FC = () => {
@@ -32,6 +32,7 @@ const ShopDashboard: React.FC = () => {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
   const [isCreatingLabel, setIsCreatingLabel] = useState(false);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
   
   // Forms
   const [newCategory, setNewCategory] = useState({ name: '', slug: '', parent_id: '' });
@@ -83,6 +84,27 @@ const ShopDashboard: React.FC = () => {
         alert('Fehler beim Speichern: ' + data.error);
       }
     } catch (e) { console.error(e); }
+  };
+
+  const handleTestDHLConnection = async () => {
+    setIsTestingConnection(true);
+    try {
+        const res = await fetch('/api/shop-management/shipping/test-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(shippingConfig)
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert(data.message);
+        } else {
+            alert('Fehler: ' + data.error);
+        }
+    } catch (e: any) {
+        alert('Verbindung fehlgeschlagen: ' + e.message);
+    } finally {
+        setIsTestingConnection(false);
+    }
   };
 
   const fetchPersonalizationOptions = async () => {
@@ -816,10 +838,32 @@ const ShopDashboard: React.FC = () => {
                             <h3 className="font-bold text-lg text-slate-800">DHL Versandkonfiguration</h3>
                             <p className="text-sm text-slate-500">Hier können Sie die DHL Zugangsdaten für diesen Shop hinterlegen.</p>
                         </div>
-                        <button onClick={handleSaveShippingConfig} className="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 flex items-center font-bold text-sm">
-                            <Save size={16} className="mr-2" />
-                            Speichern
-                        </button>
+                        <div className="flex space-x-2">
+                            <button 
+                                onClick={handleTestDHLConnection}
+                                disabled={isTestingConnection}
+                                className={`text-sm px-4 py-2 rounded-lg flex items-center border transition-all ${
+                                    isTestingConnection 
+                                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' 
+                                    : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
+                                }`}
+                            >
+                                {isTestingConnection ? (
+                                    <>
+                                        <RefreshCw size={16} className="mr-2 animate-spin" />
+                                        Testet...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Zap size={16} className="mr-2" /> Verbindung testen
+                                    </>
+                                )}
+                            </button>
+                            <button onClick={handleSaveShippingConfig} className="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 flex items-center font-bold text-sm">
+                                <Save size={16} className="mr-2" />
+                                Speichern
+                            </button>
+                        </div>
                     </div>
 
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
