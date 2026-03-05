@@ -355,7 +355,7 @@ router.get('/shipping/global-config', (req, res) => {
 
 router.post('/shipping/global-config', (req, res) => {
   try {
-    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight } = req.body;
 
     // Check if record exists
     const existing = db.prepare("SELECT id FROM global_shipping_config WHERE id = 'main'").get();
@@ -365,15 +365,15 @@ router.post('/shipping/global-config', (req, res) => {
         UPDATE global_shipping_config 
         SET dhl_user = ?, dhl_signature = ?, dhl_ekp = ?, dhl_api_key = ?, dhl_sandbox = ?, dhl_participation = ?, 
             sender_name = ?, sender_street = ?, sender_house_number = ?, 
-            sender_zip = ?, sender_city = ?, sender_country = ?, 
+            sender_zip = ?, sender_city = ?, sender_country = ?, packaging_weight = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = 'main'
-      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
+      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU', packaging_weight || 0);
     } else {
       db.prepare(`
-        INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
-        VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
+        INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight)
+        VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU', packaging_weight || 0);
     }
 
     const updatedConfig = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get();
@@ -415,11 +415,11 @@ router.get('/:shopId/shipping-config', (req, res) => {
 router.post('/:shopId/shipping-config', (req, res) => {
   try {
     const { shopId } = req.params;
-    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight } = req.body;
 
     db.prepare(`
-      INSERT INTO shop_shipping_config (shop_id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO shop_shipping_config (shop_id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(shop_id) DO UPDATE SET
         dhl_user = excluded.dhl_user,
         dhl_signature = excluded.dhl_signature,
@@ -432,8 +432,9 @@ router.post('/:shopId/shipping-config', (req, res) => {
         sender_house_number = excluded.sender_house_number,
         sender_zip = excluded.sender_zip,
         sender_city = excluded.sender_city,
-        sender_country = excluded.sender_country
-    `).run(shopId, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country);
+        sender_country = excluded.sender_country,
+        packaging_weight = excluded.packaging_weight
+    `).run(shopId, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight || 0);
 
     res.json({ success: true });
   } catch (error: any) {
@@ -479,6 +480,49 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
     if (!config.dhl_user || !config.dhl_signature || !config.dhl_ekp) {
         return res.status(400).json({ success: false, error: 'DHL Zugangsdaten unvollständig.' });
     }
+
+    // 3. Calculate Total Weight
+    let totalWeight = 0;
+    
+    // Get Order Items
+    const orderItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+    
+    for (const item of orderItems) {
+        let itemWeight = 0;
+        
+        // Try to find product via item_number (SKU)
+        if (item.item_number) {
+            // Find product belonging to the shop's owner (customer)
+            const product = db.prepare(`
+                SELECT weight 
+                FROM customer_products 
+                WHERE product_number = ? AND customer_id = ?
+            `).get(item.item_number, order.customer_id) as any;
+            
+            if (product && product.weight) {
+                itemWeight = parseFloat(product.weight);
+            }
+        }
+        
+        // If no weight found via number, try via name (fuzzy) or fallback?
+        // For now, only precise matching.
+        
+        totalWeight += (itemWeight * item.quantity);
+    }
+    
+    // Add packaging weight from config
+    if (config.packaging_weight) {
+        totalWeight += parseFloat(config.packaging_weight);
+    }
+    
+    // Fallback if weight is still 0 (e.g. no products matched or weights not set)
+    // Use a default minimum or the manually set weight if we had one (but we don't store manual weight yet)
+    if (totalWeight <= 0) {
+        totalWeight = 1.0; // Default fallback
+    }
+    
+    // Assign calculated weight to order object for DHL Client
+    order.weight = totalWeight;
 
     try {
         const client = new DhlClient(config.dhl_user, config.dhl_signature, config.dhl_ekp, config.dhl_api_key, !!config.dhl_sandbox, config.dhl_participation);

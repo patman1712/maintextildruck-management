@@ -190,7 +190,9 @@ export class DhlClient {
             await logDebug('REST_REQUEST', payload);
             
             // Skip separate validation call as it crashes too. Just try creation.
-            const response = await fetch(`${this.endpoint}/orders?docFormat=PDF&printFormat=A4`, { 
+            // Change printFormat to 910-300-600 (Common Label Laser 103x199mm) or A4 if preferred by user request.
+            // User requested "exact format like the label is", which is usually 103x199mm for thermal printers.
+            const response = await fetch(`${this.endpoint}/orders?docFormat=PDF&printFormat=910-300-600`, { 
                 method: 'POST',
                 headers: {
                     'Authorization': this.getBasicAuth(),
