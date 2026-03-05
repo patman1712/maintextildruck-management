@@ -506,6 +506,29 @@ try {
     db.exec('ALTER TABLE orders ADD COLUMN label_url TEXT');
   }
 
+  // Migration: Add API Key to shipping configs
+  try {
+    const shopShippingCols = db.prepare("PRAGMA table_info(shop_shipping_config)").all() as any[];
+    if (shopShippingCols.length > 0) { // Table exists
+        const hasApiKey = shopShippingCols.some(col => col.name === 'dhl_api_key');
+        if (!hasApiKey) {
+            console.log('Migrating database: Adding dhl_api_key to shop_shipping_config table');
+            db.exec('ALTER TABLE shop_shipping_config ADD COLUMN dhl_api_key TEXT');
+        }
+    }
+    
+    const globalShippingCols = db.prepare("PRAGMA table_info(global_shipping_config)").all() as any[];
+    if (globalShippingCols.length > 0) { // Table exists
+        const hasGlobalApiKey = globalShippingCols.some(col => col.name === 'dhl_api_key');
+        if (!hasGlobalApiKey) {
+            console.log('Migrating database: Adding dhl_api_key to global_shipping_config table');
+            db.exec('ALTER TABLE global_shipping_config ADD COLUMN dhl_api_key TEXT');
+        }
+    }
+  } catch (e) {
+    console.error('Migration error (api key):', e);
+  }
+
   // New table for shipping configuration
   db.exec(`
     CREATE TABLE IF NOT EXISTS shop_shipping_config (

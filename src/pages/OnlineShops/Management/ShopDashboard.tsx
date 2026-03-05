@@ -10,11 +10,24 @@ const ShopDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { shops, updateShop, products } = useAppStore();
   const [shop, setShop] = useState<Shop | null>(null);
-  const [activeTab, setActiveTab] = useState<'general' | 'design' | 'categories' | 'products' | 'customers' | 'orders'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'design' | 'categories' | 'products' | 'customers' | 'orders' | 'shipping'>('general');
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [shopProducts, setShopProducts] = useState<(ShopProductAssignment & { product_name?: string, product_number?: string, category_name?: string })[]>([]);
   const [shopCustomers, setShopCustomers] = useState<any[]>([]);
   const [shopOrders, setShopOrders] = useState<any[]>([]);
+  const [shippingConfig, setShippingConfig] = useState<any>({
+    dhl_user: '',
+    dhl_signature: '',
+    dhl_ekp: '',
+    dhl_api_key: '',
+    dhl_participation: '01',
+    sender_name: '',
+    sender_street: '',
+    sender_house_number: '',
+    sender_zip: '',
+    sender_city: '',
+    sender_country: 'DEU'
+  });
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
   const [isCreatingLabel, setIsCreatingLabel] = useState(false);
@@ -37,8 +50,39 @@ const ShopDashboard: React.FC = () => {
       fetchShopCustomers();
       fetchShopOrders();
       fetchPersonalizationOptions();
+      fetchShippingConfig();
     }
   }, [shopId, shops]);
+
+  const fetchShippingConfig = async () => {
+    try {
+      const res = await fetch(`/api/shop-management/${shopId}/shipping-config`);
+      const data = await res.json();
+      if (data.success && data.data) {
+        setShippingConfig({
+            ...shippingConfig,
+            ...data.data
+        });
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const handleSaveShippingConfig = async () => {
+    if (!shop) return;
+    try {
+      const res = await fetch(`/api/shop-management/${shopId}/shipping-config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(shippingConfig)
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Versandkonfiguration gespeichert!');
+      } else {
+        alert('Fehler beim Speichern: ' + data.error);
+      }
+    } catch (e) { console.error(e); }
+  };
 
   const fetchPersonalizationOptions = async () => {
     try {
@@ -224,8 +268,14 @@ const ShopDashboard: React.FC = () => {
           setSelectedOrder({ ...selectedOrder, tracking_number: data.trackingNumber, label_url: data.labelUrl, status: 'shipped' });
         }
       } else {
-        // If an error label was generated, offer to open it
-        if (data.labelUrl) {
+        // Check for specific error about missing API key
+        if (data.error && data.error.includes('API-Key')) {
+             if (confirm(`${data.error}\n\nMöchten Sie jetzt die Shop-Einstellungen öffnen, um den API-Key zu hinterlegen?`)) {
+                 setActiveTab('shipping'); // Switch to shipping tab
+                 // Scroll to top
+                 window.scrollTo(0, 0);
+             }
+        } else if (data.labelUrl) {
             if (confirm(`${data.error}\n\nMöchten Sie das Fehler-Protokoll (PDF) öffnen?`)) {
                 window.open(data.labelUrl, '_blank');
             }
@@ -341,6 +391,12 @@ const ShopDashboard: React.FC = () => {
                 className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'orders' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
             >
                 <ShoppingBag size={16} className="mr-2" /> Bestellungen
+            </button>
+            <button 
+                onClick={() => setActiveTab('shipping')}
+                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'shipping' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+                <Truck size={16} className="mr-2" /> Versand
             </button>
         </div>
 
@@ -748,6 +804,167 @@ const ShopDashboard: React.FC = () => {
                                 Keine Bestellungen vorhanden.
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'shipping' && (
+                <div className="max-w-4xl space-y-8">
+                    <div className="flex justify-between items-center border-b border-slate-200 pb-4">
+                        <div>
+                            <h3 className="font-bold text-lg text-slate-800">DHL Versandkonfiguration</h3>
+                            <p className="text-sm text-slate-500">Hier können Sie die DHL Zugangsdaten für diesen Shop hinterlegen.</p>
+                        </div>
+                        <button onClick={handleSaveShippingConfig} className="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 flex items-center font-bold text-sm">
+                            <Save size={16} className="mr-2" />
+                            Speichern
+                        </button>
+                    </div>
+
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                        <div className="flex items-start">
+                            <Key className="text-yellow-600 mr-3 mt-1" size={20} />
+                            <div>
+                                <h4 className="font-bold text-yellow-800 text-sm">Neue Authentifizierungsmethode</h4>
+                                <p className="text-sm text-yellow-700 mt-1">
+                                    Für die Erstellung von Versandlabels wird jetzt der <strong>API-Key</strong> benötigt (DHL REST API v2). 
+                                    Bitte generieren Sie diesen im DHL Geschäftskundenportal unter "Integration" oder "Entwickler".
+                                    <br />
+                                    Benutzername und Signatur werden weiterhin für Legacy-Funktionen benötigt.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-4">
+                            <h4 className="font-bold text-slate-700 uppercase tracking-widest text-xs border-b pb-2">DHL Zugangsdaten</h4>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">DHL Benutzername (Geschäftskundenportal)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border border-slate-300 rounded-lg p-2"
+                                    value={shippingConfig.dhl_user || ''}
+                                    onChange={(e) => setShippingConfig({ ...shippingConfig, dhl_user: e.target.value })}
+                                    placeholder="z.B. ihr_benutzername"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">DHL Signatur / Passwort</label>
+                                <input 
+                                    type="password" 
+                                    className="w-full border border-slate-300 rounded-lg p-2"
+                                    value={shippingConfig.dhl_signature || ''}
+                                    onChange={(e) => setShippingConfig({ ...shippingConfig, dhl_signature: e.target.value })}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">DHL EKP (Abrechnungsnummer)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border border-slate-300 rounded-lg p-2"
+                                    value={shippingConfig.dhl_ekp || ''}
+                                    onChange={(e) => setShippingConfig({ ...shippingConfig, dhl_ekp: e.target.value })}
+                                    placeholder="z.B. 6374664203"
+                                    maxLength={10}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-bold text-blue-700 mb-1">DHL API-Key (REST API v2) *WICHTIG*</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border-2 border-blue-200 bg-blue-50 rounded-lg p-2 font-mono text-sm"
+                                    value={shippingConfig.dhl_api_key || ''}
+                                    onChange={(e) => setShippingConfig({ ...shippingConfig, dhl_api_key: e.target.value })}
+                                    placeholder="Ihr generierter API-Key"
+                                />
+                                <p className="text-xs text-slate-500 mt-1">Dieser Key ist zwingend erforderlich für die neue Schnittstelle.</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Teilnahme (01)</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border border-slate-300 rounded-lg p-2"
+                                        value={shippingConfig.dhl_participation || '01'}
+                                        onChange={(e) => setShippingConfig({ ...shippingConfig, dhl_participation: e.target.value })}
+                                        maxLength={2}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <h4 className="font-bold text-slate-700 uppercase tracking-widest text-xs border-b pb-2">Absenderadresse (Label)</h4>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Firma / Name</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border border-slate-300 rounded-lg p-2"
+                                    value={shippingConfig.sender_name || ''}
+                                    onChange={(e) => setShippingConfig({ ...shippingConfig, sender_name: e.target.value })}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="col-span-2">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Straße</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border border-slate-300 rounded-lg p-2"
+                                        value={shippingConfig.sender_street || ''}
+                                        onChange={(e) => setShippingConfig({ ...shippingConfig, sender_street: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Nr.</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border border-slate-300 rounded-lg p-2"
+                                        value={shippingConfig.sender_house_number || ''}
+                                        onChange={(e) => setShippingConfig({ ...shippingConfig, sender_house_number: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">PLZ</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border border-slate-300 rounded-lg p-2"
+                                        value={shippingConfig.sender_zip || ''}
+                                        onChange={(e) => setShippingConfig({ ...shippingConfig, sender_zip: e.target.value })}
+                                    />
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Stadt</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border border-slate-300 rounded-lg p-2"
+                                        value={shippingConfig.sender_city || ''}
+                                        onChange={(e) => setShippingConfig({ ...shippingConfig, sender_city: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Land (ISO 3)</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border border-slate-300 rounded-lg p-2"
+                                    value={shippingConfig.sender_country || 'DEU'}
+                                    onChange={(e) => setShippingConfig({ ...shippingConfig, sender_country: e.target.value })}
+                                    maxLength={3}
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
