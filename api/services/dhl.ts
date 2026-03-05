@@ -155,7 +155,7 @@ export class DhlClient {
         const shipperStreetNumber = sender.street_number ? String(sender.street_number) : '1';
         const receiverStreetNumber = receiverAddress.number ? String(receiverAddress.number) : '1';
 
-        // Prepare REST JSON Payload (Back to standard V2 structure with origin object)
+        // Prepare REST JSON Payload (Updated based on DHL Support feedback)
         const payload = {
             shipments: [{
                 product: 'V01PAK',
@@ -163,23 +163,19 @@ export class DhlClient {
                 shipmentDate: shipmentDate, // Changed to tomorrow
                 shipper: {
                     name1: (sender.company || 'Maintextildruck').substring(0, 35),
-                    address: {
-                        streetName: (sender.street || '').substring(0, 35),
-                        streetNumber: shipperStreetNumber.substring(0, 5),
-                        postalCode: (sender.zip || '').substring(0, 10),
-                        city: (sender.city || '').substring(0, 35),
-                        country: 'DEU'
-                    }
+                    addressStreet: (sender.street || '').substring(0, 35),
+                    addressHouse: shipperStreetNumber.substring(0, 5),
+                    postalCode: (sender.zip || '').substring(0, 10),
+                    city: (sender.city || '').substring(0, 35),
+                    country: 'DEU'
                 },
-                receiver: {
+                consignee: {
                     name1: (`${order.first_name} ${order.last_name}`.trim() || order.customer_name || 'Kunde').substring(0, 35),
-                    address: {
-                        streetName: (receiverAddress.name || '').substring(0, 35),
-                        streetNumber: receiverStreetNumber.substring(0, 5),
-                        postalCode: zipRaw.substring(0, 10),
-                        city: cityRaw.substring(0, 35),
-                        country: countryRaw
-                    }
+                    addressStreet: (receiverAddress.name || '').substring(0, 35),
+                    addressHouse: receiverStreetNumber.substring(0, 5),
+                    postalCode: zipRaw.substring(0, 10),
+                    city: cityRaw.substring(0, 35),
+                    country: countryRaw
                 },
                 details: {
                     weight: {

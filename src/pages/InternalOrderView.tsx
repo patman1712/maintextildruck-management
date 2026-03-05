@@ -11,12 +11,11 @@ export default function InternalOrderView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const orders = useAppStore((state) => state.orders);
-  const orderItems = useAppStore((state) => state.orderItems);
   const loading = useAppStore((state) => state.loading);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   const order = orders.find(o => o.id === id);
-  const items = orderItems.filter(i => i.order_id === id);
+  const items = order?.orderItems || [];
 
   if (loading && !order) return <div className="p-8 text-center text-gray-500">Lade Auftrag...</div>;
   if (!order) return <div className="p-8 text-center text-red-600">Auftrag nicht gefunden.</div>;
@@ -24,7 +23,7 @@ export default function InternalOrderView() {
   // Filter images for display (Preview AND Internal, but no raw print/vector files unless requested)
   // User said: "druckdaten müssen nicht zu sehen sein aber vorschau bilder und interne bilder"
   const displayFiles = (order.files || []).filter(f => 
-      f.type === 'preview' || f.type === 'view' || f.type === 'internal' || 
+      f.type === 'preview' || f.type === 'internal' || 
       // Also show Shopware images if present
       (f.name && f.name.includes('Shopware'))
   );
