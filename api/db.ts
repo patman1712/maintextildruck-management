@@ -549,6 +549,29 @@ try {
     console.error('Migration error (api key):', e);
   }
 
+  // Migration: Add packaging_weight to shipping configs
+  try {
+    const shopShippingCols = db.prepare("PRAGMA table_info(shop_shipping_config)").all() as any[];
+    if (shopShippingCols.length > 0) {
+        const hasWeight = shopShippingCols.some(col => col.name === 'packaging_weight');
+        if (!hasWeight) {
+            console.log('Migrating database: Adding packaging_weight to shop_shipping_config table');
+            db.exec('ALTER TABLE shop_shipping_config ADD COLUMN packaging_weight DECIMAL(10, 3) DEFAULT 0');
+        }
+    }
+    
+    const globalShippingCols = db.prepare("PRAGMA table_info(global_shipping_config)").all() as any[];
+    if (globalShippingCols.length > 0) {
+        const hasWeight = globalShippingCols.some(col => col.name === 'packaging_weight');
+        if (!hasWeight) {
+            console.log('Migrating database: Adding packaging_weight to global_shipping_config table');
+            db.exec('ALTER TABLE global_shipping_config ADD COLUMN packaging_weight DECIMAL(10, 3) DEFAULT 0');
+        }
+    }
+  } catch (e) {
+    console.error('Migration error (packaging_weight):', e);
+  }
+
   // New table for shipping configuration
   db.exec(`
     CREATE TABLE IF NOT EXISTS shop_shipping_config (
@@ -556,6 +579,8 @@ try {
       dhl_user TEXT,
       dhl_signature TEXT,
       dhl_ekp TEXT,
+      dhl_api_key TEXT,
+      dhl_sandbox BOOLEAN DEFAULT 0,
       dhl_participation TEXT DEFAULT '01',
       sender_name TEXT,
       sender_street TEXT,
@@ -563,6 +588,7 @@ try {
       sender_zip TEXT,
       sender_city TEXT,
       sender_country TEXT DEFAULT 'DEU',
+      packaging_weight DECIMAL(10, 3) DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE
     )
@@ -626,6 +652,8 @@ try {
       dhl_user TEXT,
       dhl_signature TEXT,
       dhl_ekp TEXT,
+      dhl_api_key TEXT,
+      dhl_sandbox BOOLEAN DEFAULT 0,
       dhl_participation TEXT DEFAULT '01',
       sender_name TEXT,
       sender_street TEXT,
@@ -633,6 +661,7 @@ try {
       sender_zip TEXT,
       sender_city TEXT,
       sender_country TEXT DEFAULT 'DEU',
+      packaging_weight DECIMAL(10, 3) DEFAULT 0,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
