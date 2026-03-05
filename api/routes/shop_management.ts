@@ -355,7 +355,7 @@ router.get('/shipping/global-config', (req, res) => {
 
 router.post('/shipping/global-config', (req, res) => {
   try {
-    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
 
     // Check if record exists
     const existing = db.prepare("SELECT id FROM global_shipping_config WHERE id = 'main'").get();
@@ -363,17 +363,17 @@ router.post('/shipping/global-config', (req, res) => {
     if (existing) {
       db.prepare(`
         UPDATE global_shipping_config 
-        SET dhl_user = ?, dhl_signature = ?, dhl_ekp = ?, dhl_api_key = ?, dhl_participation = ?, 
+        SET dhl_user = ?, dhl_signature = ?, dhl_ekp = ?, dhl_api_key = ?, dhl_sandbox = ?, dhl_participation = ?, 
             sender_name = ?, sender_street = ?, sender_house_number = ?, 
             sender_zip = ?, sender_city = ?, sender_country = ?, 
             updated_at = CURRENT_TIMESTAMP
         WHERE id = 'main'
-      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
+      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
     } else {
       db.prepare(`
-        INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
-        VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
+        INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
+        VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU');
     }
 
     const updatedConfig = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get();
@@ -386,14 +386,14 @@ router.post('/shipping/global-config', (req, res) => {
 
 router.post('/shipping/test-config', async (req, res) => {
   try {
-    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key } = req.body;
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox } = req.body;
 
     if (!dhl_user || !dhl_signature || !dhl_ekp) {
         return res.status(400).json({ success: false, error: 'Unvollständige Daten für den Test. Benutzer, Passwort und EKP sind erforderlich.' });
     }
 
     // Pass apiKey to client
-    const client = new DhlClient(dhl_user, dhl_signature, dhl_ekp, dhl_api_key);
+    const client = new DhlClient(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, !!dhl_sandbox);
     const result = await client.checkConnection();
     res.json(result);
 
@@ -415,16 +415,17 @@ router.get('/:shopId/shipping-config', (req, res) => {
 router.post('/:shopId/shipping-config', (req, res) => {
   try {
     const { shopId } = req.params;
-    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country } = req.body;
 
     db.prepare(`
-      INSERT INTO shop_shipping_config (shop_id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO shop_shipping_config (shop_id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(shop_id) DO UPDATE SET
         dhl_user = excluded.dhl_user,
         dhl_signature = excluded.dhl_signature,
         dhl_ekp = excluded.dhl_ekp,
         dhl_api_key = excluded.dhl_api_key,
+        dhl_sandbox = excluded.dhl_sandbox,
         dhl_participation = excluded.dhl_participation,
         sender_name = excluded.sender_name,
         sender_street = excluded.sender_street,
@@ -432,7 +433,7 @@ router.post('/:shopId/shipping-config', (req, res) => {
         sender_zip = excluded.sender_zip,
         sender_city = excluded.sender_city,
         sender_country = excluded.sender_country
-    `).run(shopId, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country);
+    `).run(shopId, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country);
 
     res.json({ success: true });
   } catch (error: any) {
@@ -480,7 +481,7 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
     }
 
     try {
-        const client = new DhlClient(config.dhl_user, config.dhl_signature, config.dhl_ekp, config.dhl_api_key);
+        const client = new DhlClient(config.dhl_user, config.dhl_signature, config.dhl_ekp, config.dhl_api_key, !!config.dhl_sandbox);
         
         // Prepare Sender Address
         const sender = {

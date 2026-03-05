@@ -515,6 +515,12 @@ try {
             console.log('Migrating database: Adding dhl_api_key to shop_shipping_config table');
             db.exec('ALTER TABLE shop_shipping_config ADD COLUMN dhl_api_key TEXT');
         }
+        
+        const hasSandbox = shopShippingCols.some(col => col.name === 'dhl_sandbox');
+        if (!hasSandbox) {
+            console.log('Migrating database: Adding dhl_sandbox to shop_shipping_config table');
+            db.exec('ALTER TABLE shop_shipping_config ADD COLUMN dhl_sandbox BOOLEAN DEFAULT 0');
+        }
     }
     
     const globalShippingCols = db.prepare("PRAGMA table_info(global_shipping_config)").all() as any[];
@@ -523,6 +529,12 @@ try {
         if (!hasGlobalApiKey) {
             console.log('Migrating database: Adding dhl_api_key to global_shipping_config table');
             db.exec('ALTER TABLE global_shipping_config ADD COLUMN dhl_api_key TEXT');
+        }
+
+        const hasGlobalSandbox = globalShippingCols.some(col => col.name === 'dhl_sandbox');
+        if (!hasGlobalSandbox) {
+            console.log('Migrating database: Adding dhl_sandbox to global_shipping_config table');
+            db.exec('ALTER TABLE global_shipping_config ADD COLUMN dhl_sandbox BOOLEAN DEFAULT 0');
         }
     }
   } catch (e) {

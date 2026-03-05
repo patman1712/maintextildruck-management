@@ -23,6 +23,7 @@ const OnlineShops: React.FC = () => {
     dhl_user: '',
     dhl_signature: '',
     dhl_ekp: '',
+    dhl_sandbox: false,
     dhl_participation: '01',
     sender_name: '',
     sender_street: '',
@@ -525,6 +526,19 @@ const OnlineShops: React.FC = () => {
                         <h4 className="font-bold text-slate-800">DHL API Zugangsdaten</h4>
                     </div>
                     
+                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center mb-4">
+                        <input 
+                            type="checkbox" 
+                            id="global_dhl_sandbox"
+                            className="h-4 w-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                            checked={!!globalShippingConfig.dhl_sandbox}
+                            onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, dhl_sandbox: e.target.checked })}
+                        />
+                        <label htmlFor="global_dhl_sandbox" className="ml-3 block text-sm font-bold text-slate-700">
+                            Sandbox-Modus aktivieren (Testumgebung)
+                        </label>
+                    </div>
+
                     <div>
                          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">DHL API Benutzer</label>
                          <input 

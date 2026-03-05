@@ -34,12 +34,16 @@ export class DhlClient {
     private apiKey: string; // New: For REST API 2.0
     private endpoint: string;
 
-    constructor(user: string, signature: string, ekp: string, apiKey: string = '') {
+    constructor(user: string, signature: string, ekp: string, apiKey: string = '', sandbox: boolean = false) {
         this.user = user;
         this.signature = signature;
         this.ekp = ekp;
         this.apiKey = apiKey;
-        this.endpoint = 'https://api-eu.dhl.com/parcel/de/shipping/v2';
+        this.endpoint = sandbox 
+            ? 'https://api-sandbox.dhl.com/parcel/de/shipping/v2'
+            : 'https://api-eu.dhl.com/parcel/de/shipping/v2';
+        
+        console.log(`DHL Client initialized with Sandbox: ${sandbox}, Endpoint: ${this.endpoint}`);
     }
 
     private getBasicAuth() {
