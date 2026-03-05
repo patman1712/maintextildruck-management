@@ -184,17 +184,47 @@ router.get('/:id/shipping-config', (req, res) => {
 
     const config = db.prepare('SELECT packaging_weight, shipping_tiers FROM shop_shipping_config WHERE shop_id = ?').get(shopId) as any;
     
-    if (config) {
-        if (config.shipping_tiers) {
-            try {
-                config.shipping_tiers = JSON.parse(config.shipping_tiers);
-            } catch (e) {
-                config.shipping_tiers = [];
-            }
+    // Parse shop tiers
+    let shopTiers = [];
+    if (config && config.shipping_tiers) {
+        try {
+            shopTiers = JSON.parse(config.shipping_tiers);
+        } catch (e) {
+            shopTiers = [];
         }
     }
 
-    res.json({ success: true, data: config || null });
+    // Get global config
+    const globalConfig = db.prepare("SELECT shipping_tiers, packaging_weight FROM global_shipping_config WHERE id = 'main'").get() as any;
+    let globalTiers = [];
+    if (globalConfig && globalConfig.shipping_tiers) {
+        try {
+            globalTiers = JSON.parse(globalConfig.shipping_tiers);
+        } catch (e) {
+            globalTiers = [];
+        }
+    }
+
+    // Determine final tiers: Shop tiers take precedence if they exist and are not empty.
+    // However, if shop tiers are empty, we fallback to global tiers.
+    const finalTiers = (shopTiers.length > 0) ? shopTiers : globalTiers;
+
+    // Also determine packaging weight: if shop has 0, fallback to global?
+    // Current logic in create-label: if shop > 0 use shop, else global.
+    let packagingWeight = 0;
+    if (config && config.packaging_weight && parseFloat(config.packaging_weight) > 0) {
+        packagingWeight = parseFloat(config.packaging_weight);
+    } else if (globalConfig && globalConfig.packaging_weight) {
+        packagingWeight = parseFloat(globalConfig.packaging_weight);
+    }
+
+    res.json({ 
+        success: true, 
+        data: {
+            packaging_weight: packagingWeight,
+            shipping_tiers: finalTiers
+        } 
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -346,7 +346,16 @@ router.delete('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
 
 router.get('/shipping/global-config', (req, res) => {
   try {
-    const config = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get();
+    const config = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get() as any;
+    
+    if (config && config.shipping_tiers) {
+        try {
+            config.shipping_tiers = JSON.parse(config.shipping_tiers);
+        } catch (e) {
+            config.shipping_tiers = [];
+        }
+    }
+
     res.json({ success: true, data: config || null });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -355,7 +364,7 @@ router.get('/shipping/global-config', (req, res) => {
 
 router.post('/shipping/global-config', (req, res) => {
   try {
-    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight } = req.body;
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight, shipping_tiers } = req.body;
 
     // Check if record exists
     const existing = db.prepare("SELECT id FROM global_shipping_config WHERE id = 'main'").get();
@@ -366,14 +375,15 @@ router.post('/shipping/global-config', (req, res) => {
         SET dhl_user = ?, dhl_signature = ?, dhl_ekp = ?, dhl_api_key = ?, dhl_sandbox = ?, dhl_participation = ?, 
             sender_name = ?, sender_street = ?, sender_house_number = ?, 
             sender_zip = ?, sender_city = ?, sender_country = ?, packaging_weight = ?,
+            shipping_tiers = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = 'main'
-      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU', packaging_weight || 0);
+      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU', packaging_weight || 0, shipping_tiers ? JSON.stringify(shipping_tiers) : '[]');
     } else {
       db.prepare(`
-        INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight)
-        VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU', packaging_weight || 0);
+        INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight, shipping_tiers)
+        VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation || '01', sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country || 'DEU', packaging_weight || 0, shipping_tiers ? JSON.stringify(shipping_tiers) : '[]');
     }
 
     const updatedConfig = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get();

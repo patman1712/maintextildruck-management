@@ -28,8 +28,7 @@ const ShopDashboard: React.FC = () => {
     sender_zip: '',
     sender_city: '',
     sender_country: 'DEU',
-    packaging_weight: 0,
-    shipping_tiers: []
+    packaging_weight: 0
   });
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
@@ -1112,97 +1111,6 @@ const ShopDashboard: React.FC = () => {
                                     maxLength={3}
                                 />
                             </div>
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        <h4 className="font-bold text-slate-700 uppercase tracking-widest text-xs border-b pb-2">Versandkosten nach Gewicht (Endkunde)</h4>
-                        <p className="text-sm text-slate-500 mb-4">
-                            Hier können Sie festlegen, wie viel Versandkosten dem Kunden im Shop basierend auf dem Gesamtgewicht (Artikel + Verpackung) berechnet werden.
-                        </p>
-
-                        <div className="bg-slate-50 border border-slate-200 rounded-lg overflow-hidden">
-                            <table className="w-full text-left text-sm">
-                                <thead className="bg-slate-100 text-slate-500 font-bold uppercase text-xs">
-                                    <tr>
-                                        <th className="px-4 py-2">Von (kg)</th>
-                                        <th className="px-4 py-2">Bis (kg)</th>
-                                        <th className="px-4 py-2">Preis (€)</th>
-                                        <th className="px-4 py-2 w-10"></th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-200">
-                                    {(shippingConfig.shipping_tiers || []).sort((a: any, b: any) => a.min_weight - b.min_weight).map((tier: any, index: number) => (
-                                        <tr key={index} className="bg-white">
-                                            <td className="px-4 py-2">
-                                                <input 
-                                                    type="number" 
-                                                    step="0.001"
-                                                    className="w-20 border border-slate-300 rounded p-1"
-                                                    value={tier.min_weight}
-                                                    onChange={(e) => {
-                                                        const newTiers = [...(shippingConfig.shipping_tiers || [])];
-                                                        newTiers[index].min_weight = parseFloat(e.target.value);
-                                                        setShippingConfig({ ...shippingConfig, shipping_tiers: newTiers });
-                                                    }}
-                                                />
-                                            </td>
-                                            <td className="px-4 py-2">
-                                                <input 
-                                                    type="number" 
-                                                    step="0.001"
-                                                    className="w-20 border border-slate-300 rounded p-1"
-                                                    value={tier.max_weight}
-                                                    onChange={(e) => {
-                                                        const newTiers = [...(shippingConfig.shipping_tiers || [])];
-                                                        newTiers[index].max_weight = parseFloat(e.target.value);
-                                                        setShippingConfig({ ...shippingConfig, shipping_tiers: newTiers });
-                                                    }}
-                                                />
-                                            </td>
-                                            <td className="px-4 py-2">
-                                                <input 
-                                                    type="number" 
-                                                    step="0.01"
-                                                    className="w-20 border border-slate-300 rounded p-1"
-                                                    value={tier.price}
-                                                    onChange={(e) => {
-                                                        const newTiers = [...(shippingConfig.shipping_tiers || [])];
-                                                        newTiers[index].price = parseFloat(e.target.value);
-                                                        setShippingConfig({ ...shippingConfig, shipping_tiers: newTiers });
-                                                    }}
-                                                />
-                                            </td>
-                                            <td className="px-4 py-2 text-right">
-                                                <button 
-                                                    onClick={() => {
-                                                        const newTiers = [...(shippingConfig.shipping_tiers || [])];
-                                                        newTiers.splice(index, 1);
-                                                        setShippingConfig({ ...shippingConfig, shipping_tiers: newTiers });
-                                                    }}
-                                                    className="text-slate-400 hover:text-red-600"
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                    <tr className="bg-slate-50">
-                                        <td colSpan={4} className="px-4 py-2">
-                                            <button 
-                                                onClick={() => {
-                                                    const newTiers = [...(shippingConfig.shipping_tiers || [])];
-                                                    newTiers.push({ min_weight: 0, max_weight: 5, price: 4.90 });
-                                                    setShippingConfig({ ...shippingConfig, shipping_tiers: newTiers });
-                                                }}
-                                                className="text-blue-600 text-xs font-bold uppercase flex items-center hover:text-blue-800"
-                                            >
-                                                <Plus size={14} className="mr-1" /> Neue Gewichtsstufe hinzufügen
-                                            </button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
                         </div>
                     </div>
                 </div>

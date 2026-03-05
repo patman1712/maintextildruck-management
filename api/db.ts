@@ -684,6 +684,7 @@ try {
       sender_city TEXT,
       sender_country TEXT DEFAULT 'DEU',
       packaging_weight DECIMAL(10, 3) DEFAULT 0,
+      shipping_tiers TEXT, -- JSON array of {min: number, max: number, price: number}
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
