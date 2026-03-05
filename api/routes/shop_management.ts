@@ -482,11 +482,20 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
     ];
 
     keys.forEach(key => {
-        // Use shop config if it has a value (and not an empty string for text fields)
-        if (shopConfig[key] !== null && shopConfig[key] !== undefined && shopConfig[key] !== '') {
-            config[key] = shopConfig[key];
+        // Special handling for packaging_weight: 0 should inherit from global
+        if (key === 'packaging_weight') {
+             if (shopConfig[key] && parseFloat(shopConfig[key]) > 0) {
+                 config[key] = shopConfig[key];
+             } else {
+                 config[key] = globalConfig[key];
+             }
         } else {
-            config[key] = globalConfig[key];
+            // Use shop config if it has a value (and not an empty string for text fields)
+            if (shopConfig[key] !== null && shopConfig[key] !== undefined && shopConfig[key] !== '') {
+                config[key] = shopConfig[key];
+            } else {
+                config[key] = globalConfig[key];
+            }
         }
     });
 
@@ -500,6 +509,8 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
     // Get Order Items
     const orderItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
     
+    console.log(`Calculating weight for Order ${order.order_number} (${orderItems.length} items)...`);
+
     for (const item of orderItems) {
         let itemWeight = 0;
         
@@ -507,26 +518,38 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         if (item.item_number) {
             // Find product belonging to the shop's owner (customer)
             const product = db.prepare(`
-                SELECT weight 
+                SELECT weight, name
                 FROM customer_products 
                 WHERE product_number = ? AND customer_id = ?
             `).get(item.item_number, order.customer_id) as any;
             
             if (product && product.weight) {
                 itemWeight = parseFloat(product.weight);
+                console.log(`- Item "${item.item_name}" (SKU: ${item.item_number}): Found product "${product.name}" with weight ${itemWeight}kg`);
+            } else {
+                console.log(`- Item "${item.item_name}" (SKU: ${item.item_number}): Product lookup failed or no weight set.`);
             }
+        } else {
+             console.log(`- Item "${item.item_name}": No SKU provided.`);
         }
-        
-        // If no weight found via number, try via name (fuzzy) or fallback?
-        // For now, only precise matching.
         
         totalWeight += (itemWeight * item.quantity);
     }
     
+    console.log(`Total Item Weight: ${totalWeight}kg`);
+
     // Add packaging weight from config
     if (config.packaging_weight) {
-        totalWeight += parseFloat(String(config.packaging_weight).replace(',', '.'));
+        const pkgWeight = parseFloat(String(config.packaging_weight).replace(',', '.'));
+        console.log(`Adding Packaging Weight: ${pkgWeight}kg`);
+        totalWeight += pkgWeight;
+    } else {
+        console.log('No Packaging Weight configured (or 0).');
     }
+    
+    console.log(`Final Calculated Weight: ${totalWeight}kg`);
+
+    // Fallback if weight is still 0 (e.g. no products matched or weights not set)
     
     // Fallback if weight is still 0 (e.g. no products matched or weights not set)
     // Use a default minimum or the manually set weight if we had one (but we don't store manual weight yet)
