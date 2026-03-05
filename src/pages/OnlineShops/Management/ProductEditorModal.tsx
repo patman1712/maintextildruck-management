@@ -150,6 +150,11 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
             setSaving(false);
             return;
         }
+        if (!createData.weight || createData.weight <= 0) {
+            alert('Bitte geben Sie ein gültiges Gewicht (> 0 kg) ein. Dies ist für den Versand erforderlich.');
+            setSaving(false);
+            return;
+        }
         if (!customerId) {
             alert('Kunden-ID fehlt. Bitte neu laden.');
             setSaving(false);
@@ -210,6 +215,12 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     } else {
         // Update existing assignment
         if (assignment) {
+            if (!formData.weight || formData.weight <= 0) {
+                alert('Bitte geben Sie ein gültiges Gewicht (> 0 kg) ein. Dies ist für den Versand erforderlich.');
+                setSaving(false);
+                return;
+            }
+
             // Also update basic product info if changed
             if (editData.name !== assignment.product_name || editData.productNumber !== assignment.product_number) {
                 // We need to update the base product too. The API endpoint handles this if we pass the fields?
@@ -681,7 +692,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                         </div>
                     </div>
                     <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Gewicht (kg)</label>
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Gewicht (kg) <span className="text-red-600">*</span></label>
                         <div className="flex items-center">
                             <input 
                                 type="number" 

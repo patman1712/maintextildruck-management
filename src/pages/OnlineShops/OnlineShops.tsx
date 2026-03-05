@@ -30,7 +30,8 @@ const OnlineShops: React.FC = () => {
     sender_house_number: '',
     sender_zip: '',
     sender_city: '',
-    sender_country: 'DEU'
+    sender_country: 'DEU',
+    packaging_weight: 0
   });
 
   const fetchVariables = async () => {
@@ -594,6 +595,19 @@ const OnlineShops: React.FC = () => {
                             />
                         </div>
                     </div>
+
+                    <div>
+                         <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Verpackungsgewicht (kg)</label>
+                         <input 
+                             type="number" 
+                             step="0.001"
+                             className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-500 outline-none transition-all"
+                             value={globalShippingConfig.packaging_weight || 0}
+                             onChange={(e) => setGlobalShippingConfig({ ...globalShippingConfig, packaging_weight: parseFloat(e.target.value) })}
+                             placeholder="z.B. 0.2"
+                         />
+                         <p className="text-[10px] text-slate-400 mt-1">Dieses Gewicht wird pauschal zu jeder Sendung addiert.</p>
+                     </div>
                 </div>
 
                 {/* Global Sender Info */}

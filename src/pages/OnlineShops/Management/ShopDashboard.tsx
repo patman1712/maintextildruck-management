@@ -27,7 +27,8 @@ const ShopDashboard: React.FC = () => {
     sender_house_number: '',
     sender_zip: '',
     sender_city: '',
-    sender_country: 'DEU'
+    sender_country: 'DEU',
+    packaging_weight: 0
   });
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
@@ -967,6 +968,17 @@ const ShopDashboard: React.FC = () => {
                                         value={shippingConfig.dhl_participation || '01'}
                                         onChange={(e) => setShippingConfig({ ...shippingConfig, dhl_participation: e.target.value })}
                                         maxLength={2}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Verpackungsgewicht (kg)</label>
+                                    <input 
+                                        type="number" 
+                                        step="0.001"
+                                        className="w-full border border-slate-300 rounded-lg p-2"
+                                        value={shippingConfig.packaging_weight || 0}
+                                        onChange={(e) => setShippingConfig({ ...shippingConfig, packaging_weight: parseFloat(e.target.value) })}
+                                        placeholder="0.000"
                                     />
                                 </div>
                             </div>
