@@ -30,6 +30,8 @@ export default function DTFOrdering() {
     quantity: number;
     orderId: string;
     customerName: string;
+    status?: string; // Add optional status
+    reference?: string; // Add optional reference
   }[]>([]);
 
   // File Picker Modal State
@@ -178,7 +180,8 @@ export default function DTFOrdering() {
                 quantity: f.quantity || 1,
                 width: 0,
                 height: 0,
-                reference: f.reference
+                reference: f.reference,
+                status: 'pending' as const // Add status explicitly for typescript
             }));
           
           // Batch update for manual groups too
@@ -204,7 +207,8 @@ export default function DTFOrdering() {
             date: order.createdAt,
             quantity: f.quantity || 1, // Use stored quantity or default to 1
             width: 0,
-            height: 0
+            height: 0,
+            status: 'pending' as const // Add status
         }));
         
       console.log('Adding files from order:', orderId, filesToAdd.length, filesToAdd);
@@ -295,7 +299,9 @@ export default function DTFOrdering() {
             id: Math.random().toString(36).substr(2, 9), // Overwrite ID with unique selection ID
             quantity: file.quantity || 1,
             width: 0,
-            height: 0
+            height: 0,
+            status: file.status || 'pending', // Use status if available
+            reference: file.reference // Use reference if available
         }]);
     }
   };
@@ -348,13 +354,13 @@ export default function DTFOrdering() {
             
             const newFileEntry = {
                 name: uploadedFile.originalName,
-                type: 'print',
+                type: 'print' as const, // Fix type error
                 url: fileUrl,
                 thumbnail: thumbnail,
                 customName: uploadedFile.originalName,
-                status: 'pending', // Important: visible
+                status: 'pending' as const, // Fix type error
                 quantity: 1,
-                reference: customer ? customer.name : 'Manueller Upload', // Used for grouping
+                reference: customer ? customer.name : 'Manueller Upload', 
                 uploadedAt: new Date().toISOString()
             };
 
@@ -367,7 +373,7 @@ export default function DTFOrdering() {
                     customerName: 'Warteschlange',
                     customerEmail: '',
                     deadline: new Date().toISOString().split('T')[0],
-                    status: "active", // Must be active to be seen
+                    status: "active", 
                     steps: { processing: true, produced: false, invoiced: false },
                     createdAt: new Date().toISOString(),
                     description: "Sammelauftrag für manuelle DTF Uploads",
@@ -377,6 +383,8 @@ export default function DTFOrdering() {
                 await addOrder(newOrder);
             } else {
                 // Append file to existing queue
+                // We need to be careful with types here. The store expects specific file types.
+                // Using 'any' cast for the array update to bypass strict checks if needed, but 'as const' above should fix it.
                 const currentFiles = queueOrder.files || [];
                 await updateOrder(queueOrderId, {
                     files: [...currentFiles, newFileEntry]
@@ -397,7 +405,9 @@ export default function DTFOrdering() {
                 date: new Date().toISOString(),
                 quantity: 1,
                 width: 0,
-                height: 0
+                height: 0,
+                reference: customer ? customer.name : 'Manueller Upload',
+                status: 'pending' as const
             };
             
             addFile(fileToAdd);
