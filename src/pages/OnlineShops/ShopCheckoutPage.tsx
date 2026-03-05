@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useOutletContext, useParams, Link, useNavigate } from 'react-router-dom';
 import { CreditCard, Truck, MapPin, CheckCircle, ArrowLeft, ArrowRight, ShieldCheck, ShoppingBag, ShoppingCart } from 'lucide-react';
 import { Shop } from '../../store';
