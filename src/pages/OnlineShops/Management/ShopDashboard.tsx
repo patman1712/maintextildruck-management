@@ -318,7 +318,7 @@ const ShopDashboard: React.FC = () => {
         console.error("Could not calculate default weight", e);
     }
 
-    const weightInput = prompt(`Bitte bestätigen Sie das Versandgewicht für Bestellung #${order.order_number} (in kg):`, defaultWeight.toFixed(3));
+    const weightInput = prompt(`Das berechnete Paketgewicht beträgt laut System ${defaultWeight.toFixed(3)} kg.\n\nSoll das Label so erstellt werden?\n\nFalls nicht, geben Sie bitte das korrekte Gesamtgewicht (in kg) ein:`, defaultWeight.toFixed(3));
     
     if (weightInput === null) return; // Cancelled
     
