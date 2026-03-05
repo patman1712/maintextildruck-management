@@ -588,6 +588,12 @@ try {
             console.log('Migrating database: Adding packaging_weight to global_shipping_config table');
             db.exec('ALTER TABLE global_shipping_config ADD COLUMN packaging_weight DECIMAL(10, 3) DEFAULT 0');
         }
+
+        const hasTiers = globalShippingCols.some(col => col.name === 'shipping_tiers');
+        if (!hasTiers) {
+            console.log('Migrating database: Adding shipping_tiers to global_shipping_config table');
+            db.exec('ALTER TABLE global_shipping_config ADD COLUMN shipping_tiers TEXT'); // JSON array
+        }
     }
   } catch (e) {
     console.error('Migration error (packaging_weight):', e);
