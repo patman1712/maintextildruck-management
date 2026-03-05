@@ -481,7 +481,7 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
     }
 
     try {
-        const client = new DhlClient(config.dhl_user, config.dhl_signature, config.dhl_ekp, config.dhl_api_key, !!config.dhl_sandbox);
+        const client = new DhlClient(config.dhl_user, config.dhl_signature, config.dhl_ekp, config.dhl_api_key, !!config.dhl_sandbox, config.dhl_participation);
         
         // Prepare Sender Address
         const sender = {

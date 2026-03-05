@@ -33,12 +33,14 @@ export class DhlClient {
     private ekp: string;
     private apiKey: string; // New: For REST API 2.0
     private endpoint: string;
+    private participation: string;
 
-    constructor(user: string, signature: string, ekp: string, apiKey: string = '', sandbox: boolean = false) {
+    constructor(user: string, signature: string, ekp: string, apiKey: string = '', sandbox: boolean = false, participation: string = '01') {
         this.user = user;
         this.signature = signature;
         this.ekp = ekp;
         this.apiKey = apiKey;
+        this.participation = participation;
         this.endpoint = sandbox 
             ? 'https://api-sandbox.dhl.com/parcel/de/shipping/v2'
             : 'https://api-eu.dhl.com/parcel/de/shipping/v2';
@@ -48,6 +50,20 @@ export class DhlClient {
 
     private getBasicAuth() {
         return `Basic ${Buffer.from(`${this.user}:${this.signature}`, 'utf8').toString('base64')}`;
+    }
+
+    private splitStreet(address: string) {
+        if (!address) return { name: '', number: '' };
+        
+        // Simple regex for German addresses: Last digits are number
+        const match = address.match(/^(.+?)\s*(\d+(?:[a-zA-Z])?(?:[-/]\d+(?:[a-zA-Z])?)?)$/);
+        if (match) {
+            return { name: match[1].trim(), number: match[2].trim() };
+        }
+        
+        // Fallback: If no number found, put everything in name and '1' in number (bad, but better than crash)
+        // Ideally we should try to extract number differently or let user fix it
+        return { name: address, number: '1' };
     }
 
     public async checkConnection() {
@@ -107,14 +123,27 @@ export class DhlClient {
     public async createLabel(order: any, sender: any) {
         if (!this.apiKey) throw new Error('API-Key fehlt.');
 
-        const billingNumber = this.ekp + '0101';
+        const billingNumber = this.ekp + this.participation + '01'; // EKP(10) + Procedure(01) + Participation(01) -> usually 14 chars. Wait, Standard is EKP(10) + Procedure(2) + Participation(2)
+        // Standard procedure for "Paket" is '01'. Participation is often '01'.
+        // Let's assume procedure is fixed to '01' (DHL Paket) unless we want to support others.
+        // Billing Number format: 14 digits.
+        // 1-10: EKP
+        // 11-12: Procedure (01 = Paket V01PAK)
+        // 13-14: Participation (Teilnahme)
+        
+        const finalBillingNumber = `${this.ekp}01${this.participation}`;
+
         const today = new Date().toISOString().split('T')[0];
+
+        // Split street and number for receiver
+        const receiverStreetFull = order.shipping_street || order.billing_street || '';
+        const receiverAddress = this.splitStreet(receiverStreetFull);
 
         // Prepare REST JSON Payload
         const payload = {
             shipments: [{
                 product: 'V01PAK',
-                billingNumber: billingNumber,
+                billingNumber: finalBillingNumber,
                 shipmentDate: today,
                 shipper: {
                     name1: sender.company || 'Maintextildruck',
@@ -129,8 +158,8 @@ export class DhlClient {
                 receiver: {
                     name1: `${order.first_name} ${order.last_name}`.trim() || order.customer_name,
                     address: {
-                        streetName: order.shipping_street || order.billing_street || '',
-                        streetNumber: '1', // Needs splitting in real use, but for test 1
+                        streetName: receiverAddress.name,
+                        streetNumber: receiverAddress.number, 
                         zipCode: order.shipping_zip || order.billing_zip,
                         city: order.shipping_city || order.billing_city,
                         origin: { countryISOCode: 'DEU' }
@@ -156,7 +185,16 @@ export class DhlClient {
                 body: JSON.stringify(payload)
             });
 
-            const data = await response.json();
+            const responseText = await response.text();
+            let data;
+            try {
+                data = JSON.parse(responseText);
+            } catch (e) {
+                // If not JSON, it's likely a raw HTML error page from 500
+                await logDebug('REST_RESPONSE_RAW', responseText);
+                throw new Error(`DHL Server Fehler (${response.status}): ${responseText.substring(0, 200)}`);
+            }
+
             await logDebug('REST_RESPONSE', data);
 
             if (!response.ok) {
