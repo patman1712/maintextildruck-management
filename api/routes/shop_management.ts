@@ -540,23 +540,24 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
 
         // 2. Fallback: Try to find product by NAME if SKU lookup failed or SKU was missing
         if (!product && item.item_name) {
-             console.log(`- Fallback: Looking up product by Name "${item.item_name}"...`);
+             const cleanName = item.item_name.trim();
+             console.log(`- Fallback: Looking up product by Name "${cleanName}" (fuzzy)...`);
              
-             // Try strict match by name & customer
+             // Try strict match by name & customer (Case Insensitive)
              product = db.prepare(`
                 SELECT weight, name
                 FROM customer_products 
-                WHERE name = ? AND customer_id = ?
-             `).get(item.item_name, order.customer_id) as any;
+                WHERE LOWER(name) = LOWER(?) AND customer_id = ?
+             `).get(cleanName, order.customer_id) as any;
 
              if (!product) {
-                 // Try global name match
-                 console.log(`- Strict name lookup failed. Trying global name lookup...`);
+                 // Try global name match (Case Insensitive)
+                 console.log(`- Strict name lookup failed. Trying global name lookup (fuzzy)...`);
                  product = db.prepare(`
                     SELECT weight, name
                     FROM customer_products 
-                    WHERE name = ?
-                 `).get(item.item_name) as any;
+                    WHERE LOWER(name) = LOWER(?)
+                 `).get(cleanName) as any;
              }
         }
         
