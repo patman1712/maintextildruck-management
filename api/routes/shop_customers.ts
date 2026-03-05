@@ -222,6 +222,8 @@ router.post('/:shopId/orders', async (req, res) => {
       items, 
       address, 
       paymentMethod,
+      paymentStatus,
+      transactionId,
       totalAmount,
       shippingCosts
     } = req.body;
@@ -243,8 +245,9 @@ router.post('/:shopId/orders', async (req, res) => {
           id, title, shop_id, shop_customer_id, customer_id,
           customer_name, customer_email, customer_phone, customer_address,
           order_number, total_amount, shipping_costs, payment_method,
+          payment_status, transaction_id,
           status, deadline
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         orderId,
         `Shop Bestellung ${orderNumber}`,
@@ -259,6 +262,8 @@ router.post('/:shopId/orders', async (req, res) => {
         totalAmount,
         shippingCosts,
         paymentMethod,
+        paymentStatus || 'pending',
+        transactionId || null,
         'active',
         new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() // Default 14 days
       );

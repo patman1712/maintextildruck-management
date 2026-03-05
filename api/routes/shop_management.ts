@@ -394,6 +394,42 @@ router.post('/shipping/global-config', (req, res) => {
   }
 });
 
+// Global Payment Config
+router.get('/payment/global-config', (req, res) => {
+    try {
+        const config = db.prepare("SELECT * FROM global_payment_config WHERE id = 'main'").get();
+        res.json({ success: true, data: config || null });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/payment/global-config', (req, res) => {
+    try {
+        const { paypal_client_id, paypal_client_secret, paypal_mode } = req.body;
+
+        const existing = db.prepare("SELECT id FROM global_payment_config WHERE id = 'main'").get();
+        
+        if (existing) {
+            db.prepare(`
+                UPDATE global_payment_config
+                SET paypal_client_id = ?, paypal_client_secret = ?, paypal_mode = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = 'main'
+            `).run(paypal_client_id, paypal_client_secret, paypal_mode || 'sandbox');
+        } else {
+            db.prepare(`
+                INSERT INTO global_payment_config (id, paypal_client_id, paypal_client_secret, paypal_mode)
+                VALUES ('main', ?, ?, ?)
+            `).run(paypal_client_id, paypal_client_secret, paypal_mode || 'sandbox');
+        }
+
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Error saving global payment config:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 router.post('/shipping/test-config', async (req, res) => {
   try {
     const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox } = req.body;

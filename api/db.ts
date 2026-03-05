@@ -514,6 +514,12 @@ try {
     db.exec('ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT "pending"');
   }
 
+  const hasTransactionId = orderCols.some(col => col.name === 'transaction_id');
+  if (!hasTransactionId) {
+      console.log('Migrating database: Adding transaction_id to orders table');
+      db.exec('ALTER TABLE orders ADD COLUMN transaction_id TEXT');
+  }
+
   const hasTrackingNumber = orderCols.some(col => col.name === 'tracking_number');
   if (!hasTrackingNumber) {
     console.log('Migrating database: Adding tracking_number, label_url and shipped_at to orders table');
@@ -691,6 +697,15 @@ try {
       sender_country TEXT DEFAULT 'DEU',
       packaging_weight DECIMAL(10, 3) DEFAULT 0,
       shipping_tiers TEXT, -- JSON array of {min: number, max: number, price: number}
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Global Payment Config Table
+    CREATE TABLE IF NOT EXISTS global_payment_config (
+      id TEXT PRIMARY KEY DEFAULT 'main',
+      paypal_client_id TEXT,
+      paypal_client_secret TEXT,
+      paypal_mode TEXT DEFAULT 'sandbox', -- 'sandbox' or 'live'
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);

@@ -36,6 +36,13 @@ const OnlineShops: React.FC = () => {
     shipping_tiers: []
   });
 
+  // --- GLOBAL PAYMENT STATE ---
+  const [globalPaymentConfig, setGlobalPaymentConfig] = useState({
+      paypal_client_id: '',
+      paypal_client_secret: '',
+      paypal_mode: 'sandbox'
+  });
+
   const fetchVariables = async () => {
       try {
           const res = await fetch('/api/variables');
@@ -60,10 +67,19 @@ const OnlineShops: React.FC = () => {
     } catch (e) { console.error(e); }
   };
 
+  const fetchGlobalPaymentConfig = async () => {
+    try {
+        const res = await fetch('/api/shop-management/payment/global-config');
+        const data = await res.json();
+        if (data.success && data.data) setGlobalPaymentConfig(data.data);
+    } catch (e) { console.error(e); }
+  };
+
   useEffect(() => {
       fetchVariables();
       fetchPersonalizations();
       fetchGlobalShippingConfig();
+      fetchGlobalPaymentConfig();
   }, []);
 
   const handleSaveGlobalShippingConfig = async () => {
@@ -83,6 +99,25 @@ const OnlineShops: React.FC = () => {
     } catch (e: any) {
       console.error(e);
       alert('Netzwerkfehler beim Speichern: ' + e.message);
+    }
+  };
+
+  const handleSaveGlobalPaymentConfig = async () => {
+    try {
+        const res = await fetch('/api/shop-management/payment/global-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(globalPaymentConfig)
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('Globale PayPal-Einstellungen gespeichert!');
+        } else {
+            alert('Fehler beim Speichern: ' + (data.error || 'Unbekannter Fehler'));
+        }
+    } catch (e: any) {
+        console.error(e);
+        alert('Netzwerkfehler beim Speichern: ' + e.message);
     }
   };
 
@@ -779,6 +814,69 @@ const OnlineShops: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <h2 className="text-lg font-semibold text-slate-700 mt-12 mb-4 border-b pb-2 flex items-center justify-between">
+                <div className="flex items-center">
+                    <CreditCard size={20} className="mr-2" />
+                    Globaler PayPal (Alle Shops)
+                </div>
+                <div className="flex space-x-2">
+                    <button 
+                        onClick={handleSaveGlobalPaymentConfig}
+                        className="text-sm bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 flex items-center"
+                    >
+                        <Save size={16} className="mr-2" /> Speichern
+                    </button>
+                </div>
+            </h2>
+            <p className="text-sm text-gray-600 mb-6">
+                Hinterlegen Sie hier Ihre PayPal Business API Zugangsdaten. Diese werden für alle Shops verwendet.
+            </p>
+
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+                 <div className="flex items-center space-x-3 mb-2">
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                        <CreditCard size={20} />
+                    </div>
+                    <h4 className="font-bold text-slate-800">PayPal API Zugangsdaten</h4>
+                </div>
+                
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex flex-col mb-4">
+                    <div className="flex items-center mb-2">
+                        <input 
+                            type="checkbox" 
+                            id="global_paypal_sandbox"
+                            className="h-4 w-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                            checked={globalPaymentConfig.paypal_mode === 'sandbox'}
+                            onChange={(e) => setGlobalPaymentConfig({ ...globalPaymentConfig, paypal_mode: e.target.checked ? 'sandbox' : 'live' })}
+                        />
+                        <label htmlFor="global_paypal_sandbox" className="ml-3 block text-sm font-bold text-slate-700">
+                            Sandbox-Modus aktivieren (Testumgebung)
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                     <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">PayPal Client ID</label>
+                     <input 
+                         type="text" 
+                         className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                         value={globalPaymentConfig.paypal_client_id || ''}
+                         onChange={(e) => setGlobalPaymentConfig({ ...globalPaymentConfig, paypal_client_id: e.target.value })}
+                         placeholder="Client ID aus dem PayPal Developer Dashboard"
+                     />
+                 </div>
+                 <div>
+                     <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">PayPal Client Secret</label>
+                     <input 
+                         type="password" 
+                         className="w-full border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                         value={globalPaymentConfig.paypal_client_secret || ''}
+                         onChange={(e) => setGlobalPaymentConfig({ ...globalPaymentConfig, paypal_client_secret: e.target.value })}
+                         placeholder="••••••••"
+                     />
+                 </div>
             </div>
         </div>
       )}

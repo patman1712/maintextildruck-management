@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext, useParams, Link, useNavigate } from 'react-router-dom';
 import { CreditCard, Truck, MapPin, CheckCircle, ArrowLeft, ArrowRight, ShieldCheck, ShoppingBag, ShoppingCart } from 'lucide-react';
+import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import { Shop } from '../../store';
 import { useShopStore } from '../../shopStore';
 
@@ -18,6 +19,19 @@ const ShopCheckoutPage: React.FC = () => {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [shippingConfig, setShippingConfig] = useState<any>(null);
   const [shippingCost, setShippingCost] = useState(5.95);
+  const [paypalConfig, setPaypalConfig] = useState<{ clientId: string, mode: string } | null>(null);
+
+  useEffect(() => {
+    // Fetch PayPal Config
+    fetch('/api/paypal/config')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                setPaypalConfig({ clientId: data.clientId, mode: data.mode });
+            }
+        })
+        .catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (shopId) {
@@ -96,7 +110,7 @@ const ShopCheckoutPage: React.FC = () => {
   });
   const [paymentMethod, setPaymentMethod] = useState('PayPal');
 
-  const handlePlaceOrder = async () => {
+  const handlePlaceOrder = async (transactionId?: string) => {
     console.log('Place order clicked');
     setLoading(true);
     setError(null);
@@ -110,6 +124,8 @@ const ShopCheckoutPage: React.FC = () => {
           items: cart,
           address,
           paymentMethod,
+          paymentStatus: transactionId ? 'paid' : 'pending',
+          transactionId,
           totalAmount: total,
           shippingCosts: shipping
         })
@@ -260,10 +276,17 @@ const ShopCheckoutPage: React.FC = () => {
               </div>
 
               <div className="grid gap-4">
-                <label className="flex items-center p-6 border-2 border-slate-100 rounded-2xl cursor-pointer hover:border-blue-100 hover:bg-blue-50/20 transition-all group">
-                  <input type="radio" name="payment" className="w-5 h-5 text-blue-600" checked={paymentMethod === 'PayPal'} onChange={() => setPaymentMethod('PayPal')} />
+                <label className={`flex items-center p-6 border-2 border-slate-100 rounded-2xl cursor-pointer hover:border-blue-100 hover:bg-blue-50/20 transition-all group ${!paypalConfig ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                  <input 
+                      type="radio" 
+                      name="payment" 
+                      className="w-5 h-5 text-blue-600" 
+                      checked={paymentMethod === 'PayPal'} 
+                      onChange={() => paypalConfig && setPaymentMethod('PayPal')} 
+                      disabled={!paypalConfig}
+                  />
                   <div className="ml-4 flex-1">
-                    <div className="font-black uppercase italic tracking-tighter text-slate-800">PayPal</div>
+                    <div className="font-black uppercase italic tracking-tighter text-slate-800">PayPal {!paypalConfig && '(Nicht verfügbar)'}</div>
                     <div className="text-xs text-slate-500 font-medium">Bezahle sicher und schnell mit deinem PayPal Konto.</div>
                   </div>
                   <div className="w-12 h-8 bg-slate-100 rounded-md flex items-center justify-center font-black italic text-blue-800 text-[10px]">PP</div>
@@ -333,7 +356,7 @@ const ShopCheckoutPage: React.FC = () => {
                 Durch Klicken auf "Kostenpflichtig bestellen" akzeptiere ich die AGB und die Datenschutzerklärung.
               </div>
 
-              <div className="flex justify-between pt-8">
+              <div className="flex justify-between pt-8 items-center">
                 <button 
                   onClick={() => setStep(2)}
                   className="px-6 py-4 rounded-xl font-bold uppercase tracking-widest text-xs text-slate-500 hover:bg-slate-50 transition-all flex items-center group"
@@ -341,24 +364,77 @@ const ShopCheckoutPage: React.FC = () => {
                   <ArrowLeft size={16} className="mr-2 group-hover:-translate-x-1 transition-transform" />
                   <span>Zurück zur Zahlung</span>
                 </button>
-                <button 
-                  onClick={handlePlaceOrder}
-                  disabled={loading}
-                  className="px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all flex items-center group disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: primaryColor }}
-                >
-                  {loading ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-3"></div>
-                      <span>Wird verarbeitet...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle size={18} className="mr-2" />
-                      <span>Kostenpflichtig bestellen</span>
-                    </>
-                  )}
-                </button>
+                
+                {paymentMethod === 'PayPal' && paypalConfig ? (
+                    <div className="w-full max-w-[300px]">
+                        <PayPalScriptProvider options={{ 
+                            clientId: paypalConfig.clientId, 
+                            currency: "EUR",
+                            intent: "capture"
+                        }}>
+                            <PayPalButtons 
+                                style={{ layout: "vertical", shape: "rect", label: "pay" }}
+                                createOrder={async (data, actions) => {
+                                    try {
+                                        const res = await fetch('/api/paypal/create-order', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ amount: total.toFixed(2), currency: "EUR" })
+                                        });
+                                        const json = await res.json();
+                                        if (!json.success) throw new Error(json.error?.message || 'Unknown error');
+                                        return json.orderId;
+                                    } catch (err: any) {
+                                        console.error(err);
+                                        setError('Fehler bei PayPal: ' + err.message);
+                                        throw err;
+                                    }
+                                }}
+                                onApprove={async (data, actions) => {
+                                    try {
+                                        const res = await fetch('/api/paypal/capture-order', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ orderId: data.orderID })
+                                        });
+                                        const json = await res.json();
+                                        if (json.success) {
+                                            await handlePlaceOrder(data.orderID);
+                                        } else {
+                                            setError('Zahlung fehlgeschlagen: ' + (json.error?.message || 'Unknown error'));
+                                        }
+                                    } catch (err: any) {
+                                        console.error(err);
+                                        setError('Zahlungsfehler: ' + err.message);
+                                    }
+                                }}
+                                onError={(err: any) => {
+                                    console.error('PayPal Error:', err);
+                                    setError('PayPal Fehler: ' + (err.message || 'Ein Fehler ist aufgetreten'));
+                                }}
+                            />
+                        </PayPalScriptProvider>
+                    </div>
+                ) : (
+                    <button 
+                    onClick={() => handlePlaceOrder()}
+                    disabled={loading}
+                    className="px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all flex items-center group disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: primaryColor }}
+                    >
+                    {loading ? (
+                        <>
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-3"></div>
+                        <span>Wird verarbeitet...</span>
+                        </>
+                    ) : (
+                        <>
+                        <CheckCircle size={18} className="mr-2" />
+                        <span>Kostenpflichtig bestellen</span>
+                        </>
+                    )}
+                    </button>
+                )}
               </div>
             </div>
           )}
