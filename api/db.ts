@@ -317,6 +317,21 @@ try {
     console.log('Migrating database: Adding personalization_options to shop_product_assignments table');
     db.exec('ALTER TABLE shop_product_assignments ADD COLUMN personalization_options TEXT'); // JSON array of selected option IDs
   }
+  // Migration: Fix missing customer_id for shop orders
+  try {
+      const ordersWithMissingCustomer = db.prepare("SELECT count(*) as count FROM orders WHERE shop_id IS NOT NULL AND customer_id IS NULL").get() as any;
+      if (ordersWithMissingCustomer.count > 0) {
+          console.log(`Migrating database: Fixing ${ordersWithMissingCustomer.count} shop orders with missing customer_id`);
+          const updates = db.prepare(`
+              UPDATE orders 
+              SET customer_id = (SELECT customer_id FROM shops WHERE shops.id = orders.shop_id)
+              WHERE shop_id IS NOT NULL AND customer_id IS NULL
+          `).run();
+          console.log(`Fixed ${updates.changes} orders.`);
+      }
+  } catch (e) {
+      console.error('Migration error (fix shop orders):', e);
+  }
 } catch (error) {
   console.error('Migration error (variants/personalization):', error);
 }

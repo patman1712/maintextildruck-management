@@ -213,6 +213,10 @@ router.post('/:shopId/orders', async (req, res) => {
 
     if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
 
+    // Get Shop Owner (Customer ID)
+    const shop = db.prepare('SELECT customer_id FROM shops WHERE id = ?').get(shopId) as { customer_id: string };
+    if (!shop) return res.status(404).json({ success: false, error: 'Shop-Besitzer nicht gefunden.' });
+
     const { 
       customerId, 
       items, 
@@ -236,16 +240,17 @@ router.post('/:shopId/orders', async (req, res) => {
       // 1. Create Order
       db.prepare(`
         INSERT INTO orders (
-          id, title, shop_id, shop_customer_id, 
+          id, title, shop_id, shop_customer_id, customer_id,
           customer_name, customer_email, customer_phone, customer_address,
           order_number, total_amount, shipping_costs, payment_method,
           status, deadline
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         orderId,
         `Shop Bestellung ${orderNumber}`,
         shopId,
         customerId || null,
+        shop.customer_id,
         `${address.firstName} ${address.lastName}`,
         address.email || '',
         address.phone || '',

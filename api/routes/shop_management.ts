@@ -564,7 +564,7 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         if (product) {
             // Check if weight is set (allow 0, but log it)
             if (product.weight !== undefined && product.weight !== null) {
-                itemWeight = parseFloat(product.weight);
+                itemWeight = parseFloat(String(product.weight).replace(',', '.'));
                 console.log(`- Item "${item.item_name}": Found product "${product.name}" with weight ${itemWeight}kg`);
             } else {
                 console.log(`- Item "${item.item_name}": Product found but has no weight property.`);
