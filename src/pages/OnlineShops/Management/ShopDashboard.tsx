@@ -276,12 +276,48 @@ const ShopDashboard: React.FC = () => {
   };
 
   const handleCreateShippingLabel = async (order: any) => {
-    // 1. Ask for weight confirmation (Manual Override)
-    // We try to guess a default weight if possible, otherwise 0.5
-    // Since we might not have items here, we just use a generic default or 0.
-    // Ideally we would fetch the calculated weight first, but to save time/requests we just ask the user.
-    const defaultWeight = "0.5"; 
-    const weightInput = prompt(`Bitte bestätigen Sie das Versandgewicht für Bestellung #${order.order_number} (in kg):`, defaultWeight);
+    // 1. Calculate default weight on client side if possible
+    let defaultWeight = 0.5;
+
+    // We need to fetch order details (items) if they are not present in the order object
+    // The order object from the list might not have items
+    try {
+        const res = await fetch(`/api/shop-customers/${shopId}/orders/${order.shop_customer_id || 'guest'}/${order.id}`);
+        const data = await res.json();
+        
+        if (data.success && data.data && data.data.items) {
+             const items = data.data.items;
+             let totalItemWeight = 0;
+             
+             // Calculate weight based on items
+             for (const item of items) {
+                 // Try to find matching shop product in current shopProducts state
+                 const shopProduct = shopProducts.find(sp => {
+                     // Check by SKU if available
+                     if (item.item_number && sp.product_number === item.item_number) return true;
+                     // Check by Name (fuzzy)
+                     if (sp.product_name && item.item_name && sp.product_name.toLowerCase().trim() === item.item_name.toLowerCase().trim()) return true;
+                     return false;
+                 });
+                 
+                 if (shopProduct && shopProduct.weight > 0) {
+                     totalItemWeight += (shopProduct.weight * item.quantity);
+                 } else {
+                     console.warn(`Product weight not found for item: ${item.item_name}`);
+                 }
+             }
+             
+             if (totalItemWeight > 0) {
+                 // Add packaging weight
+                 const pkgWeight = shippingConfig.packaging_weight || 0;
+                 defaultWeight = totalItemWeight + pkgWeight;
+             }
+        }
+    } catch (e) {
+        console.error("Could not calculate default weight", e);
+    }
+
+    const weightInput = prompt(`Bitte bestätigen Sie das Versandgewicht für Bestellung #${order.order_number} (in kg):`, defaultWeight.toFixed(3));
     
     if (weightInput === null) return; // Cancelled
     
