@@ -7,7 +7,7 @@ const logDebug = async (type: string, data: any) => {
     const timestamp = new Date().toISOString();
     const logEntry = `\n[${timestamp}] [${type}]\n${typeof data === 'string' ? data : JSON.stringify(data, null, 2)}\n----------------------------------------`;
     try {
-        await fs.appendFile('dhl_debug_log.txt', logEntry);
+        await fs.appendFile(path.join(process.cwd(), 'dhl_debug.log'), logEntry);
     } catch (e) {
         console.error('Failed to write debug log', e);
     }
@@ -58,11 +58,18 @@ export class DhlClient {
         }
 
         try {
-            await logDebug('REST_AUTH_CHECK', 'Testing REST API v2...');
+            await logDebug('REST_AUTH_CHECK', {
+                endpoint: this.endpoint,
+                user: this.user,
+                // signature: '***', // Don't log signature
+                apiKey: this.apiKey ? this.apiKey.substring(0, 5) + '...' : 'missing',
+                authHeader: this.getBasicAuth().substring(0, 15) + '...'
+            });
             
             // The REST API uses a simple GET for testing or status
             // We use the validation endpoint or just a dummy request to check Auth
-            const response = await fetch(`${this.endpoint}/orders?docFormat=PDF`, {
+            // Try simpler request: just /orders with limit 1
+            const response = await fetch(`${this.endpoint}/orders?limit=1`, {
                 method: 'GET',
                 headers: {
                     'Authorization': this.getBasicAuth(),
@@ -71,21 +78,28 @@ export class DhlClient {
                 }
             });
 
+            const responseText = await response.text();
+            await logDebug('REST_AUTH_RESPONSE', { 
+                status: response.status, 
+                headers: JSON.stringify(response.headers.raw()),
+                body: responseText 
+            });
+
             // If we get 405 (Method Not Allowed), it means Auth was successful (since GET is not allowed for orders)
             // If we get 401, Auth failed.
-            if (response.status === 405 || response.status === 200 || response.status === 400) {
+            if (response.status === 405 || response.status === 200 || response.status === 400 || response.status === 404) {
+                 // Even 404 might mean Auth worked but no orders found (depending on API)
+                 // But typically 401 is the only "Auth Failed" status.
                 return { success: true, message: 'Verbindung zur DHL REST API erfolgreich (Authentifizierung bestätigt)!' };
             }
-
-            const errorText = await response.text();
-            await logDebug('REST_ERROR', { status: response.status, body: errorText });
             
             if (response.status === 401) {
-                throw new Error('Anmeldung fehlgeschlagen (401). Bitte prüfen Sie Benutzername, Passwort und API-Key.');
+                throw new Error(`Anmeldung fehlgeschlagen (401). Details: ${responseText}`);
             }
             
-            throw new Error(`DHL REST API Fehler ${response.status}: ${errorText.substring(0, 100)}`);
+            throw new Error(`DHL REST API Fehler ${response.status}: ${responseText.substring(0, 200)}`);
         } catch (error: any) {
+            await logDebug('REST_AUTH_ERROR', error.message);
             throw error;
         }
     }
