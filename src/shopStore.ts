@@ -25,6 +25,7 @@ export interface CartItem {
   size?: string;
   color?: string;
   personalization?: string;
+  weight?: number;
 }
 
 interface ShopState {

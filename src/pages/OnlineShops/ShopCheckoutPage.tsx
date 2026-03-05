@@ -16,9 +16,69 @@ const ShopCheckoutPage: React.FC = () => {
   const { shop, primaryColor } = useOutletContext<ShopContext>();
   const { cart, currentCustomer, clearCart } = useShopStore();
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [shippingConfig, setShippingConfig] = useState<any>(null);
+  const [shippingCost, setShippingCost] = useState(5.95);
+
+  useEffect(() => {
+    if (shopId) {
+        fetch(`/api/shops/${shopId}/shipping-config`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.data) {
+                    setShippingConfig(data.data);
+                }
+            })
+            .catch(console.error);
+    }
+  }, [shopId]);
+
+  useEffect(() => {
+    if (shippingConfig && shippingConfig.shipping_tiers && Array.isArray(shippingConfig.shipping_tiers) && shippingConfig.shipping_tiers.length > 0) {
+        // Calculate total weight
+        let totalWeight = 0;
+        
+        // Items weight
+        cart.forEach(item => {
+             if (item.weight) {
+                 totalWeight += (item.weight * item.quantity);
+             }
+        });
+
+        // Packaging weight
+        if (shippingConfig.packaging_weight) {
+            totalWeight += parseFloat(shippingConfig.packaging_weight);
+        }
+
+        console.log(`Checkout Weight Calculation: Items + Pkg = ${totalWeight}kg`);
+
+        // Find tier
+        // Tiers should be sorted by min_weight
+        const tiers = shippingConfig.shipping_tiers.sort((a: any, b: any) => a.min_weight - b.min_weight);
+        
+        const tier = tiers.find((t: any) => totalWeight >= t.min_weight && totalWeight < t.max_weight);
+        
+        if (tier) {
+            setShippingCost(parseFloat(tier.price));
+        } else {
+            // Check if we are above the highest tier
+            const maxTier = tiers[tiers.length - 1];
+            if (maxTier && totalWeight >= maxTier.max_weight) {
+                 // Use the price of the highest tier? Or fallback?
+                 // Usually highest tier covers "everything above"
+                 setShippingCost(parseFloat(maxTier.price));
+            } else {
+                 // Below lowest tier? Or gap?
+                 // If below lowest, use lowest?
+                 if (tiers.length > 0 && totalWeight < tiers[0].min_weight) {
+                     setShippingCost(parseFloat(tiers[0].price));
+                 }
+            }
+        }
+    }
+  }, [cart, shippingConfig]);
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const shipping = 5.95;
+  const shipping = shippingCost;
   const total = cartTotal + shipping;
 
   const [orderComplete, setOrderComplete] = useState(false);

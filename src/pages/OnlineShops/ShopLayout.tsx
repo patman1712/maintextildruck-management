@@ -15,6 +15,9 @@ const ShopLayout: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
+  
+  const [shippingConfig, setShippingConfig] = useState<any>(null);
+  const [shippingCost, setShippingCost] = useState(5.95);
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -33,6 +36,17 @@ const ShopLayout: React.FC = () => {
           if (catData.success) {
             setCategories(catData.data);
           }
+
+          // Fetch Shipping Config
+          fetch(`/api/shops/${data.data.id}/shipping-config`)
+            .then(res => res.json())
+            .then(sData => {
+                if (sData.success && sData.data) {
+                    setShippingConfig(sData.data);
+                }
+            })
+            .catch(console.error);
+
         } else {
           setError('Shop nicht gefunden');
         }
@@ -47,6 +61,31 @@ const ShopLayout: React.FC = () => {
       fetchShop();
     }
   }, [shopId]);
+
+  useEffect(() => {
+    if (shippingConfig && shippingConfig.shipping_tiers && Array.isArray(shippingConfig.shipping_tiers) && shippingConfig.shipping_tiers.length > 0) {
+        let totalWeight = 0;
+        cart.forEach(item => {
+             if (item.weight) totalWeight += (item.weight * item.quantity);
+        });
+        if (shippingConfig.packaging_weight) totalWeight += parseFloat(shippingConfig.packaging_weight);
+
+        const tiers = shippingConfig.shipping_tiers.sort((a: any, b: any) => a.min_weight - b.min_weight);
+        const tier = tiers.find((t: any) => totalWeight >= t.min_weight && totalWeight < t.max_weight);
+        
+        if (tier) {
+            setShippingCost(parseFloat(tier.price));
+        } else {
+            const maxTier = tiers[tiers.length - 1];
+            if (maxTier && totalWeight >= maxTier.max_weight) {
+                 setShippingCost(parseFloat(maxTier.price));
+            } else if (tiers.length > 0 && totalWeight < tiers[0].min_weight) {
+                 setShippingCost(parseFloat(tiers[0].price));
+            }
+        }
+    }
+  }, [cart, shippingConfig]);
+
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Lade Shop...</div>;
   if (error || !shop) return <div className="min-h-screen flex items-center justify-center text-red-600">{error || 'Shop nicht gefunden'}</div>;
@@ -292,11 +331,11 @@ const ShopLayout: React.FC = () => {
                     </div>
                     <div className="flex justify-between text-sm text-slate-500 font-medium">
                       <span>Versandkosten</span>
-                      <span>5,95 €*</span>
+                      <span>{shippingCost.toFixed(2).replace('.', ',')} €*</span>
                     </div>
                     <div className="flex justify-between text-lg font-black text-slate-900 pt-2">
                       <span>Gesamtbetrag</span>
-                      <span>{(cartTotal + 5.95).toFixed(2).replace('.', ',')} €*</span>
+                      <span>{(cartTotal + shippingCost).toFixed(2).replace('.', ',')} €*</span>
                     </div>
                     <p className="text-[10px] text-slate-400 text-right">*inkl. MwSt.</p>
                   </div>

@@ -93,6 +93,7 @@ router.get('/:id/products', (req, res) => {
         cp.manufacturer_info,
         cp.color,
         cp.size,
+        cp.weight,
         sc.name as category_name,
         sc.slug as category_slug
       FROM shop_product_assignments spa
@@ -163,6 +164,37 @@ router.get('/:id/products', (req, res) => {
     }
 
     res.json({ success: true, data: products });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get shipping config for a shop (public)
+router.get('/:id/shipping-config', (req, res) => {
+  try {
+    const { id } = req.params;
+    let shopId = id;
+
+    // Resolve slug if needed
+    if (!id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
+        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(id) as { id: string } | undefined;
+        if (!shop) return res.status(404).json({ success: false, error: 'Shop not found' });
+        shopId = shop.id;
+    }
+
+    const config = db.prepare('SELECT packaging_weight, shipping_tiers FROM shop_shipping_config WHERE shop_id = ?').get(shopId) as any;
+    
+    if (config) {
+        if (config.shipping_tiers) {
+            try {
+                config.shipping_tiers = JSON.parse(config.shipping_tiers);
+            } catch (e) {
+                config.shipping_tiers = [];
+            }
+        }
+    }
+
+    res.json({ success: true, data: config || null });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

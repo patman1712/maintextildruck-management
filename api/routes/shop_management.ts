@@ -405,7 +405,16 @@ router.post('/shipping/test-config', async (req, res) => {
 router.get('/:shopId/shipping-config', (req, res) => {
   try {
     const { shopId } = req.params;
-    const config = db.prepare('SELECT * FROM shop_shipping_config WHERE shop_id = ?').get(shopId);
+    const config = db.prepare('SELECT * FROM shop_shipping_config WHERE shop_id = ?').get(shopId) as any;
+    
+    if (config && config.shipping_tiers) {
+        try {
+            config.shipping_tiers = JSON.parse(config.shipping_tiers);
+        } catch (e) {
+            config.shipping_tiers = [];
+        }
+    }
+
     res.json({ success: true, data: config || null });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -415,11 +424,11 @@ router.get('/:shopId/shipping-config', (req, res) => {
 router.post('/:shopId/shipping-config', (req, res) => {
   try {
     const { shopId } = req.params;
-    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight } = req.body;
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight, shipping_tiers } = req.body;
 
     db.prepare(`
-      INSERT INTO shop_shipping_config (shop_id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO shop_shipping_config (shop_id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight, shipping_tiers)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(shop_id) DO UPDATE SET
         dhl_user = excluded.dhl_user,
         dhl_signature = excluded.dhl_signature,
@@ -433,8 +442,25 @@ router.post('/:shopId/shipping-config', (req, res) => {
         sender_zip = excluded.sender_zip,
         sender_city = excluded.sender_city,
         sender_country = excluded.sender_country,
-        packaging_weight = excluded.packaging_weight
-    `).run(shopId, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox ? 1 : 0, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight || 0);
+        packaging_weight = excluded.packaging_weight,
+        shipping_tiers = excluded.shipping_tiers
+    `).run(
+        shopId, 
+        dhl_user, 
+        dhl_signature, 
+        dhl_ekp, 
+        dhl_api_key, 
+        dhl_sandbox ? 1 : 0, 
+        dhl_participation, 
+        sender_name, 
+        sender_street, 
+        sender_house_number, 
+        sender_zip, 
+        sender_city, 
+        sender_country, 
+        packaging_weight || 0,
+        shipping_tiers ? JSON.stringify(shipping_tiers) : '[]'
+    );
 
     res.json({ success: true });
   } catch (error: any) {

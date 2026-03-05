@@ -573,6 +573,12 @@ try {
             console.log('Migrating database: Adding packaging_weight to shop_shipping_config table');
             db.exec('ALTER TABLE shop_shipping_config ADD COLUMN packaging_weight DECIMAL(10, 3) DEFAULT 0');
         }
+
+        const hasTiers = shopShippingCols.some(col => col.name === 'shipping_tiers');
+        if (!hasTiers) {
+            console.log('Migrating database: Adding shipping_tiers to shop_shipping_config table');
+            db.exec('ALTER TABLE shop_shipping_config ADD COLUMN shipping_tiers TEXT'); // JSON array
+        }
     }
     
     const globalShippingCols = db.prepare("PRAGMA table_info(global_shipping_config)").all() as any[];
@@ -604,6 +610,7 @@ try {
       sender_city TEXT,
       sender_country TEXT DEFAULT 'DEU',
       packaging_weight DECIMAL(10, 3) DEFAULT 0,
+      shipping_tiers TEXT, -- JSON array of {min: number, max: number, price: number}
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE
     )
