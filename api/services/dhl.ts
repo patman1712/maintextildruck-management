@@ -179,12 +179,6 @@ export class DhlClient {
                     }
                 },
                 details: {
-                    dim: {
-                        uom: 'mm',
-                        height: 100,
-                        length: 200,
-                        width: 150
-                    },
                     weight: {
                         uom: 'kg',
                         value: weight
@@ -196,13 +190,16 @@ export class DhlClient {
         try {
             await logDebug('REST_REQUEST', payload);
             
-            const response = await fetch(`${this.endpoint}/orders?docFormat=PDF&printFormat=A4`, { // Add print params
+            // docFormat=PDF is usually enough. printFormat=A4 might be optional or called differently.
+            // Let's try minimal parameters first to rule out query param issues.
+            const response = await fetch(`${this.endpoint}/orders?docFormat=PDF`, { 
                 method: 'POST',
                 headers: {
                     'Authorization': this.getBasicAuth(),
                     'dhl-api-key': this.apiKey,
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'Accept-Language': 'de-DE' // Maybe helps with error messages
                 },
                 body: JSON.stringify(payload)
             });
