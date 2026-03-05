@@ -93,7 +93,7 @@ router.get('/:shopId/products', (req, res) => {
   try {
     const { shopId } = req.params;
     const products = db.prepare(`
-      SELECT spa.*, cp.name as product_name, cp.product_number, cp.manufacturer_info, cp.description, cp.size, cp.color, sc.name as category_name
+      SELECT spa.*, cp.name as product_name, cp.product_number, cp.manufacturer_info, cp.description, cp.size, cp.weight, cp.color, sc.name as category_name
       FROM shop_product_assignments spa
       JOIN customer_products cp ON spa.product_id = cp.id
       LEFT JOIN shop_categories sc ON spa.category_id = sc.id
