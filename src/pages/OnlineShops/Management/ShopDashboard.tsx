@@ -309,8 +309,9 @@ const ShopDashboard: React.FC = () => {
              
              if (totalItemWeight > 0) {
                  // Add packaging weight
-                 const pkgWeight = shippingConfig.packaging_weight || 0;
+                 const pkgWeight = parseFloat(String(shippingConfig.packaging_weight || 0));
                  defaultWeight = totalItemWeight + pkgWeight;
+                 console.log(`Calculated weight: Items (${totalItemWeight}) + Pkg (${pkgWeight}) = ${defaultWeight}`);
              }
         }
     } catch (e) {
