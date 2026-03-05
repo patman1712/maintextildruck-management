@@ -517,12 +517,23 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         // Try to find product via item_number (SKU)
         if (item.item_number) {
             // Find product belonging to the shop's owner (customer)
-            const product = db.prepare(`
+            // First try strict match with customer_id
+            let product = db.prepare(`
                 SELECT weight, name
                 FROM customer_products 
                 WHERE product_number = ? AND customer_id = ?
             `).get(item.item_number, order.customer_id) as any;
             
+            // If not found, try finding ANY product with this SKU (fallback for shared products or wrong customer mapping)
+            if (!product) {
+                 console.log(`- Strict lookup failed for SKU "${item.item_number}". Trying global lookup...`);
+                 product = db.prepare(`
+                    SELECT weight, name
+                    FROM customer_products 
+                    WHERE product_number = ?
+                 `).get(item.item_number) as any;
+            }
+
             if (product && product.weight) {
                 itemWeight = parseFloat(product.weight);
                 console.log(`- Item "${item.item_name}" (SKU: ${item.item_number}): Found product "${product.name}" with weight ${itemWeight}kg`);
