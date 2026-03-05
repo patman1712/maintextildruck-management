@@ -163,9 +163,9 @@ export class DhlClient {
                     address: {
                         streetName: (sender.street || '').substring(0, 35),
                         streetNumber: shipperStreetNumber.substring(0, 5),
-                        zipCode: (sender.zip || '').substring(0, 10),
+                        postalCode: (sender.zip || '').substring(0, 10),
                         city: (sender.city || '').substring(0, 35),
-                        origin: { countryISOCode: 'DEU' }
+                        country: 'DEU'
                     }
                 },
                 receiver: {
@@ -173,9 +173,9 @@ export class DhlClient {
                     address: {
                         streetName: (receiverAddress.name || '').substring(0, 35),
                         streetNumber: receiverStreetNumber.substring(0, 5),
-                        zipCode: zipRaw.substring(0, 10),
+                        postalCode: zipRaw.substring(0, 10),
                         city: cityRaw.substring(0, 35),
-                        origin: { countryISOCode: countryRaw }
+                        country: countryRaw
                     }
                 },
                 details: {
@@ -190,8 +190,39 @@ export class DhlClient {
         try {
             await logDebug('REST_REQUEST', payload);
             
-            // docFormat=PDF is usually enough. printFormat=A4 might be optional or called differently.
-            // Let's try minimal parameters first to rule out query param issues.
+            // Validate first!
+            const validationResponse = await fetch(`${this.endpoint}/orders?validate=true`, { 
+                method: 'POST',
+                headers: {
+                    'Authorization': this.getBasicAuth(),
+                    'dhl-api-key': this.apiKey,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Accept-Language': 'de-DE'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const validationText = await validationResponse.text();
+            let validationData;
+            try {
+                validationData = JSON.parse(validationText);
+            } catch (e) {
+                // If validation crashes, it's a server issue
+                 await logDebug('REST_VALIDATION_RAW', validationText);
+            }
+
+            if (validationData && validationData.shipments && validationData.shipments[0] && validationData.shipments[0].validationMessages) {
+                 const msgs = validationData.shipments[0].validationMessages;
+                 const errors = msgs.filter((m: any) => m.validationState === 'ERROR');
+                 if (errors.length > 0) {
+                     const err = new Error(`Validierungsfehler: ${errors[0].validationMessage}`);
+                     (err as any).payload = payload;
+                     throw err;
+                 }
+            }
+
+            // If validation passed (or crashed but maybe creation works?), try creation
             const response = await fetch(`${this.endpoint}/orders?docFormat=PDF`, { 
                 method: 'POST',
                 headers: {
@@ -199,7 +230,7 @@ export class DhlClient {
                     'dhl-api-key': this.apiKey,
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'Accept-Language': 'de-DE' // Maybe helps with error messages
+                    'Accept-Language': 'de-DE'
                 },
                 body: JSON.stringify(payload)
             });
