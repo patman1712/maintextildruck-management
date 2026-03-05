@@ -101,16 +101,22 @@ export default function DTFOrdering() {
         return hasPendingFiles;
     });
 
-  // 2. Manual Inventory Groups (Virtual Orders)
+  // 2. Manual Inventory Groups (Virtual Orders) AND DTF Queue
   const manualGroups: any[] = [];
   const manualOrder = orders.find(o => o.id === 'inventory-manual');
+  const dtfQueueOrder = orders.find(o => o.id === 'dtf-manual-queue');
   
-  if (manualOrder) {
+  // Combine files from both sources
+  const combinedManualOrders = [manualOrder, dtfQueueOrder].filter(Boolean);
+
+  combinedManualOrders.forEach(mOrder => {
+      if (!mOrder) return;
       const filesByRef: Record<string, any[]> = {};
-      (manualOrder.files || []).forEach(f => {
+      
+      (mOrder.files || []).forEach((f: any) => {
            // Filter out ordered files
            if ((f.type === 'print' || f.type === 'vector') && f.status !== 'ordered') {
-               const ref = f.reference || 'Unbekannt';
+               const ref = f.reference || (mOrder.id === 'dtf-manual-queue' ? 'Manueller Upload' : 'Unbekannt');
                if (!filesByRef[ref]) filesByRef[ref] = [];
                filesByRef[ref].push(f);
            }
@@ -118,40 +124,57 @@ export default function DTFOrdering() {
 
       Object.entries(filesByRef).forEach(([ref, files]) => {
           manualGroups.push({
-              id: `manual-group-${ref}`,
+              id: `${mOrder.id}-group-${ref}`, // Unique Group ID
               title: ref === 'Unbekannt' ? 'Ohne Auftragsnummer' : ref,
-              orderNumber: '', // Hide MANUELL badge to keep it clean
-              customerName: 'Manuelle Lagerbestellung', 
-              createdAt: manualOrder.createdAt,
+              orderNumber: '', 
+              customerName: mOrder.id === 'dtf-manual-queue' ? 'Manuelle DTF Warteschlange' : 'Manuelle Lagerbestellung', 
+              createdAt: mOrder.createdAt,
               files: files,
               printStatus: 'pending', 
-              isVirtual: true
+              isVirtual: true,
+              originalOrderId: mOrder.id // Track origin
           });
       });
-  }
+  });
 
   const openOrdersWithFiles = [...regularOrders, ...manualGroups];
 
   const addOrderFiles = (orderId: string) => {
-      // Check for virtual order (Manual Inventory Groups)
-      if (orderId.startsWith('manual-group-')) {
-          const ref = orderId.replace('manual-group-', '');
-          const manualOrder = orders.find(o => o.id === 'inventory-manual');
-          if (!manualOrder) return;
+      // Check for virtual order (Manual Inventory Groups or Queue)
+      if (orderId.includes('-group-')) {
+          // Parse ID: {originalOrderId}-group-{ref}
+          // e.g. inventory-manual-group-Ref123 OR dtf-manual-queue-group-Manueller Upload
           
-          const filesToAdd = (manualOrder.files || [])
-             .filter(f => {
-                 const fileRef = f.reference || 'Unbekannt';
+          let originalOrderId = '';
+          let ref = '';
+          
+          if (orderId.startsWith('inventory-manual-group-')) {
+              originalOrderId = 'inventory-manual';
+              ref = orderId.replace('inventory-manual-group-', '');
+          } else if (orderId.startsWith('dtf-manual-queue-group-')) {
+              originalOrderId = 'dtf-manual-queue';
+              ref = orderId.replace('dtf-manual-queue-group-', '');
+          } else {
+               // Fallback / legacy
+               return;
+          }
+
+          const sourceOrder = orders.find(o => o.id === originalOrderId);
+          if (!sourceOrder) return;
+          
+          const filesToAdd = (sourceOrder.files || [])
+             .filter((f: any) => {
+                 const fileRef = f.reference || (originalOrderId === 'dtf-manual-queue' ? 'Manueller Upload' : 'Unbekannt');
                  return fileRef === ref && (f.type === 'print' || f.type === 'vector' || !f.type) && f.status !== 'ordered';
              })
-             .map(f => ({
+             .map((f: any) => ({
                 id: Math.random().toString(36).substr(2, 9),
                 url: f.url,
                 name: f.customName || f.name,
                 thumbnail: f.thumbnail,
-                orderId: `manual-group-${ref}`, // Use Virtual ID for tracking status update
-                customerName: 'Lager / Manuell',
-                date: manualOrder.createdAt,
+                orderId: orderId, // Use Virtual Group ID for tracking status update
+                customerName: originalOrderId === 'dtf-manual-queue' ? (f.reference || 'Manueller Upload') : 'Lager / Manuell',
+                date: sourceOrder.createdAt,
                 quantity: f.quantity || 1,
                 width: 0,
                 height: 0,
@@ -160,7 +183,7 @@ export default function DTFOrdering() {
           
           // Batch update for manual groups too
           setSelectedFiles(prev => {
-              const uniqueNewFiles = filesToAdd.filter(nf => !prev.some(pf => pf.url === nf.url && pf.orderId === nf.orderId && pf.name === nf.name));
+              const uniqueNewFiles = filesToAdd.filter((nf: any) => !prev.some(pf => pf.url === nf.url && pf.orderId === nf.orderId && pf.name === nf.name));
               return [...prev, ...uniqueNewFiles];
           });
           return;
@@ -317,44 +340,61 @@ export default function DTFOrdering() {
             const fileUrl = uploadedFile.path;
             const thumbnail = uploadedFile.thumbnail;
             
-            // Create a "storage" order for this file
-            const newOrder: any = {
-                id: Math.random().toString(36).substr(2, 9),
-                title: isOneTime ? "Einmaliger DTF Upload" : "Direkter Dateiupload (DTF)",
-                customerId: customer?.id || 'one-time',
-                customerName: customer?.name || 'Einmaliger Kunde (Kein Profil)',
-                customerEmail: customer?.email || '',
-                customerPhone: customer?.phone || '',
-                customerAddress: customer?.address || '',
-                deadline: new Date().toISOString().split('T')[0],
-                status: isOneTime ? "archived" : "archived", // Both archived to hide from main list
-                steps: { processing: true, produced: true, invoiced: true },
-                createdAt: new Date().toISOString(),
-                description: isOneTime ? "Temporärer Upload für einmaligen DTF Druck" : "Direkt im DTF-Bestellbereich hochgeladen",
-                employees: [],
-                files: [{
-                    name: uploadedFile.originalName,
-                    type: 'print',
-                    url: fileUrl,
-                    thumbnail: thumbnail,
-                    customName: uploadedFile.originalName
-                }]
+            // Instead of creating a NEW hidden order, append to a central "dtf-manual-queue" order
+            // This ensures files are visible to ALL users until processed.
+            
+            const queueOrderId = 'dtf-manual-queue';
+            let queueOrder = orders.find(o => o.id === queueOrderId);
+            
+            const newFileEntry = {
+                name: uploadedFile.originalName,
+                type: 'print',
+                url: fileUrl,
+                thumbnail: thumbnail,
+                customName: uploadedFile.originalName,
+                status: 'pending', // Important: visible
+                quantity: 1,
+                reference: customer ? customer.name : 'Manueller Upload', // Used for grouping
+                uploadedAt: new Date().toISOString()
             };
 
-            await addOrder(newOrder);
+            if (!queueOrder) {
+                // Create the queue order if it doesn't exist
+                const newOrder: any = {
+                    id: queueOrderId,
+                    title: "Manuelle DTF Warteschlange",
+                    customerId: 'dtf-queue',
+                    customerName: 'Warteschlange',
+                    customerEmail: '',
+                    deadline: new Date().toISOString().split('T')[0],
+                    status: "active", // Must be active to be seen
+                    steps: { processing: true, produced: false, invoiced: false },
+                    createdAt: new Date().toISOString(),
+                    description: "Sammelauftrag für manuelle DTF Uploads",
+                    employees: [],
+                    files: [newFileEntry]
+                };
+                await addOrder(newOrder);
+            } else {
+                // Append file to existing queue
+                const currentFiles = queueOrder.files || [];
+                await updateOrder(queueOrderId, {
+                    files: [...currentFiles, newFileEntry]
+                });
+            }
             
             // Refresh data
             await fetchData();
 
             // Automatically select the uploaded file
             const fileToAdd = {
-                id: fileUrl,
+                id: fileUrl, // Use URL as ID for selection matching
                 url: fileUrl,
                 name: uploadedFile.originalName,
                 thumbnail: thumbnail,
-                orderId: newOrder.id,
-                customerName: newOrder.customerName,
-                date: newOrder.createdAt,
+                orderId: queueOrderId,
+                customerName: customer ? customer.name : 'Manueller Upload',
+                date: new Date().toISOString(),
                 quantity: 1,
                 width: 0,
                 height: 0
@@ -420,22 +460,56 @@ export default function DTFOrdering() {
         const orderIds = new Set(selectedFiles.map(f => f.orderId));
         let updatedCount = 0;
         
+        // Handle Manual Queues
         const manualOrder = orders.find(o => o.id === 'inventory-manual');
+        const dtfQueueOrder = orders.find(o => o.id === 'dtf-manual-queue');
+        
         let manualFilesChanged = false;
+        let dtfQueueChanged = false;
+        
         let manualFiles = manualOrder?.files ? [...manualOrder.files] : [];
+        let dtfQueueFiles = dtfQueueOrder?.files ? [...dtfQueueOrder.files] : [];
 
         for (const orderId of Array.from(orderIds)) {
-            if (orderId.startsWith('manual-group-')) {
-                // Update status for files in this manual group
-                const ref = orderId.replace('manual-group-', '');
-                manualFiles = manualFiles.map(f => {
-                    const fRef = f.reference || 'Unbekannt';
-                    if (fRef === ref && (f.type === 'print' || f.type === 'vector')) {
-                        manualFilesChanged = true;
-                        return { ...f, status: 'ordered' as const };
+            if (orderId.includes('-group-')) {
+                // Handle Virtual Groups
+                let originalOrderId = '';
+                let ref = '';
+
+                if (orderId.startsWith('inventory-manual-group-')) {
+                    originalOrderId = 'inventory-manual';
+                    ref = orderId.replace('inventory-manual-group-', '');
+                    
+                    // Update status for files in this manual group
+                    manualFiles = manualFiles.map((f: any) => {
+                        const fRef = f.reference || 'Unbekannt';
+                        if (fRef === ref && (f.type === 'print' || f.type === 'vector')) {
+                            manualFilesChanged = true;
+                            return { ...f, status: 'ordered' as const };
+                        }
+                        return f;
+                    });
+                    
+                } else if (orderId.startsWith('dtf-manual-queue-group-')) {
+                    originalOrderId = 'dtf-manual-queue';
+                    ref = orderId.replace('dtf-manual-queue-group-', '');
+                    
+                    // For DTF Queue: DELETE the files entirely after printing, as requested by user
+                    // "erst danach soll die datei da wieder rausgehen" -> Delete
+                    const initialLength = dtfQueueFiles.length;
+                    dtfQueueFiles = dtfQueueFiles.filter((f: any) => {
+                        const fRef = f.reference || 'Manueller Upload';
+                        // Keep files that don't match the printed group
+                        // OR match but are not print/vector type (unlikely here)
+                        const isMatch = fRef === ref && (f.type === 'print' || f.type === 'vector');
+                        return !isMatch; 
+                    });
+                    
+                    if (dtfQueueFiles.length !== initialLength) {
+                        dtfQueueChanged = true;
                     }
-                    return f;
-                });
+                }
+
             } else if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
                 const order = orders.find(o => o.id === orderId);
                 if (order && order.files) {
@@ -466,6 +540,11 @@ export default function DTFOrdering() {
 
         if (manualFilesChanged && manualOrder) {
             await updateOrder(manualOrder.id, { files: manualFiles });
+            updatedCount++;
+        }
+
+        if (dtfQueueChanged && dtfQueueOrder) {
+            await updateOrder(dtfQueueOrder.id, { files: dtfQueueFiles });
             updatedCount++;
         }
         
