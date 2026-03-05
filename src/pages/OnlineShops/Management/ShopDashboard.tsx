@@ -276,13 +276,30 @@ const ShopDashboard: React.FC = () => {
   };
 
   const handleCreateShippingLabel = async (order: any) => {
-    if (!confirm('DHL Versandlabel jetzt erstellen?')) return;
+    // 1. Ask for weight confirmation (Manual Override)
+    // We try to guess a default weight if possible, otherwise 0.5
+    // Since we might not have items here, we just use a generic default or 0.
+    // Ideally we would fetch the calculated weight first, but to save time/requests we just ask the user.
+    const defaultWeight = "0.5"; 
+    const weightInput = prompt(`Bitte bestätigen Sie das Versandgewicht für Bestellung #${order.order_number} (in kg):`, defaultWeight);
+    
+    if (weightInput === null) return; // Cancelled
+    
+    const manualWeight = parseFloat(weightInput.replace(',', '.'));
+    if (isNaN(manualWeight) || manualWeight <= 0) {
+        alert('Ungültiges Gewicht. Bitte geben Sie eine Zahl größer 0 ein.');
+        return;
+    }
+
     setIsCreatingLabel(true);
     try {
       const res = await fetch(`/api/shop-management/${shopId}/shipping/create-label`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: order.id })
+        body: JSON.stringify({ 
+            orderId: order.id,
+            manualWeight: manualWeight // Send manual weight
+        })
       });
       const data = await res.json();
       if (data.success) {
