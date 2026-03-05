@@ -93,7 +93,7 @@ export default function DTFOrdering() {
   // Group active orders that have print files (for the "Open Orders" list)
   // 1. Regular Orders
   const regularOrders = orders
-    .filter(o => o.id !== 'inventory-manual')
+    .filter(o => o.id !== 'inventory-manual' && o.id !== 'dtf-manual-queue')
     .filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'archived')
     .filter(o => {
         // Check if there are ANY print/vector files that are NOT yet ordered

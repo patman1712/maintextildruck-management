@@ -287,6 +287,9 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
 
     // Hide the special "Manual Inventory" order from the list
     if (order.id === 'inventory-manual') return false;
+    
+    // Hide the special "DTF Manual Queue" order from the list
+    if (order.id === 'dtf-manual-queue') return false;
 
     // Hide manual invoices from Order List (they appear in Invoice List)
     if (order.status === 'manual_invoice') return false;
