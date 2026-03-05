@@ -386,13 +386,14 @@ router.post('/shipping/global-config', (req, res) => {
 
 router.post('/shipping/test-config', async (req, res) => {
   try {
-    const { dhl_user, dhl_signature, dhl_ekp } = req.body;
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key } = req.body;
 
     if (!dhl_user || !dhl_signature || !dhl_ekp) {
-        return res.status(400).json({ success: false, error: 'Unvollständige Daten für den Test.' });
+        return res.status(400).json({ success: false, error: 'Unvollständige Daten für den Test. Benutzer, Passwort und EKP sind erforderlich.' });
     }
 
-    const client = new DhlClient(dhl_user, dhl_signature, dhl_ekp);
+    // Pass apiKey to client
+    const client = new DhlClient(dhl_user, dhl_signature, dhl_ekp, dhl_api_key);
     const result = await client.checkConnection();
     res.json(result);
 
@@ -473,12 +474,12 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
         config = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get() as any;
     }
 
-    if (!config || !config.dhl_user) {
-        return res.status(400).json({ success: false, error: 'DHL Konfiguration fehlt oder unvollständig (weder im Shop noch global hinterlegt).' });
+    if (!config.dhl_user || !config.dhl_signature || !config.dhl_ekp) {
+        return res.status(400).json({ success: false, error: 'DHL Zugangsdaten unvollständig.' });
     }
 
     try {
-        const client = new DhlClient(config.dhl_user, config.dhl_signature, config.dhl_ekp);
+        const client = new DhlClient(config.dhl_user, config.dhl_signature, config.dhl_ekp, config.dhl_api_key);
         
         // Prepare Sender Address
         const sender = {
