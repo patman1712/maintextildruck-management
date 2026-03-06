@@ -213,7 +213,13 @@ const ShopOrderDetailPage: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-500 font-medium">Status:</span>
-                  <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-black uppercase">Bezahlt</span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                    (order.payment_status === 'paid' || order.payment_status === 'completed') 
+                    ? 'bg-green-100 text-green-700' 
+                    : 'bg-yellow-100 text-yellow-700'
+                  }`}>
+                    {(order.payment_status === 'paid' || order.payment_status === 'completed') ? 'Bezahlt' : 'Offen'}
+                  </span>
                 </div>
                 <div className="pt-4 border-t border-slate-50 space-y-2">
                   <div className="flex justify-between text-xs text-slate-500">
