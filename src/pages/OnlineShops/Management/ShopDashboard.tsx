@@ -300,6 +300,24 @@ const ShopDashboard: React.FC = () => {
     } catch (e) { console.error(e); }
   };
 
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!confirm('Bestellung wirklich löschen? Diese Aktion entfernt die Bestellung auch aus der Kundenansicht und kann nicht rückgängig gemacht werden.')) return;
+    try {
+      const res = await fetch(`/api/shop-customers/${shopId}/admin/orders/${orderId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShopOrders(shopOrders.filter(o => o.id !== orderId));
+        if (selectedOrder && selectedOrder.id === orderId) {
+            setSelectedOrder(null);
+        }
+      } else {
+        alert(data.error || 'Fehler beim Löschen der Bestellung.');
+      }
+    } catch (e) { console.error(e); }
+  };
+
   const handleCreateShippingLabel = async (order: any) => {
     // 1. Calculate default weight on client side if possible
     let defaultWeight = 0.5;
@@ -894,6 +912,13 @@ const ShopDashboard: React.FC = () => {
                                                     className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg text-sm font-bold"
                                                 >
                                                     Details
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteOrder(order.id)}
+                                                    className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                                                    title="Bestellung löschen"
+                                                >
+                                                    <Trash2 size={18} />
                                                 </button>
                                                 {order.status !== 'cancelled' && (
                                                     <div className="flex items-center space-x-1">

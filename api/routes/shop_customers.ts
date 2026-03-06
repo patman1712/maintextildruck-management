@@ -482,6 +482,26 @@ router.put('/:shopId/admin/orders/:orderId/status', (req, res) => {
   }
 });
 
+// Admin: Delete an order
+router.delete('/:shopId/admin/orders/:orderId', (req, res) => {
+  try {
+    const { orderId } = req.params;
+    
+    // Delete order items first
+    db.prepare('DELETE FROM order_items WHERE order_id = ?').run(orderId);
+    
+    // Delete associated files
+    db.prepare('DELETE FROM files WHERE order_id = ?').run(orderId);
+    
+    // Delete the order itself
+    db.prepare('DELETE FROM orders WHERE id = ?').run(orderId);
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Admin: Delete a customer
 router.delete('/:shopId/admin/:customerId', (req, res) => {
   try {
