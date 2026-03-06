@@ -586,7 +586,7 @@ const ShopLayout: React.FC = () => {
             {/* Column 1: Company Info */}
             <div>
               {shop.footer_logo_url ? (
-                  <img src={shop.footer_logo_url} alt={shop.name} className="h-12 mb-6 object-contain brightness-0 invert" />
+                  <img src={shop.footer_logo_url.replace('_thumb', '')} alt={shop.name} className="h-24 mb-6 object-contain brightness-0 invert" />
               ) : (
                   <h4 className="font-black uppercase italic text-2xl mb-6">{shop.name}</h4>
               )}

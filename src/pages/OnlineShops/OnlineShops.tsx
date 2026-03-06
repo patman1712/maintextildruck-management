@@ -628,7 +628,8 @@ const OnlineShops: React.FC = () => {
                                             const res = await fetch('/api/upload', { method: 'POST', body: formData });
                                             const data = await res.json();
                                             if (data.success && data.files?.preview?.[0]) {
-                                                const url = data.files.preview[0].thumbnail || data.files.preview[0].path;
+                                                // Prefer full image path over thumbnail for footer logo
+                                                const url = data.files.preview[0].path || data.files.preview[0].thumbnail;
                                                 setGlobalContentConfig({ ...globalContentConfig, footer_logo_url: url });
                                             }
                                         } catch (err) { console.error(err); }
