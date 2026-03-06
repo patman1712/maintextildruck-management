@@ -196,23 +196,23 @@ const ShopLayout: React.FC = () => {
 
                             {/* Mega Menu Dropdown */}
                             {hasSub && (
-                                <div className="absolute top-full left-0 w-[600px] bg-white shadow-xl border-t border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50 -ml-4 rounded-b-lg overflow-hidden">
+                                <div className="absolute top-full left-0 w-[600px] shadow-xl border-t border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50 -ml-4 rounded-b-lg overflow-hidden" style={{ backgroundColor: primaryColor }}>
                                     <div className="grid grid-cols-3 gap-6 p-8">
                                         {subCats.map(sub => (
                                             <div key={sub.id} className="space-y-2">
                                                 {sub.image_url ? (
-                                                    <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden mb-3">
+                                                    <div className="aspect-video bg-white/10 rounded-lg overflow-hidden mb-3 border border-white/20">
                                                         <img src={sub.image_url} alt={sub.name} className="w-full h-full object-cover" />
                                                     </div>
                                                 ) : null}
-                                                <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="font-bold text-slate-800 shop-hover-text block">
+                                                <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="font-bold block hover:opacity-80 transition-opacity" style={{ color: secondaryColor }}>
                                                     {sub.name}
                                                 </Link>
                                                 {/* Level 3 Categories (if any) */}
                                                 <ul className="space-y-1">
                                                     {getSubCategories(sub.id).map(lvl3 => (
                                                         <li key={lvl3.id}>
-                                                            <Link to={`${shopBaseUrl}/category/${lvl3.slug}`} className="text-sm text-slate-500 hover:text-slate-800">
+                                                            <Link to={`${shopBaseUrl}/category/${lvl3.slug}`} className="text-sm hover:opacity-100 opacity-70 transition-opacity" style={{ color: secondaryColor }}>
                                                                 {lvl3.name}
                                                             </Link>
                                                         </li>

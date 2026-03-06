@@ -36,7 +36,7 @@ const ShopDashboard: React.FC = () => {
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   
   // Forms
-  const [newCategory, setNewCategory] = useState({ name: '', slug: '', parent_id: '' });
+  const [newCategory, setNewCategory] = useState({ name: '', slug: '', parent_id: '', image_url: '' });
   const [assignProductSearch, setAssignProductSearch] = useState('');
   const [showProductModal, setShowProductModal] = useState(false);
   
@@ -167,13 +167,14 @@ const ShopDashboard: React.FC = () => {
         body: JSON.stringify({
             name: newCategory.name,
             slug: newCategory.slug || newCategory.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-            parent_id: newCategory.parent_id || null
+            parent_id: newCategory.parent_id || null,
+            image_url: newCategory.image_url || null
         })
       });
       const data = await res.json();
       if (data.success) {
           setCategories([...categories, data.data]);
-          setNewCategory({ name: '', slug: '', parent_id: '' });
+          setNewCategory({ name: '', slug: '', parent_id: '', image_url: '' });
       }
     } catch (e) { console.error(e); }
   };
@@ -778,16 +779,58 @@ const ShopDashboard: React.FC = () => {
                                 value={newCategory.name}
                                 onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
                             />
-                            <select
-                                className="w-full border border-slate-300 rounded-lg p-2 text-sm text-slate-600"
-                                value={newCategory.parent_id}
-                                onChange={(e) => setNewCategory({ ...newCategory, parent_id: e.target.value })}
-                            >
-                                <option value="">Keine Überkategorie (Hauptkategorie)</option>
-                                {categories.filter(c => !c.parent_id).map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
+                            <div className="flex gap-2">
+                                <select
+                                    className="flex-1 border border-slate-300 rounded-lg p-2 text-sm text-slate-600"
+                                    value={newCategory.parent_id}
+                                    onChange={(e) => setNewCategory({ ...newCategory, parent_id: e.target.value })}
+                                >
+                                    <option value="">Keine Überkategorie (Hauptkategorie)</option>
+                                    {categories.filter(c => !c.parent_id).map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                                <label className="flex-1 cursor-pointer border border-slate-300 rounded-lg p-2 text-sm text-slate-600 hover:bg-slate-50 flex items-center justify-center truncate relative">
+                                    {newCategory.image_url ? (
+                                        <>
+                                            <ImageIcon size={14} className="mr-2 text-green-500" />
+                                            <span className="truncate max-w-[100px]">Bild ausgewählt</span>
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    setNewCategory({ ...newCategory, image_url: '' });
+                                                }}
+                                                className="absolute right-1 top-1.5 p-0.5 bg-white rounded-full text-red-500 shadow-sm"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ImageIcon size={14} className="mr-2" /> Bild (optional)
+                                        </>
+                                    )}
+                                    <input 
+                                        type="file" 
+                                        className="hidden" 
+                                        accept="image/*"
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            const formData = new FormData();
+                                            formData.append('preview', file);
+                                            try {
+                                                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                                                const data = await res.json();
+                                                if (data.success && data.files?.preview?.[0]) {
+                                                    const url = data.files.preview[0].thumbnail || data.files.preview[0].path;
+                                                    setNewCategory({ ...newCategory, image_url: url });
+                                                }
+                                            } catch (err) { console.error(err); }
+                                        }}
+                                    />
+                                </label>
+                            </div>
                         </div>
                         <button onClick={handleAddCategory} className="bg-slate-800 text-white px-4 py-2 h-10 rounded-lg hover:bg-slate-700 mb-0.5">
                             Hinzufügen
@@ -814,7 +857,12 @@ const ShopDashboard: React.FC = () => {
                                     <div className="pl-8 space-y-2 border-l-2 border-slate-100 ml-4">
                                         {categories.filter(sub => sub.parent_id === cat.id).map(sub => (
                                              <div key={sub.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100 shadow-sm">
-                                                <span className="font-medium text-slate-600">{sub.name}</span>
+                                                <div className="flex items-center gap-2">
+                                                    {sub.image_url ? (
+                                                        <img src={sub.image_url} alt="" className="w-8 h-8 rounded object-cover border border-slate-100" />
+                                                    ) : <div className="w-8 h-8 bg-slate-50 rounded border border-slate-100" />}
+                                                    <span className="font-medium text-slate-600">{sub.name}</span>
+                                                </div>
                                                 <div className="flex items-center space-x-2">
                                                     <span className="text-xs text-slate-400 font-mono bg-slate-50 px-2 py-0.5 rounded">/{sub.slug}</span>
                                                     <button onClick={() => handleDeleteCategory(sub.id)} className="text-slate-300 hover:text-red-600 p-1">
