@@ -72,7 +72,7 @@ export default function DTFOrdering() {
         date: order.createdAt,
         status: order.status,
         reference: f.reference,
-        quantity: f.quantity || 1
+        quantity: f.quantity || 1 // Here we read the quantity from the file object
       }))
   ).filter(f => f.url);
 
@@ -177,7 +177,7 @@ export default function DTFOrdering() {
                 orderId: orderId, // Use Virtual Group ID for tracking status update
                 customerName: originalOrderId === 'dtf-manual-queue' ? (f.reference || 'Manueller Upload') : 'Lager / Manuell',
                 date: sourceOrder.createdAt,
-                quantity: f.quantity || 1,
+                quantity: f.quantity || 1, // Ensure quantity is passed here too
                 width: 0,
                 height: 0,
                 reference: f.reference,
@@ -205,7 +205,7 @@ export default function DTFOrdering() {
             orderId: order.id,
             customerName: order.customerName,
             date: order.createdAt,
-            quantity: f.quantity || 1, // Use stored quantity or default to 1
+            quantity: f.quantity || 1, // Correctly read quantity from file object
             width: 0,
             height: 0,
             status: 'pending' as const // Add status
