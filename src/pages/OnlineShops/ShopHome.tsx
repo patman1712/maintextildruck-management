@@ -68,9 +68,9 @@ const ShopHome: React.FC = () => {
         {heroImages.length > 0 ? (
              <div className="relative w-full">
                  <img 
-                    src={heroImages[currentSlide]} 
+                    src={heroImages[currentSlide].replace('_thumb', '').replace(/_thumb\.[a-z]+$/i, (match) => match.replace('_thumb', ''))} 
                     alt="Hero" 
-                    className="w-full h-auto object-contain max-h-[80vh]" 
+                    className="w-full h-auto object-cover" 
                  />
                  
                  {heroImages.length > 1 && (

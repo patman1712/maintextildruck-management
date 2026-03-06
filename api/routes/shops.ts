@@ -343,6 +343,14 @@ router.post('/', (req, res) => {
     );
 
     const shop = db.prepare('SELECT * FROM shops WHERE id = ?').get(id);
+    
+    // Parse JSON fields before returning
+    if (shop) {
+        if (shop.dhl_config) shop.dhl_config = JSON.parse(shop.dhl_config);
+        if (shop.paypal_config) shop.paypal_config = JSON.parse(shop.paypal_config);
+        if (shop.hero_images) shop.hero_images = JSON.parse(shop.hero_images);
+    }
+
     res.json({ success: true, data: shop });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
