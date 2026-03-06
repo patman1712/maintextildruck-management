@@ -434,6 +434,61 @@ router.post('/payment/global-config', (req, res) => {
     }
 });
 
+// Global Content Config (Footer & Legal)
+router.get('/content/global-config', (req, res) => {
+    try {
+        const config = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get();
+        res.json({ success: true, data: config || null });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/content/global-config', (req, res) => {
+    try {
+        const { 
+            footer_logo_url, contact_phone, contact_email, contact_address, opening_hours,
+            social_instagram, social_tiktok, social_whatsapp,
+            impressum_text, privacy_text, agb_text, revocation_text, shipping_info_text, about_us_text, contact_text
+        } = req.body;
+
+        const existing = db.prepare("SELECT id FROM global_shop_content WHERE id = 'main'").get();
+        
+        if (existing) {
+            db.prepare(`
+                UPDATE global_shop_content
+                SET footer_logo_url = ?, contact_phone = ?, contact_email = ?, contact_address = ?, opening_hours = ?,
+                    social_instagram = ?, social_tiktok = ?, social_whatsapp = ?,
+                    impressum_text = ?, privacy_text = ?, agb_text = ?, revocation_text = ?, shipping_info_text = ?, about_us_text = ?, contact_text = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = 'main'
+            `).run(
+                footer_logo_url, contact_phone, contact_email, contact_address, opening_hours,
+                social_instagram, social_tiktok, social_whatsapp,
+                impressum_text, privacy_text, agb_text, revocation_text, shipping_info_text, about_us_text, contact_text
+            );
+        } else {
+            db.prepare(`
+                INSERT INTO global_shop_content (
+                    id, footer_logo_url, contact_phone, contact_email, contact_address, opening_hours,
+                    social_instagram, social_tiktok, social_whatsapp,
+                    impressum_text, privacy_text, agb_text, revocation_text, shipping_info_text, about_us_text, contact_text
+                )
+                VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                footer_logo_url, contact_phone, contact_email, contact_address, opening_hours,
+                social_instagram, social_tiktok, social_whatsapp,
+                impressum_text, privacy_text, agb_text, revocation_text, shipping_info_text, about_us_text, contact_text
+            );
+        }
+
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Error saving global content config:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 router.post('/shipping/test-config', async (req, res) => {
   try {
     const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox } = req.body;

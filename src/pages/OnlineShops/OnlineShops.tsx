@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../../store';
-import { ShoppingBag, Plus, Edit, Trash2, ExternalLink, Palette, Truck, CreditCard, Sliders, Save, X, MapPin, RefreshCw, Zap } from 'lucide-react';
+import { ShoppingBag, Plus, Edit, Trash2, ExternalLink, Palette, Truck, CreditCard, Sliders, Save, X, MapPin, RefreshCw, Zap, Layout, Image as ImageIcon } from 'lucide-react';
 
 const OnlineShops: React.FC = () => {
   const { shops, customers, addShop, updateShop, deleteShop } = useAppStore();
@@ -43,6 +43,9 @@ const OnlineShops: React.FC = () => {
       paypal_mode: 'sandbox'
   });
 
+  // --- GLOBAL CONTENT STATE ---
+  const [globalContentConfig, setGlobalContentConfig] = useState<any>({});
+
   const fetchVariables = async () => {
       try {
           const res = await fetch('/api/variables');
@@ -75,11 +78,39 @@ const OnlineShops: React.FC = () => {
     } catch (e) { console.error(e); }
   };
 
+  const fetchGlobalContentConfig = async () => {
+    try {
+        const res = await fetch('/api/shop-management/content/global-config');
+        const data = await res.json();
+        if (data.success && data.data) setGlobalContentConfig(data.data);
+    } catch (e) { console.error(e); }
+  };
+
+  const handleSaveGlobalContentConfig = async () => {
+    try {
+        const res = await fetch('/api/shop-management/content/global-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(globalContentConfig)
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('Globale Footer & Rechtstexte gespeichert!');
+        } else {
+            alert('Fehler beim Speichern: ' + (data.error || 'Unbekannter Fehler'));
+        }
+    } catch (e: any) {
+        console.error(e);
+        alert('Netzwerkfehler beim Speichern: ' + e.message);
+    }
+  };
+
   useEffect(() => {
       fetchVariables();
       fetchPersonalizations();
       fetchGlobalShippingConfig();
       fetchGlobalPaymentConfig();
+      fetchGlobalContentConfig();
   }, []);
 
   const handleSaveGlobalShippingConfig = async () => {
@@ -538,6 +569,187 @@ const OnlineShops: React.FC = () => {
                         Keine Personalisierungs-Optionen vorhanden.
                     </div>
                 )}
+            </div>
+
+            <h2 className="text-lg font-semibold text-slate-700 mt-12 mb-4 border-b pb-2 flex items-center justify-between">
+                <div className="flex items-center">
+                    <Layout size={20} className="mr-2" />
+                    Globaler Footer & Rechtliches (Alle Shops)
+                </div>
+                <button 
+                    onClick={handleSaveGlobalContentConfig}
+                    className="text-sm bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 flex items-center"
+                >
+                    <Save size={16} className="mr-2" /> Speichern
+                </button>
+            </h2>
+            <p className="text-sm text-gray-600 mb-6">
+                Definieren Sie hier die Inhalte für den Footer und die rechtlichen Seiten. Diese Einstellungen gelten für alle Shops und überschreiben individuelle Shop-Einstellungen.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+                {/* Column 1: Contact & Social */}
+                <div className="space-y-6 bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                    <h4 className="font-bold text-slate-700 border-b pb-2">Kontakt & Social Media</h4>
+                    
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Footer Logo</label>
+                        <div className="flex items-center space-x-2 mb-2">
+                            <input 
+                                type="text" 
+                                className="flex-1 border border-slate-300 rounded-lg p-2 text-sm"
+                                value={globalContentConfig.footer_logo_url || ''}
+                                onChange={(e) => setGlobalContentConfig({ ...globalContentConfig, footer_logo_url: e.target.value })}
+                                placeholder="URL oder Upload..."
+                            />
+                            {globalContentConfig.footer_logo_url && (
+                                <button 
+                                    onClick={() => setGlobalContentConfig({ ...globalContentConfig, footer_logo_url: '' })}
+                                    className="p-2 text-red-500 hover:bg-red-50 rounded"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-3 py-1.5 rounded text-sm hover:bg-slate-50 transition-colors flex items-center">
+                                <ImageIcon size={14} className="mr-2" />
+                                Logo hochladen
+                                <input 
+                                    type="file" 
+                                    className="hidden" 
+                                    accept="image/*"
+                                    onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        const formData = new FormData();
+                                        formData.append('preview', file);
+                                        try {
+                                            const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                                            const data = await res.json();
+                                            if (data.success && data.files?.preview?.[0]) {
+                                                const url = data.files.preview[0].thumbnail || data.files.preview[0].path;
+                                                setGlobalContentConfig({ ...globalContentConfig, footer_logo_url: url });
+                                            }
+                                        } catch (err) { console.error(err); }
+                                    }}
+                                />
+                            </label>
+                        </div>
+                        {globalContentConfig.footer_logo_url && (
+                            <div className="mt-2 p-2 bg-slate-800 rounded">
+                                <img src={globalContentConfig.footer_logo_url} className="h-10 object-contain" alt="Footer Logo" />
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Telefonnummer</label>
+                        <input 
+                            type="text" 
+                            className="w-full border border-slate-300 rounded-lg p-2"
+                            value={globalContentConfig.contact_phone || ''}
+                            onChange={(e) => setGlobalContentConfig({ ...globalContentConfig, contact_phone: e.target.value })}
+                            placeholder="01522 - 9193545"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">E-Mail</label>
+                        <input 
+                            type="text" 
+                            className="w-full border border-slate-300 rounded-lg p-2"
+                            value={globalContentConfig.contact_email || ''}
+                            onChange={(e) => setGlobalContentConfig({ ...globalContentConfig, contact_email: e.target.value })}
+                            placeholder="info@example.com"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Adresse</label>
+                        <textarea 
+                            className="w-full border border-slate-300 rounded-lg p-2 h-20"
+                            value={globalContentConfig.contact_address || ''}
+                            onChange={(e) => setGlobalContentConfig({ ...globalContentConfig, contact_address: e.target.value })}
+                            placeholder="Musterstraße 1&#10;12345 Musterstadt"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Öffnungszeiten</label>
+                        <input 
+                            type="text" 
+                            className="w-full border border-slate-300 rounded-lg p-2"
+                            value={globalContentConfig.opening_hours || ''}
+                            onChange={(e) => setGlobalContentConfig({ ...globalContentConfig, opening_hours: e.target.value })}
+                            placeholder="Mo-Fr, 09:00 - 17:00 Uhr"
+                        />
+                    </div>
+
+                    <div className="space-y-3 pt-4 border-t border-slate-100">
+                        <h5 className="font-medium text-sm text-slate-600">Social Media Links</h5>
+                        <div className="flex items-center space-x-2">
+                            <span className="w-24 text-sm text-slate-500">Instagram:</span>
+                            <input 
+                                type="text" 
+                                className="flex-1 border border-slate-300 rounded-lg p-2 text-sm"
+                                value={globalContentConfig.social_instagram || ''}
+                                onChange={(e) => setGlobalContentConfig({ ...globalContentConfig, social_instagram: e.target.value })}
+                                placeholder="https://instagram.com/..."
+                            />
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <span className="w-24 text-sm text-slate-500">TikTok:</span>
+                            <input 
+                                type="text" 
+                                className="flex-1 border border-slate-300 rounded-lg p-2 text-sm"
+                                value={globalContentConfig.social_tiktok || ''}
+                                onChange={(e) => setGlobalContentConfig({ ...globalContentConfig, social_tiktok: e.target.value })}
+                                placeholder="https://tiktok.com/..."
+                            />
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <span className="w-24 text-sm text-slate-500">WhatsApp:</span>
+                            <input 
+                                type="text" 
+                                className="flex-1 border border-slate-300 rounded-lg p-2 text-sm"
+                                value={globalContentConfig.social_whatsapp || ''}
+                                onChange={(e) => setGlobalContentConfig({ ...globalContentConfig, social_whatsapp: e.target.value })}
+                                placeholder="https://wa.me/..."
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Column 2: Legal Pages Content */}
+                <div className="space-y-6 bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                    <h4 className="font-bold text-slate-700 border-b pb-2">Rechtstexte & Seiten</h4>
+                    
+                    <div className="space-y-4">
+                        {([
+                            { key: 'about_us_text', label: 'Über uns' },
+                            { key: 'impressum_text', label: 'Impressum' },
+                            { key: 'privacy_text', label: 'Datenschutz' },
+                            { key: 'agb_text', label: 'AGB' },
+                            { key: 'revocation_text', label: 'Widerrufsrecht' },
+                            { key: 'shipping_info_text', label: 'Versand- und Zahlungsbedingungen' },
+                            { key: 'contact_text', label: 'Kontakt (Text auf Seite)' },
+                        ] as const).map(page => (
+                            <div key={page.key}>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block text-sm font-medium text-slate-700">{page.label}</label>
+                                    <span className="text-xs text-slate-400 uppercase">HTML erlaubt</span>
+                                </div>
+                                <textarea 
+                                    className="w-full border border-slate-300 rounded-lg p-2 h-32 font-mono text-xs"
+                                    value={globalContentConfig[page.key] || ''}
+                                    onChange={(e) => setGlobalContentConfig({ ...globalContentConfig, [page.key]: e.target.value })}
+                                    placeholder={`Inhalt für ${page.label}...`}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
 
             <h2 className="text-lg font-semibold text-slate-700 mt-12 mb-4 border-b pb-2 flex items-center justify-between">
