@@ -310,20 +310,14 @@ router.post('/:shopId/orders', async (req, res) => {
         // 2.1 Copy files from Product to Order (Preview & Print Data)
         // Find the original product to get its files
         if (item.productId) {
-            // Check for assigned shop product first (it might have specific files? No, currently we use customer_product_files)
-            // But we need to know the customer_product_id.
-            // item.productId IS the shop_product_assignment.product_id (which is customer_product.id)
-            
-            // Get files for this product
+            // Get all files for this product
             const productFiles = db.prepare(`
                 SELECT * FROM customer_product_files WHERE product_id = ?
             `).all(item.productId) as any[];
             
+            // 2.1.1 Print & Vector Data (Always copy all)
             for (const file of productFiles) {
-                // Determine type mapping
-                // We want: preview -> preview, print -> print, vector -> vector
-                // User said: "vorschaubilder und druckdaten"
-                if (['preview', 'print', 'vector', 'photoshop'].includes(file.type)) {
+                if (['print', 'vector', 'photoshop'].includes(file.type)) {
                      insertFile.run(
                         crypto.randomUUID(),
                         orderId,
@@ -334,6 +328,52 @@ router.post('/:shopId/orders', async (req, res) => {
                         'active',
                         new Date().toISOString()
                      );
+                }
+            }
+
+            // 2.1.2 Preview Image (Specific one selected by user)
+            // If item.image is provided, it's the URL of the selected preview image
+            if (item.image) {
+                const selectedPreview = productFiles.find(f => f.file_url === item.image);
+                if (selectedPreview) {
+                    insertFile.run(
+                        crypto.randomUUID(),
+                        orderId,
+                        shop.customer_id,
+                        selectedPreview.file_name || 'Vorschau',
+                        selectedPreview.file_url,
+                        'preview',
+                        'active',
+                        new Date().toISOString()
+                    );
+                } else {
+                    // Fallback: If selected URL not found in product files, still add it as a preview
+                    insertFile.run(
+                        crypto.randomUUID(),
+                        orderId,
+                        shop.customer_id,
+                        'Vorschau',
+                        item.image,
+                        'preview',
+                        'active',
+                        new Date().toISOString()
+                    );
+                }
+            } else {
+                // Legacy Fallback: Add all previews if none specific selected
+                for (const file of productFiles) {
+                    if (file.type === 'preview' || file.type === 'view') {
+                         insertFile.run(
+                            crypto.randomUUID(),
+                            orderId,
+                            shop.customer_id,
+                            file.file_name,
+                            file.file_url,
+                            'preview',
+                            'active',
+                            new Date().toISOString()
+                         );
+                    }
                 }
             }
         }
