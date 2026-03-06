@@ -627,16 +627,70 @@ const ShopDashboard: React.FC = () => {
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Logo URL</label>
-                        <input 
-                            type="text" 
-                            className="w-full border border-slate-300 rounded-lg p-2 mb-2"
-                            value={shop.logo_url || ''}
-                            onChange={(e) => setShop({ ...shop, logo_url: e.target.value })}
-                            placeholder="https://..."
-                        />
-                        {shop.logo_url && (
-                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex justify-center">
+                        <div className="flex items-center space-x-2 mb-2">
+                            <input 
+                                type="text" 
+                                className="flex-1 border border-slate-300 rounded-lg p-2"
+                                value={shop.logo_url || ''}
+                                onChange={(e) => setShop({ ...shop, logo_url: e.target.value })}
+                                placeholder="https://..."
+                            />
+                            {shop.logo_url && (
+                                <button 
+                                    onClick={() => setShop({ ...shop, logo_url: '' })}
+                                    className="p-2 text-red-500 hover:bg-red-50 rounded"
+                                    title="Logo entfernen"
+                                >
+                                    <Trash2 size={18} />
+                                </button>
+                            )}
+                        </div>
+                        
+                        {shop.logo_url ? (
+                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex justify-center relative group">
                                 <img src={shop.logo_url} alt="Logo Preview" className="h-16 object-contain" />
+                            </div>
+                        ) : (
+                             <div className="mt-2">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Oder Logo hochladen</label>
+                                <div className="flex items-center space-x-2">
+                                    <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center">
+                                        <ImageIcon size={16} className="mr-2" />
+                                        Datei auswählen...
+                                        <input 
+                                            type="file" 
+                                            className="hidden" 
+                                            accept="image/*"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+                                                
+                                                const formData = new FormData();
+                                                formData.append('preview', file); // Use 'preview' field for general images
+                                                
+                                                try {
+                                                    const res = await fetch('/api/upload', {
+                                                        method: 'POST',
+                                                        body: formData
+                                                    });
+                                                    const data = await res.json();
+                                                    if (data.success && data.files && data.files.preview && data.files.preview.length > 0) {
+                                                        const uploadedFile = data.files.preview[0];
+                                                        // Use the uploaded file path as logo URL
+                                                        // uploadedFile.path starts with /uploads/...
+                                                        setShop({ ...shop, logo_url: uploadedFile.path });
+                                                    } else {
+                                                        alert('Fehler beim Hochladen.');
+                                                    }
+                                                } catch (err) {
+                                                    console.error(err);
+                                                    alert('Fehler beim Hochladen.');
+                                                }
+                                            }}
+                                        />
+                                    </label>
+                                    <span className="text-xs text-slate-500">PNG, JPG, SVG (max. 2MB)</span>
+                                </div>
                             </div>
                         )}
                     </div>
