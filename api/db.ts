@@ -660,6 +660,15 @@ try {
     )
   `);
 
+  // Migration for Order Number Circles
+  const shopCols = db.prepare("PRAGMA table_info(shops)").all() as any[];
+  const hasOrderCircle = shopCols.some(col => col.name === 'order_number_circle');
+  if (!hasOrderCircle) {
+    console.log('Migrating database: Adding order_number_circle to shops table');
+    db.exec('ALTER TABLE shops ADD COLUMN order_number_circle TEXT'); // e.g. "RE-{YYYY}-"
+    db.exec('ALTER TABLE shops ADD COLUMN next_order_number INTEGER DEFAULT 1');
+  }
+
   // Migration for Order Items price
   const orderItemCols = db.prepare("PRAGMA table_info(order_items)").all() as any[];
   const hasPrice = orderItemCols.some(col => col.name === 'price');

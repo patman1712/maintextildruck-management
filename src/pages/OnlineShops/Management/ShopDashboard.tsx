@@ -549,6 +549,41 @@ const ShopDashboard: React.FC = () => {
                             />
                         </div>
                     </div>
+
+                    <div className="pt-6 border-t border-slate-200">
+                        <h4 className="font-bold text-slate-700 mb-4">Bestellnummern & Rechnungen</h4>
+                        <div className="grid grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Nummernkreis Format
+                                </label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border border-slate-300 rounded-lg p-2 font-mono text-sm"
+                                    value={shop.order_number_circle || ''}
+                                    onChange={(e) => setShop({ ...shop, order_number_circle: e.target.value })}
+                                    placeholder="{YEAR}-{NR}"
+                                />
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Platzhalter: <code className="bg-slate-100 px-1 rounded">{'{YEAR}'}</code> (Jahr), <code className="bg-slate-100 px-1 rounded">{'{NR}'}</code> (Laufende Nummer)
+                                </p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Nächste Nummer
+                                </label>
+                                <input 
+                                    type="number" 
+                                    className="w-full border border-slate-300 rounded-lg p-2"
+                                    value={shop.next_order_number || 1}
+                                    onChange={(e) => setShop({ ...shop, next_order_number: parseInt(e.target.value) || 1 })}
+                                />
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Wird nach jeder Bestellung automatisch erhöht.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
 

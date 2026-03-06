@@ -213,8 +213,8 @@ router.post('/:shopId/orders', async (req, res) => {
 
     if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
 
-    // Get Shop Owner (Customer ID)
-    const shop = db.prepare('SELECT customer_id FROM shops WHERE id = ?').get(shopId) as { customer_id: string };
+    // Get Shop Owner (Customer ID) and number circle config
+    const shop = db.prepare('SELECT customer_id, order_number_circle, next_order_number FROM shops WHERE id = ?').get(shopId) as { customer_id: string, order_number_circle?: string, next_order_number?: number };
     if (!shop) return res.status(404).json({ success: false, error: 'Shop-Besitzer nicht gefunden.' });
 
     const { 
@@ -235,10 +235,27 @@ router.post('/:shopId/orders', async (req, res) => {
     }
 
     const orderId = crypto.randomUUID();
-    const orderNumber = `${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    
+    // Generate Order Number
+    let orderNumber = `${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    let nextNr = 1;
+
+    // Use custom number circle if defined
+    if (shop.order_number_circle) {
+        nextNr = shop.next_order_number || 1;
+        // Simple replacements
+        orderNumber = shop.order_number_circle
+            .replace('{YEAR}', new Date().getFullYear().toString())
+            .replace('{NR}', nextNr.toString());
+    }
 
     // Start transaction
     const transaction = db.transaction(() => {
+      // Update next number if custom circle used
+      if (shop.order_number_circle) {
+          db.prepare('UPDATE shops SET next_order_number = ? WHERE id = ?').run(nextNr + 1, shopId);
+      }
+
       // 1. Create Order
       // Logic: If paymentStatus is 'paid', status is 'active'. If 'open', status is 'on_hold' (or similar).
       // But user said: "Aufträge sollen erst dort unter aktuelle aufträge erscheinen wenn der status komplett bezahlt vergeben wurde!"

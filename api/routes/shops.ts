@@ -265,11 +265,19 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { name, domain_slug, logo_url, primary_color, secondary_color, template, dhl_config, paypal_config } = req.body;
+    const { 
+        name, domain_slug, logo_url, 
+        primary_color, secondary_color, template, 
+        dhl_config, paypal_config,
+        order_number_circle, next_order_number
+    } = req.body;
 
     db.prepare(`
       UPDATE shops 
-      SET name = ?, domain_slug = ?, logo_url = ?, primary_color = ?, secondary_color = ?, template = ?, dhl_config = ?, paypal_config = ?
+      SET name = ?, domain_slug = ?, logo_url = ?, 
+          primary_color = ?, secondary_color = ?, template = ?, 
+          dhl_config = ?, paypal_config = ?,
+          order_number_circle = ?, next_order_number = ?
       WHERE id = ?
     `).run(
       name,
@@ -280,6 +288,8 @@ router.put('/:id', (req, res) => {
       template,
       dhl_config ? JSON.stringify(dhl_config) : null,
       paypal_config ? JSON.stringify(paypal_config) : null,
+      order_number_circle || null,
+      next_order_number || 1,
       id
     );
 

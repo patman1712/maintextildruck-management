@@ -132,6 +132,8 @@ export interface Shop {
   template: string;
   dhl_config?: any;
   paypal_config?: any;
+  order_number_circle?: string;
+  next_order_number?: number;
   created_at: string;
 }
 
