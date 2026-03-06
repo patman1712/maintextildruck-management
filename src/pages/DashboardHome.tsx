@@ -6,7 +6,7 @@ export default function DashboardHome() {
   const { orders, currentUser, suppliers } = useAppStore();
   
   // 1. Active Orders
-  const activeOrders = orders.filter(o => o.status === 'active');
+  const activeOrders = orders.filter(o => o.status === 'active' && o.id !== 'inventory-manual');
   
   // 2. My Orders
   // Check against ID, username, and name to handle legacy data or different storage formats
@@ -28,6 +28,7 @@ export default function DashboardHome() {
   
   // 4. DTF Needs (Print Files not ordered)
   // Logic: Active order + Has Print Files + printStatus != 'ordered'
+  // Also include pending_payment orders if needed? No, user said only when paid.
   const dtfOrders = activeOrders.filter(o => {
       const hasPrintFiles = o.files?.some(f => f.type === 'print');
       return hasPrintFiles && o.printStatus !== 'ordered';

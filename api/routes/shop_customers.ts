@@ -240,6 +240,18 @@ router.post('/:shopId/orders', async (req, res) => {
     // Start transaction
     const transaction = db.transaction(() => {
       // 1. Create Order
+      // Logic: If paymentStatus is 'paid', status is 'active'. If 'open', status is 'on_hold' (or similar).
+      // But user said: "Aufträge sollen erst dort unter aktuelle aufträge erscheinen wenn der status komplett bezahlt vergeben wurde!"
+      // So if not paid, we might want to use a status that is filtered out by default in the main list.
+      // 'active' orders ARE shown in the main list.
+      // So let's use 'pending_payment' for open orders?
+      // Or just keep 'active' but filter in frontend?
+      // User says: "aufträge sollen erst dort unter aktuelle aufträge erscheinen wenn der status komplett bezahlt vergeben wurde"
+      // This implies we should set status to 'pending_payment' if not paid.
+      
+      const isPaid = paymentStatus === 'paid';
+      const initialStatus = isPaid ? 'active' : 'pending_payment';
+
       db.prepare(`
         INSERT INTO orders (
           id, title, shop_id, shop_customer_id, customer_id,
@@ -264,7 +276,7 @@ router.post('/:shopId/orders', async (req, res) => {
         paymentMethod,
         paymentStatus || 'open', // Default to 'open' instead of 'pending'
         transactionId || null,
-        'active',
+        initialStatus,
         new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() // Default 14 days
       );
 
@@ -273,6 +285,12 @@ router.post('/:shopId/orders', async (req, res) => {
         INSERT INTO order_items (
           id, order_id, supplier_id, item_name, quantity, price, color, size, notes, item_number
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      const insertFile = db.prepare(`
+        INSERT INTO files (
+            id, order_id, customer_id, name, path, type, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const item of items) {
@@ -288,6 +306,48 @@ router.post('/:shopId/orders', async (req, res) => {
           item.personalization || null,
           item.productNumber || null
         );
+        
+        // 2.1 Copy files from Product to Order (Preview & Print Data)
+        // Find the original product to get its files
+        if (item.productId) {
+            // Check for assigned shop product first (it might have specific files? No, currently we use customer_product_files)
+            // But we need to know the customer_product_id.
+            // item.productId IS the shop_product_assignment.product_id (which is customer_product.id)
+            
+            // Get files for this product
+            const productFiles = db.prepare(`
+                SELECT * FROM customer_product_files WHERE product_id = ?
+            `).all(item.productId) as any[];
+            
+            for (const file of productFiles) {
+                // Determine type mapping
+                // We want: preview -> preview, print -> print, vector -> vector
+                // User said: "vorschaubilder und druckdaten"
+                if (['preview', 'print', 'vector', 'photoshop'].includes(file.type)) {
+                     insertFile.run(
+                        crypto.randomUUID(),
+                        orderId,
+                        shop.customer_id, // Owner
+                        file.file_name,
+                        file.file_url,
+                        file.type,
+                        'active',
+                        new Date().toISOString()
+                     );
+                }
+            }
+        }
+      }
+      
+      // Update orders.files JSON cache
+      const allLinkedFiles = db.prepare("SELECT * FROM files WHERE order_id = ?").all(orderId) as any[];
+      if (allLinkedFiles.length > 0) {
+          const filesJson = allLinkedFiles.map(f => ({
+              name: f.name,
+              url: f.path,
+              type: f.type
+          }));
+          db.prepare('UPDATE orders SET files = ? WHERE id = ?').run(JSON.stringify(filesJson), orderId);
       }
     });
 
@@ -332,6 +392,14 @@ router.put('/:shopId/admin/orders/:orderId/status', (req, res) => {
 
     if (payment_status) {
         db.prepare('UPDATE orders SET payment_status = ? WHERE id = ?').run(payment_status, orderId);
+
+        // Auto-activate order if paid
+        if (payment_status === 'paid' || payment_status === 'completed') {
+             const currentStatus = db.prepare('SELECT status FROM orders WHERE id = ?').get(orderId) as { status: string };
+             if (currentStatus && currentStatus.status === 'pending_payment') {
+                 db.prepare('UPDATE orders SET status = ? WHERE id = ?').run('active', orderId);
+             }
+        }
     }
 
     res.json({ success: true });

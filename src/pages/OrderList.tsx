@@ -280,7 +280,7 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
     // If no source specified (legacy view?), maybe show all? But we usually pass source prop now.
     
     // In "active" filter (which is default view), hide completed/archived orders
-    if (effectiveStatusFilter === 'active' && (order.status === 'completed' || (order.status as any) === 'archived')) return false;
+    if (effectiveStatusFilter === 'active' && (order.status === 'completed' || (order.status as any) === 'archived' || (order.status as any) === 'pending_payment')) return false;
     
     // In "completed" filter, hide active/cancelled
     if (effectiveStatusFilter === 'completed' && order.status !== 'completed' && (order.status as any) !== 'archived') return false;

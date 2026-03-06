@@ -853,11 +853,13 @@ const ShopDashboard: React.FC = () => {
                                                 onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
                                                 className={`px-2 py-1 rounded text-[10px] font-black uppercase outline-none cursor-pointer border-transparent hover:border-slate-200 transition-all ${
                                                     order.status === 'active' ? 'bg-blue-50 text-blue-600' : 
+                                                    order.status === 'pending_payment' ? 'bg-yellow-50 text-yellow-600' :
                                                     order.status === 'shipped' ? 'bg-green-50 text-green-600' :
                                                     'bg-slate-100 text-slate-600'
                                                 }`}
                                             >
                                                 <option value="active">In Bearbeitung</option>
+                                                <option value="pending_payment">Zahlung ausstehend</option>
                                                 <option value="shipped">Versendet</option>
                                                 <option value="cancelled">Storniert</option>
                                             </select>
@@ -1218,11 +1220,13 @@ const ShopDashboard: React.FC = () => {
                                         onChange={(e) => handleUpdateOrderStatus(selectedOrder.id, e.target.value)}
                                         className={`px-3 py-1 rounded-full text-[10px] font-black uppercase outline-none cursor-pointer ${
                                             selectedOrder.status === 'active' ? 'bg-blue-100 text-blue-700' : 
+                                            selectedOrder.status === 'pending_payment' ? 'bg-yellow-100 text-yellow-700' :
                                             selectedOrder.status === 'shipped' ? 'bg-green-100 text-green-700' :
                                             'bg-slate-100 text-slate-700'
                                         }`}
                                     >
                                         <option value="active">In Bearbeitung</option>
+                                        <option value="pending_payment">Zahlung ausstehend</option>
                                         <option value="shipped">Versendet</option>
                                         <option value="cancelled">Storniert</option>
                                     </select>

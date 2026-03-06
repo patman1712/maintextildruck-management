@@ -77,14 +77,17 @@ const ShopOrderDetailPage: React.FC = () => {
           </div>
           <div className={`flex items-center px-6 py-3 rounded-2xl border ${
             order.status === 'shipped' ? 'bg-green-50 text-green-700 border-green-100' : 
+            order.status === 'pending_payment' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' :
             order.status === 'cancelled' ? 'bg-red-50 text-red-700 border-red-100' :
             'bg-blue-50 text-blue-700 border-blue-100'
           }`}>
             {order.status === 'shipped' ? <CheckCircle size={20} className="mr-2.5" /> : 
              order.status === 'cancelled' ? <X size={20} className="mr-2.5" /> : 
+             order.status === 'pending_payment' ? <Clock size={20} className="mr-2.5" /> :
              <Clock size={20} className="mr-2.5" />}
             <span className="font-black uppercase tracking-widest text-sm">
               Status: {order.status === 'active' ? 'In Bearbeitung' : 
+                       order.status === 'pending_payment' ? 'Zahlung ausstehend' :
                        order.status === 'shipped' ? 'Versendet' : 
                        order.status === 'cancelled' ? 'Storniert' : order.status}
             </span>
@@ -148,7 +151,9 @@ const ShopOrderDetailPage: React.FC = () => {
                   <div className="ml-6">
                     <div className="font-black text-slate-800 text-sm uppercase tracking-tight">In Produktion</div>
                     <div className="text-xs text-slate-400 mt-0.5">
-                      {order.status === 'shipped' ? 'Die Produktion wurde abgeschlossen.' : 'Deine Artikel werden nun individuell für dich angefertigt.'}
+                      {order.status === 'shipped' ? 'Die Produktion wurde abgeschlossen.' : 
+                       order.status === 'pending_payment' ? 'Wartet auf Zahlungseingang.' :
+                       'Deine Artikel werden nun individuell für dich angefertigt.'}
                     </div>
                   </div>
                 </div>
