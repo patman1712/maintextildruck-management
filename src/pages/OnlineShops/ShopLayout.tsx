@@ -278,11 +278,10 @@ const ShopLayout: React.FC = () => {
 
       {/* Search Overlay */}
       {searchOpen && (
-        <div className="fixed inset-0 z-[100] bg-white animate-in slide-in-from-top-10 duration-200">
+        <div className="fixed inset-0 z-[100] bg-white/95 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="container mx-auto px-4 py-6">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-xl font-black uppercase italic tracking-tighter">Suche</h2>
-              <button onClick={() => setSearchOpen(false)} className="p-2 hover:bg-slate-100 rounded-full">
+            <div className="flex items-center justify-end mb-8">
+              <button onClick={() => setSearchOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
                 <X size={24} />
               </button>
             </div>
@@ -301,18 +300,18 @@ const ShopLayout: React.FC = () => {
 
             <div className="max-w-4xl mx-auto mt-12">
                 {isSearching ? (
-                    <div className="text-center text-slate-400 py-12">Suche läuft...</div>
+                    <div className="text-center text-slate-400 py-12 animate-pulse">Suche läuft...</div>
                 ) : searchQuery.length >= 2 ? (
                     searchResults.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                             {searchResults.map((product: any) => (
                                 <Link 
                                     to={`${shopBaseUrl}/product/${product.product_id}`} 
                                     key={product.product_id}
                                     onClick={() => setSearchOpen(false)}
-                                    className="flex items-start space-x-4 group bg-slate-50 p-3 rounded-lg hover:bg-slate-100 transition-colors"
+                                    className="flex items-start space-x-4 group bg-white p-3 rounded-lg shadow-sm hover:shadow-md border border-slate-100 transition-all"
                                 >
-                                    <div className="w-16 h-20 bg-white flex-shrink-0 overflow-hidden rounded border border-slate-200">
+                                    <div className="w-16 h-20 bg-slate-50 flex-shrink-0 overflow-hidden rounded border border-slate-100">
                                         {product.files && product.files[0] ? (
                                             <img src={product.files[0].thumbnail_url || product.files[0].file_url} className="w-full h-full object-contain group-hover:scale-105 transition-transform" />
                                         ) : (
@@ -324,7 +323,7 @@ const ShopLayout: React.FC = () => {
                                     <div>
                                         <h4 className="font-bold text-slate-800 text-sm group-hover:text-red-600 transition-colors line-clamp-2">{product.name}</h4>
                                         <p className="text-xs text-slate-500 mb-1 font-mono">{product.product_number}</p>
-                                        <span className="font-bold text-sm">{product.price?.toFixed(2).replace('.', ',')} €</span>
+                                        <span className="font-bold text-sm text-slate-900">{product.price?.toFixed(2).replace('.', ',')} €</span>
                                     </div>
                                 </Link>
                             ))}
