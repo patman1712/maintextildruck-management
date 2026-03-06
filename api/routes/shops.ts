@@ -8,7 +8,15 @@ const router = Router();
 // List all shops
 router.get('/', (req, res) => {
   try {
-    const shops = db.prepare('SELECT * FROM shops ORDER BY created_at DESC').all();
+    const shops = db.prepare('SELECT * FROM shops ORDER BY created_at DESC').all() as any[];
+    
+    // Parse JSON fields for all shops
+    shops.forEach(shop => {
+        if (shop.dhl_config) shop.dhl_config = JSON.parse(shop.dhl_config);
+        if (shop.paypal_config) shop.paypal_config = JSON.parse(shop.paypal_config);
+        if (shop.hero_images) shop.hero_images = JSON.parse(shop.hero_images);
+    });
+
     res.json({ success: true, data: shops });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -323,7 +331,8 @@ router.get('/:id/shipping-config', (req, res) => {
 // Create new shop
 router.post('/', (req, res) => {
   try {
-    const { customer_id, name, domain_slug, logo_url, primary_color, secondary_color, template, dhl_config, paypal_config } = req.body;
+    const body = req.body as any;
+    const { customer_id, name, domain_slug, logo_url, primary_color, secondary_color, template, dhl_config, paypal_config } = body;
     const id = crypto.randomUUID();
 
     db.prepare(`
@@ -361,6 +370,7 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const { id } = req.params;
+    const body = req.body as any;
     const { 
         name, domain_slug, logo_url, 
         primary_color, secondary_color, template, 
@@ -368,7 +378,7 @@ router.put('/:id', (req, res) => {
         order_number_circle, next_order_number,
         hero_images,
         welcome_text
-    } = req.body;
+    } = body;
 
     const query = `
       UPDATE shops 

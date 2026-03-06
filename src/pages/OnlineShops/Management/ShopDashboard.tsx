@@ -753,7 +753,7 @@ const ShopDashboard: React.FC = () => {
                                                 const newUrls = data.files.preview.map((f: any) => f.path); // Use full path, not thumbnail
                                                 setShop({ 
                                                     ...shop, 
-                                                    hero_images: [...(shop.hero_images || []), ...newUrls] 
+                                                    hero_images: [...(Array.isArray(shop.hero_images) ? shop.hero_images : []), ...newUrls] 
                                                 });
                                             }
                                         } catch (err) {

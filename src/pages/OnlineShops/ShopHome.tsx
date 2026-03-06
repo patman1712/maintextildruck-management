@@ -38,7 +38,7 @@ const ShopHome: React.FC = () => {
 
   // Auto-advance slider
   useEffect(() => {
-    if (!shop.hero_images || shop.hero_images.length <= 1) return;
+    if (!shop.hero_images || !Array.isArray(shop.hero_images) || shop.hero_images.length <= 1) return;
     
     const interval = setInterval(() => {
         setCurrentSlide(prev => (prev + 1) % (shop.hero_images?.length || 1));
@@ -48,16 +48,16 @@ const ShopHome: React.FC = () => {
   }, [shop.hero_images]);
 
   const nextSlide = () => {
-      if (!shop.hero_images) return;
+      if (!shop.hero_images || !Array.isArray(shop.hero_images)) return;
       setCurrentSlide(prev => (prev + 1) % shop.hero_images!.length);
   };
 
   const prevSlide = () => {
-      if (!shop.hero_images) return;
+      if (!shop.hero_images || !Array.isArray(shop.hero_images)) return;
       setCurrentSlide(prev => (prev - 1 + shop.hero_images!.length) % shop.hero_images!.length);
   };
 
-  const heroImages = shop.hero_images && shop.hero_images.length > 0 
+  const heroImages = Array.isArray(shop.hero_images) && shop.hero_images.length > 0 
     ? shop.hero_images 
     : ['https://images.unsplash.com/photo-1518609878373-06d740f60d8b?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80'];
 
