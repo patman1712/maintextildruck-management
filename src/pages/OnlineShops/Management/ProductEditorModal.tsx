@@ -32,7 +32,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     size: assignment?.size || '', 
     weight: assignment?.weight || 0,
     variants: assignment?.variants ? (typeof assignment.variants === 'string' ? JSON.parse(assignment.variants) : assignment.variants) : {},
-    is_active: assignment?.is_active === 0 ? false : true, // Default to true if undefined or 1
+    is_active: (assignment as any)?.is_active === 0 || assignment?.is_active === false ? false : true, // Default to true if undefined or 1
     supplier_id: assignment?.supplier_id || ''
   });
   
