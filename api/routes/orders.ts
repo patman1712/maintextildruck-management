@@ -69,8 +69,8 @@ router.post('/', (req: Request, res: Response) => {
     if (files && Array.isArray(files)) {
       const checkFile = db.prepare('SELECT id FROM files WHERE path = ?');
       const insertFile = db.prepare(`
-        INSERT INTO files (id, customer_id, order_id, name, original_name, path, type)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO files (id, customer_id, order_id, name, original_name, path, type, quantity)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       files.forEach((file: any) => {
@@ -85,7 +85,8 @@ router.post('/', (req: Request, res: Response) => {
               file.customName || file.name, 
               file.name, 
               file.url, 
-              file.type
+              file.type,
+              file.quantity || 1
             );
           }
         }
@@ -144,18 +145,17 @@ router.put('/:id', (req: Request, res: Response) => {
   if (updates.files && Array.isArray(updates.files)) {
     const checkFile = db.prepare('SELECT id FROM files WHERE path = ?');
     const insertFile = db.prepare(`
-      INSERT INTO files (id, customer_id, order_id, name, original_name, path, type)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO files (id, customer_id, order_id, name, original_name, path, type, quantity)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     updates.files.forEach((file: any) => {
       if (file.url) {
-        const existing = checkFile.get(file.url);
-        if (!existing) {
+        const existingFile = checkFile.get(file.url) as any;
+        if (!existingFile) {
           const fileId = Math.random().toString(36).substr(2, 9);
-          // Need to get customer_id from existing order if not in updates
-          // But here we can just use updates.customer_id if present or existing.customer_id
-          const customerId = updates.customer_id || (existing as any).customer_id;
+          // Use outer 'existing' (order) for customer_id fallback
+          const customerId = updates.customer_id || existing.customer_id;
           
           insertFile.run(
             fileId, 
@@ -164,8 +164,12 @@ router.put('/:id', (req: Request, res: Response) => {
             file.customName || file.name, 
             file.name, 
             file.url, 
-            file.type
+            file.type,
+            file.quantity || 1
           );
+        } else {
+              // Update quantity for existing file
+              db.prepare('UPDATE files SET quantity = ? WHERE id = ?').run(file.quantity || 1, existingFile.id);
         }
       }
     });

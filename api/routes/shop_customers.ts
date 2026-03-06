@@ -402,7 +402,8 @@ router.post('/:shopId/orders', async (req, res) => {
           const filesJson = allLinkedFiles.map(f => ({
               name: f.name,
               url: f.path,
-              type: f.type
+              type: f.type,
+              quantity: f.quantity // Include quantity
           }));
           db.prepare('UPDATE orders SET files = ? WHERE id = ?').run(JSON.stringify(filesJson), orderId);
       }

@@ -580,7 +580,8 @@ router.post('/import-single', async (req: Request, res: Response) => {
                     name: f.name,
                     url: f.path,
                     type: f.type,
-                    thumbnail: f.thumbnail
+                    thumbnail: f.thumbnail,
+                    quantity: f.quantity
                 }));
                 db.prepare('UPDATE orders SET files = ? WHERE id = ?').run(JSON.stringify(filesJson), newOrderId);
             }
@@ -956,7 +957,8 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                             name: f.name,
                             url: f.path,
                             type: f.type,
-                            thumbnail: f.thumbnail
+                            thumbnail: f.thumbnail,
+                            quantity: f.quantity
                         }));
                         db.prepare('UPDATE orders SET files = ? WHERE id = ?').run(JSON.stringify(filesJson), newOrderId);
                     }
