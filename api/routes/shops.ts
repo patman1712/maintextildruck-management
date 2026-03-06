@@ -66,6 +66,7 @@ router.get('/:id/categories', (req, res) => {
 router.get('/:id/products', (req, res) => {
   try {
     const { id } = req.params;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : null;
     let shopId = id;
 
     // Resolve slug if needed
@@ -76,7 +77,7 @@ router.get('/:id/products', (req, res) => {
     }
 
     // Join with customer_products to get details, and shop_categories for filtering
-    const products = db.prepare(`
+    let query = `
       SELECT 
         spa.id as assignment_id,
         spa.price,
@@ -101,7 +102,13 @@ router.get('/:id/products', (req, res) => {
       LEFT JOIN shop_categories sc ON spa.category_id = sc.id
       WHERE spa.shop_id = ? AND (spa.is_active = 1 OR spa.is_active IS NULL)
       ORDER BY spa.sort_order ASC, cp.name ASC
-    `).all(shopId) as any[];
+    `;
+
+    if (limit) {
+        query += ` LIMIT ${limit}`;
+    }
+
+    const products = db.prepare(query).all(shopId) as any[];
 
     console.log(`Fetched ${products.length} active products for shop ${shopId}`);
 

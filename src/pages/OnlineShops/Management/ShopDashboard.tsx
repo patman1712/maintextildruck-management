@@ -676,9 +676,9 @@ const ShopDashboard: React.FC = () => {
                                                     const data = await res.json();
                                                     if (data.success && data.files && data.files.preview && data.files.preview.length > 0) {
                                                         const uploadedFile = data.files.preview[0];
-                                                        // Use the uploaded file path as logo URL
-                                                        // uploadedFile.path starts with /uploads/...
-                                                        setShop({ ...shop, logo_url: uploadedFile.path });
+                                                        // Use thumbnail if available (e.g. for PDFs), otherwise path
+                                                        const logoUrl = uploadedFile.thumbnail || uploadedFile.path;
+                                                        setShop({ ...shop, logo_url: logoUrl });
                                                     } else {
                                                         alert('Fehler beim Hochladen.');
                                                     }

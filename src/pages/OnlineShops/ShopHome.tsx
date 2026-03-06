@@ -20,11 +20,11 @@ const ShopHome: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch(`/api/shops/${shopId}/products`);
+        const res = await fetch(`/api/shops/${shopId}/products?limit=8`);
         const data = await res.json();
         if (data.success) {
-          // Filter featured or just take first 8
-          setProducts(data.data.slice(0, 8));
+          // Filter featured or just take first 8 (already limited by API)
+          setProducts(data.data);
         }
       } catch (err) {
         console.error(err);

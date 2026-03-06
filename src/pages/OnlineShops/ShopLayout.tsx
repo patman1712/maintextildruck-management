@@ -118,12 +118,25 @@ const ShopLayout: React.FC = () => {
           {/* Logo */}
           <Link to={shopBaseUrl} className="flex-shrink-0 flex items-center justify-center lg:justify-start flex-1 lg:flex-none">
             {shop.logo_url ? (
-              <img src={shop.logo_url} alt={shop.name} className="h-12 w-auto object-contain" />
+              <img 
+                src={shop.logo_url.toLowerCase().endsWith('.pdf') ? `${shop.logo_url}_thumb.png` : shop.logo_url} 
+                alt={shop.name} 
+                className="h-12 w-auto object-contain" 
+                onError={(e) => {
+                    // Fallback to text if image fails
+                    e.currentTarget.style.display = 'none';
+                    const textSpan = e.currentTarget.parentElement?.querySelector('.logo-text-fallback');
+                    if (textSpan) textSpan.classList.remove('hidden');
+                }}
+              />
             ) : (
               <span className="text-2xl font-black uppercase tracking-tighter italic" style={{ color: primaryColor }}>
                 {shop.name}
               </span>
             )}
+            <span className="logo-text-fallback hidden text-2xl font-black uppercase tracking-tighter italic" style={{ color: primaryColor }}>
+                {shop.name}
+            </span>
           </Link>
 
           {/* Desktop Nav - Mega Menu */}
