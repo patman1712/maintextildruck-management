@@ -750,7 +750,7 @@ const ShopDashboard: React.FC = () => {
                                             });
                                             const data = await res.json();
                                             if (data.success && data.files && data.files.preview) {
-                                                const newUrls = data.files.preview.map((f: any) => f.thumbnail || f.path);
+                                                const newUrls = data.files.preview.map((f: any) => f.path); // Use full path, not thumbnail
                                                 setShop({ 
                                                     ...shop, 
                                                     hero_images: [...(shop.hero_images || []), ...newUrls] 
