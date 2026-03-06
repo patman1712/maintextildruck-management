@@ -579,54 +579,76 @@ const ShopLayout: React.FC = () => {
       <Outlet context={{ shop, categories, primaryColor, secondaryColor }} />
 
       {/* Footer */}
-      <footer className="bg-slate-900 text-white pt-16 pb-8 mt-auto">
+      <footer style={{ backgroundColor: primaryColor }} className="text-white pt-16 pb-8 mt-auto">
         <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-12">
+            
+            {/* Column 1: Company Info */}
             <div>
-              <h4 className="font-bold uppercase tracking-widest mb-6 text-sm text-slate-400">Shop</h4>
-              <ul className="space-y-3 text-sm text-slate-300">
-                <li><a href="#" className="hover:text-white">Neuheiten</a></li>
-                <li><a href="#" className="hover:text-white">Männer</a></li>
-                <li><a href="#" className="hover:text-white">Frauen</a></li>
-                <li><a href="#" className="hover:text-white">Sale</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold uppercase tracking-widest mb-6 text-sm text-slate-400">Service</h4>
-              <ul className="space-y-3 text-sm text-slate-300">
-                <li><a href="#" className="hover:text-white">Hilfe & Kontakt</a></li>
-                <li><a href="#" className="hover:text-white">Versand & Lieferung</a></li>
-                <li><a href="#" className="hover:text-white">Rücksendung</a></li>
-                <li><a href="#" className="hover:text-white">Größentabellen</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold uppercase tracking-widest mb-6 text-sm text-slate-400">Rechtliches</h4>
-              <ul className="space-y-3 text-sm text-slate-300">
-                <li><a href="#" className="hover:text-white">AGB</a></li>
-                <li><a href="#" className="hover:text-white">Datenschutz</a></li>
-                <li><a href="#" className="hover:text-white">Impressum</a></li>
-                <li><a href="#" className="hover:text-white">Widerrufsrecht</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold uppercase tracking-widest mb-6 text-sm text-slate-400">Newsletter</h4>
-              <p className="text-sm text-slate-300 mb-4">Melde dich für den Newsletter an und erhalte 10% Rabatt.</p>
-              <div className="flex">
-                <input type="email" placeholder="Deine E-Mail" className="bg-slate-800 border-none text-white px-4 py-2 flex-grow text-sm focus:ring-1 focus:ring-slate-500" />
-                <button style={{ backgroundColor: primaryColor }} className="px-4 py-2 font-bold uppercase text-xs">OK</button>
+              {shop.footer_logo_url ? (
+                  <img src={shop.footer_logo_url} alt={shop.name} className="h-12 mb-6 object-contain brightness-0 invert" />
+              ) : (
+                  <h4 className="font-black uppercase italic text-2xl mb-6">{shop.name}</h4>
+              )}
+              
+              <div className="space-y-4 text-sm">
+                  {shop.contact_phone && (
+                      <div>
+                          <p className="opacity-80 mb-1">Unterstützung und Beratung unter:</p>
+                          <p className="font-bold text-lg border-b-2 border-white/20 inline-block pb-1 mb-2">{shop.contact_phone}</p>
+                          {shop.opening_hours && <p className="opacity-80">{shop.opening_hours}</p>}
+                      </div>
+                  )}
+                  
+                  <div>
+                      <p className="opacity-80">Oder über unser <Link to={`${shopBaseUrl}/page/kontakt`} className="underline hover:text-white/80">Kontaktformular</Link>.</p>
+                  </div>
+
+                  <div className="flex space-x-4 pt-4">
+                      {shop.social_instagram && (
+                          <a href={shop.social_instagram} target="_blank" rel="noopener noreferrer" className="hover:opacity-80">
+                              <img src="https://cdn.simpleicons.org/instagram/white" className="w-6 h-6" alt="Instagram" />
+                          </a>
+                      )}
+                      {shop.social_tiktok && (
+                          <a href={shop.social_tiktok} target="_blank" rel="noopener noreferrer" className="hover:opacity-80">
+                              <img src="https://cdn.simpleicons.org/tiktok/white" className="w-6 h-6" alt="TikTok" />
+                          </a>
+                      )}
+                      {shop.social_whatsapp && (
+                          <a href={shop.social_whatsapp} target="_blank" rel="noopener noreferrer" className="hover:opacity-80">
+                              <img src="https://cdn.simpleicons.org/whatsapp/white" className="w-6 h-6" alt="WhatsApp" />
+                          </a>
+                      )}
+                  </div>
               </div>
             </div>
-          </div>
-          <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500">
-            <p>&copy; 2024 {shop.name}. Alle Rechte vorbehalten.</p>
-            <div className="flex space-x-4 mt-4 md:mt-0">
-               {/* Payment Icons Placeholder */}
-               <span>PayPal</span>
-               <span>Visa</span>
-               <span>Mastercard</span>
-               <span>DHL</span>
+
+            {/* Column 2: Information */}
+            <div>
+              <h4 className="font-bold underline decoration-2 underline-offset-4 mb-6 text-lg">Information</h4>
+              <ul className="space-y-3 text-sm">
+                <li><Link to={`${shopBaseUrl}/page/impressum`} className="hover:underline">Impressum</Link></li>
+                <li><Link to={`${shopBaseUrl}/page/datenschutz`} className="hover:underline">Datenschutz</Link></li>
+                <li><Link to={`${shopBaseUrl}/page/ueber-uns`} className="hover:underline">Über uns</Link></li>
+              </ul>
             </div>
+
+            {/* Column 3: Shop Service */}
+            <div>
+              <h4 className="font-bold underline decoration-2 underline-offset-4 mb-6 text-lg">Shop Service</h4>
+              <ul className="space-y-3 text-sm">
+                <li><Link to={`${shopBaseUrl}/page/kontakt`} className="hover:underline">Kontakt</Link></li>
+                <li><Link to={`${shopBaseUrl}/page/widerrufsrecht`} className="hover:underline">Widerrufsrecht</Link></li>
+                <li><Link to={`${shopBaseUrl}/page/versand`} className="hover:underline">Versand- und Zahlungsbedingungen</Link></li>
+                <li><Link to={`${shopBaseUrl}/page/agb`} className="hover:underline">AGB</Link></li>
+              </ul>
+            </div>
+
+          </div>
+          
+          <div className="border-t border-white/20 pt-8 text-center text-xs opacity-80">
+            <p>Alle Preise inkl. gesetzl. Mehrwertsteuer zzgl. <Link to={`${shopBaseUrl}/page/versand`} className="underline">Versandkosten</Link> und ggf. Nachnahmegebühren, wenn nicht anders angegeben.</p>
           </div>
         </div>
       </footer>

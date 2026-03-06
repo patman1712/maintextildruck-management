@@ -377,7 +377,10 @@ router.put('/:id', (req, res) => {
         dhl_config, paypal_config,
         order_number_circle, next_order_number,
         hero_images,
-        welcome_text
+        welcome_text,
+        footer_logo_url, contact_phone, contact_email, contact_address, opening_hours,
+        social_instagram, social_tiktok, social_whatsapp,
+        impressum_text, privacy_text, agb_text, revocation_text, shipping_info_text, about_us_text, contact_text
     } = body;
 
     const query = `
@@ -387,7 +390,10 @@ router.put('/:id', (req, res) => {
           dhl_config = ?, paypal_config = ?,
           order_number_circle = ?, next_order_number = ?,
           hero_images = ?,
-          welcome_text = ?
+          welcome_text = ?,
+          footer_logo_url = ?, contact_phone = ?, contact_email = ?, contact_address = ?, opening_hours = ?,
+          social_instagram = ?, social_tiktok = ?, social_whatsapp = ?,
+          impressum_text = ?, privacy_text = ?, agb_text = ?, revocation_text = ?, shipping_info_text = ?, about_us_text = ?, contact_text = ?
       WHERE id = ?
     `;
 
@@ -404,6 +410,9 @@ router.put('/:id', (req, res) => {
       next_order_number || 1,
       hero_images ? JSON.stringify(hero_images) : null,
       welcome_text || null,
+      footer_logo_url || null, contact_phone || null, contact_email || null, contact_address || null, opening_hours || null,
+      social_instagram || null, social_tiktok || null, social_whatsapp || null,
+      impressum_text || null, privacy_text || null, agb_text || null, revocation_text || null, shipping_info_text || null, about_us_text || null, contact_text || null,
       id
     );
 

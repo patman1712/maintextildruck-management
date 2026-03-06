@@ -136,6 +136,25 @@ export interface Shop {
   next_order_number?: number;
   hero_images?: string[]; // New field for hero slider
   welcome_text?: string; // New field for welcome text
+  
+  // Footer / Legal
+  footer_logo_url?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  contact_address?: string;
+  opening_hours?: string;
+  social_instagram?: string;
+  social_tiktok?: string;
+  social_whatsapp?: string;
+  
+  impressum_text?: string;
+  privacy_text?: string;
+  agb_text?: string;
+  revocation_text?: string;
+  shipping_info_text?: string;
+  about_us_text?: string;
+  contact_text?: string;
+
   created_at: string;
 }
 
