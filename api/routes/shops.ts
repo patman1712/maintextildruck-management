@@ -22,10 +22,10 @@ router.get('/:id', (req, res) => {
     let shop;
     if (id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
         // Assume UUID/ID
-        shop = db.prepare('SELECT * FROM shops WHERE id = ?').get(id);
+        shop = db.prepare('SELECT * FROM shops WHERE id = ?').get(id) as any;
     } else {
         // Assume slug
-        shop = db.prepare('SELECT * FROM shops WHERE domain_slug = ?').get(id);
+        shop = db.prepare('SELECT * FROM shops WHERE domain_slug = ?').get(id) as any;
     }
 
     if (!shop) {
@@ -342,7 +342,7 @@ router.post('/', (req, res) => {
       paypal_config ? JSON.stringify(paypal_config) : null
     );
 
-    const shop = db.prepare('SELECT * FROM shops WHERE id = ?').get(id);
+    const shop: any = db.prepare('SELECT * FROM shops WHERE id = ?').get(id);
     
     // Parse JSON fields before returning
     if (shop) {
@@ -397,7 +397,15 @@ router.put('/:id', (req, res) => {
       id
     );
 
-    const shop = db.prepare('SELECT * FROM shops WHERE id = ?').get(id);
+    const shop: any = db.prepare('SELECT * FROM shops WHERE id = ?').get(id);
+
+    // Parse JSON fields before returning
+    if (shop) {
+        if (shop.dhl_config) shop.dhl_config = JSON.parse(shop.dhl_config);
+        if (shop.paypal_config) shop.paypal_config = JSON.parse(shop.paypal_config);
+        if (shop.hero_images) shop.hero_images = JSON.parse(shop.hero_images);
+    }
+
     res.json({ success: true, data: shop });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
