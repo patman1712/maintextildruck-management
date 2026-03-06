@@ -346,6 +346,7 @@ export default function DTFOrdering() {
             const uploadedFile = data.files.print[0];
             const fileUrl = uploadedFile.path;
             const thumbnail = uploadedFile.thumbnail;
+            const uniqueId = Math.random().toString(36).substr(2, 9); // Add ID here for deletion
             
             // Instead of creating a NEW hidden order, append to a central "dtf-manual-queue" order
             // This ensures files are visible to ALL users until processed.
@@ -354,12 +355,13 @@ export default function DTFOrdering() {
             let queueOrder = orders.find(o => o.id === queueOrderId);
             
             const newFileEntry = {
+                id: uniqueId, // Add ID to file entry
                 name: uploadedFile.originalName,
-                type: 'print' as const, // Fix type error
+                type: 'print' as const,
                 url: fileUrl,
                 thumbnail: thumbnail,
                 customName: uploadedFile.originalName,
-                status: 'pending' as const, // Fix type error
+                status: 'pending' as const,
                 quantity: uploadQuantity,
                 reference: customer ? customer.name : 'Manueller Upload', 
                 uploadedAt: new Date().toISOString()
@@ -384,8 +386,6 @@ export default function DTFOrdering() {
                 await addOrder(newOrder);
             } else {
                 // Append file to existing queue
-                // We need to be careful with types here. The store expects specific file types.
-                // Using 'any' cast for the array update to bypass strict checks if needed, but 'as const' above should fix it.
                 const currentFiles = queueOrder.files || [];
                 await updateOrder(queueOrderId, {
                     files: [...currentFiles, newFileEntry]
@@ -397,7 +397,7 @@ export default function DTFOrdering() {
 
             // Automatically select the uploaded file
             const fileToAdd = {
-                id: fileUrl, // Use URL as ID for selection matching
+                id: uniqueId, // Use consistent ID
                 url: fileUrl,
                 name: uploadedFile.originalName,
                 thumbnail: thumbnail,
@@ -422,6 +422,23 @@ export default function DTFOrdering() {
         console.error("Upload failed:", error);
         alert("Upload fehlgeschlagen.");
     }
+  };
+
+  const handleDeleteManualUpload = async (orderId: string, fileUrl: string) => {
+      if (!confirm('Soll dieser manuelle Upload wirklich gelöscht werden?')) return;
+      
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+      
+      // Filter out the file
+      const newFiles = (order.files || []).filter(f => f.url !== fileUrl);
+      
+      await updateOrder(orderId, { files: newFiles });
+      
+      // Also remove from selection if selected
+      setSelectedFiles(prev => prev.filter(f => f.url !== fileUrl));
+      
+      await fetchData();
   };
 
   const handleGenerate = async () => {
@@ -669,23 +686,51 @@ export default function DTFOrdering() {
                                     <p className={`text-xs truncate ${isSelected ? 'text-yellow-700' : 'text-blue-700'}`}>{order.customerName}</p>
                                     <p className={`text-[10px] ${isSelected ? 'text-yellow-600' : 'text-blue-500'}`}>{new Date(order.createdAt).toLocaleDateString('de-DE')}</p>
                                 </div>
-                                <button 
-                                    onClick={() => !isSelected && addOrderFiles(order.id)}
-                                    disabled={isSelected}
-                                    className={`${isSelected ? 'bg-yellow-500 cursor-default opacity-80' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs px-2 py-1.5 rounded shrink-0 flex items-center transition-all`}
-                                >
-                                    {isSelected ? (
-                                        <>
-                                            <Check size={12} className="mr-1" />
-                                            In Auswahl
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Check size={12} className="mr-1" />
-                                            Übernehmen
-                                        </>
+                                <div className="flex items-center gap-2">
+                                    {(order.id === 'dtf-manual-queue' || order.id === 'inventory-manual' || order.originalOrderId === 'dtf-manual-queue') && (
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                const originalId = order.originalOrderId || order.id;
+                                                // If it's a group, we need to delete ALL files in this group
+                                                if (order.isVirtual) {
+                                                    if(confirm('Soll diese Gruppe wirklich gelöscht werden?')) {
+                                                        const sourceOrder = orders.find(o => o.id === originalId);
+                                                        if (sourceOrder) {
+                                                            const newFiles = (sourceOrder.files || []).filter((f: any) => {
+                                                                const fRef = f.reference || (originalId === 'dtf-manual-queue' ? 'Manueller Upload' : 'Unbekannt');
+                                                                // Keep files that DO NOT match the group reference
+                                                                return fRef !== (order.title === 'Ohne Auftragsnummer' ? 'Unbekannt' : order.title);
+                                                            });
+                                                            updateOrder(originalId, { files: newFiles }).then(fetchData);
+                                                        }
+                                                    }
+                                                }
+                                            }}
+                                            className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded transition-colors"
+                                            title="Gruppe löschen"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
                                     )}
-                                </button>
+                                    <button 
+                                        onClick={() => !isSelected && addOrderFiles(order.id)}
+                                        disabled={isSelected}
+                                        className={`${isSelected ? 'bg-yellow-500 cursor-default opacity-80' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs px-2 py-1.5 rounded shrink-0 flex items-center transition-all`}
+                                    >
+                                        {isSelected ? (
+                                            <>
+                                                <Check size={12} className="mr-1" />
+                                                In Auswahl
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Check size={12} className="mr-1" />
+                                                Übernehmen
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         )})}
                     </div>
