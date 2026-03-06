@@ -13,6 +13,7 @@ export default function OrderDetails() {
   const deleteOrder = useAppStore((state) => state.deleteOrder);
   const suppliers = useAppStore((state) => state.suppliers);
   const [order, setOrder] = useState(orders.find(o => o.id === id));
+  const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
 
   useEffect(() => {
     if (loading) return; // Wait for data
@@ -22,7 +23,37 @@ export default function OrderDetails() {
     } else {
       navigate("/dashboard/orders");
     }
+    fetchPersonalizationOptions();
   }, [id, orders, navigate, loading]);
+
+  const fetchPersonalizationOptions = async () => {
+    try {
+      const res = await fetch('/api/personalization');
+      const data = await res.json();
+      if (data.success) setPersonalizationOptions(data.data);
+    } catch (e) { console.error(e); }
+  };
+
+  const formatPersonalization = (notes: string) => {
+    if (!notes) return '';
+    
+    // Check if notes is just a plain string (legacy) or formatted
+    if (!notes.includes('|') && !notes.includes(':')) return notes;
+
+    return notes.split('|').map(part => {
+        const [id, value] = part.split(':');
+        if (!id || !value) return part;
+        
+        const option = personalizationOptions.find(o => o.id === id);
+        if (option) {
+            // Handle boolean values (true/false as strings)
+            if (value === 'true') return option.name;
+            if (value === 'false') return '';
+            return `${option.name}: ${value}`;
+        }
+        return part;
+    }).filter(p => !!p).join(', ');
+  };
 
   const handleDelete = async () => {
     if (!order) return;
@@ -234,6 +265,7 @@ export default function OrderDetails() {
                                         <div className="text-sm font-medium text-gray-900">{item.itemName}</div>
                                         {item.itemNumber && <div className="text-xs text-gray-500">Art: {item.itemNumber}</div>}
                                         {item.color && <div className="text-xs text-gray-500">Farbe: {item.color}</div>}
+                                        {item.notes && <div className="text-xs text-blue-600 italic mt-1">Personalisierung: {formatPersonalization(item.notes)}</div>}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                         <div className="font-bold">
