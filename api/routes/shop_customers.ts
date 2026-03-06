@@ -290,7 +290,7 @@ router.post('/:shopId/orders', async (req, res) => {
       const insertFile = db.prepare(`
         INSERT INTO files (
             id, order_id, customer_id, name, path, type, status, quantity, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const item of items) {
