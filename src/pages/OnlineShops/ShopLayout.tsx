@@ -19,8 +19,35 @@ const ShopLayout: React.FC = () => {
   const [shippingConfig, setShippingConfig] = useState<any>(null);
   const [shippingCost, setShippingCost] = useState(5.95);
 
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+  useEffect(() => {
+    if (searchQuery.length >= 2) {
+        const timeoutId = setTimeout(async () => {
+            setIsSearching(true);
+            try {
+                const res = await fetch(`/api/shops/${shopId}/search?q=${encodeURIComponent(searchQuery)}`);
+                const data = await res.json();
+                if (data.success) {
+                    setSearchResults(data.data);
+                }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setIsSearching(false);
+            }
+        }, 300);
+        return () => clearTimeout(timeoutId);
+    } else {
+        setSearchResults([]);
+    }
+  }, [searchQuery, shopId]);
 
   useEffect(() => {
     const fetchShop = async () => {
@@ -202,7 +229,7 @@ const ShopLayout: React.FC = () => {
 
           {/* Icons */}
           <div className="flex items-center space-x-4 lg:space-x-6 text-slate-600">
-            <button className="hover:text-slate-900 hidden sm:block">
+            <button className="hover:text-slate-900" onClick={() => setSearchOpen(true)}>
               <Search size={22} />
             </button>
             {currentCustomer ? (
@@ -248,6 +275,68 @@ const ShopLayout: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {/* Search Overlay */}
+      {searchOpen && (
+        <div className="fixed inset-0 z-[100] bg-white animate-in slide-in-from-top-10 duration-200">
+          <div className="container mx-auto px-4 py-6">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-black uppercase italic tracking-tighter">Suche</h2>
+              <button onClick={() => setSearchOpen(false)} className="p-2 hover:bg-slate-100 rounded-full">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="relative max-w-2xl mx-auto">
+              <input 
+                autoFocus
+                type="text" 
+                placeholder="Wonach suchst du? (Produktname, Artikelnummer...)" 
+                className="w-full text-2xl font-bold border-b-2 border-slate-200 py-4 outline-none focus:border-slate-900 placeholder:text-slate-300 bg-transparent pr-12"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <Search className="absolute right-0 top-5 text-slate-400" size={24} />
+            </div>
+
+            <div className="max-w-4xl mx-auto mt-12">
+                {isSearching ? (
+                    <div className="text-center text-slate-400 py-12">Suche läuft...</div>
+                ) : searchQuery.length >= 2 ? (
+                    searchResults.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                            {searchResults.map((product: any) => (
+                                <Link 
+                                    to={`${shopBaseUrl}/product/${product.product_id}`} 
+                                    key={product.product_id}
+                                    onClick={() => setSearchOpen(false)}
+                                    className="flex items-start space-x-4 group bg-slate-50 p-3 rounded-lg hover:bg-slate-100 transition-colors"
+                                >
+                                    <div className="w-16 h-20 bg-white flex-shrink-0 overflow-hidden rounded border border-slate-200">
+                                        {product.files && product.files[0] ? (
+                                            <img src={product.files[0].thumbnail_url || product.files[0].file_url} className="w-full h-full object-contain group-hover:scale-105 transition-transform" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                                <BagIcon size={16} />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <h4 className="font-bold text-slate-800 text-sm group-hover:text-red-600 transition-colors line-clamp-2">{product.name}</h4>
+                                        <p className="text-xs text-slate-500 mb-1 font-mono">{product.product_number}</p>
+                                        <span className="font-bold text-sm">{product.price?.toFixed(2).replace('.', ',')} €</span>
+                                    </div>
+                                </Link>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center text-slate-400 py-12">Keine Ergebnisse für "{searchQuery}" gefunden.</div>
+                    )
+                ) : null}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cart Sidebar */}
       {cartOpen && (

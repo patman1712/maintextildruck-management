@@ -179,6 +179,86 @@ router.get('/:id/products', (req, res) => {
   }
 });
 
+// Search public products for a shop
+router.get('/:id/search', (req, res) => {
+  try {
+    const { id } = req.params;
+    const query = req.query.q as string;
+    let shopId = id;
+
+    if (!query || query.length < 2) {
+        return res.json({ success: true, data: [] });
+    }
+
+    // Resolve slug if needed
+    if (!id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
+        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(id) as { id: string } | undefined;
+        if (!shop) return res.status(404).json({ success: false, error: 'Shop not found' });
+        shopId = shop.id;
+    }
+
+    // Search query
+    const sql = `
+      SELECT 
+        spa.id as assignment_id,
+        spa.price,
+        spa.is_featured,
+        spa.personalization_enabled,
+        spa.category_id,
+        cp.id as product_id,
+        cp.name,
+        cp.product_number,
+        cp.description,
+        cp.color,
+        cp.size
+      FROM shop_product_assignments spa
+      JOIN customer_products cp ON spa.product_id = cp.id
+      WHERE spa.shop_id = ? 
+      AND (spa.is_active = 1 OR spa.is_active IS NULL)
+      AND (
+          cp.name LIKE ? OR 
+          cp.product_number LIKE ? OR
+          cp.description LIKE ?
+      )
+      ORDER BY cp.name ASC
+      LIMIT 20
+    `;
+
+    const searchTerm = `%${query}%`;
+    const products = db.prepare(sql).all(shopId, searchTerm, searchTerm, searchTerm) as any[];
+
+    // Fetch images for these products (simplified for search results)
+    const productIds = products.map((p: any) => p.product_id);
+    if (productIds.length > 0) {
+        const placeholders = productIds.map(() => '?').join(',');
+        
+        // Try to get one image per product
+        const images = db.prepare(`
+            SELECT product_id, file_url, thumbnail_url 
+            FROM customer_product_files 
+            WHERE product_id IN (${placeholders})
+            GROUP BY product_id
+        `).all(...productIds) as any[];
+
+        products.forEach((p: any) => {
+            const img = images.find((i: any) => i.product_id === p.product_id);
+            if (img) {
+                p.files = [{
+                    file_url: img.file_url,
+                    thumbnail_url: img.thumbnail_url
+                }];
+            } else {
+                p.files = [];
+            }
+        });
+    }
+
+    res.json({ success: true, data: products });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get shipping config for a shop (public)
 router.get('/:id/shipping-config', (req, res) => {
   try {
