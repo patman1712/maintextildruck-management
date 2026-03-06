@@ -49,6 +49,7 @@ export default function DTFOrdering() {
   // Direct Upload State
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadCustomerId, setUploadCustomerId] = useState<string>("");
+  const [uploadQuantity, setUploadQuantity] = useState(1);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -359,7 +360,7 @@ export default function DTFOrdering() {
                 thumbnail: thumbnail,
                 customName: uploadedFile.originalName,
                 status: 'pending' as const, // Fix type error
-                quantity: 1,
+                quantity: uploadQuantity,
                 reference: customer ? customer.name : 'Manueller Upload', 
                 uploadedAt: new Date().toISOString()
             };
@@ -403,7 +404,7 @@ export default function DTFOrdering() {
                 orderId: queueOrderId,
                 customerName: customer ? customer.name : 'Manueller Upload',
                 date: new Date().toISOString(),
-                quantity: 1,
+                quantity: uploadQuantity,
                 width: 0,
                 height: 0,
                 reference: customer ? customer.name : 'Manueller Upload',
@@ -415,6 +416,7 @@ export default function DTFOrdering() {
             setPickerTab('files');
             setUploadFile(null);
             setUploadCustomerId("");
+            setUploadQuantity(1);
         }
     } catch (error) {
         console.error("Upload failed:", error);
@@ -893,6 +895,17 @@ export default function DTFOrdering() {
                                     <p className="text-[10px] text-gray-400 mt-1">
                                         Drag & Drop möglich
                                     </p>
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-500 mb-1">Anzahl</label>
+                                    <input 
+                                        type="number" 
+                                        min="1"
+                                        value={uploadQuantity}
+                                        onChange={(e) => setUploadQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                                        className="w-full border border-gray-300 rounded p-2 text-sm focus:ring-red-500 focus:border-red-500"
+                                    />
                                 </div>
                                 
                                 <div className="flex justify-end pt-2">
