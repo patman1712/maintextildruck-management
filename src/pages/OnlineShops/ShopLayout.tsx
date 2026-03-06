@@ -129,6 +129,11 @@ const ShopLayout: React.FC = () => {
 
   return (
     <div className="font-sans text-slate-800 bg-white min-h-screen flex flex-col">
+      <style>{`
+        .shop-hover-text:hover { color: ${primaryColor} !important; }
+        .shop-hover-bg:hover { background-color: ${primaryColor}10 !important; }
+        .group:hover .group-hover-shop-text { color: ${primaryColor} !important; }
+      `}</style>
       {/* Announcement Bar */}
       <div style={{ backgroundColor: primaryColor }} className="text-white text-xs font-bold py-2 text-center tracking-wider uppercase">
         Offizieller Fanshop
@@ -142,90 +147,93 @@ const ShopLayout: React.FC = () => {
             <Menu size={24} />
           </button>
 
-          {/* Logo */}
-          <Link to={shopBaseUrl} className="flex-shrink-0 flex items-center justify-center lg:justify-start flex-1 lg:flex-none">
-            {shop.logo_url ? (
-              <img 
-                src={shop.logo_url.toLowerCase().endsWith('.pdf') ? `${shop.logo_url}_thumb.png` : shop.logo_url} 
-                alt={shop.name} 
-                className="h-12 w-auto object-contain" 
-                onError={(e) => {
-                    // Fallback to text if image fails
-                    e.currentTarget.style.display = 'none';
-                    const textSpan = e.currentTarget.parentElement?.querySelector('.logo-text-fallback');
-                    if (textSpan) textSpan.classList.remove('hidden');
-                }}
-              />
-            ) : (
-              <span className="text-2xl font-black uppercase tracking-tighter italic" style={{ color: primaryColor }}>
-                {shop.name}
-              </span>
-            )}
-            <span className="logo-text-fallback hidden text-2xl font-black uppercase tracking-tighter italic" style={{ color: primaryColor }}>
-                {shop.name}
-            </span>
-          </Link>
+          {/* Left Section: Logo + Nav */}
+          <div className="flex items-center h-full flex-1 lg:flex-none justify-center lg:justify-start">
+              {/* Logo */}
+              <Link to={shopBaseUrl} className="flex-shrink-0 flex items-center justify-center lg:justify-start">
+                {shop.logo_url ? (
+                  <img 
+                    src={shop.logo_url.toLowerCase().endsWith('.pdf') ? `${shop.logo_url}_thumb.png` : shop.logo_url} 
+                    alt={shop.name} 
+                    className="h-12 w-auto object-contain" 
+                    onError={(e) => {
+                        // Fallback to text if image fails
+                        e.currentTarget.style.display = 'none';
+                        const textSpan = e.currentTarget.parentElement?.querySelector('.logo-text-fallback');
+                        if (textSpan) textSpan.classList.remove('hidden');
+                    }}
+                  />
+                ) : (
+                  <span className="text-2xl font-black uppercase tracking-tighter italic" style={{ color: primaryColor }}>
+                    {shop.name}
+                  </span>
+                )}
+                <span className="logo-text-fallback hidden text-2xl font-black uppercase tracking-tighter italic" style={{ color: primaryColor }}>
+                    {shop.name}
+                </span>
+              </Link>
 
-          {/* Desktop Nav - Mega Menu */}
-          <nav className="hidden lg:flex items-center space-x-8 mx-8 h-full">
-            {topLevelCategories.map(cat => {
-                const subCats = getSubCategories(cat.id);
-                const hasSub = subCats.length > 0;
-                
-                return (
-                    <div 
-                        key={cat.id} 
-                        className="h-full flex items-center relative group"
-                        onMouseEnter={() => setHoveredCategory(cat.id)}
-                        onMouseLeave={() => setHoveredCategory(null)}
-                    >
-                        <Link 
-                            to={`${shopBaseUrl}/category/${cat.slug}`} 
-                            className="font-bold text-sm uppercase tracking-wide text-slate-700 hover:text-red-600 transition-colors py-8 flex items-center"
+              {/* Desktop Nav - Mega Menu */}
+              <nav className="hidden lg:flex items-center space-x-6 ml-8 h-full">
+                {topLevelCategories.map(cat => {
+                    const subCats = getSubCategories(cat.id);
+                    const hasSub = subCats.length > 0;
+                    
+                    return (
+                        <div 
+                            key={cat.id} 
+                            className="h-full flex items-center relative group"
+                            onMouseEnter={() => setHoveredCategory(cat.id)}
+                            onMouseLeave={() => setHoveredCategory(null)}
                         >
-                            {cat.name}
-                            {hasSub && <ChevronDown size={14} className="ml-1 opacity-50" />}
-                        </Link>
+                            <Link 
+                                to={`${shopBaseUrl}/category/${cat.slug}`} 
+                                className="font-bold text-sm uppercase tracking-wide text-slate-700 shop-hover-text transition-colors py-8 flex items-center"
+                            >
+                                {cat.name}
+                                {hasSub && <ChevronDown size={14} className="ml-1 opacity-50" />}
+                            </Link>
 
-                        {/* Mega Menu Dropdown */}
-                        {hasSub && (
-                            <div className="absolute top-full left-0 w-[600px] bg-white shadow-xl border-t border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50 -ml-4 rounded-b-lg overflow-hidden">
-                                <div className="grid grid-cols-3 gap-6 p-8">
-                                    {subCats.map(sub => (
-                                        <div key={sub.id} className="space-y-2">
-                                            {sub.image_url ? (
-                                                <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden mb-3">
-                                                    <img src={sub.image_url} alt={sub.name} className="w-full h-full object-cover" />
-                                                </div>
-                                            ) : null}
-                                            <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="font-bold text-slate-800 hover:text-red-600 block">
-                                                {sub.name}
-                                            </Link>
-                                            {/* Level 3 Categories (if any) */}
-                                            <ul className="space-y-1">
-                                                {getSubCategories(sub.id).map(lvl3 => (
-                                                    <li key={lvl3.id}>
-                                                        <Link to={`${shopBaseUrl}/category/${lvl3.slug}`} className="text-sm text-slate-500 hover:text-slate-800">
-                                                            {lvl3.name}
-                                                        </Link>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    ))}
+                            {/* Mega Menu Dropdown */}
+                            {hasSub && (
+                                <div className="absolute top-full left-0 w-[600px] bg-white shadow-xl border-t border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50 -ml-4 rounded-b-lg overflow-hidden">
+                                    <div className="grid grid-cols-3 gap-6 p-8">
+                                        {subCats.map(sub => (
+                                            <div key={sub.id} className="space-y-2">
+                                                {sub.image_url ? (
+                                                    <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden mb-3">
+                                                        <img src={sub.image_url} alt={sub.name} className="w-full h-full object-cover" />
+                                                    </div>
+                                                ) : null}
+                                                <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="font-bold text-slate-800 shop-hover-text block">
+                                                    {sub.name}
+                                                </Link>
+                                                {/* Level 3 Categories (if any) */}
+                                                <ul className="space-y-1">
+                                                    {getSubCategories(sub.id).map(lvl3 => (
+                                                        <li key={lvl3.id}>
+                                                            <Link to={`${shopBaseUrl}/category/${lvl3.slug}`} className="text-sm text-slate-500 hover:text-slate-800">
+                                                                {lvl3.name}
+                                                            </Link>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                    </div>
-                );
-            })}
-            {!topLevelCategories.length && (
-                 <>
-                    <Link to={`${shopBaseUrl}/new`} className="font-bold text-sm uppercase tracking-wide text-slate-700 hover:text-red-600 transition-colors">Neuheiten</Link>
-                    <Link to={`${shopBaseUrl}/sale`} className="font-bold text-sm uppercase tracking-wide text-slate-700 hover:text-red-600 transition-colors">Sale</Link>
-                 </>
-            )}
-          </nav>
+                            )}
+                        </div>
+                    );
+                })}
+                {!topLevelCategories.length && (
+                     <>
+                        <Link to={`${shopBaseUrl}/new`} className="font-bold text-sm uppercase tracking-wide text-slate-700 shop-hover-text transition-colors">Neuheiten</Link>
+                        <Link to={`${shopBaseUrl}/sale`} className="font-bold text-sm uppercase tracking-wide text-slate-700 shop-hover-text transition-colors">Sale</Link>
+                     </>
+                )}
+              </nav>
+          </div>
 
           {/* Icons */}
           <div className="flex items-center space-x-4 lg:space-x-6 text-slate-600">
@@ -245,11 +253,11 @@ const ShopLayout: React.FC = () => {
                   <div className="px-3 py-2 border-b border-slate-50 mb-1">
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Mein Konto</p>
                   </div>
-                  <Link to={`${shopBaseUrl}/profile`} className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg transition-colors font-medium">
+                  <Link to={`${shopBaseUrl}/profile`} className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-slate-700 shop-hover-bg transition-colors font-medium rounded-lg">
                     <User size={16} />
                     <span>Profil bearbeiten</span>
                   </Link>
-                  <Link to={`${shopBaseUrl}/orders`} className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg transition-colors font-medium">
+                  <Link to={`${shopBaseUrl}/orders`} className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-slate-700 shop-hover-bg transition-colors font-medium rounded-lg">
                     <ShoppingBag size={16} />
                     <span>Meine Bestellungen</span>
                   </Link>
@@ -267,7 +275,7 @@ const ShopLayout: React.FC = () => {
             <button className="hover:text-slate-900 relative" onClick={() => setCartOpen(true)}>
               <ShoppingCart size={22} />
               {cartCount > 0 && (
-                <span className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] font-bold h-4 w-4 rounded-full flex items-center justify-center">
+                <span className="absolute -top-2 -right-2 text-white text-[10px] font-bold h-4 w-4 rounded-full flex items-center justify-center" style={{ backgroundColor: primaryColor }}>
                   {cartCount}
                 </span>
               )}
@@ -321,7 +329,7 @@ const ShopLayout: React.FC = () => {
                                         )}
                                     </div>
                                     <div>
-                                        <h4 className="font-bold text-slate-800 text-sm group-hover:text-red-600 transition-colors line-clamp-2">{product.name}</h4>
+                                        <h4 className="font-bold text-slate-800 text-sm group-hover-shop-text transition-colors line-clamp-2">{product.name}</h4>
                                         <p className="text-xs text-slate-500 mb-1 font-mono">{product.product_number}</p>
                                         <span className="font-bold text-sm text-slate-900">{product.price?.toFixed(2).replace('.', ',')} €</span>
                                     </div>
