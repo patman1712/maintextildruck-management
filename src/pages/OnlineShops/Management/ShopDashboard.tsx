@@ -246,6 +246,8 @@ const ShopDashboard: React.FC = () => {
             is_featured: payload.is_featured,
             personalization_enabled: payload.personalization_enabled,
             sort_order: payload.sort_order,
+            is_active: payload.is_active, // Include is_active in payload
+            supplier_id: payload.supplier_id, // Include supplier_id
             // Also update product details if provided in updates
             manufacturer_info: updates.manufacturer_info,
             description: updates.description,
