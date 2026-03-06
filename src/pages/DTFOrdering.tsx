@@ -43,6 +43,7 @@ export default function DTFOrdering() {
   // Product Tab State
   const [productSearch, setProductSearch] = useState("");
   const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [customerProducts, setCustomerProducts] = useState<Record<string, any[]>>({});
   const [loadingProducts, setLoadingProducts] = useState<Set<string>>(new Set());
 
@@ -281,6 +282,46 @@ export default function DTFOrdering() {
           }
       }
       setExpandedCustomers(newExpanded);
+  };
+
+  const toggleOrderExpansion = (orderId: string) => {
+      const newExpanded = new Set(expandedOrders);
+      if (newExpanded.has(orderId)) {
+          newExpanded.delete(orderId);
+      } else {
+          newExpanded.add(orderId);
+      }
+      setExpandedOrders(newExpanded);
+  };
+
+  const handleDeleteSingleManualFile = async (virtualOrderId: string, fileUrl: string) => {
+      if (!confirm('Soll diese einzelne Datei wirklich gelöscht werden?')) return;
+
+      // Check for virtual order (Manual Inventory Groups or Queue)
+      if (virtualOrderId.includes('-group-')) {
+          let originalOrderId = '';
+          
+          if (virtualOrderId.startsWith('inventory-manual-group-')) {
+              originalOrderId = 'inventory-manual';
+          } else if (virtualOrderId.startsWith('dtf-manual-queue-group-')) {
+              originalOrderId = 'dtf-manual-queue';
+          } else {
+               return;
+          }
+
+          const sourceOrder = orders.find(o => o.id === originalOrderId);
+          if (!sourceOrder) return;
+          
+          // Filter out the specific file
+          const newFiles = (sourceOrder.files || []).filter((f: any) => f.url !== fileUrl);
+          
+          await updateOrder(originalOrderId, { files: newFiles });
+          
+          // Also remove from selection if selected
+          setSelectedFiles(prev => prev.filter(f => f.url !== fileUrl));
+          
+          await fetchData();
+      }
   };
 
   const addFile = (file: any) => {
@@ -676,61 +717,110 @@ export default function DTFOrdering() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-40 overflow-y-auto">
                         {openOrdersWithFiles.map(order => {
                             const isSelected = selectedFiles.some(f => f.orderId === order.id);
+                            const isExpanded = expandedOrders.has(order.id);
+                            const isManualGroup = order.id.includes('-group-');
+
                             return (
-                            <div key={order.id} className={`border p-3 rounded-md flex justify-between items-center transition-colors ${isSelected ? 'border-yellow-200 bg-yellow-50' : 'border-blue-100 bg-blue-50'}`}>
-                                <div className="min-w-0 flex-1 mr-2">
-                                    <p className={`font-medium truncate text-sm ${isSelected ? 'text-yellow-900' : 'text-blue-900'}`} title={order.title}>
-                                        {order.orderNumber && <span className={`${isSelected ? 'text-yellow-600' : 'text-blue-400'} mr-1 font-mono text-xs`}>{order.orderNumber}</span>}
-                                        {order.title}
-                                    </p>
-                                    <p className={`text-xs truncate ${isSelected ? 'text-yellow-700' : 'text-blue-700'}`}>{order.customerName}</p>
-                                    <p className={`text-[10px] ${isSelected ? 'text-yellow-600' : 'text-blue-500'}`}>{new Date(order.createdAt).toLocaleDateString('de-DE')}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    {(order.id === 'dtf-manual-queue' || order.id === 'inventory-manual' || order.originalOrderId === 'dtf-manual-queue') && (
-                                        <button 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                const originalId = order.originalOrderId || order.id;
-                                                // If it's a group, we need to delete ALL files in this group
-                                                if (order.isVirtual) {
-                                                    if(confirm('Soll diese Gruppe wirklich gelöscht werden?')) {
-                                                        const sourceOrder = orders.find(o => o.id === originalId);
-                                                        if (sourceOrder) {
-                                                            const newFiles = (sourceOrder.files || []).filter((f: any) => {
-                                                                const fRef = f.reference || (originalId === 'dtf-manual-queue' ? 'Manueller Upload' : 'Unbekannt');
-                                                                // Keep files that DO NOT match the group reference
-                                                                return fRef !== (order.title === 'Ohne Auftragsnummer' ? 'Unbekannt' : order.title);
-                                                            });
-                                                            updateOrder(originalId, { files: newFiles }).then(fetchData);
+                            <div key={order.id} className={`border rounded-md transition-colors overflow-hidden ${isSelected ? 'border-yellow-200 bg-yellow-50' : 'border-blue-100 bg-blue-50'}`}>
+                                <div className="p-3 flex justify-between items-center">
+                                    <div className="min-w-0 flex-1 mr-2 flex items-center">
+                                        {isManualGroup && (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); toggleOrderExpansion(order.id); }}
+                                                className="mr-2 text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-black/5 transition-colors"
+                                            >
+                                                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                            </button>
+                                        )}
+                                        
+                                        <div className="min-w-0">
+                                            <p className={`font-medium truncate text-sm ${isSelected ? 'text-yellow-900' : 'text-blue-900'}`} title={order.title}>
+                                                {order.orderNumber && <span className={`${isSelected ? 'text-yellow-600' : 'text-blue-400'} mr-1 font-mono text-xs`}>{order.orderNumber}</span>}
+                                                {order.title}
+                                            </p>
+                                            <p className={`text-xs truncate ${isSelected ? 'text-yellow-700' : 'text-blue-700'}`}>{order.customerName}</p>
+                                            <p className={`text-[10px] ${isSelected ? 'text-yellow-600' : 'text-blue-500'}`}>{new Date(order.createdAt).toLocaleDateString('de-DE')}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {(order.id === 'dtf-manual-queue' || order.id === 'inventory-manual' || order.originalOrderId === 'dtf-manual-queue') && (
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const originalId = order.originalOrderId || order.id;
+                                                    // If it's a group, we need to delete ALL files in this group
+                                                    if (order.isVirtual) {
+                                                        if(confirm('Soll diese ganze Gruppe wirklich gelöscht werden?')) {
+                                                            const sourceOrder = orders.find(o => o.id === originalId);
+                                                            if (sourceOrder) {
+                                                                const newFiles = (sourceOrder.files || []).filter((f: any) => {
+                                                                    const fRef = f.reference || (originalId === 'dtf-manual-queue' ? 'Manueller Upload' : 'Unbekannt');
+                                                                    // Keep files that DO NOT match the group reference
+                                                                    return fRef !== (order.title === 'Ohne Auftragsnummer' ? 'Unbekannt' : order.title);
+                                                                });
+                                                                updateOrder(originalId, { files: newFiles }).then(fetchData);
+                                                            }
                                                         }
                                                     }
-                                                }
-                                            }}
-                                            className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded transition-colors"
-                                            title="Gruppe löschen"
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
-                                    )}
-                                    <button 
-                                        onClick={() => !isSelected && addOrderFiles(order.id)}
-                                        disabled={isSelected}
-                                        className={`${isSelected ? 'bg-yellow-500 cursor-default opacity-80' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs px-2 py-1.5 rounded shrink-0 flex items-center transition-all`}
-                                    >
-                                        {isSelected ? (
-                                            <>
-                                                <Check size={12} className="mr-1" />
-                                                In Auswahl
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Check size={12} className="mr-1" />
-                                                Übernehmen
-                                            </>
+                                                }}
+                                                className="text-red-400 hover:text-red-600 p-1.5 hover:bg-red-50 rounded transition-colors"
+                                                title="Ganze Gruppe löschen"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
                                         )}
-                                    </button>
+                                        <button 
+                                            onClick={() => !isSelected && addOrderFiles(order.id)}
+                                            disabled={isSelected}
+                                            className={`${isSelected ? 'bg-yellow-500 cursor-default opacity-80' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs px-2 py-1.5 rounded shrink-0 flex items-center transition-all`}
+                                        >
+                                            {isSelected ? (
+                                                <>
+                                                    <Check size={12} className="mr-1" />
+                                                    In Auswahl
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Check size={12} className="mr-1" />
+                                                    Übernehmen
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
+                                
+                                {isExpanded && isManualGroup && order.files && (
+                                    <div className="border-t border-gray-200/50 bg-white/40 p-2 space-y-1 animate-in slide-in-from-top-1">
+                                        {order.files.map((file: any, fIdx: number) => (
+                                            <div key={file.id || fIdx} className="flex items-center justify-between p-1.5 rounded hover:bg-white/60 border border-transparent hover:border-gray-100 transition-all text-xs group">
+                                                <div className="flex items-center min-w-0 gap-2">
+                                                    <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden border border-gray-200">
+                                                        {file.thumbnail || file.url ? (
+                                                            <img src={file.thumbnail || file.url} className="w-full h-full object-contain" />
+                                                        ) : <FileText size={14} className="text-gray-400" />}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="truncate font-medium text-gray-700 max-w-[150px]" title={file.name}>{file.name}</p>
+                                                        <p className="text-[10px] text-gray-500 flex items-center">
+                                                            <span className="bg-gray-100 px-1 rounded mr-1">{file.quantity || 1}x</span>
+                                                            {new Date(file.uploadedAt || order.createdAt).toLocaleDateString()}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteSingleManualFile(order.id, file.url);
+                                                    }}
+                                                    className="text-gray-400 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                                    title="Einzelne Datei löschen"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )})}
                     </div>
