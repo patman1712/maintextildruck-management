@@ -64,56 +64,47 @@ const ShopHome: React.FC = () => {
   return (
     <>
       {/* Hero Section */}
-      <div className="relative bg-slate-900 h-[500px] flex items-center justify-center overflow-hidden group">
-        {heroImages.map((img, idx) => (
-            <div 
-                key={idx}
-                className={`absolute inset-0 bg-cover bg-center transition-opacity duration-1000 ease-in-out ${idx === currentSlide ? 'opacity-40' : 'opacity-0'}`}
-                style={{ backgroundImage: `url(${img})` }}
-            />
-        ))}
-        
-        {heroImages.length > 1 && (
-            <>
-                <button 
-                    onClick={prevSlide}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 p-2 rounded-full text-white backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100"
-                >
-                    <ChevronLeft size={32} />
-                </button>
-                <button 
-                    onClick={nextSlide}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 p-2 rounded-full text-white backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100"
-                >
-                    <ChevronRight size={32} />
-                </button>
-                
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2">
-                    {heroImages.map((_, idx) => (
+      <div className="relative w-full overflow-hidden group">
+        {heroImages.length > 0 ? (
+             <div className="relative w-full">
+                 <img 
+                    src={heroImages[currentSlide]} 
+                    alt="Hero" 
+                    className="w-full h-auto object-contain max-h-[80vh]" 
+                 />
+                 
+                 {heroImages.length > 1 && (
+                    <>
                         <button 
-                            key={idx}
-                            onClick={() => setCurrentSlide(idx)}
-                            className={`w-2 h-2 rounded-full transition-all ${idx === currentSlide ? 'bg-white w-6' : 'bg-white/50 hover:bg-white/80'}`}
-                        />
-                    ))}
-                </div>
-            </>
+                            onClick={prevSlide}
+                            className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/30 hover:bg-white/50 p-2 rounded-full text-slate-800 backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100"
+                        >
+                            <ChevronLeft size={32} />
+                        </button>
+                        <button 
+                            onClick={nextSlide}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/30 hover:bg-white/50 p-2 rounded-full text-slate-800 backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100"
+                        >
+                            <ChevronRight size={32} />
+                        </button>
+                        
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-2">
+                            {heroImages.map((_, idx) => (
+                                <button 
+                                    key={idx}
+                                    onClick={() => setCurrentSlide(idx)}
+                                    className={`w-2 h-2 rounded-full transition-all shadow-sm ${idx === currentSlide ? 'bg-white w-6' : 'bg-white/50 hover:bg-white/80'}`}
+                                />
+                            ))}
+                        </div>
+                    </>
+                 )}
+             </div>
+        ) : (
+            <div className="bg-slate-100 h-[300px] flex items-center justify-center text-slate-300">
+                Kein Bild vorhanden
+            </div>
         )}
-
-        <div className="relative z-10 text-center text-white px-4">
-          <h1 className="text-5xl md:text-7xl font-black uppercase italic tracking-tighter mb-4">
-            Neue Kollektion
-          </h1>
-          <p className="text-xl md:text-2xl font-medium mb-8 max-w-2xl mx-auto opacity-90">
-            Entdecke die neuen Styles für die kommende Saison.
-          </p>
-          <button 
-            style={{ backgroundColor: primaryColor, color: secondaryColor }}
-            className="px-8 py-4 font-bold uppercase tracking-widest text-sm hover:opacity-90 transition-opacity transform hover:scale-105 duration-200"
-          >
-            Jetzt Shoppen
-          </button>
-        </div>
       </div>
 
       {/* Welcome Text Section */}
