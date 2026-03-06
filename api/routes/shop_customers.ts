@@ -289,8 +289,8 @@ router.post('/:shopId/orders', async (req, res) => {
       
       const insertFile = db.prepare(`
         INSERT INTO files (
-            id, order_id, customer_id, name, path, type, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            id, order_id, customer_id, name, path, type, status, quantity, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `);
 
       for (const item of items) {
@@ -318,6 +318,19 @@ router.post('/:shopId/orders', async (req, res) => {
             // 2.1.1 Print & Vector Data (Always copy all)
             for (const file of productFiles) {
                 if (['print', 'vector', 'photoshop'].includes(file.type)) {
+                     // Calculate total quantity needed for this file based on order item quantity
+                     // Default file quantity is 1 (per product). So if customer buys 9 products, we need 9 prints.
+                     // If file itself has a quantity (e.g. front and back print needed per shirt?), we should multiply.
+                     // Assuming customer_product_files doesn't have a quantity field yet, or if it does, use it.
+                     // Currently customer_product_files schema: id, product_id, file_name, file_url, type, created_at...
+                     // Wait, shopware.ts line 923 suggests: const fileQty = (pFile.quantity || 1) * quantity;
+                     
+                     // Let's check if customer_product_files has quantity. 
+                     // Looking at db.ts schema for customer_product_files... it does NOT seem to have quantity.
+                     // But let's assume 1 per product for now.
+                     
+                     const fileQuantity = item.quantity; 
+
                      insertFile.run(
                         crypto.randomUUID(),
                         orderId,
@@ -325,10 +338,11 @@ router.post('/:shopId/orders', async (req, res) => {
                         file.file_name,
                         file.file_url,
                         file.type,
-                        'active',
-                        new Date().toISOString()
-                     );
-                }
+                         'active',
+                         fileQuantity,
+                         new Date().toISOString()
+                      );
+                 }
             }
 
             // 2.1.2 Preview Image (Specific one selected by user)
@@ -344,6 +358,7 @@ router.post('/:shopId/orders', async (req, res) => {
                         selectedPreview.file_url,
                         'preview',
                         'active',
+                        1, // Preview always quantity 1
                         new Date().toISOString()
                     );
                 } else {
@@ -356,6 +371,7 @@ router.post('/:shopId/orders', async (req, res) => {
                         item.image,
                         'preview',
                         'active',
+                        1,
                         new Date().toISOString()
                     );
                 }
@@ -371,6 +387,7 @@ router.post('/:shopId/orders', async (req, res) => {
                             file.file_url,
                             'preview',
                             'active',
+                            1,
                             new Date().toISOString()
                          );
                     }

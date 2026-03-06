@@ -72,6 +72,7 @@ db.exec(`
     thumbnail TEXT,
     status TEXT DEFAULT 'active', -- NEW: status column
     print_status TEXT DEFAULT 'pending', -- pending, ordered, completed
+    quantity INTEGER DEFAULT 1, -- NEW: quantity of prints needed
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -484,6 +485,12 @@ try {
   if (!hasStatusFile) {
       console.log('Migrating database: Adding status to files table');
       db.exec("ALTER TABLE files ADD COLUMN status TEXT DEFAULT 'active'");
+  }
+
+  const hasQuantityFile = fileColumns.some(col => col.name === 'quantity');
+  if (!hasQuantityFile) {
+      console.log('Migrating database: Adding quantity to files table');
+      db.exec("ALTER TABLE files ADD COLUMN quantity INTEGER DEFAULT 1");
   }
 
   const customerProductCols = db.prepare("PRAGMA table_info(customer_products)").all() as any[];
