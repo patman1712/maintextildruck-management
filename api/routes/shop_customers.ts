@@ -294,10 +294,26 @@ router.post('/:shopId/orders', async (req, res) => {
       `);
 
       for (const item of items) {
+        let supplierId = 'manual';
+        if (item.productId) {
+            // 1. Check Shop Assignment first (overrides base product)
+            const assignment = db.prepare('SELECT supplier_id FROM shop_product_assignments WHERE shop_id = ? AND product_id = ?').get(shopId, item.productId) as { supplier_id: string };
+            
+            if (assignment && assignment.supplier_id) {
+                supplierId = assignment.supplier_id;
+            } else {
+                // 2. Fallback to Base Product
+                const product = db.prepare('SELECT supplier_id FROM customer_products WHERE id = ?').get(item.productId) as { supplier_id: string };
+                if (product && product.supplier_id) {
+                    supplierId = product.supplier_id;
+                }
+            }
+        }
+
         insertItem.run(
           crypto.randomUUID(),
           orderId,
-          'manual', // Default or find supplier
+          supplierId,
           item.name,
           item.quantity,
           item.price,

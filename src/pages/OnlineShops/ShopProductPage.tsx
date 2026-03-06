@@ -271,7 +271,8 @@ const ShopProductPage: React.FC = () => {
       size: selectedSize,
       color: selectedVariantId ? variants[selectedVariantId]?.name : undefined,
       personalization: personalizationString || undefined,
-      weight: product.weight || 0
+      weight: product.weight || 0,
+      supplierId: product.supplier_id || undefined
     };
 
     useShopStore.getState().addToCart(cartItem);
