@@ -179,12 +179,12 @@ router.put('/:shopId/products/:id', (req, res) => {
         sort_order, 
         variants ? JSON.stringify(variants) : null, 
         personalization_options ? JSON.stringify(personalization_options) : null,
-        req.body.is_active === false ? 0 : 1, // Default to true if undefined
+        req.body.is_active === false || req.body.is_active === 0 ? 0 : 1, // Default to true if undefined
         req.body.supplier_id || null,
         id
     );
 
-    console.log(`Updated product assignment ${id}: is_active=${req.body.is_active === false ? 0 : 1}`);
+    console.log(`Updated product assignment ${id}: is_active=${req.body.is_active === false || req.body.is_active === 0 ? 0 : 1}`);
 
     // Update product details (manufacturer_info, description, size, weight)
     const assignment = db.prepare('SELECT product_id FROM shop_product_assignments WHERE id = ?').get(id) as { product_id: string };

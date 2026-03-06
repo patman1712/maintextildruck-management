@@ -73,6 +73,7 @@ const CustomerOnlineShopProducts: React.FC<CustomerOnlineShopProductsProps> = ({
                     price: payload.price,
                     is_featured: payload.is_featured,
                     personalization_enabled: payload.personalization_enabled,
+                    is_active: payload.is_active,
                     sort_order: payload.sort_order,
                     manufacturer_info: updates.manufacturer_info,
                     description: updates.description,

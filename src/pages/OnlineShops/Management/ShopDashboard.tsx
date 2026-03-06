@@ -652,9 +652,9 @@ const ShopDashboard: React.FC = () => {
                                         <ImageIcon size={20} className="text-slate-400" />
                                     </div>
                                     <div>
-                                        <h4 className={`font-bold ${sp.is_active === false ? 'text-slate-400' : 'text-slate-800'}`}>
+                                        <h4 className={`font-bold ${(sp.is_active === false || sp.is_active === 0) ? 'text-slate-400' : 'text-slate-800'}`}>
                                             {sp.product_name}
-                                            {sp.is_active === false && (
+                                            {(sp.is_active === false || sp.is_active === 0) && (
                                                 <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold uppercase">
                                                     Inaktiv
                                                 </span>
