@@ -134,6 +134,7 @@ export interface Shop {
   paypal_config?: any;
   order_number_circle?: string;
   next_order_number?: number;
+  hero_images?: string[]; // New field for hero slider
   created_at: string;
 }
 

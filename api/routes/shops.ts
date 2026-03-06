@@ -35,6 +35,7 @@ router.get('/:id', (req, res) => {
     // Parse JSON fields
     if (shop.dhl_config) shop.dhl_config = JSON.parse(shop.dhl_config);
     if (shop.paypal_config) shop.paypal_config = JSON.parse(shop.paypal_config);
+    if (shop.hero_images) shop.hero_images = JSON.parse(shop.hero_images);
 
     res.json({ success: true, data: shop });
   } catch (error: any) {
@@ -276,17 +277,21 @@ router.put('/:id', (req, res) => {
         name, domain_slug, logo_url, 
         primary_color, secondary_color, template, 
         dhl_config, paypal_config,
-        order_number_circle, next_order_number
+        order_number_circle, next_order_number,
+        hero_images
     } = req.body;
 
-    db.prepare(`
+    const query = `
       UPDATE shops 
       SET name = ?, domain_slug = ?, logo_url = ?, 
           primary_color = ?, secondary_color = ?, template = ?, 
           dhl_config = ?, paypal_config = ?,
-          order_number_circle = ?, next_order_number = ?
+          order_number_circle = ?, next_order_number = ?,
+          hero_images = ?
       WHERE id = ?
-    `).run(
+    `;
+
+    db.prepare(query).run(
       name,
       domain_slug,
       logo_url,
@@ -297,6 +302,7 @@ router.put('/:id', (req, res) => {
       paypal_config ? JSON.stringify(paypal_config) : null,
       order_number_circle || null,
       next_order_number || 1,
+      hero_images ? JSON.stringify(hero_images) : null,
       id
     );
 

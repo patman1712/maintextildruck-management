@@ -694,6 +694,66 @@ const ShopDashboard: React.FC = () => {
                             </div>
                         )}
                     </div>
+                    
+                    <div className="pt-6 border-t border-slate-200">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Hero Bilder (Slider)</label>
+                        <p className="text-xs text-slate-500 mb-4">Laden Sie hier Bilder für den Slider auf der Startseite hoch. Drag & Drop zum Sortieren (bald verfügbar).</p>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                            {shop.hero_images && shop.hero_images.map((img, idx) => (
+                                <div key={idx} className="relative group aspect-video bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
+                                    <img src={img} alt={`Hero ${idx + 1}`} className="w-full h-full object-cover" />
+                                    <button 
+                                        onClick={() => {
+                                            const newImages = [...(shop.hero_images || [])];
+                                            newImages.splice(idx, 1);
+                                            setShop({ ...shop, hero_images: newImages });
+                                        }}
+                                        className="absolute top-2 right-2 p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
+                            ))}
+                            
+                            <label className="border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center p-4 cursor-pointer hover:bg-slate-50 hover:border-slate-400 transition-all aspect-video">
+                                <Plus size={24} className="text-slate-400 mb-2" />
+                                <span className="text-xs text-slate-500 font-medium">Bild hinzufügen</span>
+                                <input 
+                                    type="file" 
+                                    className="hidden" 
+                                    accept="image/*"
+                                    multiple
+                                    onChange={async (e) => {
+                                        if (!e.target.files || e.target.files.length === 0) return;
+                                        
+                                        const formData = new FormData();
+                                        Array.from(e.target.files).forEach(file => {
+                                            formData.append('preview', file);
+                                        });
+                                        
+                                        try {
+                                            const res = await fetch('/api/upload', {
+                                                method: 'POST',
+                                                body: formData
+                                            });
+                                            const data = await res.json();
+                                            if (data.success && data.files && data.files.preview) {
+                                                const newUrls = data.files.preview.map((f: any) => f.thumbnail || f.path);
+                                                setShop({ 
+                                                    ...shop, 
+                                                    hero_images: [...(shop.hero_images || []), ...newUrls] 
+                                                });
+                                            }
+                                        } catch (err) {
+                                            console.error(err);
+                                            alert('Fehler beim Hochladen.');
+                                        }
+                                    }}
+                                />
+                            </label>
+                        </div>
+                    </div>
                 </div>
             )}
 

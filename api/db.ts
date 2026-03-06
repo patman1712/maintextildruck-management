@@ -677,6 +677,14 @@ try {
     db.exec('ALTER TABLE order_items ADD COLUMN price DECIMAL(10, 2)');
   }
 
+  // Migration for Shop Hero Images (Slider)
+  const shopColsHero = db.prepare("PRAGMA table_info(shops)").all() as any[];
+  const hasHeroImages = shopColsHero.some(col => col.name === 'hero_images');
+  if (!hasHeroImages) {
+    console.log('Migrating database: Adding hero_images to shops table');
+    db.exec('ALTER TABLE shops ADD COLUMN hero_images TEXT'); // JSON array of image URLs
+  }
+
   // Migration: Fix file types for shop images
   // Previously all files were 'print'. We want shop images to be 'view'.
   // We assume all files currently assigned to shops are images.
