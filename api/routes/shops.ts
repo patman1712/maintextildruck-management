@@ -99,9 +99,11 @@ router.get('/:id/products', (req, res) => {
       FROM shop_product_assignments spa
       JOIN customer_products cp ON spa.product_id = cp.id
       LEFT JOIN shop_categories sc ON spa.category_id = sc.id
-      WHERE spa.shop_id = ? AND spa.is_active = 1
+      WHERE spa.shop_id = ? AND (spa.is_active = 1 OR spa.is_active IS NULL)
       ORDER BY spa.sort_order ASC, cp.name ASC
     `).all(shopId) as any[];
+
+    console.log(`Fetched ${products.length} active products for shop ${shopId}`);
 
     // Fetch files for these products.
     // Logic: Use shop_product_images if available, otherwise fallback to customer_product_files.
