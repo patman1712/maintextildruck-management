@@ -93,7 +93,7 @@ router.get('/:shopId/products', (req, res) => {
   try {
     const { shopId } = req.params;
     const products = db.prepare(`
-      SELECT spa.*, cp.name as product_name, cp.product_number, cp.manufacturer_info, cp.description, cp.size, cp.weight, cp.color, sc.name as category_name
+      SELECT spa.*, cp.name as product_name, cp.product_number, cp.manufacturer_info, cp.description, cp.size, cp.weight, cp.color, sc.name as category_name, sc.slug as category_slug
       FROM shop_product_assignments spa
       JOIN customer_products cp ON spa.product_id = cp.id
       LEFT JOIN shop_categories sc ON spa.category_id = sc.id
@@ -169,7 +169,7 @@ router.put('/:shopId/products/:id', (req, res) => {
     // Update assignment
     db.prepare(`
       UPDATE shop_product_assignments 
-      SET category_id = ?, price = ?, is_featured = ?, personalization_enabled = ?, sort_order = ?, variants = ?, personalization_options = ?
+      SET category_id = ?, price = ?, is_featured = ?, personalization_enabled = ?, sort_order = ?, variants = ?, personalization_options = ?, is_active = ?, supplier_id = ?
       WHERE id = ?
     `).run(
         category_id, 
@@ -179,6 +179,8 @@ router.put('/:shopId/products/:id', (req, res) => {
         sort_order, 
         variants ? JSON.stringify(variants) : null, 
         personalization_options ? JSON.stringify(personalization_options) : null,
+        req.body.is_active === false ? 0 : 1, // Default to true if undefined
+        req.body.supplier_id || null,
         id
     );
 

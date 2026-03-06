@@ -99,7 +99,7 @@ router.get('/:id/products', (req, res) => {
       FROM shop_product_assignments spa
       JOIN customer_products cp ON spa.product_id = cp.id
       LEFT JOIN shop_categories sc ON spa.category_id = sc.id
-      WHERE spa.shop_id = ?
+      WHERE spa.shop_id = ? AND spa.is_active = 1
       ORDER BY spa.sort_order ASC, cp.name ASC
     `).all(shopId) as any[];
 

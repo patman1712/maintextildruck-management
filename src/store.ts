@@ -158,6 +158,8 @@ export interface ShopProductAssignment {
   sort_order: number;
   weight?: number;
   variants?: string; // JSON string storing variant config: { "Size": { "S": { price: 10 }, "M": { price: 10 } }, "Color": ... }
+  is_active: boolean; // NEW
+  supplier_id?: string; // NEW
 }
 
 interface AppState {

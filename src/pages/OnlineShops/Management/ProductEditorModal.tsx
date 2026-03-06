@@ -31,8 +31,21 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     manufacturer_info: assignment?.manufacturer_info || '',
     size: assignment?.size || '', 
     weight: assignment?.weight || 0,
-    variants: assignment?.variants ? (typeof assignment.variants === 'string' ? JSON.parse(assignment.variants) : assignment.variants) : {}
+    variants: assignment?.variants ? (typeof assignment.variants === 'string' ? JSON.parse(assignment.variants) : assignment.variants) : {},
+    is_active: assignment?.is_active !== false, // Default to true if undefined
+    supplier_id: assignment?.supplier_id || ''
   });
+  
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/suppliers')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) setSuppliers(data.data);
+        })
+        .catch(console.error);
+  }, []);
 
   // Edit Data for Existing Product (Edit Mode)
   const [editData, setEditData] = useState({
@@ -676,6 +689,38 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                         </div>
                     </div>
                 )}
+
+                {/* Status & Supplier */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Status im Shop</label>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                className="sr-only peer" 
+                                checked={formData.is_active}
+                                onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
+                            />
+                            <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${formData.is_active ? 'peer-checked:bg-green-600' : ''}`}></div>
+                            <span className={`ml-3 text-sm font-medium ${formData.is_active ? 'text-green-600' : 'text-slate-500'}`}>
+                                {formData.is_active ? 'Aktiv (Sichtbar)' : 'Deaktiviert (Versteckt)'}
+                            </span>
+                        </label>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Lieferant</label>
+                        <select 
+                            className="w-full border border-slate-300 rounded p-2 text-sm"
+                            value={formData.supplier_id}
+                            onChange={(e) => setFormData({...formData, supplier_id: e.target.value})}
+                        >
+                            <option value="">Kein Lieferant gewählt</option>
+                            {suppliers.map(s => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
 
                 {/* Price & Weight */}
                 <div className="grid grid-cols-2 gap-4">

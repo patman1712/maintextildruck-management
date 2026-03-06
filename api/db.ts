@@ -276,6 +276,24 @@ db.exec(`
   )
 `);
 
+// Migration for is_active and supplier_id
+try {
+    const shopProductAssignmentCols = db.prepare("PRAGMA table_info(shop_product_assignments)").all() as any[];
+    const hasIsActive = shopProductAssignmentCols.some(col => col.name === 'is_active');
+    if (!hasIsActive) {
+        console.log('Migrating database: Adding is_active to shop_product_assignments table');
+        db.exec('ALTER TABLE shop_product_assignments ADD COLUMN is_active BOOLEAN DEFAULT 1');
+    }
+
+    const hasSupplierId = shopProductAssignmentCols.some(col => col.name === 'supplier_id');
+    if (!hasSupplierId) {
+        console.log('Migrating database: Adding supplier_id to shop_product_assignments table');
+        db.exec('ALTER TABLE shop_product_assignments ADD COLUMN supplier_id TEXT');
+    }
+} catch (error) {
+    console.error('Migration error (is_active/supplier_id):', error);
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS shop_product_images (
     id TEXT PRIMARY KEY,
