@@ -696,6 +696,16 @@ const ShopDashboard: React.FC = () => {
                     </div>
                     
                     <div className="pt-6 border-t border-slate-200">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Willkommenstext (Startseite)</label>
+                        <textarea
+                            className="w-full border border-slate-300 rounded-lg p-2 min-h-[100px]"
+                            value={shop.welcome_text || ''}
+                            onChange={(e) => setShop({ ...shop, welcome_text: e.target.value })}
+                            placeholder="Ein kurzer Text, der unter dem Slider angezeigt wird..."
+                        />
+                    </div>
+
+                    <div className="pt-6 border-t border-slate-200">
                         <label className="block text-sm font-medium text-slate-700 mb-2">Hero Bilder (Slider)</label>
                         <p className="text-xs text-slate-500 mb-4">Laden Sie hier Bilder für den Slider auf der Startseite hoch. Drag & Drop zum Sortieren (bald verfügbar).</p>
                         

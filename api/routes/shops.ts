@@ -358,7 +358,8 @@ router.put('/:id', (req, res) => {
         primary_color, secondary_color, template, 
         dhl_config, paypal_config,
         order_number_circle, next_order_number,
-        hero_images
+        hero_images,
+        welcome_text
     } = req.body;
 
     const query = `
@@ -367,7 +368,8 @@ router.put('/:id', (req, res) => {
           primary_color = ?, secondary_color = ?, template = ?, 
           dhl_config = ?, paypal_config = ?,
           order_number_circle = ?, next_order_number = ?,
-          hero_images = ?
+          hero_images = ?,
+          welcome_text = ?
       WHERE id = ?
     `;
 
@@ -383,6 +385,7 @@ router.put('/:id', (req, res) => {
       order_number_circle || null,
       next_order_number || 1,
       hero_images ? JSON.stringify(hero_images) : null,
+      welcome_text || null,
       id
     );
 

@@ -685,6 +685,14 @@ try {
     db.exec('ALTER TABLE shops ADD COLUMN hero_images TEXT'); // JSON array of image URLs
   }
 
+  // Migration for Welcome Text
+  const shopColsWelcome = db.prepare("PRAGMA table_info(shops)").all() as any[];
+  const hasWelcomeText = shopColsWelcome.some(col => col.name === 'welcome_text');
+  if (!hasWelcomeText) {
+    console.log('Migrating database: Adding welcome_text to shops table');
+    db.exec('ALTER TABLE shops ADD COLUMN welcome_text TEXT');
+  }
+
   // Migration: Fix file types for shop images
   // Previously all files were 'print'. We want shop images to be 'view'.
   // We assume all files currently assigned to shops are images.

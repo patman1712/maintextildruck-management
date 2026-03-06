@@ -135,6 +135,7 @@ export interface Shop {
   order_number_circle?: string;
   next_order_number?: number;
   hero_images?: string[]; // New field for hero slider
+  welcome_text?: string; // New field for welcome text
   created_at: string;
 }
 

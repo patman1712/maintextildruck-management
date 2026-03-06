@@ -116,6 +116,17 @@ const ShopHome: React.FC = () => {
         </div>
       </div>
 
+      {/* Welcome Text Section */}
+      {shop.welcome_text && (
+          <div className="container mx-auto px-4 py-12 text-center border-b border-slate-100">
+              <div className="max-w-4xl mx-auto prose prose-lg prose-slate">
+                  <p className="text-xl text-slate-700 leading-relaxed whitespace-pre-line font-medium">
+                      {shop.welcome_text}
+                  </p>
+              </div>
+          </div>
+      )}
+
       {/* Product Grid */}
       <main className="container mx-auto px-4 py-16 flex-grow">
         <div className="flex items-end justify-between mb-8">
