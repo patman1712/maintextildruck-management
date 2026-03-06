@@ -475,6 +475,107 @@ const ShopLayout: React.FC = () => {
       )}
 
       {/* Mobile Menu */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-[100] lg:hidden">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setMobileMenuOpen(false)} />
+            <div className="absolute inset-y-0 left-0 w-[80%] max-w-sm bg-white shadow-2xl flex flex-col animate-in slide-in-from-left duration-300">
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                    <span className="font-black uppercase italic text-xl" style={{ color: primaryColor }}>{shop.name}</span>
+                    <button onClick={() => setMobileMenuOpen(false)} className="p-2 hover:bg-slate-100 rounded-full">
+                        <X size={24} className="text-slate-500" />
+                    </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto py-4">
+                    <nav className="space-y-1 px-2">
+                        {topLevelCategories.map(cat => {
+                            const subCats = getSubCategories(cat.id);
+                            const hasSub = subCats.length > 0;
+                            const isExpanded = hoveredCategory === cat.id; // Reuse state or add new one for mobile accordion
+
+                            return (
+                                <div key={cat.id} className="space-y-1">
+                                    <div className="flex items-center justify-between px-4 py-3 rounded-lg hover:bg-slate-50">
+                                        <Link 
+                                            to={`${shopBaseUrl}/category/${cat.slug}`}
+                                            onClick={() => setMobileMenuOpen(false)}
+                                            className="font-bold text-slate-800 flex-1"
+                                        >
+                                            {cat.name}
+                                        </Link>
+                                        {hasSub && (
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    setHoveredCategory(hoveredCategory === cat.id ? null : cat.id);
+                                                }}
+                                                className="p-2 -mr-2 text-slate-400"
+                                            >
+                                                <ChevronDown size={16} className={`transition-transform ${hoveredCategory === cat.id ? 'rotate-180' : ''}`} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    
+                                    {/* Subcategories Accordion */}
+                                    {hasSub && hoveredCategory === cat.id && (
+                                        <div className="pl-4 pr-2 space-y-1 bg-slate-50 py-2 rounded-lg mx-2">
+                                            {subCats.map(sub => (
+                                                <Link 
+                                                    key={sub.id}
+                                                    to={`${shopBaseUrl}/category/${sub.slug}`}
+                                                    onClick={() => setMobileMenuOpen(false)}
+                                                    className="block px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 rounded-md hover:bg-slate-100/50"
+                                                >
+                                                    {sub.name}
+                                                </Link>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                        
+                        {!topLevelCategories.length && (
+                             <div className="px-4 py-4 text-center text-slate-400 italic">
+                                Keine Kategorien
+                             </div>
+                        )}
+                    </nav>
+
+                    <div className="mt-6 px-4 pt-6 border-t border-slate-100 space-y-2">
+                        <Link to={`${shopBaseUrl}/new`} onClick={() => setMobileMenuOpen(false)} className="block px-4 py-3 font-bold text-slate-700 hover:bg-slate-50 rounded-lg">Neuheiten</Link>
+                        <Link to={`${shopBaseUrl}/sale`} onClick={() => setMobileMenuOpen(false)} className="block px-4 py-3 font-bold text-red-600 hover:bg-red-50 rounded-lg">Sale</Link>
+                    </div>
+                </div>
+
+                <div className="p-4 border-t border-slate-100 bg-slate-50">
+                    {currentCustomer ? (
+                        <div className="space-y-2">
+                            <div className="flex items-center space-x-3 px-4 py-2">
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style={{ backgroundColor: primaryColor }}>
+                                    {currentCustomer.first_name?.charAt(0)}{currentCustomer.last_name?.charAt(0)}
+                                </div>
+                                <span className="font-bold text-slate-700">{currentCustomer.first_name}</span>
+                            </div>
+                            <Link to={`${shopBaseUrl}/profile`} onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Profil</Link>
+                            <Link to={`${shopBaseUrl}/orders`} onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Bestellungen</Link>
+                            <button onClick={() => { logout(); setMobileMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-red-600 font-bold hover:bg-red-50 rounded-lg">Abmelden</button>
+                        </div>
+                    ) : (
+                        <Link 
+                            to={`${shopBaseUrl}/login`} 
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="flex items-center justify-center w-full px-4 py-3 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 transition-colors"
+                        >
+                            <User size={18} className="mr-2" />
+                            Anmelden / Registrieren
+                        </Link>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
+
       <Outlet context={{ shop, categories, primaryColor, secondaryColor }} />
 
       {/* Footer */}
