@@ -633,12 +633,24 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                  }
             }
 
+            // Remove size from item name if it's there (to avoid "Jako Kindergrößen 128 | 128")
+            // Also remove phrases like "Jako Kindergrößen" or "Jako Erwachsenengrößen"
+            let cleanItemName = item.itemName;
+            
+            // Remove specific unwanted phrases
+            cleanItemName = cleanItemName.replace(/Jako\s+(Kindergrößen|Erwachsenengrößen|Damen|Herren)/gi, '').trim();
+            
+            // Remove size if it's at the end of the name
+            if (cleanSize && cleanItemName.endsWith(cleanSize)) {
+                cleanItemName = cleanItemName.substring(0, cleanItemName.length - cleanSize.length).trim();
+            }
+
             const sizeDisplay = item.quantity > 1 
                 ? `${item.quantity}x ${cleanSize}` 
                 : (cleanSize && !/^\d+x/.test(cleanSize) ? `1x ${cleanSize}` : cleanSize);
             
-             // Use cleanItemNumber if available, otherwise fallback to itemName
-             const identifier = cleanItemNumber ? cleanItemNumber : item.itemName;
+             // Use cleanItemNumber if available, otherwise fallback to cleaned itemName
+             const identifier = cleanItemNumber ? cleanItemNumber : cleanItemName;
             
             body += `${identifier} | ${sizeDisplay} ${item.color ? `| ${item.color}` : ''}\n`;
         });
