@@ -262,7 +262,7 @@ router.post('/:shopId/orders', async (req, res) => {
         totalAmount,
         shippingCosts,
         paymentMethod,
-        paymentStatus || 'pending',
+        paymentStatus || 'open', // Default to 'open' instead of 'pending'
         transactionId || null,
         'active',
         new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() // Default 14 days
@@ -320,13 +320,20 @@ router.get('/:shopId/admin/orders', (req, res) => {
 router.put('/:shopId/admin/orders/:orderId/status', (req, res) => {
   try {
     const { orderId } = req.params;
-    const { status } = req.body;
+    const { status, payment_status } = req.body;
 
-    if (!status) {
-        return res.status(400).json({ success: false, error: 'Status ist erforderlich.' });
+    if (!status && !payment_status) {
+        return res.status(400).json({ success: false, error: 'Status oder Zahlstatus ist erforderlich.' });
     }
 
-    db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, orderId);
+    if (status) {
+        db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, orderId);
+    }
+
+    if (payment_status) {
+        db.prepare('UPDATE orders SET payment_status = ? WHERE id = ?').run(payment_status, orderId);
+    }
+
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

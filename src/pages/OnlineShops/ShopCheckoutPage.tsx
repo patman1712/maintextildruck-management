@@ -124,7 +124,7 @@ const ShopCheckoutPage: React.FC = () => {
           items: cart,
           address,
           paymentMethod,
-          paymentStatus: transactionId ? 'paid' : 'pending',
+          paymentStatus: transactionId ? 'paid' : 'open',
           transactionId,
           totalAmount: total,
           shippingCosts: shipping

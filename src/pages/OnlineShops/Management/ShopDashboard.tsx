@@ -281,6 +281,25 @@ const ShopDashboard: React.FC = () => {
     } catch (e) { console.error(e); }
   };
 
+  const handleUpdateOrderPaymentStatus = async (orderId: string, newStatus: string) => {
+    try {
+      const res = await fetch(`/api/shop-customers/${shopId}/admin/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_status: newStatus })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShopOrders(shopOrders.map(o => o.id === orderId ? { ...o, payment_status: newStatus } : o));
+        if (selectedOrder && selectedOrder.id === orderId) {
+            setSelectedOrder({ ...selectedOrder, payment_status: newStatus });
+        }
+      } else {
+        alert(data.error || 'Fehler beim Aktualisieren des Zahlstatus.');
+      }
+    } catch (e) { console.error(e); }
+  };
+
   const handleCreateShippingLabel = async (order: any) => {
     // 1. Calculate default weight on client side if possible
     let defaultWeight = 0.5;
@@ -812,6 +831,7 @@ const ShopDashboard: React.FC = () => {
                                     <th className="py-4 px-4 font-bold">Bestellung</th>
                                     <th className="py-4 px-4 font-bold">Kunde</th>
                                     <th className="py-4 px-4 font-bold">Status</th>
+                                    <th className="py-4 px-4 font-bold">Zahlstatus</th>
                                     <th className="py-4 px-4 font-bold">Betrag</th>
                                     <th className="py-4 px-4 font-bold">Datum</th>
                                     <th className="py-4 px-4 font-bold">Aktionen</th>
@@ -840,6 +860,19 @@ const ShopDashboard: React.FC = () => {
                                                 <option value="active">In Bearbeitung</option>
                                                 <option value="shipped">Versendet</option>
                                                 <option value="cancelled">Storniert</option>
+                                            </select>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            <select 
+                                                value={order.payment_status === 'pending' ? 'open' : (order.payment_status || 'open')} 
+                                                onChange={(e) => handleUpdateOrderPaymentStatus(order.id, e.target.value)}
+                                                className={`px-2 py-1 rounded text-[10px] font-black uppercase outline-none cursor-pointer border-transparent hover:border-slate-200 transition-all ${
+                                                    order.payment_status === 'paid' ? 'bg-green-50 text-green-600' : 
+                                                    'bg-yellow-50 text-yellow-600'
+                                                }`}
+                                            >
+                                                <option value="open">Offen</option>
+                                                <option value="paid">Komplett bezahlt</option>
                                             </select>
                                         </td>
                                         <td className="py-4 px-4 font-bold text-slate-800">
@@ -1163,6 +1196,20 @@ const ShopDashboard: React.FC = () => {
                                 <div className="flex justify-between items-center">
                                     <span className="text-sm text-slate-500 font-medium">Zahlungsmethode:</span>
                                     <span className="font-bold text-slate-800">{selectedOrder.payment_method}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm text-slate-500 font-medium">Zahlstatus:</span>
+                                    <select 
+                                        value={selectedOrder.payment_status === 'pending' ? 'open' : (selectedOrder.payment_status || 'open')} 
+                                        onChange={(e) => handleUpdateOrderPaymentStatus(selectedOrder.id, e.target.value)}
+                                        className={`px-3 py-1 rounded-full text-[10px] font-black uppercase outline-none cursor-pointer ${
+                                            selectedOrder.payment_status === 'paid' ? 'bg-green-100 text-green-700' : 
+                                            'bg-yellow-100 text-yellow-700'
+                                        }`}
+                                    >
+                                        <option value="open">Offen</option>
+                                        <option value="paid">Komplett bezahlt</option>
+                                    </select>
                                 </div>
                                 <div className="flex justify-between items-center">
                                     <span className="text-sm text-slate-500 font-medium">Status:</span>
