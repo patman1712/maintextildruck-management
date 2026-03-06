@@ -45,21 +45,26 @@ router.get('/:id', (req, res) => {
     if (shop.paypal_config) shop.paypal_config = JSON.parse(shop.paypal_config);
     if (shop.hero_images) shop.hero_images = JSON.parse(shop.hero_images);
 
-    // Merge Global Content (Footer/Legal) - Always overwrite shop specific fields as requested
-    const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
-    if (globalContent) {
-        // List of fields to overwrite
-        const contentFields = [
-            'footer_logo_url', 'contact_phone', 'contact_email', 'contact_address', 'opening_hours',
-            'social_instagram', 'social_tiktok', 'social_whatsapp',
-            'impressum_text', 'privacy_text', 'agb_text', 'revocation_text', 'shipping_info_text', 'about_us_text', 'contact_text'
-        ];
-        
-        contentFields.forEach(field => {
-            if (globalContent[field]) {
-                shop[field] = globalContent[field];
-            }
-        });
+    // Merge Global Content (Footer/Legal)
+    try {
+        const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
+        if (globalContent) {
+            // List of fields to overwrite
+            const contentFields = [
+                'footer_logo_url', 'contact_phone', 'contact_email', 'contact_address', 'opening_hours',
+                'social_instagram', 'social_tiktok', 'social_whatsapp',
+                'impressum_text', 'privacy_text', 'agb_text', 'revocation_text', 'shipping_info_text', 'about_us_text', 'contact_text'
+            ];
+            
+            contentFields.forEach(field => {
+                if (globalContent[field]) {
+                    shop[field] = globalContent[field];
+                }
+            });
+        }
+    } catch (e) {
+        console.error('Error fetching global content:', e);
+        // Continue without global content if table is missing or error occurs
     }
 
     res.json({ success: true, data: shop });

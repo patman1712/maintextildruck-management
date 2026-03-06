@@ -765,7 +765,38 @@ try {
       paypal_mode TEXT DEFAULT 'sandbox', -- 'sandbox' or 'live'
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    -- Global Shop Content (Footer & Legal)
+    CREATE TABLE IF NOT EXISTS global_shop_content (
+      id TEXT PRIMARY KEY DEFAULT 'main',
+      footer_logo_url TEXT,
+      contact_phone TEXT,
+      contact_email TEXT,
+      contact_address TEXT,
+      opening_hours TEXT,
+      social_instagram TEXT,
+      social_tiktok TEXT,
+      social_whatsapp TEXT,
+      impressum_text TEXT,
+      privacy_text TEXT,
+      agb_text TEXT,
+      revocation_text TEXT,
+      shipping_info_text TEXT,
+      about_us_text TEXT,
+      contact_text TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
+
+  // Ensure default row for global content
+  try {
+      const row = db.prepare("SELECT id FROM global_shop_content WHERE id = 'main'").get();
+      if (!row) {
+          db.prepare("INSERT INTO global_shop_content (id) VALUES ('main')").run();
+      }
+  } catch (e) {
+      console.error('Error ensuring default global content row:', e);
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }
