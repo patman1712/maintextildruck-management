@@ -645,6 +645,16 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                 cleanItemName = cleanItemName.substring(0, cleanItemName.length - cleanSize.length).trim();
             }
 
+            // CLEAN COLOR: Remove unwanted phrases from color field as well
+            let cleanColor = item.color || '';
+            cleanColor = cleanColor.replace(/Jako\s+(Kindergrößen|Erwachsenengrößen|Damen|Herren)/gi, '').trim();
+            // Also remove size from color if present (e.g. "128")
+            if (cleanSize && cleanColor.includes(cleanSize)) {
+                cleanColor = cleanColor.replace(cleanSize, '').trim();
+            }
+            // Remove trailing pipes or separators if any
+            cleanColor = cleanColor.replace(/^[|\s]+|[|\s]+$/g, '');
+
             const sizeDisplay = item.quantity > 1 
                 ? `${item.quantity}x ${cleanSize}` 
                 : (cleanSize && !/^\d+x/.test(cleanSize) ? `1x ${cleanSize}` : cleanSize);
@@ -652,7 +662,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
              // Use cleanItemNumber if available, otherwise fallback to cleaned itemName
              const identifier = cleanItemNumber ? cleanItemNumber : cleanItemName;
             
-            body += `${identifier} | ${sizeDisplay} ${item.color ? `| ${item.color}` : ''}\n`;
+            body += `${identifier} | ${sizeDisplay} ${cleanColor ? `| ${cleanColor}` : ''}\n`;
         });
         body += `\n`;
     });
