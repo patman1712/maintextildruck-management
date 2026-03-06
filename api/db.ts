@@ -70,6 +70,7 @@ db.exec(`
     path TEXT NOT NULL,       -- URL/Path
     type TEXT NOT NULL,       -- print, vector, preview
     thumbnail TEXT,
+    status TEXT DEFAULT 'active', -- NEW: status column
     print_status TEXT DEFAULT 'pending', -- pending, ordered, completed
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -477,6 +478,12 @@ try {
   if (!hasThumbnailFile) {
       console.log('Migrating database: Adding thumbnail to files table');
       db.exec("ALTER TABLE files ADD COLUMN thumbnail TEXT");
+  }
+
+  const hasStatusFile = fileColumns.some(col => col.name === 'status');
+  if (!hasStatusFile) {
+      console.log('Migrating database: Adding status to files table');
+      db.exec("ALTER TABLE files ADD COLUMN status TEXT DEFAULT 'active'");
   }
 
   const customerProductCols = db.prepare("PRAGMA table_info(customer_products)").all() as any[];
