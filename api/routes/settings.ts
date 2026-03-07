@@ -8,8 +8,62 @@ import nodemailer from 'nodemailer';
 import dns from 'dns';
 import net from 'net';
 import tls from 'tls';
+import { exec } from 'child_process';
+import { fileURLToPath } from 'url';
 
 const router = Router();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Helper to run a standalone script for SMTP testing
+// This bypasses any weird networking/event-loop issues in the main process
+const runStandaloneTest = (config: any): Promise<any> => {
+    return new Promise((resolve, reject) => {
+        const scriptContent = `
+const nodemailer = require('nodemailer');
+
+async function test() {
+    console.log('--- Standalone Test ---');
+    const config = ${JSON.stringify(config)};
+    
+    try {
+        const transporter = nodemailer.createTransport(config);
+        console.log('Verifying connection...');
+        await transporter.verify();
+        console.log('VERIFY_SUCCESS');
+        
+        console.log('Sending mail...');
+        await transporter.sendMail({
+            from: config.sender_email,
+            to: config.test_email,
+            subject: 'Test Email - System Einstellungen',
+            text: 'Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.\\n\\nErfolgreich gesendet!',
+            html: '<h3>SMTP Test erfolgreich!</h3><p>Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.</p>'
+        });
+        console.log('SEND_SUCCESS');
+    } catch (err) {
+        console.log('ERROR: ' + err.message);
+        console.log('CODE: ' + err.code);
+        process.exit(1);
+    }
+}
+test();
+`;
+        const scriptPath = path.join(__dirname, `../../smtp-test-${Date.now()}.cjs`);
+        fs.writeFileSync(scriptPath, scriptContent);
+
+        exec(`node "${scriptPath}"`, (error, stdout, stderr) => {
+            fs.unlinkSync(scriptPath); // Clean up
+            
+            const logs = stdout.split('\n').filter(l => l.trim() !== '');
+            
+            if (stdout.includes('SEND_SUCCESS')) {
+                resolve({ success: true, logs });
+            } else {
+                reject({ success: false, error: stdout + stderr, logs });
+            }
+        });
+    });
+};
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -192,12 +246,6 @@ router.put('/email-config', (req, res) => {
 
 // POST /api/settings/email-config/test
 router.post('/email-config/test', async (req: Request, res: Response) => {
-    let logs: string[] = [];
-    const log = (msg: string) => {
-        console.log(`[SMTP Debug] ${msg}`);
-        logs.push(msg);
-    };
-
     try {
         const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_email, test_email, ignore_certs } = req.body;
 
@@ -205,10 +253,7 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: 'Bitte alle SMTP-Felder und eine Test-Empfänger-Adresse ausfüllen.' });
         }
 
-        log(`Starting Test: ${smtp_host}:${smtp_port} | User: ${smtp_user} | Secure: ${smtp_secure}`);
-
-        // SIMPLE & DIRECT APPROACH (Mirrors successful debug script)
-        const transportConfig = {
+        const config = {
             host: smtp_host.trim(),
             port: Number(smtp_port),
             secure: Boolean(smtp_secure),
@@ -217,53 +262,24 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
                 pass: smtp_pass
             },
             tls: {
-                // Critical for shared hosts like Kasserver
-                servername: smtp_host.trim(), 
-                // Allow self-signed or expired certs if requested
+                servername: smtp_host.trim(),
                 rejectUnauthorized: !Boolean(ignore_certs),
-                // Allow older TLS versions if needed
                 minVersion: 'TLSv1'
             },
-            // timeouts
             connectionTimeout: 10000,
             greetingTimeout: 10000,
             socketTimeout: 15000,
-            logger: true,
-            debug: true
+            sender_email, // passed for the script to use
+            test_email    // passed for the script to use
         };
 
-        log('Creating transport with config: ' + JSON.stringify({ ...transportConfig, auth: { user: smtp_user, pass: '***' } }, null, 2));
+        // Run via child process to ensure clean environment
+        const result = await runStandaloneTest(config);
+        res.json({ success: true, message: 'Verbindung erfolgreich & Test-Email gesendet!', logs: result.logs });
 
-        const transporter = nodemailer.createTransport(transportConfig as any);
-
-        log('Verifying connection...');
-        await transporter.verify();
-        log('Connection verified successfully!');
-
-        log('Sending test mail...');
-        await transporter.sendMail({
-            from: sender_email,
-            to: test_email,
-            subject: 'Test Email - System Einstellungen',
-            text: 'Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.\n\nErfolgreich gesendet!',
-            html: '<h3>SMTP Test erfolgreich!</h3><p>Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.</p>'
-        });
-        log('Mail sent successfully.');
-
-        res.json({ success: true, message: 'Verbindung erfolgreich & Test-Email gesendet!', logs });
     } catch (error: any) {
-        log(`Error: ${error.message}`);
-        
-        let errorMessage = error.message;
-        if (error.code === 'ETIMEDOUT') {
-            errorMessage = 'Zeitüberschreitung: Der Server konnte unter diesem Host/Port nicht erreicht werden. (Firewall?)';
-        } else if (error.code === 'EAUTH') {
-            errorMessage = 'Authentifizierung fehlgeschlagen: Benutzername oder Passwort falsch.';
-        } else if (error.code === 'ESOCKET') {
-            errorMessage = 'Verbindungsfehler: SSL/TLS Handshake fehlgeschlagen.';
-        }
-
-        res.status(500).json({ success: false, error: errorMessage, logs });
+        console.error('SMTP Test Failed:', error);
+        res.status(500).json({ success: false, error: 'Fehler beim Senden: ' + (error.error || error.message), logs: error.logs });
     }
 });
 
