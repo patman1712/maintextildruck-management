@@ -157,8 +157,25 @@ const ShopDashboard: React.FC = () => {
 
   const handleSaveGeneral = async () => {
     if (!shop) return;
-    await updateShop(shop.id, shop);
-    alert('Gespeichert!');
+    try {
+      const res = await fetch(`/api/shops/${shop.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(shop)
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Force update the shop in the store AND local state to match backend
+        await updateShop(shop.id, data.data);
+        setShop(data.data); // CRITICAL: Update local state with response from server
+        alert('Gespeichert!');
+      } else {
+        alert('Fehler beim Speichern: ' + data.error);
+      }
+    } catch (e: any) {
+        console.error(e);
+        alert('Fehler: ' + e.message);
+    }
   };
 
   const handleAddCategory = async () => {
