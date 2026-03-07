@@ -7,11 +7,7 @@ import db, { DATA_DIR } from '../db.js';
 const INVOICE_DIR = path.join(DATA_DIR, 'invoices');
 fs.ensureDirSync(INVOICE_DIR);
 
-interface InvoiceData {
-    orderId: string;
-    shopId: string;
-    customerId: string;
-}
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
 export const generateInvoice = async (orderId: string): Promise<string | null> => {
     try {
@@ -59,29 +55,51 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         // --- Header ---
         
         // Shop Logo (Left)
-        if (shop.logo_url) {
+        // Logic: Prefer email_logo_url, then logo_url
+        const logoUrl = shop.email_logo_url || shop.logo_url;
+        let logoAdded = false;
+
+        if (logoUrl) {
             try {
-                // Check if url is local path or http
-                // If it's a relative path from uploads, resolve it
-                // If it's http, we might need to fetch it.
-                // For simplicity, assume local path if it starts with /uploads
-                // But logo_url might be full URL in some cases?
-                // In db.ts migration, we didn't enforce path structure.
-                // But in ShopDashboard, we use /api/upload which returns path.
-                
-                let logoPath = shop.logo_url;
+                let logoPath = logoUrl;
+                let absolutePath = '';
+
                 if (logoPath.startsWith('http')) {
-                    // Skip remote images for now or fetch buffer (complex)
-                    // doc.addImage(logoPath, 'PNG', 20, 20, 40, 0); 
+                    // Skip remote images for now unless we implement fetching
+                    // If it's localhost, we might be able to map it?
+                    // Usually uploads are local.
                 } else {
                     // Local path
-                    // remove leading slash if present
-                    if (logoPath.startsWith('/')) logoPath = logoPath.substring(1);
-                    const absolutePath = path.join(process.cwd(), logoPath);
+                    // If starts with /uploads/, map to UPLOAD_DIR
+                    if (logoPath.startsWith('/uploads/')) {
+                        const filename = path.basename(logoPath);
+                        absolutePath = path.join(UPLOAD_DIR, filename);
+                    } else if (logoPath.startsWith('/')) {
+                        // Relative to root? or public?
+                        absolutePath = path.join(process.cwd(), logoPath);
+                    } else {
+                         // Relative?
+                         absolutePath = path.join(process.cwd(), logoPath);
+                    }
+
                     if (fs.existsSync(absolutePath)) {
-                         const ext = path.extname(absolutePath).slice(1).toUpperCase(); // PNG, JPG
+                         const ext = path.extname(absolutePath).slice(1).toUpperCase(); // PNG, JPG, JPEG
+                         // jspdf needs format.
+                         let format = ext;
+                         if (format === 'JPG') format = 'JPEG';
+                         
                          const imgData = fs.readFileSync(absolutePath);
-                         doc.addImage(imgData, ext, 20, 20, 40, 20, undefined, 'FAST');
+                         // Keep aspect ratio
+                         // We want max width 60, max height 30
+                         // We don't know dimensions easily without sharp/image-size.
+                         // jsPDF addImage(data, format, x, y, w, h)
+                         // If w/h are not provided, it uses default? No.
+                         // We'll set width 50, height auto (undefined) might not work in all versions.
+                         // Let's assume square or landscape.
+                         doc.addImage(imgData, format, 20, 15, 50, 0); // 0 height = auto keep aspect ratio
+                         logoAdded = true;
+                    } else {
+                        console.warn('Logo file not found at:', absolutePath);
                     }
                 }
             } catch (e) {
@@ -89,12 +107,14 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
             }
         }
 
-        // Main Textildruck Logo (Middle/Right) - Placeholder text if no image
-        doc.setFontSize(20);
-        doc.setTextColor(200, 0, 0); // Red
-        doc.text("MAIN", 80, 30);
-        doc.setTextColor(0, 0, 0);
-        doc.text("TEXTILDRUCK", 110, 30);
+        // Fallback Title if no logo
+        if (!logoAdded) {
+            doc.setFontSize(20);
+            doc.setTextColor(200, 0, 0); // Red
+            doc.text("MAIN", 20, 30);
+            doc.setTextColor(0, 0, 0);
+            doc.text("TEXTILDRUCK", 50, 30);
+        }
 
         // Company Info (Right)
         doc.setFontSize(9);
@@ -111,9 +131,7 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         doc.text(`Telefon ${globalContent.contact_phone || ''}`, companyX, companyY);
         companyY += 5;
         doc.text(globalContent.contact_email || '', companyX, companyY);
-        companyY += 5;
-        doc.text('maintextildruck.com', companyX, companyY); // Hardcoded or from DB?
-
+        
         companyY += 10;
         doc.text(`Kunden-Nr. ${customer?.customer_number || '-'}`, companyX, companyY);
         companyY += 5;
@@ -121,16 +139,29 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         companyY += 5;
         doc.text(`Bestelldatum ${new Date(order.created_at).toLocaleDateString('de-DE')}`, companyX, companyY);
         companyY += 5;
-        doc.text(`Datum ${new Date(invoiceDate).toLocaleDateString('de-DE')}`, companyX, companyY);
+        doc.text(`Rechnungsdatum ${new Date(invoiceDate).toLocaleDateString('de-DE')}`, companyX, companyY);
+        companyY += 5;
+        if (order.deadline) {
+             doc.text(`Lieferdatum ${new Date(order.deadline).toLocaleDateString('de-DE')}`, companyX, companyY);
+        }
 
-        // Sender Address (Left, small)
+        // Sender Address (Left, small, above address)
         doc.setFontSize(8);
-        doc.text(`${globalContent.company_name || 'Main Textildruck GmbH'} - ${globalContent.company_address || ''}`, 20, 60);
+        doc.text(`${globalContent.company_name || 'Main Textildruck GmbH'} - ${globalContent.company_address || ''}`, 20, 65);
+        
+        // Line under sender address
+        doc.setLineWidth(0.1);
+        doc.line(20, 67, 80, 67);
 
         // Delivery Address
         doc.setFontSize(10);
         const addressLines = (order.customer_address || '').split(',').map((s: string) => s.trim());
-        let addrY = 70;
+        let addrY = 75;
+        
+        if (order.company) {
+            doc.text(order.company, 20, addrY);
+            addrY += 5;
+        }
         doc.text(order.customer_name, 20, addrY);
         addrY += 5;
         // Split address nicely
@@ -145,20 +176,23 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         // Title
         doc.setFontSize(16);
         doc.setFont("helvetica", "bold");
-        doc.text(`Rechnungs-Nr. ${invoiceNumber}`, 20, 100);
+        doc.text(`Rechnung Nr. ${invoiceNumber}`, 20, 110);
+        
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text("Wir erlauben uns, Ihnen folgende Leistungen in Rechnung zu stellen:", 20, 120);
 
         // --- Table ---
-        let y = 110;
+        let y = 130;
         
         // Headers
         doc.setFontSize(9);
         doc.setFont("helvetica", "bold");
-        doc.text("Prod.-Nr.", 20, y);
-        doc.text("Produkt / Dienst", 60, y);
-        doc.text("Anzahl", 130, y, { align: 'right' });
-        doc.text("USt.", 150, y, { align: 'right' });
-        doc.text("Stückpreis", 175, y, { align: 'right' });
-        doc.text("Gesamt", 195, y, { align: 'right' });
+        doc.text("Pos.", 20, y);
+        doc.text("Bezeichnung", 40, y);
+        doc.text("Menge", 130, y, { align: 'right' });
+        doc.text("Einzelpreis", 160, y, { align: 'right' });
+        doc.text("Gesamtpreis", 195, y, { align: 'right' });
         
         doc.line(20, y + 2, 195, y + 2);
         y += 8;
@@ -167,20 +201,19 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         doc.setFont("helvetica", "normal");
         let subtotal = 0;
 
-        items.forEach((item) => {
+        items.forEach((item, index) => {
             const price = item.price || 0;
             const total = price * item.quantity;
             subtotal += total;
 
-            doc.text(item.item_number || item.product_number || '-', 20, y);
+            doc.text((index + 1).toString(), 20, y);
             
             // Handle long product names
-            const splitName = doc.splitTextToSize(item.item_name, 60);
-            doc.text(splitName, 60, y);
+            const splitName = doc.splitTextToSize(item.item_name, 80);
+            doc.text(splitName, 40, y);
             
             doc.text(item.quantity.toString(), 130, y, { align: 'right' });
-            doc.text("19 %", 150, y, { align: 'right' }); // Hardcoded 19% for now
-            doc.text(`${price.toFixed(2).replace('.', ',')} €`, 175, y, { align: 'right' });
+            doc.text(`${price.toFixed(2).replace('.', ',')} €`, 160, y, { align: 'right' });
             doc.text(`${total.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
 
             // Extra info (size, color)
@@ -191,22 +224,22 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
                 let details = [];
                 if (item.size) details.push(`Größe: ${item.size}`);
                 if (item.color) details.push(`Farbe: ${item.color}`);
-                doc.text(details.join(', '), 60, y + 4);
+                doc.text(details.join(', '), 40, y + 4);
                 doc.setTextColor(0);
                 doc.setFontSize(9);
             }
 
-            y = extraY + 4;
+            y = extraY + 6;
         });
 
         // Shipping
         const shipping = order.shipping_costs || 0;
         if (shipping > 0) {
             subtotal += shipping;
-            doc.text("Versandkosten", 60, y);
+            doc.text((items.length + 1).toString(), 20, y);
+            doc.text("Versandkosten", 40, y);
             doc.text("1", 130, y, { align: 'right' });
-            doc.text("19 %", 150, y, { align: 'right' });
-            doc.text(`${shipping.toFixed(2).replace('.', ',')} €`, 175, y, { align: 'right' });
+            doc.text(`${shipping.toFixed(2).replace('.', ',')} €`, 160, y, { align: 'right' });
             doc.text(`${shipping.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
             y += 8;
         }
@@ -215,17 +248,12 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         y += 8;
 
         // Totals
-        // Assuming prices are Gross (Brutto) in the system?
-        // Usually shop systems store Gross.
-        // Tax is included.
-        // Net = Gross / 1.19
-        // VAT = Gross - Net
-        
-        const grossTotal = subtotal; // Assuming stored prices are gross
+        // Assuming prices are Gross (Brutto) in the system
+        const grossTotal = subtotal; 
         const netTotal = grossTotal / 1.19;
         const vatTotal = grossTotal - netTotal;
 
-        doc.text("Gesamtsumme (Netto):", 160, y, { align: 'right' });
+        doc.text("Netto-Betrag:", 160, y, { align: 'right' });
         doc.text(`${netTotal.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
         y += 5;
 
@@ -234,49 +262,66 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         y += 5;
 
         doc.setFont("helvetica", "bold");
-        doc.text("Gesamtsumme:", 160, y, { align: 'right' });
+        doc.text("Gesamtbetrag:", 160, y, { align: 'right' });
         doc.text(`${grossTotal.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
         doc.setFont("helvetica", "normal");
         
         y += 15;
 
-        // Payment & Shipping Info
-        doc.setFont("helvetica", "bold");
-        doc.text(`Gewählte Zahlungsart: ${order.payment_method || '-'}`, 20, y);
+        // Payment Info
+        doc.text("Bitte bei Zahlung angeben!", 20, y);
         y += 5;
-        doc.text(`Gewählte Versandart: DHL`, 20, y); // Hardcoded DHL or from config?
-        doc.setFont("helvetica", "normal");
-        
+        doc.text(`Verwendungszweck: ${invoiceNumber}`, 20, y);
         y += 10;
-        doc.text("Die Ware bleibt, bis zur vollständigen Bezahlung, unser Eigentum.", 20, y);
-        y += 5;
-        doc.text(`Leistungsdatum entspricht Rechnungsdatum`, 20, y);
+        
+        if (order.payment_method) {
+             doc.text(`Zahlungsart: ${order.payment_method}`, 20, y);
+             y += 5;
+        }
+        
+        doc.text("Die Ware bleibt bis zur vollständigen Bezahlung unser Eigentum.", 20, y);
 
         // --- FOOTER ---
         const footerY = 270;
-        doc.setFontSize(8);
-        doc.setTextColor(102, 102, 102);
+        doc.setFontSize(7);
+        doc.setTextColor(100, 100, 100);
+        
+        // Helper for columns
+        const col1 = 20;
+        const col2 = 70;
+        const col3 = 120;
+        const col4 = 160;
         
         // Col 1: Address
-        doc.text(globalContent.company_name || shop.name || '', 20, footerY);
-        doc.text(globalContent.company_address || '', 20, footerY + 5);
+        doc.setFont("helvetica", "bold");
+        doc.text(globalContent.company_name || shop.name || '', col1, footerY);
+        doc.setFont("helvetica", "normal");
+        doc.text(globalContent.company_address || '', col1, footerY + 4);
+        if (globalContent.ceo_name) doc.text(`GF: ${globalContent.ceo_name}`, col1, footerY + 8);
         
         // Col 2: Contact
-        doc.text('Kontakt:', 70, footerY);
-        doc.text(globalContent.contact_email || '', 70, footerY + 5);
-        doc.text(globalContent.contact_phone || '', 70, footerY + 10);
+        doc.setFont("helvetica", "bold");
+        doc.text('Kontakt', col2, footerY);
+        doc.setFont("helvetica", "normal");
+        doc.text(globalContent.contact_email || '', col2, footerY + 4);
+        doc.text(globalContent.contact_phone || '', col2, footerY + 8);
+        doc.text('www.maintextildruck.com', col2, footerY + 12);
 
         // Col 3: Bank
-        doc.text('Bankverbindung:', 120, footerY);
-        doc.text(globalContent.bank_name || '', 120, footerY + 5);
-        doc.text(`IBAN: ${globalContent.bank_iban || ''}`, 120, footerY + 10);
-        doc.text(`BIC: ${globalContent.bank_bic || ''}`, 120, footerY + 15);
+        doc.setFont("helvetica", "bold");
+        doc.text('Bankverbindung', col3, footerY);
+        doc.setFont("helvetica", "normal");
+        doc.text(globalContent.bank_name || '', col3, footerY + 4);
+        doc.text(`IBAN: ${globalContent.bank_iban || ''}`, col3, footerY + 8);
+        doc.text(`BIC: ${globalContent.bank_bic || ''}`, col3, footerY + 12);
 
         // Col 4: Tax
-        doc.text('Steuer-Nr:', 170, footerY);
-        doc.text(globalContent.tax_number || '', 170, footerY + 5);
-        doc.text(`USt-ID: ${globalContent.vat_id || ''}`, 170, footerY + 10);
-
+        doc.setFont("helvetica", "bold");
+        doc.text('Register & Steuer', col4, footerY);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Steuer-Nr: ${globalContent.tax_number || ''}`, col4, footerY + 4);
+        doc.text(`USt-ID: ${globalContent.vat_id || ''}`, col4, footerY + 8);
+        if (globalContent.commercial_register) doc.text(`HRB: ${globalContent.commercial_register}`, col4, footerY + 12);
 
         // Save PDF
         const fileName = `Rechnung_${invoiceNumber}.pdf`;
