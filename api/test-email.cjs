@@ -1,6 +1,8 @@
 
 const nodemailer = require('nodemailer');
 const dns = require('dns');
+const net = require('net');
+const tls = require('tls');
 
 // Read config from command line arguments (base64 encoded JSON)
 const args = process.argv.slice(2);
@@ -18,9 +20,8 @@ try {
     process.exit(1);
 }
 
-console.log(`--- External SMTP Test (Enhanced) ---`);
+console.log(`--- External SMTP Test (Diagnostic) ---`);
 console.log(`Target: ${config.host}:${config.port}`);
-console.log(`User: ${config.auth.user}`);
 
 async function resolveHost(hostname) {
     return new Promise((resolve, reject) => {
@@ -31,21 +32,78 @@ async function resolveHost(hostname) {
     });
 }
 
+async function checkRawConnection(host, port, secure, servername) {
+    console.log('1. Testing Raw TCP/TLS Connection...');
+    return new Promise((resolve, reject) => {
+        if (secure) {
+            // TLS Connection
+            const socket = tls.connect(port, host, {
+                servername: servername,
+                rejectUnauthorized: false, // Always loose for raw test
+                timeout: 10000
+            }, () => {
+                console.log('   ✅ Raw TLS Connection Successful!');
+                console.log(`   Cipher: ${socket.getCipher().name}`);
+                socket.end();
+                resolve(true);
+            });
+            socket.on('error', (err) => {
+                console.log(`   ❌ Raw TLS Error: ${err.message}`);
+                resolve(false);
+            });
+            socket.on('timeout', () => {
+                console.log(`   ❌ Raw TLS Timeout`);
+                socket.destroy();
+                resolve(false);
+            });
+        } else {
+            // TCP Connection
+            const socket = new net.Socket();
+            socket.setTimeout(10000);
+            socket.connect(port, host, () => {
+                console.log('   ✅ Raw TCP Connection Successful!');
+                socket.end();
+                resolve(true);
+            });
+            socket.on('error', (err) => {
+                console.log(`   ❌ Raw TCP Error: ${err.message}`);
+                resolve(false);
+            });
+            socket.on('timeout', () => {
+                console.log(`   ❌ Raw TCP Timeout`);
+                socket.destroy();
+                resolve(false);
+            });
+        }
+    });
+}
+
 async function run() {
     let targetHost = config.host;
     let sniHost = config.host;
 
-    // 1. Manually resolve IP to ensure IPv4
+    // 1. Resolve DNS
     try {
-        console.log(`1. Resolving DNS for ${config.host}...`);
+        console.log(`\nResolving DNS for ${config.host}...`);
         const ip = await resolveHost(config.host);
-        console.log(`   ✅ Resolved to: ${ip}`);
-        targetHost = ip; // Connect to IP directly
+        console.log(`✅ Resolved to: ${ip}`);
+        targetHost = ip; 
     } catch (e) {
-        console.log(`   ⚠️ DNS Resolution failed: ${e.message}. Using hostname.`);
+        console.log(`⚠️ DNS Resolution failed: ${e.message}. Using hostname.`);
     }
 
-    // Construct transport config
+    // 2. Raw Check
+    const rawSuccess = await checkRawConnection(targetHost, Number(config.port), Boolean(config.secure), sniHost);
+    
+    if (!rawSuccess) {
+        console.log('\n❌ ABORTING: Even a raw connection failed. Firewall or Network issue!');
+        console.log('Please check your firewall, antivirus, or ISP settings.');
+        process.exit(1);
+    }
+
+    // 3. Nodemailer Check
+    console.log('\n2. Testing Nodemailer (Application Logic)...');
+    
     const transportConfig = {
         host: targetHost, 
         port: Number(config.port),
@@ -55,13 +113,14 @@ async function run() {
             pass: config.auth.pass
         },
         tls: {
-            servername: sniHost, // Critical for SNI when connecting to IP
+            servername: sniHost,
             rejectUnauthorized: !config.ignore_certs,
             minVersion: 'TLSv1'
         },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 15000,
+        // Increased Timeouts
+        connectionTimeout: 30000,
+        greetingTimeout: 30000,
+        socketTimeout: 30000,
         debug: true,
         logger: true
     };
@@ -69,11 +128,11 @@ async function run() {
     try {
         const transporter = nodemailer.createTransport(transportConfig);
 
-        console.log('2. Verifying connection...');
+        console.log('   Verifying connection...');
         await transporter.verify();
         console.log('✅ VERIFY_SUCCESS');
 
-        console.log('3. Sending test mail...');
+        console.log('   Sending test mail...');
         await transporter.sendMail({
             from: config.sender_email,
             to: config.test_email,
@@ -84,7 +143,7 @@ async function run() {
         console.log('✅ SEND_SUCCESS');
         process.exit(0);
     } catch (err) {
-        console.error('❌ ERROR:', err.message);
+        console.error('❌ NODEMAILER ERROR:', err.message);
         if (err.code) console.error('CODE:', err.code);
         process.exit(1);
     }
