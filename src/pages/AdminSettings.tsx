@@ -690,14 +690,30 @@ export default function AdminSettings() {
                                 onChange={(e) => setEmailConfig({ ...emailConfig, smtp_secure: e.target.checked })}
                             />
                             <label htmlFor="smtp_secure" className="text-sm font-medium text-slate-700">
-                                Secure (SSL/TLS)
+                                SSL (Erzwungen)
                                 <span className="block text-xs text-gray-400 font-normal">
-                                    {emailConfig.smtp_port === 465 ? '(Empfohlen für Port 465)' : 
-                                     emailConfig.smtp_port === 587 ? '(Meist AUS für Port 587)' : ''}
+                                    {emailConfig.smtp_port === 465 ? '(An für Port 465)' : 
+                                     emailConfig.smtp_port === 587 || emailConfig.smtp_port === 25 ? '(Aus für Port 25/587 - STARTTLS auto)' : ''}
                                 </span>
                             </label>
                         </div>
                     </div>
+                    
+                    <div className="flex items-center mt-2">
+                        <input 
+                            type="checkbox" id="ignore_certs"
+                            className="mr-2"
+                            checked={!!emailConfig.ignore_certs}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, ignore_certs: e.target.checked })}
+                        />
+                        <label htmlFor="ignore_certs" className="text-sm font-medium text-slate-700">
+                            Zertifikatsfehler ignorieren
+                            <span className="block text-xs text-gray-400 font-normal">
+                                (Hilft bei Verbindungsproblemen mit Hostnamen wie 'w01...')
+                            </span>
+                        </label>
+                    </div>
+
                     <div>
                         <label className="block text-sm font-medium text-slate-700">SMTP Benutzer</label>
                         <input 

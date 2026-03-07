@@ -172,14 +172,14 @@ router.get('/email-config', (req, res) => {
 // PUT /api/settings/email-config
 router.put('/email-config', (req, res) => {
   try {
-    const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_name, sender_email } = req.body;
+    const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_name, sender_email, ignore_certs } = req.body;
     
     db.prepare(`
         UPDATE email_config 
         SET smtp_host = ?, smtp_port = ?, smtp_user = ?, smtp_pass = ?, 
-            smtp_secure = ?, sender_name = ?, sender_email = ?, updated_at = CURRENT_TIMESTAMP 
+            smtp_secure = ?, sender_name = ?, sender_email = ?, ignore_certs = ?, updated_at = CURRENT_TIMESTAMP 
         WHERE id = 'main'
-    `).run(smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure ? 1 : 0, sender_name, sender_email);
+    `).run(smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure ? 1 : 0, sender_name, sender_email, ignore_certs ? 1 : 0);
     
     res.json({ success: true });
   } catch (error: any) {
@@ -190,13 +190,13 @@ router.put('/email-config', (req, res) => {
 // POST /api/settings/email-config/test
 router.post('/email-config/test', async (req: Request, res: Response) => {
     try {
-        const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_email, test_email } = req.body;
+        const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_email, test_email, ignore_certs } = req.body;
 
         if (!smtp_host || !smtp_port || !smtp_user || !smtp_pass || !sender_email || !test_email) {
             return res.status(400).json({ success: false, error: 'Bitte alle SMTP-Felder und eine Test-Empfänger-Adresse ausfüllen.' });
         }
 
-        console.log(`[SMTP Test] Testing connection to ${smtp_host}:${smtp_port} for ${sender_email}`);
+        console.log(`[SMTP Test] Testing connection to ${smtp_host}:${smtp_port} for ${sender_email} (Ignore Certs: ${ignore_certs})`);
 
         const transporter = nodemailer.createTransport({
             host: smtp_host,
@@ -205,6 +205,9 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             auth: {
                 user: smtp_user,
                 pass: smtp_pass,
+            },
+            tls: {
+                rejectUnauthorized: !Boolean(ignore_certs)
             },
             connectionTimeout: 10000, // 10 seconds
             greetingTimeout: 5000,    // 5 seconds
@@ -237,7 +240,9 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
         } else if (error.code === 'EAUTH') {
             errorMessage = 'Authentifizierung fehlgeschlagen: Benutzername oder Passwort falsch.';
         } else if (error.code === 'ESOCKET') {
-            errorMessage = 'Verbindungsfehler: Falsches Protokoll? (Prüfen Sie den Haken bei "Secure/SSL").';
+            errorMessage = 'Verbindungsfehler: Falsches Protokoll? (Prüfen Sie den Haken bei "SSL (Erzwungen)").';
+        } else if (error.code === 'EDNS') {
+             errorMessage = 'DNS Fehler: Der Hostname konnte nicht aufgelöst werden.';
         }
 
         res.status(500).json({ success: false, error: errorMessage });

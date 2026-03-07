@@ -878,9 +878,22 @@ try {
       smtp_secure BOOLEAN DEFAULT 0,
       sender_name TEXT,
       sender_email TEXT,
+      ignore_certs BOOLEAN DEFAULT 0,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Migration: Add ignore_certs to email_config
+  try {
+      const emailConfigCols = db.prepare("PRAGMA table_info(email_config)").all() as any[];
+      const hasIgnoreCerts = emailConfigCols.some(col => col.name === 'ignore_certs');
+      if (!hasIgnoreCerts) {
+          console.log('Migrating database: Adding ignore_certs to email_config table');
+          db.exec('ALTER TABLE email_config ADD COLUMN ignore_certs BOOLEAN DEFAULT 0');
+      }
+  } catch (e) {
+      console.error('Migration error (ignore_certs):', e);
+  }
 
   // Ensure default row for email config
   try {
