@@ -208,6 +208,7 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
 
         // 1. DNS Lookup
         log('Step 1: DNS Lookup...');
+        let resolvedIp = '';
         await new Promise<void>((resolve, reject) => {
             dns.lookup(smtp_host, (err, address, family) => {
                 if (err) {
@@ -215,6 +216,7 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
                     reject(new Error(`DNS Fehler: Hostname '${smtp_host}' konnte nicht aufgelöst werden.`));
                 } else {
                     log(`DNS Resolved: ${address} (IPv${family})`);
+                    resolvedIp = address;
                     resolve();
                 }
             });
@@ -222,30 +224,35 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
 
         // 2. TCP Connection Test
         log('Step 2: TCP Connection Check...');
-        await new Promise<void>((resolve, reject) => {
-            const socket = new net.Socket();
-            socket.setTimeout(5000);
-            
-            socket.on('connect', () => {
-                log('TCP Connection established.');
-                socket.destroy();
-                resolve();
-            });
-            
-            socket.on('timeout', () => {
-                socket.destroy();
-                log('TCP Connection timed out.');
-                reject(new Error(`TCP Timeout: Der Server ${smtp_host} antwortet nicht auf Port ${smtp_port}. (Firewall?)`));
-            });
-            
-            socket.on('error', (err) => {
-                socket.destroy();
-                log(`TCP Connection error: ${err.message}`);
-                reject(new Error(`TCP Fehler: Verbindung zu ${smtp_host}:${smtp_port} fehlgeschlagen. ${err.message}`));
-            });
+        try {
+            await new Promise<void>((resolve, reject) => {
+                const socket = new net.Socket();
+                socket.setTimeout(10000); // 10s
+                
+                socket.on('connect', () => {
+                    log('TCP Connection established.');
+                    socket.destroy();
+                    resolve();
+                });
+                
+                socket.on('timeout', () => {
+                    socket.destroy();
+                    log('TCP Connection timed out (10s).');
+                    reject(new Error(`TCP Timeout`));
+                });
+                
+                socket.on('error', (err) => {
+                    socket.destroy();
+                    log(`TCP Connection error: ${err.message}`);
+                    reject(err);
+                });
 
-            socket.connect(Number(smtp_port), smtp_host);
-        });
+                // Use the resolved IP to avoid second lookup issues
+                socket.connect(Number(smtp_port), resolvedIp || smtp_host);
+            });
+        } catch (tcpError: any) {
+            log(`Warning: TCP Check failed (${tcpError.message}), but trying Nodemailer anyway...`);
+        }
 
         // 3. Nodemailer Handshake
         log('Step 3: SMTP Handshake & Auth...');
