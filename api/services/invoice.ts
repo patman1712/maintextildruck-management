@@ -110,9 +110,9 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         const companyX = 140;
         let companyY = 25;
         
-        doc.font("helvetica", "bold");
+        doc.setFont("helvetica", "bold");
         doc.text(globalContent.company_name || 'Main Textildruck GmbH', companyX, companyY);
-        doc.font("helvetica", "normal");
+        doc.setFont("helvetica", "normal");
         companyY += 5;
         doc.text(globalContent.company_address || '', companyX, companyY);
         companyY += 5;
@@ -152,7 +152,7 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
 
         // Title
         doc.setFontSize(16);
-        doc.font("helvetica", "bold");
+        doc.setFont("helvetica", "bold");
         doc.text(`Rechnungs-Nr. ${invoiceNumber}`, 20, 100);
 
         // --- Table ---
@@ -160,7 +160,7 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         
         // Headers
         doc.setFontSize(9);
-        doc.font("helvetica", "bold");
+        doc.setFont("helvetica", "bold");
         doc.text("Prod.-Nr.", 20, y);
         doc.text("Produkt / Dienst", 60, y);
         doc.text("Anzahl", 130, y, { align: 'right' });
@@ -172,7 +172,7 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         y += 8;
 
         // Items
-        doc.font("helvetica", "normal");
+        doc.setFont("helvetica", "normal");
         let subtotal = 0;
 
         items.forEach((item) => {
@@ -241,19 +241,19 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         doc.text(`${vatTotal.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
         y += 5;
 
-        doc.font("helvetica", "bold");
+        doc.setFont("helvetica", "bold");
         doc.text("Gesamtsumme:", 160, y, { align: 'right' });
         doc.text(`${grossTotal.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
-        doc.font("helvetica", "normal");
+        doc.setFont("helvetica", "normal");
         
         y += 15;
 
         // Payment & Shipping Info
-        doc.font("helvetica", "bold");
+        doc.setFont("helvetica", "bold");
         doc.text(`Gewählte Zahlungsart: ${order.payment_method || '-'}`, 20, y);
         y += 5;
         doc.text(`Gewählte Versandart: DHL`, 20, y); // Hardcoded DHL or from config?
-        doc.font("helvetica", "normal");
+        doc.setFont("helvetica", "normal");
         
         y += 10;
         doc.text("Die Ware bleibt, bis zur vollständigen Bezahlung, unser Eigentum.", 20, y);
@@ -271,32 +271,32 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         const col4X = 195; // Right align
 
         // Col 1: Company
-        doc.font("helvetica", "bold");
+        doc.setFont("helvetica", "bold");
         doc.text(globalContent.company_name || 'Main Textildruck GmbH', col1X, footerY);
-        doc.font("helvetica", "normal");
+        doc.setFont("helvetica", "normal");
         doc.text(`IdNr.: ${globalContent.tax_number || '-'}`, col1X, footerY + 3);
         doc.text(`USt-IdNr.: ${globalContent.vat_id || '-'}`, col1X, footerY + 6);
         // doc.text(`Finanzamt: ...`, col1X, footerY + 9);
 
         // Col 2: Bank
-        doc.font("helvetica", "bold");
+        doc.setFont("helvetica", "bold");
         doc.text("Bankverbindung", col2X, footerY);
-        doc.font("helvetica", "normal");
+        doc.setFont("helvetica", "normal");
         doc.text(globalContent.bank_name || '-', col2X, footerY + 3);
         doc.text(`IBAN: ${globalContent.bank_iban || '-'}`, col2X, footerY + 6);
         doc.text(`BIC: ${globalContent.bank_bic || '-'}`, col2X, footerY + 9);
 
         // Col 3: Court
-        doc.font("helvetica", "bold");
+        doc.setFont("helvetica", "bold");
         doc.text(`Gerichtsstand: ${globalContent.commercial_register || '-'}`, col3X, footerY);
-        doc.font("helvetica", "normal");
+        doc.setFont("helvetica", "normal");
         doc.text(`Erfüllungsort: ${globalContent.company_address ? globalContent.company_address.split(',')[1]?.trim() : '-'}`, col3X, footerY + 3);
 
         // Col 4: CEO (Right aligned - tricky with simple text, use fixed X)
         // Actually col4X is right edge.
-        doc.font("helvetica", "bold");
+        doc.setFont("helvetica", "bold");
         doc.text("Geschäftsführer", 170, footerY);
-        doc.font("helvetica", "normal");
+        doc.setFont("helvetica", "normal");
         doc.text(globalContent.ceo_name || '-', 170, footerY + 3);
         doc.text(globalContent.contact_phone || '-', 170, footerY + 6);
 
