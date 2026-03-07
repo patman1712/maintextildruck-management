@@ -20,6 +20,39 @@ const MENU_ITEMS = [
   { id: 'customers', label: 'Kundendateien', icon: Users },
 ];
 
+const SMTP_PRESETS = {
+    'all-inkl': {
+        label: 'All-Inkl.com',
+        host: 'kasserver.com',
+        port: 465,
+        secure: true
+    },
+    'ionos': {
+        label: 'IONOS (1&1)',
+        host: 'smtp.ionos.de',
+        port: 465,
+        secure: true
+    },
+    'strato': {
+        label: 'Strato',
+        host: 'smtp.strato.de',
+        port: 465,
+        secure: true
+    },
+    'gmail': {
+        label: 'Gmail (App-Passwort benötigt)',
+        host: 'smtp.gmail.com',
+        port: 465,
+        secure: true
+    },
+    'custom': {
+        label: 'Benutzerdefiniert',
+        host: '',
+        port: 587,
+        secure: false
+    }
+};
+
 export default function AdminSettings() {
   const orders = useAppStore((state) => state.orders);
   const loading = useAppStore((state) => state.loading);
@@ -574,6 +607,33 @@ export default function AdminSettings() {
             <div>
                 <h3 className="font-bold text-slate-800 mb-4">E-Mail Versand (SMTP)</h3>
                 <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+                    
+                    {/* Preset Selection */}
+                    <div className="mb-4 bg-blue-50 p-3 rounded border border-blue-100">
+                        <label className="block text-xs font-bold text-blue-800 uppercase mb-2">Schnell-Konfiguration (Provider)</label>
+                        <select 
+                            className="w-full border border-blue-300 rounded p-2 text-sm bg-white"
+                            onChange={(e) => {
+                                const preset = SMTP_PRESETS[e.target.value as keyof typeof SMTP_PRESETS];
+                                if (preset && e.target.value !== 'custom') {
+                                    setEmailConfig({
+                                        ...emailConfig,
+                                        smtp_host: preset.host,
+                                        smtp_port: preset.port,
+                                        smtp_secure: preset.secure
+                                    });
+                                }
+                            }}
+                            defaultValue="custom"
+                        >
+                            <option value="custom">-- Bitte wählen --</option>
+                            {Object.entries(SMTP_PRESETS).map(([key, preset]) => (
+                                <option key={key} value={key}>{preset.label}</option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-blue-600 mt-1">Wählt automatisch die richtigen Server-Einstellungen.</p>
+                    </div>
+
                     <div>
                         <label className="block text-sm font-medium text-slate-700">Absender Name</label>
                         <input 
