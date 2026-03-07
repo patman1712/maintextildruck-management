@@ -238,6 +238,7 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
                 await new Promise<void>((resolve, reject) => {
                     const socket = tls.connect(Number(smtp_port), resolvedIp || smtp_host, {
                         rejectUnauthorized: !Boolean(ignore_certs),
+                        servername: smtp_host, // CRITICAL: SNI required for shared hosts
                         timeout: 10000
                     }, () => {
                         log('TLS Handshake successful! Protocol: ' + socket.getProtocol());
@@ -272,7 +273,8 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
                 pass: smtp_pass,
             },
             tls: {
-                rejectUnauthorized: !Boolean(ignore_certs)
+                rejectUnauthorized: !Boolean(ignore_certs),
+                servername: smtp_host // CRITICAL: SNI required for shared hosts
             },
             logger: true,
             debug: true,
