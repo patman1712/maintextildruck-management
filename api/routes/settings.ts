@@ -231,8 +231,22 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
         };
 
         // Run external test script
-        const result = await runExternalTest(config);
-        res.json({ success: true, message: 'Verbindung erfolgreich & Test-Email gesendet!', logs: result.logs });
+        // DEBUG: Force run of the known-good script to test spawning
+        const scriptPath = path.join(__dirname, '../../debug-connect.cjs');
+        console.log(`Running debug script: ${scriptPath}`);
+        
+        const result = await new Promise<any>((resolve, reject) => {
+            exec(`node "${scriptPath}"`, (error, stdout, stderr) => {
+                const logs = stdout.split('\n').filter(l => l.trim() !== '');
+                if (stdout.includes('TLS Handshake successful')) {
+                    resolve({ success: true, logs });
+                } else {
+                    reject({ success: false, error: stdout + stderr, logs });
+                }
+            });
+        });
+        
+        res.json({ success: true, message: 'Verbindung erfolgreich (Debug Script)!', logs: result.logs });
 
     } catch (error: any) {
         console.error('SMTP Test Failed:', error);
