@@ -6,28 +6,11 @@ import db from '../db.js';
 import { UPLOAD_DIR } from './upload.js';
 import { exec } from 'child_process';
 import { fileURLToPath } from 'url';
+import nodemailer from 'nodemailer';
+import dns from 'dns';
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Helper to run a standalone script for SMTP testing
-const runExternalTest = (config: any): Promise<any> => {
-    return new Promise((resolve, reject) => {
-        const jsonConfig = JSON.stringify(config);
-        const encodedConfig = Buffer.from(jsonConfig).toString('base64');
-        const scriptPath = path.join(__dirname, '../test-email.cjs');
-
-        exec(`node "${scriptPath}" "${encodedConfig}"`, (error, stdout, stderr) => {
-            const logs = stdout.split('\n').filter(l => l.trim() !== '');
-            
-            if (stdout.includes('SEND_SUCCESS')) {
-                resolve({ success: true, logs });
-            } else {
-                reject({ success: false, error: stdout + stderr, logs });
-            }
-        });
-    });
-};
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -217,40 +200,66 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: 'Bitte alle SMTP-Felder und eine Test-Empfänger-Adresse ausfüllen.' });
         }
 
-        const config = {
-            host: smtp_host.trim(),
+        // 1. Resolve IP manually (IPv4) to avoid any ambiguity
+        let resolvedHost = smtp_host.trim();
+        try {
+            await new Promise<void>((resolve) => {
+                dns.lookup(smtp_host.trim(), { family: 4 }, (err, address) => {
+                    if (!err && address) {
+                        resolvedHost = address;
+                    }
+                    resolve();
+                });
+            });
+        } catch (e) {
+            // Ignore DNS error, let nodemailer fail later
+        }
+
+        const transporter = nodemailer.createTransport({
+            host: resolvedHost, // Use IP if resolved, otherwise hostname
             port: Number(smtp_port),
             secure: Boolean(smtp_secure),
             auth: {
                 user: smtp_user.trim(),
                 pass: smtp_pass
             },
-            ignore_certs: Boolean(ignore_certs),
-            sender_email, 
-            test_email    
-        };
-
-        // Run external test script
-        // DEBUG: Force run of the known-good script to test spawning
-        const scriptPath = path.join(__dirname, '../../debug-connect.cjs');
-        console.log(`Running debug script: ${scriptPath}`);
-        
-        const result = await new Promise<any>((resolve, reject) => {
-            exec(`node "${scriptPath}"`, (error, stdout, stderr) => {
-                const logs = stdout.split('\n').filter(l => l.trim() !== '');
-                if (stdout.includes('TLS Handshake successful')) {
-                    resolve({ success: true, logs });
-                } else {
-                    reject({ success: false, error: stdout + stderr, logs });
-                }
-            });
+            tls: {
+                servername: smtp_host.trim(), // Original hostname for SNI
+                rejectUnauthorized: !Boolean(ignore_certs),
+                minVersion: 'TLSv1'
+            },
+            connectionTimeout: 20000, // 20s
+            greetingTimeout: 20000,
+            socketTimeout: 20000
         });
-        
-        res.json({ success: true, message: 'Verbindung erfolgreich (Debug Script)!', logs: result.logs });
+
+        // Verify connection
+        await transporter.verify();
+
+        // Send test email
+        await transporter.sendMail({
+            from: sender_email,
+            to: test_email,
+            subject: 'Test Email - System Einstellungen',
+            text: 'Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.\n\nErfolgreich gesendet!',
+            html: '<h3>SMTP Test erfolgreich!</h3><p>Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.</p>'
+        });
+
+        res.json({ success: true, message: 'Verbindung erfolgreich & Test-Email gesendet!' });
 
     } catch (error: any) {
         console.error('SMTP Test Failed:', error);
-        res.status(500).json({ success: false, error: 'Fehler beim Senden: ' + (error.error || error.message), logs: error.logs });
+        
+        let errorMessage = error.message;
+        if (error.code === 'ETIMEDOUT') {
+            errorMessage = 'Zeitüberschreitung: Der Server konnte unter diesem Host/Port nicht erreicht werden. (Firewall?)';
+        } else if (error.code === 'EAUTH') {
+            errorMessage = 'Authentifizierung fehlgeschlagen: Benutzername oder Passwort falsch.';
+        } else if (error.code === 'ESOCKET') {
+            errorMessage = 'Verbindungsfehler: SSL/TLS Handshake fehlgeschlagen.';
+        }
+
+        res.status(500).json({ success: false, error: errorMessage, logs: [errorMessage] });
     }
 });
 
