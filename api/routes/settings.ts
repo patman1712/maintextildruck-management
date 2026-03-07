@@ -207,76 +207,9 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
 
         log(`Starting Test: ${smtp_host}:${smtp_port} | User: ${smtp_user} | Secure: ${smtp_secure}`);
 
-        // Step 1: DNS Lookup
-        log('Step 1: DNS Lookup...');
-        let resolvedIp = '';
-        try {
-             await new Promise<void>((resolve, reject) => {
-                dns.lookup(smtp_host.trim(), { family: 4 }, (err, address) => {
-                    if (err) {
-                        log(`DNS Error: ${err.message}`);
-                        reject(err);
-                    } else {
-                        log(`DNS Resolved: ${address}`);
-                        resolvedIp = address;
-                        resolve();
-                    }
-                });
-            });
-        } catch (e: any) {
-            return res.status(500).json({ success: false, error: `DNS Fehler: ${e.message}`, logs });
-        }
-
-        // Step 2: Connectivity Check
-        // Only skip if port is 25 (often internal/unblocked but slow to handshake)
-        if (Number(smtp_port) !== 25) {
-            log(`Step 2: Checking network connectivity to ${resolvedIp}:${smtp_port}...`);
-            try {
-                await new Promise<void>((resolve, reject) => {
-                    const socket = new net.Socket();
-                    socket.setTimeout(5000);
-                    
-                    socket.on('connect', () => {
-                        log('TCP Connection successful!');
-                        socket.destroy();
-                        resolve();
-                    });
-                    
-                    socket.on('timeout', () => {
-                        log('TCP Connection Timed Out');
-                        socket.destroy();
-                        reject(new Error('TCP Timeout'));
-                    });
-                    
-                    socket.on('error', (err) => {
-                        log(`TCP Connection Error: ${err.message}`);
-                        socket.destroy();
-                        reject(err);
-                    });
-
-                    socket.connect(Number(smtp_port), resolvedIp);
-                });
-            } catch (e: any) {
-                log(`Network Check Failed: ${e.message}`);
-                // Proceed anyway? No, if TCP fails, Nodemailer will fail too.
-                // But user says "Port 25 works elsewhere". 
-                // Let's return specific advice.
-                return res.status(500).json({ 
-                    success: false, 
-                    error: `Netzwerkfehler: Verbindung zu Port ${smtp_port} fehlgeschlagen (${e.message}). Versuchen Sie Port 25.`, 
-                    logs 
-                });
-            }
-        } else {
-            log('Step 2: Skipped connectivity check for Port 25.');
-        }
-
-        // Step 3: Nodemailer
-        log('Step 3: Sending Mail via Nodemailer...');
-        
-        // Use resolved IP but keep SNI
-        const transporter = nodemailer.createTransport({
-            host: resolvedIp, 
+        // SIMPLE & DIRECT APPROACH (Mirrors successful debug script)
+        const transportConfig = {
+            host: smtp_host.trim(),
             port: Number(smtp_port),
             secure: Boolean(smtp_secure),
             auth: {
@@ -284,24 +217,30 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
                 pass: smtp_pass
             },
             tls: {
+                // Critical for shared hosts like Kasserver
+                servername: smtp_host.trim(), 
+                // Allow self-signed or expired certs if requested
                 rejectUnauthorized: !Boolean(ignore_certs),
-                servername: smtp_host.trim(), // Critical for IP connection
+                // Allow older TLS versions if needed
                 minVersion: 'TLSv1'
             },
-            // Port 25 specific: Opportunistic TLS
-            ignoreTLS: Number(smtp_port) === 25 && Boolean(ignore_certs) ? true : false, // Optional: try forcing no-TLS if user really wants to debug
+            // timeouts
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000,
             logger: true,
-            debug: true,
-            connectionTimeout: 20000,
-            greetingTimeout: 20000,
-            socketTimeout: 20000
-        } as any);
+            debug: true
+        };
 
+        log('Creating transport with config: ' + JSON.stringify({ ...transportConfig, auth: { user: smtp_user, pass: '***' } }, null, 2));
+
+        const transporter = nodemailer.createTransport(transportConfig as any);
+
+        log('Verifying connection...');
         await transporter.verify();
-        log('SMTP Handshake & Auth successful.');
+        log('Connection verified successfully!');
 
-        // 4. Send Mail
-        log('Step 4: Sending Test Mail...');
+        log('Sending test mail...');
         await transporter.sendMail({
             from: sender_email,
             to: test_email,
@@ -317,11 +256,11 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
         
         let errorMessage = error.message;
         if (error.code === 'ETIMEDOUT') {
-            errorMessage = 'Zeitüberschreitung: Der Server konnte unter diesem Host/Port nicht erreicht werden. Prüfen Sie Hostname und Port (oft 465 oder 587).';
+            errorMessage = 'Zeitüberschreitung: Der Server konnte unter diesem Host/Port nicht erreicht werden. (Firewall?)';
         } else if (error.code === 'EAUTH') {
             errorMessage = 'Authentifizierung fehlgeschlagen: Benutzername oder Passwort falsch.';
         } else if (error.code === 'ESOCKET') {
-            errorMessage = 'Verbindungsfehler: Falsches Protokoll? (Prüfen Sie den Haken bei "SSL (Erzwungen)").';
+            errorMessage = 'Verbindungsfehler: SSL/TLS Handshake fehlgeschlagen.';
         }
 
         res.status(500).json({ success: false, error: errorMessage, logs });
