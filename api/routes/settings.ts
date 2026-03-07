@@ -15,7 +15,7 @@ const runExternalTest = (config: any): Promise<any> => {
     return new Promise((resolve, reject) => {
         const jsonConfig = JSON.stringify(config);
         const encodedConfig = Buffer.from(jsonConfig).toString('base64');
-        const scriptPath = path.join(__dirname, '../test-email.js');
+        const scriptPath = path.join(__dirname, '../test-email.cjs');
 
         exec(`node "${scriptPath}" "${encodedConfig}"`, (error, stdout, stderr) => {
             const logs = stdout.split('\n').filter(l => l.trim() !== '');
