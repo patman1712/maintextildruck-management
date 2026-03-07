@@ -516,6 +516,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         set((state) => ({
             shops: state.shops.map((s) => (s.id === id ? { ...s, ...data.data } : s))
         }));
+      } else {
+        console.error('Failed to update shop:', data.error);
       }
     } catch (error) {
       console.error('Error updating shop:', error);
