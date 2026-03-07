@@ -157,26 +157,64 @@ ${branding.company_name}
             // Read PDF file for attachment
             const pdfBuffer = await fs.readFile(invoicePath);
             
-            const { data, error } = await resend.emails.send({
-                from: `${config.sender_name} <${config.sender_email}>`,
-                to: order.customer_email,
-                subject: subject,
-                text: text,
-                html: html,
-                attachments: [
-                    {
-                        filename: `Rechnung_${order.order_number}.pdf`,
-                        content: pdfBuffer
-                    }
-                ]
-            });
+            // FORCE ONBOARDING SENDER IF DOMAIN NOT MATCHING
+            // Resend only allows custom sender if domain is verified.
+            // To be safe, let's check if the sender email domain is 'resend.dev' or custom.
+            // If custom and not working, we fallback to onboarding@resend.dev
+            
+            let fromAddress = `${config.sender_name} <${config.sender_email}>`;
+            
+            // If the user hasn't verified their domain, they MUST use onboarding@resend.dev
+            // AND they can ONLY send to the email address they registered with Resend!
+            // We can't know if they verified, but we can try/catch.
+            
+            try {
+                const { data, error } = await resend.emails.send({
+                    from: fromAddress,
+                    to: order.customer_email,
+                    subject: subject,
+                    text: text,
+                    html: html,
+                    attachments: [
+                        {
+                            filename: `Rechnung_${order.order_number}.pdf`,
+                            content: pdfBuffer
+                        }
+                    ]
+                });
 
-            if (error) {
-                console.error('Resend Error:', error);
-                return false;
+                if (error) {
+                    console.warn('Resend failed with custom sender, trying fallback (onboarding@resend.dev)...', error.message);
+                    
+                    // Fallback to onboarding@resend.dev
+                    const { data: fallbackData, error: fallbackError } = await resend.emails.send({
+                        from: 'onboarding@resend.dev',
+                        to: order.customer_email,
+                        subject: subject,
+                        text: text,
+                        html: html,
+                        attachments: [
+                            {
+                                filename: `Rechnung_${order.order_number}.pdf`,
+                                content: pdfBuffer
+                            }
+                        ]
+                    });
+
+                    if (fallbackError) {
+                         console.error('Resend Fallback Error:', fallbackError);
+                         return false;
+                    }
+                    console.log('Resend Email sent (Fallback):', fallbackData?.id);
+                    return true;
+                }
+                
+                console.log('Resend Email sent:', data?.id);
+                return true;
+            } catch (err) {
+                 console.error('Resend Exception:', err);
+                 return false;
             }
-            console.log('Resend Email sent:', data?.id);
-            return true;
         }
 
         // OPTION 2: SMTP (Fallback)
