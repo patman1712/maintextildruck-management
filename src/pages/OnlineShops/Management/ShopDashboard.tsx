@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
 
 const ShopDashboard: React.FC = () => {
@@ -10,7 +12,7 @@ const ShopDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { shops, updateShop, products } = useAppStore();
   const [shop, setShop] = useState<Shop | null>(null);
-  const [activeTab, setActiveTab] = useState<'general' | 'design' | 'categories' | 'products' | 'customers' | 'orders' | 'shipping'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'design' | 'categories' | 'products' | 'customers' | 'orders' | 'shipping' | 'legal'>('general');
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [shopProducts, setShopProducts] = useState<(ShopProductAssignment & { product_name?: string, product_number?: string, category_name?: string })[]>([]);
   const [shopCustomers, setShopCustomers] = useState<any[]>([]);
@@ -524,6 +526,12 @@ const ShopDashboard: React.FC = () => {
             >
                 <Truck size={16} className="mr-2" /> Versand
             </button>
+            <button 
+                onClick={() => setActiveTab('legal')}
+                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'legal' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            >
+                <FileText size={16} className="mr-2" /> Rechtliches
+            </button>
         </div>
 
         <div className="p-8">
@@ -959,6 +967,7 @@ const ShopDashboard: React.FC = () => {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-slate-100 text-slate-400 text-xs uppercase tracking-widest">
+                                    <th className="py-4 px-4 font-bold">Nr.</th>
                                     <th className="py-4 px-4 font-bold">Kunde</th>
                                     <th className="py-4 px-4 font-bold">Unternehmen</th>
                                     <th className="py-4 px-4 font-bold">Kontakt</th>
@@ -970,6 +979,11 @@ const ShopDashboard: React.FC = () => {
                             <tbody className="divide-y divide-slate-50">
                                 {shopCustomers.map(customer => (
                                     <tr key={customer.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="py-4 px-4">
+                                            <span className="font-mono text-xs font-bold bg-slate-100 px-2 py-1 rounded text-slate-600">
+                                                {customer.customer_number || '-'}
+                                            </span>
+                                        </td>
                                         <td className="py-4 px-4">
                                             <div className="flex items-center space-x-3">
                                                 <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
@@ -1388,6 +1402,55 @@ const ShopDashboard: React.FC = () => {
                                 />
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+            {activeTab === 'legal' && (
+                <div className="max-w-4xl space-y-8">
+                    <div>
+                        <h3 className="font-bold text-lg text-slate-800 mb-2">Rechtstexte & Seiten</h3>
+                        <p className="text-sm text-slate-500 mb-6">
+                            Hier können Sie die Inhalte für die rechtlichen Seiten dieses Shops bearbeiten. 
+                            Wenn Sie Felder leer lassen, werden die globalen Standardtexte verwendet.
+                        </p>
+                    </div>
+
+                    <div className="space-y-8">
+                        {([
+                            { key: 'about_us_text', label: 'Über uns' },
+                            { key: 'impressum_text', label: 'Impressum' },
+                            { key: 'privacy_text', label: 'Datenschutz' },
+                            { key: 'agb_text', label: 'AGB' },
+                            { key: 'revocation_text', label: 'Widerrufsrecht' },
+                            { key: 'shipping_info_text', label: 'Versand- und Zahlungsbedingungen' },
+                            { key: 'contact_text', label: 'Kontakt (Text auf Seite)' },
+                        ] as const).map(page => (
+                            <div key={page.key} className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="block font-bold text-slate-700">{page.label}</label>
+                                    <span className="text-xs text-slate-400 uppercase bg-slate-100 px-2 py-1 rounded">HTML Editor</span>
+                                </div>
+                                <div className="bg-white rounded overflow-hidden border border-slate-300">
+                                    <ReactQuill 
+                                        theme="snow"
+                                        value={(shop as any)[page.key] || ''}
+                                        onChange={(content) => setShop({ ...shop!, [page.key]: content })}
+                                        placeholder={`Inhalt für ${page.label}...`}
+                                        modules={{
+                                            toolbar: [
+                                                [{ 'header': [1, 2, 3, false] }],
+                                                ['bold', 'italic', 'underline', 'strike'],
+                                                [{'list': 'ordered'}, {'list': 'bullet'}],
+                                                ['link', 'clean']
+                                            ],
+                                        }}
+                                    />
+                                </div>
+                                <p className="text-xs text-slate-400 mt-2">
+                                    Lassen Sie dieses Feld leer, um den globalen Standardtext zu verwenden.
+                                </p>
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}

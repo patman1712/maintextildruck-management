@@ -5,6 +5,7 @@ export interface ShopCustomer {
   id: string;
   shop_id: string;
   email: string;
+  customer_number?: string;
   first_name?: string;
   last_name?: string;
   company?: string;

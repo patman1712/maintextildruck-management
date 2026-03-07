@@ -693,6 +693,53 @@ try {
     db.exec('ALTER TABLE shops ADD COLUMN welcome_text TEXT');
   }
 
+  // Migration for Customer Numbers
+  try {
+    const shopCustomerCols = db.prepare("PRAGMA table_info(shop_customers)").all() as any[];
+    const hasCustomerNumber = shopCustomerCols.some(col => col.name === 'customer_number');
+    if (!hasCustomerNumber) {
+        console.log('Migrating database: Adding customer_number to shop_customers table');
+        db.exec('ALTER TABLE shop_customers ADD COLUMN customer_number TEXT');
+    }
+
+    const shopColsNextCustomer = db.prepare("PRAGMA table_info(shops)").all() as any[];
+    const hasNextCustomerNumber = shopColsNextCustomer.some(col => col.name === 'next_customer_number');
+    if (!hasNextCustomerNumber) {
+        console.log('Migrating database: Adding next_customer_number to shops table');
+        db.exec('ALTER TABLE shops ADD COLUMN next_customer_number INTEGER DEFAULT 10000');
+    }
+
+    // Backfill customer numbers if missing
+    const customersWithoutNumber = db.prepare('SELECT count(*) as count FROM shop_customers WHERE customer_number IS NULL').get() as { count: number };
+    if (customersWithoutNumber.count > 0) {
+        console.log(`Backfilling ${customersWithoutNumber.count} customers with numbers...`);
+        const shops = db.prepare('SELECT id, next_customer_number FROM shops').all() as any[];
+        
+        const updateCustomer = db.prepare('UPDATE shop_customers SET customer_number = ? WHERE id = ?');
+        const updateShop = db.prepare('UPDATE shops SET next_customer_number = ? WHERE id = ?');
+
+        for (const shop of shops) {
+            let nextNr = shop.next_customer_number || 10000;
+            const customers = db.prepare('SELECT id FROM shop_customers WHERE shop_id = ? AND customer_number IS NULL ORDER BY created_at ASC').all(shop.id) as any[];
+            
+            if (customers.length > 0) {
+                const transaction = db.transaction(() => {
+                    for (const cust of customers) {
+                        const nr = 'KD-' + nextNr;
+                        updateCustomer.run(nr, cust.id);
+                        nextNr++;
+                    }
+                    updateShop.run(nextNr, shop.id);
+                });
+                transaction();
+                console.log(`Assigned numbers for shop ${shop.id}: ${customers.length} customers.`);
+            }
+        }
+    }
+  } catch (e) {
+      console.error('Migration error (customer numbers):', e);
+  }
+
   // Migration: Fix file types for shop images
   // Previously all files were 'print'. We want shop images to be 'view'.
   // We assume all files currently assigned to shops are images.

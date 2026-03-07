@@ -93,6 +93,11 @@ const ShopProfile: React.FC = () => {
             <div>
               <h1 className="text-3xl font-black text-slate-900">Mein Profil</h1>
               <p className="text-slate-500 font-medium">Verwalten Sie Ihre persönlichen Daten und Anschrift.</p>
+              {currentCustomer?.customer_number && (
+                  <p className="text-sm font-mono text-slate-400 mt-2 bg-slate-50 inline-block px-3 py-1 rounded-lg border border-slate-100">
+                     Kunden-Nr: <span className="font-bold text-slate-600">{currentCustomer.customer_number}</span>
+                  </p>
+              )}
             </div>
             <div className="w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold" style={{ backgroundColor: primaryColor }}>
               {currentCustomer?.first_name?.charAt(0)}{currentCustomer?.last_name?.charAt(0)}

@@ -57,7 +57,8 @@ router.get('/:id', (req, res) => {
             ];
             
             contentFields.forEach(field => {
-                if (globalContent[field]) {
+                // Only use global content if shop content is empty/null
+                if (!shop[field] && globalContent[field]) {
                     shop[field] = globalContent[field];
                 }
             });

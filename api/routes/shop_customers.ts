@@ -171,7 +171,7 @@ router.put('/:shopId/profile/:customerId', async (req, res) => {
 
     db.prepare(query).run(...params);
 
-    const updated = db.prepare('SELECT id, shop_id, email, first_name, last_name, company, street, zip, city, phone FROM shop_customers WHERE id = ?').get(customerId);
+    const updated = db.prepare('SELECT id, shop_id, email, first_name, last_name, company, street, zip, city, phone, customer_number FROM shop_customers WHERE id = ?').get(customerId);
     res.json({ success: true, data: updated });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

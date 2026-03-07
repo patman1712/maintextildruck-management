@@ -49,8 +49,12 @@ const ShopContentPage: React.FC = () => {
         <div className="container mx-auto px-4 py-12 max-w-4xl">
             <h1 className="text-3xl font-bold mb-8 text-slate-900">{title}</h1>
             
-            <div className="prose max-w-none text-slate-700 whitespace-pre-wrap">
-                {content ? content : <p className="italic text-slate-400">Inhalt folgt.</p>}
+            <div className="prose max-w-none text-slate-700">
+                {content ? (
+                    <div dangerouslySetInnerHTML={{ __html: content }} />
+                ) : (
+                    <p className="italic text-slate-400">Inhalt folgt.</p>
+                )}
             </div>
 
             {pageSlug === 'kontakt' && (
