@@ -195,14 +195,21 @@ router.put('/email-config', (req, res) => {
 // POST /api/settings/email-config/test
 router.post('/email-config/test', async (req: Request, res: Response) => {
     try {
-        const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_email, test_email, ignore_certs, resend_api_key } = req.body;
+        const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_email, sender_name, test_email, ignore_certs, resend_api_key } = req.body;
 
         // If Resend API Key is provided, use Resend
         if (resend_api_key && resend_api_key.trim().startsWith('re_')) {
             const resend = new Resend(resend_api_key.trim());
 
+            // Construct Sender: "Name <email@domain.com>"
+            // Note: If domain is not verified, Resend only allows 'onboarding@resend.dev'
+            // We try to use the configured one, but catch the specific error if possible.
+            const fromAddress = sender_name && sender_email 
+                ? `${sender_name} <${sender_email}>`
+                : 'onboarding@resend.dev';
+
             const { data, error } = await resend.emails.send({
-                from: 'onboarding@resend.dev', // Must be this for testing, or a verified domain
+                from: fromAddress,
                 to: test_email,
                 subject: 'Test Email via Resend - System Einstellungen',
                 html: '<h3>Resend Test erfolgreich!</h3><p>Dies ist eine Test-Email um die Resend-API-Einstellungen zu überprüfen.</p>'
@@ -210,10 +217,18 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
 
             if (error) {
                 console.error('Resend Error:', error);
+                // If the error is about unverified domain, give a hint
+                if (error.message.includes('not verified') || error.message.includes('owned by')) {
+                    return res.status(500).json({ 
+                        success: false, 
+                        error: `Resend Domain-Fehler: Die Absender-Domain (${sender_email?.split('@')[1]}) ist noch nicht bei Resend verifiziert. Bitte verifizieren Sie die Domain im Resend Dashboard oder nutzen Sie vorerst 'onboarding@resend.dev'.`, 
+                        logs: [error.message] 
+                    });
+                }
                 return res.status(500).json({ success: false, error: 'Resend Fehler: ' + error.message, logs: [error.message] });
             }
 
-            return res.json({ success: true, message: 'Verbindung erfolgreich (via Resend) & Test-Email gesendet!' });
+            return res.json({ success: true, message: `Verbindung erfolgreich (via Resend)! Gesendet von: ${fromAddress}` });
         }
 
         // Fallback to SMTP
