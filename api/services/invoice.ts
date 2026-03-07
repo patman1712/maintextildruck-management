@@ -31,17 +31,23 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         // Fetch Global Content (Company Info)
         const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
 
-        // Generate Invoice Number if not exists
-        let invoiceNumber = order.invoice_number;
-        let invoiceDate = order.invoice_date;
+        // Check if invoice number is already set
+        const orderCheck = db.prepare('SELECT invoice_number, invoice_date FROM orders WHERE id = ?').get(orderId) as any;
+        
+        let invoiceNumber = orderCheck?.invoice_number || order.invoice_number;
+        let invoiceDate = orderCheck?.invoice_date || order.invoice_date;
 
         if (!invoiceNumber) {
             // STRICT REQUIREMENT: Invoice Number = Order Number
             invoiceNumber = order.order_number;
             invoiceDate = new Date().toISOString();
 
+            console.log(`Assigning Invoice Number ${invoiceNumber} to Order ${orderId}`);
+
             // Update Order
             db.prepare('UPDATE orders SET invoice_number = ?, invoice_date = ? WHERE id = ?').run(invoiceNumber, invoiceDate, orderId);
+        } else {
+             console.log(`Order ${orderId} already has Invoice Number ${invoiceNumber}`);
         }
 
         // Create PDF
