@@ -740,6 +740,18 @@ try {
       console.error('Migration error (customer numbers):', e);
   }
 
+  // Migration: Add is_blocked to shop_customers
+  try {
+      const shopCustomerCols = db.prepare("PRAGMA table_info(shop_customers)").all() as any[];
+      const hasIsBlocked = shopCustomerCols.some(col => col.name === 'is_blocked');
+      if (!hasIsBlocked) {
+          console.log('Migrating database: Adding is_blocked to shop_customers table');
+          db.exec('ALTER TABLE shop_customers ADD COLUMN is_blocked BOOLEAN DEFAULT 0');
+      }
+  } catch (e) {
+      console.error('Migration error (is_blocked):', e);
+  }
+
   // Migration: Fix file types for shop images
   // Previously all files were 'print'. We want shop images to be 'view'.
   // We assume all files currently assigned to shops are images.

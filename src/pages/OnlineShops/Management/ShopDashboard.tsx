@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
 
 const ShopDashboard: React.FC = () => {
@@ -33,6 +33,7 @@ const ShopDashboard: React.FC = () => {
     packaging_weight: 0
   });
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
   const [isCreatingLabel, setIsCreatingLabel] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -428,10 +429,30 @@ const ShopDashboard: React.FC = () => {
       const data = await res.json();
       if (data.success) {
         setShopCustomers(shopCustomers.filter(c => c.id !== customerId));
+        if (selectedCustomer?.id === customerId) setSelectedCustomer(null);
       } else {
         alert(data.error || 'Fehler beim Löschen des Kunden.');
       }
     } catch (e) { console.error(e); }
+  };
+
+  const handleToggleBlockCustomer = async (customerId: string, isBlocked: boolean) => {
+      try {
+          const res = await fetch(`/api/shop-customers/${shopId}/admin/customers/${customerId}/block`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ is_blocked: !isBlocked })
+          });
+          const data = await res.json();
+          if (data.success) {
+              setShopCustomers(shopCustomers.map(c => c.id === customerId ? { ...c, is_blocked: !isBlocked ? 1 : 0 } : c));
+              if (selectedCustomer?.id === customerId) {
+                  setSelectedCustomer({ ...selectedCustomer, is_blocked: !isBlocked ? 1 : 0 });
+              }
+          } else {
+              alert(data.error || 'Fehler beim Ändern des Status.');
+          }
+      } catch (e) { console.error(e); }
   };
 
   if (!shop) return <div className="p-8">Lade Shop...</div>;
@@ -978,7 +999,7 @@ const ShopDashboard: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                                 {shopCustomers.map(customer => (
-                                    <tr key={customer.id} className="hover:bg-slate-50 transition-colors">
+                                    <tr key={customer.id} className={`hover:bg-slate-50 transition-colors cursor-pointer ${customer.is_blocked ? 'bg-red-50 hover:bg-red-100' : ''}`} onClick={() => setSelectedCustomer(customer)}>
                                         <td className="py-4 px-4">
                                             <span className="font-mono text-xs font-bold bg-slate-100 px-2 py-1 rounded text-slate-600">
                                                 {customer.customer_number || '-'}
@@ -986,11 +1007,14 @@ const ShopDashboard: React.FC = () => {
                                         </td>
                                         <td className="py-4 px-4">
                                             <div className="flex items-center space-x-3">
-                                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                                                    <User size={20} />
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${customer.is_blocked ? 'bg-red-200 text-red-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                    {customer.is_blocked ? <Lock size={20} /> : <User size={20} />}
                                                 </div>
                                                 <div>
-                                                    <p className="font-bold text-slate-800">{customer.first_name} {customer.last_name}</p>
+                                                    <p className={`font-bold ${customer.is_blocked ? 'text-red-800' : 'text-slate-800'}`}>
+                                                        {customer.first_name} {customer.last_name}
+                                                        {customer.is_blocked && <span className="ml-2 text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded uppercase">Gesperrt</span>}
+                                                    </p>
                                                     <p className="text-xs text-slate-500">{customer.email}</p>
                                                 </div>
                                             </div>
@@ -1034,14 +1058,23 @@ const ShopDashboard: React.FC = () => {
                                                 {new Date(customer.created_at).toLocaleDateString('de-DE')}
                                             </div>
                                         </td>
-                                        <td className="py-4 px-4">
-                                            <button 
-                                                onClick={() => handleDeleteCustomer(customer.id)} 
-                                                className="text-slate-300 hover:text-red-600 transition-colors p-2 rounded-lg hover:bg-red-50"
-                                                title="Kunde löschen"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
+                                        <td className="py-4 px-4" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex space-x-2">
+                                                <button 
+                                                    onClick={() => handleToggleBlockCustomer(customer.id, !!customer.is_blocked)}
+                                                    className={`p-2 rounded-lg transition-colors ${customer.is_blocked ? 'text-green-600 hover:bg-green-50' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'}`}
+                                                    title={customer.is_blocked ? "Entsperren" : "Sperren"}
+                                                >
+                                                    {customer.is_blocked ? <Unlock size={18} /> : <Lock size={18} />}
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDeleteCustomer(customer.id)} 
+                                                    className="text-slate-300 hover:text-red-600 transition-colors p-2 rounded-lg hover:bg-red-50"
+                                                    title="Kunde löschen"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
@@ -1456,6 +1489,153 @@ const ShopDashboard: React.FC = () => {
             )}
         </div>
       </div>
+
+      {/* Customer Details Modal */}
+      {selectedCustomer && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+                <div className={`p-6 border-b flex justify-between items-center ${selectedCustomer.is_blocked ? 'bg-red-50' : 'bg-slate-50'}`}>
+                    <div className="flex items-center space-x-4">
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${selectedCustomer.is_blocked ? 'bg-red-200 text-red-600' : 'bg-white text-slate-400 border border-slate-200'}`}>
+                            {selectedCustomer.is_blocked ? <Lock size={24} /> : <User size={24} />}
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-xl text-slate-800">
+                                {selectedCustomer.first_name} {selectedCustomer.last_name}
+                                {selectedCustomer.is_blocked && <span className="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">Gesperrt</span>}
+                            </h3>
+                            <p className="text-sm text-slate-500 font-mono">{selectedCustomer.customer_number || 'Keine Kundennummer'}</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setSelectedCustomer(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                        <X size={20} className="text-slate-500" />
+                    </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                        <div className="space-y-6">
+                            <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">Kontaktdaten</h4>
+                            <div className="space-y-3">
+                                <div className="flex items-center text-slate-600">
+                                    <Mail size={16} className="mr-3 text-slate-400" />
+                                    <span>{selectedCustomer.email}</span>
+                                </div>
+                                {selectedCustomer.phone && (
+                                    <div className="flex items-center text-slate-600">
+                                        <Phone size={16} className="mr-3 text-slate-400" />
+                                        <span>{selectedCustomer.phone}</span>
+                                    </div>
+                                )}
+                                <div className="flex items-start text-slate-600">
+                                    <MapPin size={16} className="mr-3 text-slate-400 mt-1" />
+                                    <div className="whitespace-pre-line">
+                                        {selectedCustomer.company && <div className="font-bold">{selectedCustomer.company}</div>}
+                                        <div>{selectedCustomer.street}</div>
+                                        <div>{selectedCustomer.zip} {selectedCustomer.city}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2">Konto-Status</h4>
+                            <div className="bg-slate-50 rounded-lg p-4 border border-slate-100">
+                                <p className="text-sm text-slate-600 mb-4">
+                                    {selectedCustomer.is_blocked 
+                                        ? "Der Kunde ist aktuell gesperrt und kann sich nicht anmelden oder Bestellungen tätigen." 
+                                        : "Das Kundenkonto ist aktiv und uneingeschränkt nutzbar."}
+                                </p>
+                                <button 
+                                    onClick={() => handleToggleBlockCustomer(selectedCustomer.id, !!selectedCustomer.is_blocked)}
+                                    className={`w-full py-2 px-4 rounded-lg font-bold text-sm flex items-center justify-center transition-colors ${
+                                        selectedCustomer.is_blocked 
+                                        ? 'bg-green-600 text-white hover:bg-green-700 shadow-green-200 shadow-lg' 
+                                        : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
+                                    }`}
+                                >
+                                    {selectedCustomer.is_blocked ? (
+                                        <>
+                                            <Unlock size={16} className="mr-2" />
+                                            Konto entsperren
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Lock size={16} className="mr-2" />
+                                            Konto sperren
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2 mb-4">Bestellhistorie</h4>
+                    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-left">
+                            <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold">
+                                <tr>
+                                    <th className="px-4 py-3">Nr.</th>
+                                    <th className="px-4 py-3">Datum</th>
+                                    <th className="px-4 py-3">Status</th>
+                                    <th className="px-4 py-3 text-right">Betrag</th>
+                                    <th className="px-4 py-3"></th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {shopOrders.filter(o => o.shop_customer_id === selectedCustomer.id).length > 0 ? (
+                                    shopOrders.filter(o => o.shop_customer_id === selectedCustomer.id).map(order => (
+                                        <tr key={order.id} className="hover:bg-slate-50">
+                                            <td className="px-4 py-3 font-mono font-bold text-slate-700">#{order.order_number}</td>
+                                            <td className="px-4 py-3 text-sm text-slate-600">{new Date(order.created_at).toLocaleDateString('de-DE')}</td>
+                                            <td className="px-4 py-3">
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                                    order.status === 'active' ? 'bg-blue-100 text-blue-700' : 
+                                                    order.status === 'shipped' ? 'bg-green-100 text-green-700' :
+                                                    'bg-slate-100 text-slate-600'
+                                                }`}>
+                                                    {order.status === 'active' ? 'In Bearbeitung' : 
+                                                     order.status === 'shipped' ? 'Versendet' : 
+                                                     order.status === 'pending_payment' ? 'Zahlung offen' :
+                                                     order.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-bold text-slate-800">
+                                                {order.total_amount?.toFixed(2).replace('.', ',')} €
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <button 
+                                                    onClick={() => {
+                                                        // Close customer modal and open order modal
+                                                        setSelectedCustomer(null);
+                                                        // Fetch full order details
+                                                        (async () => {
+                                                            const res = await fetch(`/api/shop-customers/${shopId}/orders/${order.shop_customer_id}/${order.id}`);
+                                                            const data = await res.json();
+                                                            if (data.success) setSelectedOrder(data.data);
+                                                        })();
+                                                    }}
+                                                    className="text-blue-600 hover:text-blue-800"
+                                                >
+                                                    <Eye size={16} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={5} className="px-4 py-8 text-center text-slate-400 italic">
+                                            Keine Bestellungen vorhanden.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+          </div>
+      )}
 
       {/* Order Details Modal */}
       {selectedOrder && (

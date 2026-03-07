@@ -98,6 +98,11 @@ router.post('/:shopId/login', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Ungültige E-Mail oder Passwort.' });
     }
 
+    if (customer.is_blocked) {
+      console.warn(`[Login] Blocked customer attempted login: ${email}`);
+      return res.status(403).json({ success: false, error: 'Ihr Konto wurde gesperrt. Bitte kontaktieren Sie den Shop-Betreiber.' });
+    }
+
     if (!bcrypt.compareSync(password, customer.password)) {
       console.warn(`[Login] Password mismatch: ${email}`);
       return res.status(401).json({ success: false, error: 'Ungültige E-Mail oder Passwort.' });
@@ -122,8 +127,29 @@ router.get('/:shopId/admin/list', (req, res) => {
         return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
     }
 
-    const customers = db.prepare('SELECT id, email, first_name, last_name, company, street, zip, city, phone, created_at FROM shop_customers WHERE shop_id = ? ORDER BY created_at DESC').all(shopId);
+    const customers = db.prepare('SELECT id, email, first_name, last_name, company, street, zip, city, phone, created_at, customer_number, is_blocked FROM shop_customers WHERE shop_id = ? ORDER BY created_at DESC').all(shopId);
     res.json({ success: true, data: customers });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Admin: Toggle block status for a customer
+router.put('/:shopId/admin/customers/:customerId/block', (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const { is_blocked } = req.body;
+
+    if (typeof is_blocked !== 'boolean') {
+        return res.status(400).json({ success: false, error: 'is_blocked muss ein Boolean sein.' });
+    }
+
+    db.prepare('UPDATE shop_customers SET is_blocked = ? WHERE id = ?').run(is_blocked ? 1 : 0, customerId);
+    
+    // Also invalidate any active sessions if possible (not implemented here as JWT/Session is stateless or handled elsewhere)
+    // But login check will prevent new logins.
+
+    res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
