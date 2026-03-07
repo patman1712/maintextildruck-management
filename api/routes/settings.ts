@@ -230,7 +230,17 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
         res.json({ success: true, message: 'Verbindung erfolgreich & Test-Email gesendet!' });
     } catch (error: any) {
         console.error('SMTP Test Failed:', error);
-        res.status(500).json({ success: false, error: error.message });
+        
+        let errorMessage = error.message;
+        if (error.code === 'ETIMEDOUT') {
+            errorMessage = 'Zeitüberschreitung: Der Server konnte unter diesem Host/Port nicht erreicht werden. Prüfen Sie Hostname und Port (oft 465 oder 587).';
+        } else if (error.code === 'EAUTH') {
+            errorMessage = 'Authentifizierung fehlgeschlagen: Benutzername oder Passwort falsch.';
+        } else if (error.code === 'ESOCKET') {
+            errorMessage = 'Verbindungsfehler: Falsches Protokoll? (Prüfen Sie den Haken bei "Secure/SSL").';
+        }
+
+        res.status(500).json({ success: false, error: errorMessage });
     }
 });
 

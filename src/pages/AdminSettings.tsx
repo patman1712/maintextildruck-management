@@ -604,13 +604,21 @@ export default function AdminSettings() {
                             placeholder="smtp.example.com"
                         />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-sm font-medium text-slate-700">SMTP Port</label>
                             <input 
                                 type="number" className="w-full border border-gray-300 rounded p-2 text-sm"
                                 value={emailConfig.smtp_port || ''}
-                                onChange={(e) => setEmailConfig({ ...emailConfig, smtp_port: parseInt(e.target.value) })}
+                                onChange={(e) => {
+                                    const port = parseInt(e.target.value);
+                                    setEmailConfig({ 
+                                        ...emailConfig, 
+                                        smtp_port: port,
+                                        // Auto-suggest secure setting
+                                        smtp_secure: port === 465 ? true : (port === 587 ? false : emailConfig.smtp_secure)
+                                    });
+                                }}
                                 placeholder="587"
                             />
                         </div>
@@ -621,7 +629,13 @@ export default function AdminSettings() {
                                 checked={!!emailConfig.smtp_secure}
                                 onChange={(e) => setEmailConfig({ ...emailConfig, smtp_secure: e.target.checked })}
                             />
-                            <label htmlFor="smtp_secure" className="text-sm font-medium text-slate-700">Secure (SSL/TLS)</label>
+                            <label htmlFor="smtp_secure" className="text-sm font-medium text-slate-700">
+                                Secure (SSL/TLS)
+                                <span className="block text-xs text-gray-400 font-normal">
+                                    {emailConfig.smtp_port === 465 ? '(Empfohlen für Port 465)' : 
+                                     emailConfig.smtp_port === 587 ? '(Meist AUS für Port 587)' : ''}
+                                </span>
+                            </label>
                         </div>
                     </div>
                     <div>
