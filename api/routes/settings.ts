@@ -219,36 +219,14 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             });
         } catch (e) {}
 
-        // Step 2: TLS Probe (Direct)
+        // Step 2: TLS Probe (Direct) - DISABLED FOR NOW AS IT SEEMS TO CAUSE ISSUES ON SOME ENVIRONMENTS
+        /*
         if (Boolean(smtp_secure)) {
             log('Step 2: Probing TLS Handshake...');
-            try {
-                await new Promise<void>((resolve, reject) => {
-                    const socket = tls.connect(Number(smtp_port), smtp_host.trim(), {
-                        servername: smtp_host.trim(), // SNI
-                        rejectUnauthorized: !Boolean(ignore_certs),
-                        timeout: 10000
-                    }, () => {
-                        log('TLS Handshake successful! Protocol: ' + socket.getProtocol());
-                        socket.end();
-                        resolve();
-                    });
-
-                    socket.on('error', (err) => {
-                        log(`TLS Probe Error: ${err.message}`);
-                        reject(err);
-                    });
-
-                    socket.on('timeout', () => {
-                        log('TLS Probe Timeout');
-                        socket.destroy();
-                        reject(new Error('Timeout'));
-                    });
-                });
-            } catch (tlsError: any) {
-                log(`Warning: TLS Probe failed (${tlsError.message}).`);
-            }
+            // ... code removed ...
         }
+        */
+        log('Step 2: TLS Probe skipped (Direct Nodemailer test).');
 
         // Step 3: Nodemailer
         log('Step 3: Sending Mail via Nodemailer...');
@@ -261,14 +239,17 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
                 pass: smtp_pass
             },
             tls: {
+                // Completely permissive settings to rule out nodejs strictness
                 rejectUnauthorized: !Boolean(ignore_certs),
-                servername: smtp_host.trim()
+                servername: smtp_host.trim(),
+                minVersion: 'TLSv1' // Allow older TLS
             },
+            // REMOVED family: 4 to allow system default
             logger: true,
             debug: true,
-            connectionTimeout: 10000,
-            greetingTimeout: 10000,
-            socketTimeout: 15000
+            connectionTimeout: 20000, // Increased
+            greetingTimeout: 20000,   // Increased
+            socketTimeout: 30000      // Increased
         } as any);
 
         await transporter.verify();
