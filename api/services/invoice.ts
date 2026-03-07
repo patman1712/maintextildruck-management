@@ -117,7 +117,7 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         }
 
         // Company Info (Right)
-        doc.setFontSize(8); // Reduced from 9
+        doc.setFontSize(8); 
         doc.setTextColor(0, 0, 0);
         const companyX = 140;
         let companyY = 25;
@@ -125,14 +125,22 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         doc.setFont("helvetica", "bold");
         doc.text(globalContent.company_name || 'Main Textildruck GmbH', companyX, companyY);
         doc.setFont("helvetica", "normal");
-        companyY += 4; // Reduced from 5
-        doc.text(globalContent.company_address || '', companyX, companyY);
         companyY += 4;
+        
+        // Handle multiline address
+        const companyAddr = globalContent.company_address || '';
+        const companyAddrLines = companyAddr.split('\n').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
+        
+        companyAddrLines.forEach((line: string) => {
+            doc.text(line, companyX, companyY);
+            companyY += 4;
+        });
+
         doc.text(`Telefon ${globalContent.contact_phone || ''}`, companyX, companyY);
         companyY += 4;
         doc.text(globalContent.contact_email || '', companyX, companyY);
         
-        companyY += 8; // Reduced from 10
+        companyY += 8;
         doc.text(`Kunden-Nr. ${customer?.customer_number || '-'}`, companyX, companyY);
         companyY += 4;
         doc.text(`Bestell-Nr. ${order.order_number}`, companyX, companyY);
@@ -146,12 +154,14 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         }
 
         // Sender Address (Left, small, above address)
-        doc.setFontSize(7); // Reduced from 8
-        doc.text(`${globalContent.company_name || 'Main Textildruck GmbH'} - ${globalContent.company_address || ''}`, 20, 60); // Moved up from 65
+        doc.setFontSize(7);
+        // Flatten address for single line display
+        const flatAddress = (globalContent.company_address || '').replace(/\n/g, ', ').replace(/\r/g, '');
+        doc.text(`${globalContent.company_name || 'Main Textildruck GmbH'} - ${flatAddress}`, 20, 60);
         
         // Line under sender address
         doc.setLineWidth(0.1);
-        doc.line(20, 62, 80, 62); // Moved up from 67
+        doc.line(20, 62, 100, 62); // Made slightly longer
 
         // Delivery Address
         doc.setFontSize(10);
@@ -219,7 +229,11 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
             // Extra info (size, color, notes)
             let extraLines = [];
             if (item.size) extraLines.push(`Größe: ${item.size}`);
-            if (item.color) extraLines.push(`Farbe: ${item.color}`);
+            
+            // Filter out "Kindergrößen" or empty/irrelevant color info
+            if (item.color && !item.color.includes('Kindergrößen') && item.color.trim() !== '') {
+                extraLines.push(`Farbe: ${item.color}`);
+            }
             
             // Check for personalization notes
             if (item.notes) {
