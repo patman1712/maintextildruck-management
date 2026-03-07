@@ -82,7 +82,7 @@ export default function AdminSettings() {
   const [emailConfig, setEmailConfig] = useState<any>({});
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [testingEmail, setTestingEmail] = useState(false);
-  const [testStatus, setTestStatus] = useState<{success: boolean, message: string} | null>(null);
+  const [testStatus, setTestStatus] = useState<{success: boolean, message: string, logs?: string[]} | null>(null);
 
   const fetchGlobalSettings = async () => {
       try {
@@ -149,9 +149,9 @@ export default function AdminSettings() {
           
           const data = await res.json();
           if (data.success) {
-              setTestStatus({ success: true, message: data.message || 'Email gesendet!' });
+              setTestStatus({ success: true, message: data.message || 'Email gesendet!', logs: data.logs });
           } else {
-              setTestStatus({ success: false, message: data.error || 'Unbekannter Fehler' });
+              setTestStatus({ success: false, message: data.error || 'Unbekannter Fehler', logs: data.logs });
           }
       } catch (e: any) {
           if (e.name === 'AbortError') {
@@ -754,6 +754,14 @@ export default function AdminSettings() {
                         {testStatus && (
                             <div className={`mt-3 p-2 rounded text-sm ${testStatus.success ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'}`}>
                                 <strong>{testStatus.success ? 'Erfolg:' : 'Fehler:'}</strong> {testStatus.message}
+                                {testStatus.logs && testStatus.logs.length > 0 && (
+                                    <div className="mt-2 text-xs font-mono bg-white p-2 rounded border border-gray-200 overflow-x-auto max-h-32">
+                                        <div className="font-bold mb-1 text-gray-500">System Log:</div>
+                                        {testStatus.logs.map((log, i) => (
+                                            <div key={i}>{log}</div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

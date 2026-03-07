@@ -5,6 +5,8 @@ import fs from 'fs-extra';
 import db from '../db.js';
 import { UPLOAD_DIR } from './upload.js';
 import nodemailer from 'nodemailer';
+import dns from 'dns';
+import net from 'net';
 
 const router = Router();
 
@@ -189,6 +191,12 @@ router.put('/email-config', (req, res) => {
 
 // POST /api/settings/email-config/test
 router.post('/email-config/test', async (req: Request, res: Response) => {
+    let logs: string[] = [];
+    const log = (msg: string) => {
+        console.log(`[SMTP Debug] ${msg}`);
+        logs.push(msg);
+    };
+
     try {
         const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_email, test_email, ignore_certs } = req.body;
 
@@ -196,8 +204,51 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: 'Bitte alle SMTP-Felder und eine Test-Empfänger-Adresse ausfüllen.' });
         }
 
-        console.log(`[SMTP Test] Testing connection to ${smtp_host}:${smtp_port} for ${sender_email} (Ignore Certs: ${ignore_certs})`);
+        log(`Starting Test: ${smtp_host}:${smtp_port} | User: ${smtp_user} | Secure: ${smtp_secure}`);
 
+        // 1. DNS Lookup
+        log('Step 1: DNS Lookup...');
+        await new Promise<void>((resolve, reject) => {
+            dns.lookup(smtp_host, (err, address, family) => {
+                if (err) {
+                    log(`DNS Lookup failed: ${err.message}`);
+                    reject(new Error(`DNS Fehler: Hostname '${smtp_host}' konnte nicht aufgelöst werden.`));
+                } else {
+                    log(`DNS Resolved: ${address} (IPv${family})`);
+                    resolve();
+                }
+            });
+        });
+
+        // 2. TCP Connection Test
+        log('Step 2: TCP Connection Check...');
+        await new Promise<void>((resolve, reject) => {
+            const socket = new net.Socket();
+            socket.setTimeout(5000);
+            
+            socket.on('connect', () => {
+                log('TCP Connection established.');
+                socket.destroy();
+                resolve();
+            });
+            
+            socket.on('timeout', () => {
+                socket.destroy();
+                log('TCP Connection timed out.');
+                reject(new Error(`TCP Timeout: Der Server ${smtp_host} antwortet nicht auf Port ${smtp_port}. (Firewall?)`));
+            });
+            
+            socket.on('error', (err) => {
+                socket.destroy();
+                log(`TCP Connection error: ${err.message}`);
+                reject(new Error(`TCP Fehler: Verbindung zu ${smtp_host}:${smtp_port} fehlgeschlagen. ${err.message}`));
+            });
+
+            socket.connect(Number(smtp_port), smtp_host);
+        });
+
+        // 3. Nodemailer Handshake
+        log('Step 3: SMTP Handshake & Auth...');
         const transporter = nodemailer.createTransport({
             host: smtp_host,
             port: Number(smtp_port),
@@ -209,18 +260,18 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             tls: {
                 rejectUnauthorized: !Boolean(ignore_certs)
             },
-            connectionTimeout: 10000, // 10 seconds
-            greetingTimeout: 5000,    // 5 seconds
-            socketTimeout: 15000      // 15 seconds
+            logger: true,
+            debug: true,
+            connectionTimeout: 10000,
+            greetingTimeout: 5000,
+            socketTimeout: 15000
         });
 
-        // 1. Verify connection
-        console.log('[SMTP Test] Verifying connection...');
         await transporter.verify();
-        console.log('[SMTP Test] Connection verified.');
+        log('SMTP Handshake & Auth successful.');
 
-        // 2. Send test email
-        console.log('[SMTP Test] Sending mail...');
+        // 4. Send Mail
+        log('Step 4: Sending Test Mail...');
         await transporter.sendMail({
             from: sender_email,
             to: test_email,
@@ -228,11 +279,11 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             text: 'Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.\n\nErfolgreich gesendet!',
             html: '<h3>SMTP Test erfolgreich!</h3><p>Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.</p>'
         });
-        console.log('[SMTP Test] Mail sent.');
+        log('Mail sent successfully.');
 
-        res.json({ success: true, message: 'Verbindung erfolgreich & Test-Email gesendet!' });
+        res.json({ success: true, message: 'Verbindung erfolgreich & Test-Email gesendet!', logs });
     } catch (error: any) {
-        console.error('SMTP Test Failed:', error);
+        log(`Error: ${error.message}`);
         
         let errorMessage = error.message;
         if (error.code === 'ETIMEDOUT') {
@@ -241,11 +292,9 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             errorMessage = 'Authentifizierung fehlgeschlagen: Benutzername oder Passwort falsch.';
         } else if (error.code === 'ESOCKET') {
             errorMessage = 'Verbindungsfehler: Falsches Protokoll? (Prüfen Sie den Haken bei "SSL (Erzwungen)").';
-        } else if (error.code === 'EDNS') {
-             errorMessage = 'DNS Fehler: Der Hostname konnte nicht aufgelöst werden.';
         }
 
-        res.status(500).json({ success: false, error: errorMessage });
+        res.status(500).json({ success: false, error: errorMessage, logs });
     }
 });
 
