@@ -47,6 +47,8 @@ export default function AdminSettings() {
   // Invoice & Email Settings
   const [globalContent, setGlobalContent] = useState<any>({});
   const [emailConfig, setEmailConfig] = useState<any>({});
+  const [testEmailAddress, setTestEmailAddress] = useState('');
+  const [testingEmail, setTestingEmail] = useState(false);
 
   const fetchGlobalSettings = async () => {
       try {
@@ -84,6 +86,36 @@ export default function AdminSettings() {
           });
           alert('E-Mail Einstellungen gespeichert!');
       } catch (e) { alert('Fehler beim Speichern'); }
+  };
+
+  const handleTestEmail = async () => {
+      if (!testEmailAddress) {
+          alert("Bitte geben Sie eine Empfänger-Adresse für den Test ein.");
+          return;
+      }
+      
+      setTestingEmail(true);
+      try {
+          const res = await fetch('/api/settings/email-config/test', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  ...emailConfig,
+                  test_email: testEmailAddress
+              })
+          });
+          
+          const data = await res.json();
+          if (data.success) {
+              alert("Erfolg: " + (data.message || 'Email gesendet!'));
+          } else {
+              alert("Fehler: " + (data.error || 'Unbekannter Fehler'));
+          }
+      } catch (e: any) {
+          alert("Verbindungsfehler: " + e.message);
+      } finally {
+          setTestingEmail(false);
+      }
   };
 
   const checkSystemHealth = async () => {
@@ -593,6 +625,27 @@ export default function AdminSettings() {
                             value={emailConfig.smtp_pass || ''}
                             onChange={(e) => setEmailConfig({ ...emailConfig, smtp_pass: e.target.value })}
                         />
+                    </div>
+
+                    <div className="bg-slate-100 p-3 rounded border border-slate-200 mt-4">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Verbindung testen</label>
+                        <div className="flex space-x-2">
+                            <input 
+                                type="email" 
+                                className="flex-1 border border-gray-300 rounded p-2 text-sm"
+                                placeholder="Empfänger für Test-Email (z.B. Ihre Adresse)"
+                                value={testEmailAddress}
+                                onChange={(e) => setTestEmailAddress(e.target.value)}
+                            />
+                            <button 
+                                onClick={handleTestEmail}
+                                disabled={testingEmail}
+                                className="bg-slate-600 text-white px-3 py-2 rounded text-sm hover:bg-slate-700 disabled:opacity-50 whitespace-nowrap"
+                            >
+                                {testingEmail ? 'Sende...' : 'Test Senden'}
+                            </button>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">Sendet eine Test-Email mit den oben eingegebenen Einstellungen (auch ohne Speichern).</p>
                     </div>
 
                     <button 

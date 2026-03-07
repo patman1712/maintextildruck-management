@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import db from '../db.js';
 import { UPLOAD_DIR } from './upload.js';
+import nodemailer from 'nodemailer';
 
 const router = Router();
 
@@ -184,6 +185,44 @@ router.put('/email-config', (req, res) => {
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
+});
+
+// POST /api/settings/email-config/test
+router.post('/email-config/test', async (req: Request, res: Response) => {
+    try {
+        const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_email, test_email } = req.body;
+
+        if (!smtp_host || !smtp_port || !smtp_user || !smtp_pass || !sender_email || !test_email) {
+            return res.status(400).json({ success: false, error: 'Bitte alle SMTP-Felder und eine Test-Empfänger-Adresse ausfüllen.' });
+        }
+
+        const transporter = nodemailer.createTransport({
+            host: smtp_host,
+            port: Number(smtp_port),
+            secure: Boolean(smtp_secure),
+            auth: {
+                user: smtp_user,
+                pass: smtp_pass,
+            },
+        });
+
+        // 1. Verify connection
+        await transporter.verify();
+
+        // 2. Send test email
+        await transporter.sendMail({
+            from: sender_email,
+            to: test_email,
+            subject: 'Test Email - System Einstellungen',
+            text: 'Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.\n\nErfolgreich gesendet!',
+            html: '<h3>SMTP Test erfolgreich!</h3><p>Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.</p>'
+        });
+
+        res.json({ success: true, message: 'Verbindung erfolgreich & Test-Email gesendet!' });
+    } catch (error: any) {
+        console.error('SMTP Test Failed:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 export default router;
