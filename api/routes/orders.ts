@@ -43,10 +43,10 @@ router.get('/', (req: Request, res: Response) => {
 });
 
 // POST new order
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { 
     id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person, 
-    deadline, status, processing, produced, invoiced, print_status, description, employees, files 
+    deadline, status, processing, produced, invoiced, print_status, description, employees, files, shop_id 
   } = req.body;
 
   console.log('Received order payload:', req.body);
@@ -55,16 +55,16 @@ router.post('/', (req: Request, res: Response) => {
     const stmt = db.prepare(`
       INSERT INTO orders (
         id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person,
-        deadline, status, processing, produced, invoiced, print_status, description, employees, files
+        deadline, status, processing, produced, invoiced, print_status, description, employees, files, shop_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
       id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person,
       deadline, status, processing ? 1 : 0, produced ? 1 : 0, invoiced ? 1 : 0, 
       print_status || 'pending',
-      description, JSON.stringify(employees || []), JSON.stringify(files || [])
+      description, JSON.stringify(employees || []), JSON.stringify(files || []), shop_id
     );
     
     // Also save files to the dedicated 'files' table for independent persistence
@@ -96,6 +96,21 @@ router.post('/', (req: Request, res: Response) => {
     }
 
     console.log('Order added successfully:', id);
+
+    // AUTO-INVOICE & EMAIL
+    // Generate invoice and send confirmation email immediately
+    try {
+        console.log(`Auto-generating invoice for new order ${id}...`);
+        const invoicePath = await generateInvoice(id);
+        if (invoicePath) {
+            console.log(`Invoice generated at: ${invoicePath}`);
+            console.log(`Sending confirmation email to customer...`);
+            await sendOrderConfirmation(id, invoicePath);
+        }
+    } catch (e) {
+        console.error('Error in auto-invoice workflow:', e);
+    }
+
     res.json({ success: true, message: 'Order added' });
   } catch (error) {
     console.error('Error adding order to database:', error);

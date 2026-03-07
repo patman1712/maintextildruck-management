@@ -36,26 +36,12 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         let invoiceDate = order.invoice_date;
 
         if (!invoiceNumber) {
-            // Transaction to ensure sequential numbers
-            const transaction = db.transaction(() => {
-                // Get current next number for shop
-                const currentShop = db.prepare('SELECT invoice_number_circle, next_invoice_number FROM shops WHERE id = ?').get(shop.id) as any;
-                let nextNr = currentShop.next_invoice_number || 1;
-                let format = currentShop.invoice_number_circle || 'RE-{YYYY}-{NR}';
+            // STRICT REQUIREMENT: Invoice Number = Order Number
+            invoiceNumber = order.order_number;
+            invoiceDate = new Date().toISOString();
 
-                invoiceNumber = format
-                    .replace('{YEAR}', new Date().getFullYear().toString())
-                    .replace('{NR}', nextNr.toString());
-                
-                invoiceDate = new Date().toISOString();
-
-                // Update Order
-                db.prepare('UPDATE orders SET invoice_number = ?, invoice_date = ? WHERE id = ?').run(invoiceNumber, invoiceDate, orderId);
-
-                // Update Shop next number
-                db.prepare('UPDATE shops SET next_invoice_number = ? WHERE id = ?').run(nextNr + 1, shop.id);
-            });
-            transaction();
+            // Update Order
+            db.prepare('UPDATE orders SET invoice_number = ?, invoice_date = ? WHERE id = ?').run(invoiceNumber, invoiceDate, orderId);
         }
 
         // Create PDF
