@@ -24,6 +24,10 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         // Fetch Customer (Shop Customer)
         const customer = db.prepare('SELECT * FROM shop_customers WHERE id = ?').get(order.shop_customer_id) as any;
 
+        // Fetch Personalization Options Map
+        const personalizationOptions = db.prepare('SELECT id, name FROM personalization_options').all() as {id: string, name: string}[];
+        const optionMap = new Map(personalizationOptions.map(o => [o.id, o.name]));
+
         // Fetch Global Content (Company Info)
         const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
 
@@ -237,20 +241,38 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
             
             // Check for personalization notes
             if (item.notes) {
-                 // Try to parse if JSON
+                 let notesParsed = false;
+                 // Try JSON
                  try {
                      const notesObj = JSON.parse(item.notes);
-                     // If it's an object/array, format it nicely
-                     if (Array.isArray(notesObj)) {
-                         notesObj.forEach((n: any) => extraLines.push(`• ${n.name || n.key}: ${n.value}`));
-                     } else if (typeof notesObj === 'object') {
-                         Object.entries(notesObj).forEach(([k, v]) => extraLines.push(`• ${k}: ${v}`));
-                     } else {
-                         extraLines.push(`Hinweis: ${item.notes}`);
+                     if (typeof notesObj === 'object' && notesObj !== null) {
+                         Object.entries(notesObj).forEach(([k, v]) => {
+                             // Check if k is a known option ID
+                             const label = optionMap.get(k) || k;
+                             let valStr = String(v);
+                             extraLines.push(`${label}: ${valStr}`);
+                         });
+                         notesParsed = true;
                      }
-                 } catch (e) {
-                     // Plain text
-                     extraLines.push(`Hinweis: ${item.notes}`);
+                 } catch (e) { /* ignore */ }
+                 
+                 if (!notesParsed) {
+                     // Check for UUID:Value format
+                     const parts = item.notes.split(':');
+                     if (parts.length === 2) {
+                         const [key, val] = parts;
+                         if (optionMap.has(key)) {
+                             extraLines.push(`${optionMap.get(key)}: ${val}`);
+                             notesParsed = true;
+                         }
+                     }
+                 }
+
+                 if (!notesParsed) {
+                      // Fallback: If it looks like a raw code but we couldn't resolve it,
+                      // and user wants "Initialen: PS", maybe we can guess?
+                      // If it's just text, show it.
+                      extraLines.push(`Hinweis: ${item.notes}`);
                  }
             }
 
@@ -263,8 +285,10 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
                 // Print each extra line
                 extraLines.forEach((line) => {
                     const splitLine = doc.splitTextToSize(line, 80);
-                    doc.text(splitLine, 40, extraY + 4);
-                    extraY += (splitLine.length * 4);
+                    // Reduced spacing: +2 instead of +4
+                    doc.text(splitLine, 40, extraY + 2);
+                    // Reduced line height for extra info block: * 3.5 instead of * 4
+                    extraY += (splitLine.length * 3.5);
                 });
 
                 doc.setTextColor(0);
