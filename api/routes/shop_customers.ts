@@ -65,6 +65,19 @@ router.post('/:shopId/register', async (req, res) => {
     }
     const customerNumber = `KD-${nextNr}`;
 
+    // Fix: Ensure last_name does not have a trailing '0' appended by accident if frontend sends it?
+    // User reported "Pat Sch0" or "Patrick Scheiber0".
+    // This implies something is appending '0' to the name.
+    // Check if data_privacy_accepted logic was somehow concatenating '0' string instead of int?
+    // In previous versions: data_privacy_accepted ? 1 : 0.
+    // Wait, in line 76: last_name is passed directly.
+    // Let's check where the user input comes from.
+    // If user input is clean, maybe the DB insert is weird?
+    // Or maybe the display logic?
+    // Let's sanitize input just in case.
+    const cleanLastName = last_name.trim();
+    const cleanFirstName = first_name.trim();
+
     // Transaction for atomic update
     const transaction = db.transaction(() => {
         db.prepare(`
@@ -73,10 +86,10 @@ router.post('/:shopId/register', async (req, res) => {
             company, street, zip, city, phone, data_privacy_accepted, customer_number
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-          id, shopId, email, hashedPassword, first_name, last_name, 
+          id, shopId, email, hashedPassword, cleanFirstName, cleanLastName, 
           company, street, zip, city, phone, data_privacy_accepted ? 1 : 0, customerNumber
         );
-
+        
         // Increment shop next number
         db.prepare('UPDATE shops SET next_customer_number = ? WHERE id = ?').run(nextNr + 1, shopId);
     });

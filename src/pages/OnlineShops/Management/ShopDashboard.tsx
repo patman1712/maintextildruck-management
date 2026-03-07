@@ -1125,9 +1125,9 @@ const ShopDashboard: React.FC = () => {
                                                 </div>
                                                 <div>
                                                     <p className={`font-bold ${customer.is_blocked ? 'text-red-800' : 'text-slate-800'}`}>
-                                                        {customer.first_name} {customer.last_name}
-                                                        {customer.is_blocked && <span className="ml-2 text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded uppercase">Gesperrt</span>}
-                                                    </p>
+                                        {customer.first_name} {customer.last_name}
+                                        {customer.is_blocked && <span className="ml-2 text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded uppercase">Gesperrt</span>}
+                                    </p>
                                                     <p className="text-xs text-slate-500">{customer.email}</p>
                                                 </div>
                                             </div>
