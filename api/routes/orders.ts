@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import db from '../db.js';
+import { generateInvoice } from '../services/invoice.js';
+import { sendOrderConfirmation } from '../services/email.js';
 
 const router = Router();
 
@@ -102,7 +104,7 @@ router.post('/', (req: Request, res: Response) => {
 });
 
 // PUT update order
-router.put('/:id', (req: Request, res: Response) => {
+router.put('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const updates = req.body;
   console.log(`PUT /orders/${id} updates:`, Object.keys(updates));
@@ -135,11 +137,36 @@ router.put('/:id', (req: Request, res: Response) => {
   if (updates.employees !== undefined) { fields.push('employees = ?'); values.push(JSON.stringify(updates.employees)); }
   if (updates.files !== undefined) { fields.push('files = ?'); values.push(JSON.stringify(updates.files)); }
 
-  if (fields.length === 0) return res.json({ success: true, message: 'No changes' });
+  // Check if invoice needs to be generated (if invoiced flag changed to true)
+  const shouldGenerateInvoice = updates.invoiced === true && !existing.invoiced;
 
-  values.push(id);
-  const stmt = db.prepare(`UPDATE orders SET ${fields.join(', ')} WHERE id = ?`);
-  stmt.run(...values);
+  if (fields.length > 0) {
+      values.push(id);
+      const stmt = db.prepare(`UPDATE orders SET ${fields.join(', ')} WHERE id = ?`);
+      stmt.run(...values);
+  }
+
+  // Handle Invoice Generation & Email
+  if (shouldGenerateInvoice) {
+      try {
+          console.log(`Generating invoice for order ${id}...`);
+          const invoicePath = await generateInvoice(id);
+          if (invoicePath) {
+              console.log(`Invoice generated at: ${invoicePath}`);
+              
+              // Send Email with Invoice
+              console.log(`Sending invoice email to customer...`);
+              const emailSent = await sendOrderConfirmation(id, invoicePath);
+              if (emailSent) {
+                  console.log('Invoice email sent successfully.');
+              } else {
+                  console.warn('Failed to send invoice email.');
+              }
+          }
+      } catch (e) {
+          console.error('Error in invoice workflow:', e);
+      }
+  }
 
   // Also update files table if files are in the update payload
   if (updates.files && Array.isArray(updates.files)) {
