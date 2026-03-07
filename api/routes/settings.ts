@@ -228,45 +228,53 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
         }
 
         // Step 2: Connectivity Check
-        log(`Step 2: Checking network connectivity to ${resolvedIp}:${smtp_port}...`);
-        try {
-            await new Promise<void>((resolve, reject) => {
-                const socket = new net.Socket();
-                socket.setTimeout(5000);
-                
-                socket.on('connect', () => {
-                    log('TCP Connection successful!');
-                    socket.destroy();
-                    resolve();
-                });
-                
-                socket.on('timeout', () => {
-                    log('TCP Connection Timed Out');
-                    socket.destroy();
-                    reject(new Error('TCP Timeout'));
-                });
-                
-                socket.on('error', (err) => {
-                    log(`TCP Connection Error: ${err.message}`);
-                    socket.destroy();
-                    reject(err);
-                });
+        // Only skip if port is 25 (often internal/unblocked but slow to handshake)
+        if (Number(smtp_port) !== 25) {
+            log(`Step 2: Checking network connectivity to ${resolvedIp}:${smtp_port}...`);
+            try {
+                await new Promise<void>((resolve, reject) => {
+                    const socket = new net.Socket();
+                    socket.setTimeout(5000);
+                    
+                    socket.on('connect', () => {
+                        log('TCP Connection successful!');
+                        socket.destroy();
+                        resolve();
+                    });
+                    
+                    socket.on('timeout', () => {
+                        log('TCP Connection Timed Out');
+                        socket.destroy();
+                        reject(new Error('TCP Timeout'));
+                    });
+                    
+                    socket.on('error', (err) => {
+                        log(`TCP Connection Error: ${err.message}`);
+                        socket.destroy();
+                        reject(err);
+                    });
 
-                socket.connect(Number(smtp_port), resolvedIp);
-            });
-        } catch (e: any) {
-            log(`Network Check Failed: ${e.message}`);
-            return res.status(500).json({ 
-                success: false, 
-                error: `Netzwerkfehler: Der Server kann keine Verbindung zu Port ${smtp_port} aufbauen. Vermutlich blockiert eine Firewall (ausgehend) oder der Provider (Vercel/Railway/etc.) diesen Port.`, 
-                logs 
-            });
+                    socket.connect(Number(smtp_port), resolvedIp);
+                });
+            } catch (e: any) {
+                log(`Network Check Failed: ${e.message}`);
+                // Proceed anyway? No, if TCP fails, Nodemailer will fail too.
+                // But user says "Port 25 works elsewhere". 
+                // Let's return specific advice.
+                return res.status(500).json({ 
+                    success: false, 
+                    error: `Netzwerkfehler: Verbindung zu Port ${smtp_port} fehlgeschlagen (${e.message}). Versuchen Sie Port 25.`, 
+                    logs 
+                });
+            }
+        } else {
+            log('Step 2: Skipped connectivity check for Port 25.');
         }
 
         // Step 3: Nodemailer
         log('Step 3: Sending Mail via Nodemailer...');
         
-        // Force use of IP address to bypass Node's internal DNS issues
+        // Use resolved IP but keep SNI
         const transporter = nodemailer.createTransport({
             host: resolvedIp, 
             port: Number(smtp_port),
@@ -277,13 +285,16 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             },
             tls: {
                 rejectUnauthorized: !Boolean(ignore_certs),
-                servername: smtp_host.trim() // Critical for IP connection
+                servername: smtp_host.trim(), // Critical for IP connection
+                minVersion: 'TLSv1'
             },
+            // Port 25 specific: Opportunistic TLS
+            ignoreTLS: Number(smtp_port) === 25 && Boolean(ignore_certs) ? true : false, // Optional: try forcing no-TLS if user really wants to debug
             logger: true,
             debug: true,
-            connectionTimeout: 10000,
-            greetingTimeout: 10000,
-            socketTimeout: 15000
+            connectionTimeout: 20000,
+            greetingTimeout: 20000,
+            socketTimeout: 20000
         } as any);
 
         await transporter.verify();

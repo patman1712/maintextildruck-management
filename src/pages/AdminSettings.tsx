@@ -707,9 +707,9 @@ export default function AdminSettings() {
                             onChange={(e) => setEmailConfig({ ...emailConfig, ignore_certs: e.target.checked })}
                         />
                         <label htmlFor="ignore_certs" className="text-sm font-medium text-slate-700">
-                            Zertifikatsfehler ignorieren
+                            Zertifikatsfehler ignorieren / Ältere Protokolle zulassen
                             <span className="block text-xs text-gray-400 font-normal">
-                                (Hilft bei Verbindungsproblemen mit Hostnamen wie 'w01...')
+                                (Aktivieren bei Timeout-Problemen oder "Handshake" Fehlern)
                             </span>
                         </label>
                     </div>
