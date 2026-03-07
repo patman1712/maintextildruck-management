@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, ArrowRight } from 'lucide-react';
 
 interface ProductTileProps {
     product: any;
@@ -8,7 +8,6 @@ interface ProductTileProps {
 }
 
 export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId }) => {
-    const [showSizes, setShowSizes] = useState(false);
     
     // Parse variants if available
     let sizes: string[] = [];
@@ -24,65 +23,76 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId }) => 
     } catch (e) {
         console.error('Error parsing variants', e);
     }
+    
+    // TODO: Connect this to backend "is_new" field later
+    // For now we assume if product.is_new is true, or we could add a field in shop_products table
+    const isNew = product.is_new === 1 || product.is_new === true;
 
     return (
-        <div className="group block relative" onMouseLeave={() => setShowSizes(false)}>
-            <Link to={`/shop/${shopId}/product/${product.product_id}`} className="block">
-                <div className="relative aspect-[3/4] bg-slate-100 mb-4 overflow-hidden">
+        <div className="group block relative bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-slate-100">
+            <Link to={`/shop/${shopId}/product/${product.product_id}`} className="block h-full flex flex-col">
+                <div className="relative aspect-[3/4] bg-slate-50 overflow-hidden">
                     {product.files && product.files.length > 0 && (product.files[0].thumbnail_url || product.files[0].file_url) ? (
-                        <img 
-                            src={product.files[0].thumbnail_url || product.files[0].file_url} 
-                            alt={product.name}
-                            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
-                        />
+                        <>
+                            <img 
+                                src={product.files[0].thumbnail_url || product.files[0].file_url} 
+                                alt={product.name}
+                                className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-700"
+                            />
+                            {/* Overlay gradient on hover */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                        </>
                     ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-300">
-                            <span className="text-4xl font-bold opacity-20">NO IMAGE</span>
+                        <div className="w-full h-full flex items-center justify-center text-slate-300 bg-slate-100">
+                            <span className="text-sm font-bold opacity-30 uppercase tracking-widest">Kein Bild</span>
                         </div>
                     )}
                     
-                    {/* Badge */}
-                    <div className="absolute top-4 left-4 bg-white px-2 py-1 text-xs font-bold uppercase tracking-wider">Neu</div>
+                    {/* Badge "NEU" - Only show if isNew is true */}
+                    {isNew && (
+                        <div className="absolute top-3 left-3 bg-red-600 text-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded shadow-md z-10">
+                            Neu
+                        </div>
+                    )}
                     
-                    {/* Quick Add Button / Size Selector Overlay */}
-                    <div className={`absolute bottom-0 left-0 right-0 bg-white p-4 transition-transform duration-300 ${showSizes ? 'translate-y-0' : 'translate-y-full group-hover:translate-y-0'}`}>
-                        {showSizes ? (
-                            <div className="grid grid-cols-4 gap-2">
-                                {sizes.length > 0 ? sizes.map(size => (
-                                    <Link 
-                                        key={size}
-                                        to={`/shop/${shopId}/product/${product.product_id}?size=${size}`} 
-                                        className="text-center py-1 border border-slate-200 hover:border-black text-xs font-bold text-slate-800"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        {size}
-                                    </Link>
-                                )) : (
-                                    <Link to={`/shop/${shopId}/product/${product.product_id}`} className="col-span-4 text-center text-xs font-bold underline text-slate-800">
-                                        Details ansehen
-                                    </Link>
-                                )}
-                            </div>
-                        ) : (
-                            <button 
-                                className="w-full bg-black text-white py-2 text-sm font-bold uppercase hover:bg-slate-800 flex items-center justify-center gap-2"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setShowSizes(true);
-                                }}
-                            >
-                                <ShoppingCart size={16} />
-                                In den Warenkorb
-                            </button>
-                        )}
+                    {/* Hover Action Button */}
+                    <div className="absolute bottom-4 right-4 translate-y-12 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 z-10">
+                         <div className="bg-white text-slate-900 w-10 h-10 rounded-full flex items-center justify-center shadow-lg hover:bg-slate-900 hover:text-white transition-colors">
+                             <ArrowRight size={18} />
+                         </div>
                     </div>
                 </div>
                 
-                <h3 className="font-bold text-lg leading-tight mb-1 group-hover:text-red-600 transition-colors">{product.name}</h3>
-                <p className="text-sm text-slate-500 mb-2">{product.product_number}</p>
-                <div className="flex items-center justify-between">
-                    <span className="font-bold text-lg">€ {product.price > 0 ? product.price.toFixed(2) : '29.95'}</span>
+                <div className="p-5 flex-grow flex flex-col">
+                    <div className="mb-1">
+                        <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-1">{product.product_number}</p>
+                        <h3 className="font-bold text-base leading-snug text-slate-800 group-hover:text-red-600 transition-colors line-clamp-2 min-h-[2.5rem]">
+                            {product.name}
+                        </h3>
+                    </div>
+                    
+                    {/* Size Preview (Optional - small dots or text) */}
+                    {sizes.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2 mb-3">
+                            {sizes.slice(0, 5).map(size => (
+                                <span key={size} className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                                    {size}
+                                </span>
+                            ))}
+                            {sizes.length > 5 && (
+                                <span className="text-[10px] text-slate-400 px-1 py-0.5">+</span>
+                            )}
+                        </div>
+                    )}
+                    
+                    <div className="mt-auto pt-3 flex items-center justify-between border-t border-slate-50">
+                        <span className="font-extrabold text-lg text-slate-900">
+                            € {product.price > 0 ? product.price.toFixed(2) : '29.95'}
+                        </span>
+                        <span className="text-xs font-bold text-red-600 uppercase opacity-0 group-hover:opacity-100 transition-opacity -translate-x-2 group-hover:translate-x-0 duration-300">
+                            Zum Produkt
+                        </span>
+                    </div>
                 </div>
             </Link>
         </div>
