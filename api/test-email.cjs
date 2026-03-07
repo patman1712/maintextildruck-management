@@ -1,10 +1,11 @@
 
 const nodemailer = require('nodemailer');
+const dns = require('dns');
 
 // Read config from command line arguments (base64 encoded JSON)
 const args = process.argv.slice(2);
 if (args.length < 1) {
-    console.error('Usage: node test-email.js <base64-json-config>');
+    console.error('Usage: node test-email.cjs <base64-json-config>');
     process.exit(1);
 }
 
@@ -17,16 +18,36 @@ try {
     process.exit(1);
 }
 
-console.log(`--- External SMTP Test ---`);
-console.log(`Host: ${config.host}`);
-console.log(`Port: ${config.port}`);
-console.log(`Secure: ${config.secure}`);
+console.log(`--- External SMTP Test (Enhanced) ---`);
+console.log(`Target: ${config.host}:${config.port}`);
 console.log(`User: ${config.auth.user}`);
 
+async function resolveHost(hostname) {
+    return new Promise((resolve, reject) => {
+        dns.lookup(hostname, { family: 4 }, (err, address) => {
+            if (err) reject(err);
+            else resolve(address);
+        });
+    });
+}
+
 async function run() {
-    // Construct transport config exactly as it should be
+    let targetHost = config.host;
+    let sniHost = config.host;
+
+    // 1. Manually resolve IP to ensure IPv4
+    try {
+        console.log(`1. Resolving DNS for ${config.host}...`);
+        const ip = await resolveHost(config.host);
+        console.log(`   ✅ Resolved to: ${ip}`);
+        targetHost = ip; // Connect to IP directly
+    } catch (e) {
+        console.log(`   ⚠️ DNS Resolution failed: ${e.message}. Using hostname.`);
+    }
+
+    // Construct transport config
     const transportConfig = {
-        host: config.host, // Use hostname directly, let Node handle DNS
+        host: targetHost, 
         port: Number(config.port),
         secure: Boolean(config.secure),
         auth: {
@@ -34,13 +55,13 @@ async function run() {
             pass: config.auth.pass
         },
         tls: {
-            servername: config.host, // SNI
+            servername: sniHost, // Critical for SNI when connecting to IP
             rejectUnauthorized: !config.ignore_certs,
             minVersion: 'TLSv1'
         },
-        connectionTimeout: 15000,
-        greetingTimeout: 15000,
-        socketTimeout: 20000,
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
         debug: true,
         logger: true
     };
@@ -48,11 +69,11 @@ async function run() {
     try {
         const transporter = nodemailer.createTransport(transportConfig);
 
-        console.log('1. Verifying connection...');
+        console.log('2. Verifying connection...');
         await transporter.verify();
         console.log('✅ VERIFY_SUCCESS');
 
-        console.log('2. Sending test mail...');
+        console.log('3. Sending test mail...');
         await transporter.sendMail({
             from: config.sender_email,
             to: config.test_email,
@@ -65,8 +86,6 @@ async function run() {
     } catch (err) {
         console.error('❌ ERROR:', err.message);
         if (err.code) console.error('CODE:', err.code);
-        // Print full error for debugging
-        console.error(JSON.stringify(err, Object.getOwnPropertyNames(err)));
         process.exit(1);
     }
 }
