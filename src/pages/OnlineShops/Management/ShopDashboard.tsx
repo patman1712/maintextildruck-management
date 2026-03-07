@@ -734,7 +734,12 @@ const ShopDashboard: React.FC = () => {
                                                             const data = await res.json();
                                                             if (data.success && data.files?.preview?.[0]) {
                                                                 const url = data.files.preview[0].thumbnail || data.files.preview[0].path;
-                                                                setShop({ ...shop, email_logo_url: url });
+                                                                // IMPORTANT: We must update the state AND trigger a save immediately or ensure handleSaveGeneral picks it up
+                                                                // For now, we update state, user must click Save.
+                                                                // But wait, the user said it disappears on refresh. That means handleSaveGeneral might not include it?
+                                                                // No, handleSaveGeneral calls updateShop with the whole shop object.
+                                                                // Let's verify updateShop implementation in store.
+                                                                setShop(prev => prev ? ({ ...prev, email_logo_url: url }) : null);
                                                             }
                                                         } catch (err) { console.error(err); }
                                                     }}
