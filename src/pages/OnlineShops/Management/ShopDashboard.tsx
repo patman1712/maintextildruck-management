@@ -673,6 +673,78 @@ const ShopDashboard: React.FC = () => {
                                 />
                             </div>
                         </div>
+
+                        {/* Email Logo (Neu) */}
+                        <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 mt-6">
+                            <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                                <Mail className="w-5 h-5 text-blue-600" />
+                                E-Mail & PDF Logo
+                            </h2>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                                        Logo für E-Mails & Rechnungen (PDF)
+                                    </label>
+                                    <p className="text-xs text-slate-500 mb-3">
+                                        Dieses Logo wird oben links auf Rechnungen und in E-Mails angezeigt. 
+                                        (Optimal: Transparentes PNG, max. 300px breit)
+                                    </p>
+                                    
+                                    <div className="flex items-start gap-4">
+                                        {shop.email_logo_url ? (
+                                            <div className="relative group">
+                                                <div className="w-48 h-24 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-center p-2">
+                                                    <img 
+                                                        src={shop.email_logo_url} 
+                                                        alt="Email Logo" 
+                                                        className="max-w-full max-h-full object-contain"
+                                                    />
+                                                </div>
+                                                <button
+                                                    onClick={() => setShop({...shop, email_logo_url: ''})}
+                                                    className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="w-48 h-24 bg-slate-50 rounded-lg border border-dashed border-slate-300 flex items-center justify-center text-slate-400 text-sm">
+                                                Kein Logo
+                                            </div>
+                                        )}
+                                        
+                                        <div className="flex-1">
+                                            <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center w-full justify-center">
+                                                <ImageIcon size={16} className="mr-2" />
+                                                Logo hochladen
+                                                <input 
+                                                    type="file" 
+                                                    className="hidden" 
+                                                    accept="image/*"
+                                                    onChange={async (e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (!file) return;
+                                                        
+                                                        const formData = new FormData();
+                                                        formData.append('preview', file);
+                                                        
+                                                        try {
+                                                            const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                                                            const data = await res.json();
+                                                            if (data.success && data.files?.preview?.[0]) {
+                                                                const url = data.files.preview[0].thumbnail || data.files.preview[0].path;
+                                                                setShop({ ...shop, email_logo_url: url });
+                                                            }
+                                                        } catch (err) { console.error(err); }
+                                                    }}
+                                                />
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-1">Logo URL</label>

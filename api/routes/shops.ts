@@ -395,7 +395,7 @@ router.put('/:id', (req, res) => {
     const { id } = req.params;
     const body = req.body as any;
     const { 
-        name, domain_slug, logo_url, 
+        name, domain_slug, logo_url, email_logo_url,
         primary_color, secondary_color, template, 
         dhl_config, paypal_config,
         order_number_circle, next_order_number,
@@ -409,7 +409,7 @@ router.put('/:id', (req, res) => {
 
     const query = `
       UPDATE shops 
-      SET name = ?, domain_slug = ?, logo_url = ?, 
+      SET name = ?, domain_slug = ?, logo_url = ?, email_logo_url = ?,
           primary_color = ?, secondary_color = ?, template = ?, 
           dhl_config = ?, paypal_config = ?,
           order_number_circle = ?, next_order_number = ?,
@@ -426,6 +426,7 @@ router.put('/:id', (req, res) => {
       name,
       domain_slug,
       logo_url,
+      email_logo_url || null,
       primary_color,
       secondary_color,
       template,

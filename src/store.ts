@@ -136,6 +136,7 @@ export interface Shop {
   next_order_number?: number;
   invoice_number_circle?: string;
   next_invoice_number?: number;
+  email_logo_url?: string; // New field for email logo
   hero_images?: string[]; // New field for hero slider
   welcome_text?: string; // New field for welcome text
   
