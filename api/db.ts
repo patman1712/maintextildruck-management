@@ -891,8 +891,14 @@ try {
           console.log('Migrating database: Adding ignore_certs to email_config table');
           db.exec('ALTER TABLE email_config ADD COLUMN ignore_certs BOOLEAN DEFAULT 0');
       }
+
+      const hasResendApiKey = emailConfigCols.some(col => col.name === 'resend_api_key');
+      if (!hasResendApiKey) {
+          console.log('Migrating database: Adding resend_api_key to email_config table');
+          db.exec('ALTER TABLE email_config ADD COLUMN resend_api_key TEXT');
+      }
   } catch (e) {
-      console.error('Migration error (ignore_certs):', e);
+      console.error('Migration error (email_config):', e);
   }
 
   // Ensure default row for email config

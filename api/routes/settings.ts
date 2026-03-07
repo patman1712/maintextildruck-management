@@ -8,6 +8,7 @@ import { exec } from 'child_process';
 import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import dns from 'dns';
+import { Resend } from 'resend';
 
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -176,14 +177,14 @@ router.get('/email-config', (req, res) => {
 // PUT /api/settings/email-config
 router.put('/email-config', (req, res) => {
   try {
-    const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_name, sender_email, ignore_certs } = req.body;
+    const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_name, sender_email, ignore_certs, resend_api_key } = req.body;
     
     db.prepare(`
         UPDATE email_config 
         SET smtp_host = ?, smtp_port = ?, smtp_user = ?, smtp_pass = ?, 
-            smtp_secure = ?, sender_name = ?, sender_email = ?, ignore_certs = ?, updated_at = CURRENT_TIMESTAMP 
+            smtp_secure = ?, sender_name = ?, sender_email = ?, ignore_certs = ?, resend_api_key = ?, updated_at = CURRENT_TIMESTAMP 
         WHERE id = 'main'
-    `).run(smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure ? 1 : 0, sender_name, sender_email, ignore_certs ? 1 : 0);
+    `).run(smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure ? 1 : 0, sender_name, sender_email, ignore_certs ? 1 : 0, resend_api_key);
     
     res.json({ success: true });
   } catch (error: any) {
@@ -194,10 +195,30 @@ router.put('/email-config', (req, res) => {
 // POST /api/settings/email-config/test
 router.post('/email-config/test', async (req: Request, res: Response) => {
     try {
-        const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_email, test_email, ignore_certs } = req.body;
+        const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_email, test_email, ignore_certs, resend_api_key } = req.body;
 
+        // If Resend API Key is provided, use Resend
+        if (resend_api_key && resend_api_key.trim().startsWith('re_')) {
+            const resend = new Resend(resend_api_key.trim());
+
+            const { data, error } = await resend.emails.send({
+                from: 'onboarding@resend.dev', // Must be this for testing, or a verified domain
+                to: test_email,
+                subject: 'Test Email via Resend - System Einstellungen',
+                html: '<h3>Resend Test erfolgreich!</h3><p>Dies ist eine Test-Email um die Resend-API-Einstellungen zu überprüfen.</p>'
+            });
+
+            if (error) {
+                console.error('Resend Error:', error);
+                return res.status(500).json({ success: false, error: 'Resend Fehler: ' + error.message, logs: [error.message] });
+            }
+
+            return res.json({ success: true, message: 'Verbindung erfolgreich (via Resend) & Test-Email gesendet!' });
+        }
+
+        // Fallback to SMTP
         if (!smtp_host || !smtp_port || !smtp_user || !smtp_pass || !sender_email || !test_email) {
-            return res.status(400).json({ success: false, error: 'Bitte alle SMTP-Felder und eine Test-Empfänger-Adresse ausfüllen.' });
+            return res.status(400).json({ success: false, error: 'Bitte alle SMTP-Felder ODER einen Resend API Key ausfüllen.' });
         }
 
         // 1. Resolve IP manually (IPv4) to avoid any ambiguity

@@ -656,7 +656,22 @@ export default function AdminSettings() {
                     <div className="border-t border-slate-200 my-3 pt-3"></div>
 
                     <div>
-                        <label className="block text-sm font-medium text-slate-700">SMTP Host</label>
+                        <label className="block text-sm font-medium text-slate-700">Resend API Key</label>
+                        <input 
+                            type="password" className="w-full border border-gray-300 rounded p-2 text-sm"
+                            value={emailConfig.resend_api_key || ''}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, resend_api_key: e.target.value })}
+                            placeholder="re_123456789..."
+                        />
+                        <p className="mt-1 text-xs text-slate-500">
+                            Wenn gesetzt, wird Resend statt SMTP verwendet (Empfohlen für bessere Zustellbarkeit).
+                        </p>
+                    </div>
+
+                    <div className="border-t border-slate-200 my-3 pt-3"></div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700">SMTP Host (Optional)</label>
                         <input 
                             type="text" className="w-full border border-gray-300 rounded p-2 text-sm"
                             value={emailConfig.smtp_host || ''}
