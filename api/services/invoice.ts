@@ -252,47 +252,30 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         y += 5;
         doc.text(`Leistungsdatum entspricht Rechnungsdatum`, 20, y);
 
-        // Footer (Bottom)
+        // --- FOOTER ---
         const footerY = 270;
-        doc.setFontSize(7);
-        doc.line(20, footerY - 5, 195, footerY - 5);
+        doc.setFontSize(8);
+        doc.setTextColor(102, 102, 102);
         
-        const col1X = 20;
-        const col2X = 80;
-        const col3X = 140;
-        const col4X = 195; // Right align
+        // Col 1: Address
+        doc.text(globalContent.company_name || shop.name || '', 20, footerY);
+        doc.text(globalContent.company_address || '', 20, footerY + 5);
+        
+        // Col 2: Contact
+        doc.text('Kontakt:', 70, footerY);
+        doc.text(globalContent.contact_email || '', 70, footerY + 5);
+        doc.text(globalContent.contact_phone || '', 70, footerY + 10);
 
-        // Col 1: Company
-        doc.setFont("helvetica", "bold");
-        doc.text(globalContent.company_name || 'Main Textildruck GmbH', col1X, footerY);
-        doc.setFont("helvetica", "normal");
-        doc.text(`IdNr.: ${globalContent.tax_number || '-'}`, col1X, footerY + 3);
-        doc.text(`USt-IdNr.: ${globalContent.vat_id || '-'}`, col1X, footerY + 6);
-        // doc.text(`Finanzamt: ...`, col1X, footerY + 9);
+        // Col 3: Bank
+        doc.text('Bankverbindung:', 120, footerY);
+        doc.text(globalContent.bank_name || '', 120, footerY + 5);
+        doc.text(`IBAN: ${globalContent.bank_iban || ''}`, 120, footerY + 10);
+        doc.text(`BIC: ${globalContent.bank_bic || ''}`, 120, footerY + 15);
 
-        // Col 2: Bank
-        doc.setFont("helvetica", "bold");
-        doc.text("Bankverbindung", col2X, footerY);
-        doc.setFont("helvetica", "normal");
-        doc.text(globalContent.bank_name || '-', col2X, footerY + 3);
-        doc.text(`IBAN: ${globalContent.bank_iban || '-'}`, col2X, footerY + 6);
-        doc.text(`BIC: ${globalContent.bank_bic || '-'}`, col2X, footerY + 9);
-
-        // Col 3: Court
-        doc.setFont("helvetica", "bold");
-        doc.text(`Gerichtsstand: ${globalContent.commercial_register || '-'}`, col3X, footerY);
-        doc.setFont("helvetica", "normal");
-        doc.text(`Erfüllungsort: ${globalContent.company_address ? globalContent.company_address.split(',')[1]?.trim() : '-'}`, col3X, footerY + 3);
-
-        // Col 4: CEO (Right aligned - tricky with simple text, use fixed X)
-        // Actually col4X is right edge.
-        doc.setFont("helvetica", "bold");
-        doc.text("Geschäftsführer", 170, footerY);
-        doc.setFont("helvetica", "normal");
-        doc.text(globalContent.ceo_name || '-', 170, footerY + 3);
-        doc.text(globalContent.contact_phone || '-', 170, footerY + 6);
-
-        doc.text("Seite 1 / 1", 195, footerY, { align: 'right' });
+        // Col 4: Tax
+        doc.text('Steuer-Nr:', 170, footerY);
+        doc.text(globalContent.tax_number || '', 170, footerY + 5);
+        doc.text(`USt-ID: ${globalContent.vat_id || ''}`, 170, footerY + 10);
 
 
         // Save PDF
