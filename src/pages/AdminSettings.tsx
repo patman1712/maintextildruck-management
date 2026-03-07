@@ -49,6 +49,7 @@ export default function AdminSettings() {
   const [emailConfig, setEmailConfig] = useState<any>({});
   const [testEmailAddress, setTestEmailAddress] = useState('');
   const [testingEmail, setTestingEmail] = useState(false);
+  const [testStatus, setTestStatus] = useState<{success: boolean, message: string} | null>(null);
 
   const fetchGlobalSettings = async () => {
       try {
@@ -95,6 +96,7 @@ export default function AdminSettings() {
       }
       
       setTestingEmail(true);
+      setTestStatus(null);
       try {
           const res = await fetch('/api/settings/email-config/test', {
               method: 'POST',
@@ -107,12 +109,12 @@ export default function AdminSettings() {
           
           const data = await res.json();
           if (data.success) {
-              alert("Erfolg: " + (data.message || 'Email gesendet!'));
+              setTestStatus({ success: true, message: data.message || 'Email gesendet!' });
           } else {
-              alert("Fehler: " + (data.error || 'Unbekannter Fehler'));
+              setTestStatus({ success: false, message: data.error || 'Unbekannter Fehler' });
           }
       } catch (e: any) {
-          alert("Verbindungsfehler: " + e.message);
+          setTestStatus({ success: false, message: "Verbindungsfehler: " + e.message });
       } finally {
           setTestingEmail(false);
       }
@@ -646,6 +648,12 @@ export default function AdminSettings() {
                             </button>
                         </div>
                         <p className="text-xs text-slate-500 mt-1">Sendet eine Test-Email mit den oben eingegebenen Einstellungen (auch ohne Speichern).</p>
+                        
+                        {testStatus && (
+                            <div className={`mt-3 p-2 rounded text-sm ${testStatus.success ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'}`}>
+                                <strong>{testStatus.success ? 'Erfolg:' : 'Fehler:'}</strong> {testStatus.message}
+                            </div>
+                        )}
                     </div>
 
                     <button 
