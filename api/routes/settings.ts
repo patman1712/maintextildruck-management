@@ -207,31 +207,64 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
 
         log(`Starting Test: ${smtp_host}:${smtp_port} | User: ${smtp_user} | Secure: ${smtp_secure}`);
 
-        // Step 1: DNS Lookup (Just to log it)
+        // Step 1: DNS Lookup
         log('Step 1: DNS Lookup...');
+        let resolvedIp = '';
         try {
-             await new Promise<void>((resolve) => {
+             await new Promise<void>((resolve, reject) => {
                 dns.lookup(smtp_host.trim(), { family: 4 }, (err, address) => {
-                    if (err) log(`DNS Error: ${err.message}`);
-                    else log(`DNS Resolved: ${address}`);
-                    resolve();
+                    if (err) {
+                        log(`DNS Error: ${err.message}`);
+                        reject(err);
+                    } else {
+                        log(`DNS Resolved: ${address}`);
+                        resolvedIp = address;
+                        resolve();
+                    }
                 });
             });
-        } catch (e) {}
-
-        // Step 2: TLS Probe (Direct) - DISABLED FOR NOW AS IT SEEMS TO CAUSE ISSUES ON SOME ENVIRONMENTS
-        /*
-        if (Boolean(smtp_secure)) {
-            log('Step 2: Probing TLS Handshake...');
-            // ... code removed ...
+        } catch (e: any) {
+            return res.status(500).json({ success: false, error: `DNS Fehler: ${e.message}`, logs });
         }
-        */
-        log('Step 2: TLS Probe skipped (Direct Nodemailer test).');
+
+        // Step 2: Connectivity Check (Replicating successful script)
+        if (Boolean(smtp_secure)) {
+            log(`Step 2: Testing TLS Connection to ${resolvedIp}...`);
+            try {
+                await new Promise<void>((resolve, reject) => {
+                    const socket = tls.connect(Number(smtp_port), resolvedIp, {
+                        servername: smtp_host.trim(), // SNI
+                        rejectUnauthorized: !Boolean(ignore_certs),
+                        timeout: 5000
+                    }, () => {
+                        log('Manual TLS Handshake successful!');
+                        socket.end();
+                        resolve();
+                    });
+
+                    socket.on('error', (err) => {
+                        log(`Manual TLS Error: ${err.message}`);
+                        reject(err);
+                    });
+
+                    socket.on('timeout', () => {
+                        log('Manual TLS Timeout');
+                        socket.destroy();
+                        reject(new Error('TLS Connection Timeout'));
+                    });
+                });
+            } catch (e: any) {
+                log(`Skipping manual check failure: ${e.message}`);
+                // Proceed anyway, maybe Nodemailer has better luck?
+            }
+        }
 
         // Step 3: Nodemailer
         log('Step 3: Sending Mail via Nodemailer...');
+        
+        // Force use of IP address to bypass Node's internal DNS issues
         const transporter = nodemailer.createTransport({
-            host: smtp_host.trim(),
+            host: resolvedIp, 
             port: Number(smtp_port),
             secure: Boolean(smtp_secure),
             auth: {
@@ -239,17 +272,14 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
                 pass: smtp_pass
             },
             tls: {
-                // Completely permissive settings to rule out nodejs strictness
                 rejectUnauthorized: !Boolean(ignore_certs),
-                servername: smtp_host.trim(),
-                minVersion: 'TLSv1' // Allow older TLS
+                servername: smtp_host.trim() // Critical for IP connection
             },
-            // REMOVED family: 4 to allow system default
             logger: true,
             debug: true,
-            connectionTimeout: 20000, // Increased
-            greetingTimeout: 20000,   // Increased
-            socketTimeout: 30000      // Increased
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000
         } as any);
 
         await transporter.verify();
