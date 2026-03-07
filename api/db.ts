@@ -920,8 +920,14 @@ try {
           db.exec('ALTER TABLE shops ADD COLUMN invoice_number_circle TEXT'); // e.g. "RE-{YYYY}-"
           db.exec('ALTER TABLE shops ADD COLUMN next_invoice_number INTEGER DEFAULT 1');
       }
+
+      const hasEmailLogo = shopCols.some(col => col.name === 'email_logo_url');
+      if (!hasEmailLogo) {
+          console.log('Migrating database: Adding email_logo_url to shops table');
+          db.exec('ALTER TABLE shops ADD COLUMN email_logo_url TEXT');
+      }
   } catch (e) {
-      console.error('Migration error (invoice circle):', e);
+      console.error('Migration error (invoice circle/email logo):', e);
   }
 
   // Migration: Add Invoice details to Orders
