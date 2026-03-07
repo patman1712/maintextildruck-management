@@ -117,7 +117,7 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         }
 
         // Company Info (Right)
-        doc.setFontSize(9);
+        doc.setFontSize(8); // Reduced from 9
         doc.setTextColor(0, 0, 0);
         const companyX = 140;
         let companyY = 25;
@@ -125,38 +125,38 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         doc.setFont("helvetica", "bold");
         doc.text(globalContent.company_name || 'Main Textildruck GmbH', companyX, companyY);
         doc.setFont("helvetica", "normal");
-        companyY += 5;
+        companyY += 4; // Reduced from 5
         doc.text(globalContent.company_address || '', companyX, companyY);
-        companyY += 5;
+        companyY += 4;
         doc.text(`Telefon ${globalContent.contact_phone || ''}`, companyX, companyY);
-        companyY += 5;
+        companyY += 4;
         doc.text(globalContent.contact_email || '', companyX, companyY);
         
-        companyY += 10;
+        companyY += 8; // Reduced from 10
         doc.text(`Kunden-Nr. ${customer?.customer_number || '-'}`, companyX, companyY);
-        companyY += 5;
+        companyY += 4;
         doc.text(`Bestell-Nr. ${order.order_number}`, companyX, companyY);
-        companyY += 5;
+        companyY += 4;
         doc.text(`Bestelldatum ${new Date(order.created_at).toLocaleDateString('de-DE')}`, companyX, companyY);
-        companyY += 5;
+        companyY += 4;
         doc.text(`Rechnungsdatum ${new Date(invoiceDate).toLocaleDateString('de-DE')}`, companyX, companyY);
-        companyY += 5;
+        companyY += 4;
         if (order.deadline) {
              doc.text(`Lieferdatum ${new Date(order.deadline).toLocaleDateString('de-DE')}`, companyX, companyY);
         }
 
         // Sender Address (Left, small, above address)
-        doc.setFontSize(8);
-        doc.text(`${globalContent.company_name || 'Main Textildruck GmbH'} - ${globalContent.company_address || ''}`, 20, 65);
+        doc.setFontSize(7); // Reduced from 8
+        doc.text(`${globalContent.company_name || 'Main Textildruck GmbH'} - ${globalContent.company_address || ''}`, 20, 60); // Moved up from 65
         
         // Line under sender address
         doc.setLineWidth(0.1);
-        doc.line(20, 67, 80, 67);
+        doc.line(20, 62, 80, 62); // Moved up from 67
 
         // Delivery Address
         doc.setFontSize(10);
         const addressLines = (order.customer_address || '').split(',').map((s: string) => s.trim());
-        let addrY = 75;
+        let addrY = 70; // Moved up from 75
         
         if (order.company) {
             doc.text(order.company, 20, addrY);
@@ -216,15 +216,43 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
             doc.text(`${price.toFixed(2).replace('.', ',')} €`, 160, y, { align: 'right' });
             doc.text(`${total.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
 
-            // Extra info (size, color)
+            // Extra info (size, color, notes)
+            let extraLines = [];
+            if (item.size) extraLines.push(`Größe: ${item.size}`);
+            if (item.color) extraLines.push(`Farbe: ${item.color}`);
+            
+            // Check for personalization notes
+            if (item.notes) {
+                 // Try to parse if JSON
+                 try {
+                     const notesObj = JSON.parse(item.notes);
+                     // If it's an object/array, format it nicely
+                     if (Array.isArray(notesObj)) {
+                         notesObj.forEach((n: any) => extraLines.push(`• ${n.name || n.key}: ${n.value}`));
+                     } else if (typeof notesObj === 'object') {
+                         Object.entries(notesObj).forEach(([k, v]) => extraLines.push(`• ${k}: ${v}`));
+                     } else {
+                         extraLines.push(`Hinweis: ${item.notes}`);
+                     }
+                 } catch (e) {
+                     // Plain text
+                     extraLines.push(`Hinweis: ${item.notes}`);
+                 }
+            }
+
             let extraY = y + (splitName.length * 4);
-            if (item.size || item.color) {
+            
+            if (extraLines.length > 0) {
                 doc.setFontSize(8);
                 doc.setTextColor(100);
-                let details = [];
-                if (item.size) details.push(`Größe: ${item.size}`);
-                if (item.color) details.push(`Farbe: ${item.color}`);
-                doc.text(details.join(', '), 40, y + 4);
+                
+                // Print each extra line
+                extraLines.forEach((line) => {
+                    const splitLine = doc.splitTextToSize(line, 80);
+                    doc.text(splitLine, 40, extraY + 4);
+                    extraY += (splitLine.length * 4);
+                });
+
                 doc.setTextColor(0);
                 doc.setFontSize(9);
             }
@@ -283,45 +311,45 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
 
         // --- FOOTER ---
         const footerY = 270;
-        doc.setFontSize(7);
+        doc.setFontSize(6); // Reduced from 7
         doc.setTextColor(100, 100, 100);
         
-        // Helper for columns
+        // Helper for columns - Adjusted spacing
         const col1 = 20;
-        const col2 = 70;
-        const col3 = 120;
-        const col4 = 160;
+        const col2 = 65; // Reduced from 70
+        const col3 = 110; // Reduced from 120
+        const col4 = 155; // Reduced from 160
         
         // Col 1: Address
         doc.setFont("helvetica", "bold");
         doc.text(globalContent.company_name || shop.name || '', col1, footerY);
         doc.setFont("helvetica", "normal");
-        doc.text(globalContent.company_address || '', col1, footerY + 4);
-        if (globalContent.ceo_name) doc.text(`GF: ${globalContent.ceo_name}`, col1, footerY + 8);
+        doc.text(globalContent.company_address || '', col1, footerY + 3);
+        if (globalContent.ceo_name) doc.text(`GF: ${globalContent.ceo_name}`, col1, footerY + 6);
         
         // Col 2: Contact
         doc.setFont("helvetica", "bold");
         doc.text('Kontakt', col2, footerY);
         doc.setFont("helvetica", "normal");
-        doc.text(globalContent.contact_email || '', col2, footerY + 4);
-        doc.text(globalContent.contact_phone || '', col2, footerY + 8);
-        doc.text('www.maintextildruck.com', col2, footerY + 12);
+        doc.text(globalContent.contact_email || '', col2, footerY + 3);
+        doc.text(globalContent.contact_phone || '', col2, footerY + 6);
+        doc.text('www.maintextildruck.com', col2, footerY + 9);
 
         // Col 3: Bank
         doc.setFont("helvetica", "bold");
         doc.text('Bankverbindung', col3, footerY);
         doc.setFont("helvetica", "normal");
-        doc.text(globalContent.bank_name || '', col3, footerY + 4);
-        doc.text(`IBAN: ${globalContent.bank_iban || ''}`, col3, footerY + 8);
-        doc.text(`BIC: ${globalContent.bank_bic || ''}`, col3, footerY + 12);
+        doc.text(globalContent.bank_name || '', col3, footerY + 3);
+        doc.text(`IBAN: ${globalContent.bank_iban || ''}`, col3, footerY + 6);
+        doc.text(`BIC: ${globalContent.bank_bic || ''}`, col3, footerY + 9);
 
         // Col 4: Tax
         doc.setFont("helvetica", "bold");
         doc.text('Register & Steuer', col4, footerY);
         doc.setFont("helvetica", "normal");
-        doc.text(`Steuer-Nr: ${globalContent.tax_number || ''}`, col4, footerY + 4);
-        doc.text(`USt-ID: ${globalContent.vat_id || ''}`, col4, footerY + 8);
-        if (globalContent.commercial_register) doc.text(`HRB: ${globalContent.commercial_register}`, col4, footerY + 12);
+        doc.text(`Steuer-Nr: ${globalContent.tax_number || ''}`, col4, footerY + 3);
+        doc.text(`USt-ID: ${globalContent.vat_id || ''}`, col4, footerY + 6);
+        if (globalContent.commercial_register) doc.text(`HRB: ${globalContent.commercial_register}`, col4, footerY + 9);
 
         // Save PDF
         const fileName = `Rechnung_${invoiceNumber}.pdf`;
