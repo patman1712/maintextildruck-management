@@ -22,19 +22,25 @@ const runStandaloneTest = (config: any): Promise<any> => {
 const nodemailer = require('nodemailer');
 
 async function test() {
-    console.log('--- Standalone Test ---');
-    const config = ${JSON.stringify(config)};
+    console.log('--- Standalone Test (v2) ---');
     
+    // Deconstruct to separate mail-options from transport-config
+    const { sender_email, test_email, ...transportConfig } = ${JSON.stringify(config)};
+    
+    console.log('Connecting to:', transportConfig.host + ':' + transportConfig.port);
+    console.log('Secure:', transportConfig.secure);
+    console.log('SNI:', transportConfig.tls?.servername);
+
     try {
-        const transporter = nodemailer.createTransport(config);
+        const transporter = nodemailer.createTransport(transportConfig);
         console.log('Verifying connection...');
         await transporter.verify();
         console.log('VERIFY_SUCCESS');
         
         console.log('Sending mail...');
         await transporter.sendMail({
-            from: config.sender_email,
-            to: config.test_email,
+            from: sender_email,
+            to: test_email,
             subject: 'Test Email - System Einstellungen',
             text: 'Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.\\n\\nErfolgreich gesendet!',
             html: '<h3>SMTP Test erfolgreich!</h3><p>Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.</p>'
@@ -42,7 +48,7 @@ async function test() {
         console.log('SEND_SUCCESS');
     } catch (err) {
         console.log('ERROR: ' + err.message);
-        console.log('CODE: ' + err.code);
+        if (err.code) console.log('CODE: ' + err.code);
         process.exit(1);
     }
 }
@@ -253,8 +259,23 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: 'Bitte alle SMTP-Felder und eine Test-Empfänger-Adresse ausfüllen.' });
         }
 
+        // 1. Resolve IP manually (IPv4) to avoid any ambiguity
+        let resolvedHost = smtp_host.trim();
+        try {
+            await new Promise<void>((resolve) => {
+                dns.lookup(smtp_host.trim(), { family: 4 }, (err, address) => {
+                    if (!err && address) {
+                        resolvedHost = address;
+                    }
+                    resolve();
+                });
+            });
+        } catch (e) {
+            // Ignore DNS error, let nodemailer fail later
+        }
+
         const config = {
-            host: smtp_host.trim(),
+            host: resolvedHost, // Use IP if resolved, otherwise hostname
             port: Number(smtp_port),
             secure: Boolean(smtp_secure),
             auth: {
@@ -262,15 +283,15 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
                 pass: smtp_pass
             },
             tls: {
-                servername: smtp_host.trim(),
+                servername: smtp_host.trim(), // Original hostname for SNI
                 rejectUnauthorized: !Boolean(ignore_certs),
                 minVersion: 'TLSv1'
             },
-            connectionTimeout: 10000,
-            greetingTimeout: 10000,
-            socketTimeout: 15000,
-            sender_email, // passed for the script to use
-            test_email    // passed for the script to use
+            connectionTimeout: 20000, // 20s
+            greetingTimeout: 20000,
+            socketTimeout: 20000,
+            sender_email, 
+            test_email    
         };
 
         // Run via child process to ensure clean environment
