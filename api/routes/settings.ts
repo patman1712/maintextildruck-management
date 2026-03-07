@@ -4,10 +4,6 @@ import path from 'path';
 import fs from 'fs-extra';
 import db from '../db.js';
 import { UPLOAD_DIR } from './upload.js';
-import nodemailer from 'nodemailer';
-import dns from 'dns';
-import net from 'net';
-import tls from 'tls';
 import { exec } from 'child_process';
 import { fileURLToPath } from 'url';
 
@@ -15,51 +11,13 @@ const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Helper to run a standalone script for SMTP testing
-// This bypasses any weird networking/event-loop issues in the main process
-const runStandaloneTest = (config: any): Promise<any> => {
+const runExternalTest = (config: any): Promise<any> => {
     return new Promise((resolve, reject) => {
-        const scriptContent = `
-const nodemailer = require('nodemailer');
+        const jsonConfig = JSON.stringify(config);
+        const encodedConfig = Buffer.from(jsonConfig).toString('base64');
+        const scriptPath = path.join(__dirname, '../test-email.js');
 
-async function test() {
-    console.log('--- Standalone Test (v2) ---');
-    
-    // Deconstruct to separate mail-options from transport-config
-    const { sender_email, test_email, ...transportConfig } = ${JSON.stringify(config)};
-    
-    console.log('Connecting to:', transportConfig.host + ':' + transportConfig.port);
-    console.log('Secure:', transportConfig.secure);
-    console.log('SNI:', transportConfig.tls?.servername);
-
-    try {
-        const transporter = nodemailer.createTransport(transportConfig);
-        console.log('Verifying connection...');
-        await transporter.verify();
-        console.log('VERIFY_SUCCESS');
-        
-        console.log('Sending mail...');
-        await transporter.sendMail({
-            from: sender_email,
-            to: test_email,
-            subject: 'Test Email - System Einstellungen',
-            text: 'Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.\\n\\nErfolgreich gesendet!',
-            html: '<h3>SMTP Test erfolgreich!</h3><p>Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.</p>'
-        });
-        console.log('SEND_SUCCESS');
-    } catch (err) {
-        console.log('ERROR: ' + err.message);
-        if (err.code) console.log('CODE: ' + err.code);
-        process.exit(1);
-    }
-}
-test();
-`;
-        const scriptPath = path.join(__dirname, `../../smtp-test-${Date.now()}.cjs`);
-        fs.writeFileSync(scriptPath, scriptContent);
-
-        exec(`node "${scriptPath}"`, (error, stdout, stderr) => {
-            fs.unlinkSync(scriptPath); // Clean up
-            
+        exec(`node "${scriptPath}" "${encodedConfig}"`, (error, stdout, stderr) => {
             const logs = stdout.split('\n').filter(l => l.trim() !== '');
             
             if (stdout.includes('SEND_SUCCESS')) {
@@ -259,43 +217,21 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: 'Bitte alle SMTP-Felder und eine Test-Empfänger-Adresse ausfüllen.' });
         }
 
-        // 1. Resolve IP manually (IPv4) to avoid any ambiguity
-        let resolvedHost = smtp_host.trim();
-        try {
-            await new Promise<void>((resolve) => {
-                dns.lookup(smtp_host.trim(), { family: 4 }, (err, address) => {
-                    if (!err && address) {
-                        resolvedHost = address;
-                    }
-                    resolve();
-                });
-            });
-        } catch (e) {
-            // Ignore DNS error, let nodemailer fail later
-        }
-
         const config = {
-            host: resolvedHost, // Use IP if resolved, otherwise hostname
+            host: smtp_host.trim(),
             port: Number(smtp_port),
             secure: Boolean(smtp_secure),
             auth: {
                 user: smtp_user.trim(),
                 pass: smtp_pass
             },
-            tls: {
-                servername: smtp_host.trim(), // Original hostname for SNI
-                rejectUnauthorized: !Boolean(ignore_certs),
-                minVersion: 'TLSv1'
-            },
-            connectionTimeout: 20000, // 20s
-            greetingTimeout: 20000,
-            socketTimeout: 20000,
+            ignore_certs: Boolean(ignore_certs),
             sender_email, 
             test_email    
         };
 
-        // Run via child process to ensure clean environment
-        const result = await runStandaloneTest(config);
+        // Run external test script
+        const result = await runExternalTest(config);
         res.json({ success: true, message: 'Verbindung erfolgreich & Test-Email gesendet!', logs: result.logs });
 
     } catch (error: any) {
