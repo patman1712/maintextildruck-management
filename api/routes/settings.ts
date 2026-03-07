@@ -227,36 +227,40 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             return res.status(500).json({ success: false, error: `DNS Fehler: ${e.message}`, logs });
         }
 
-        // Step 2: Connectivity Check (Replicating successful script)
-        if (Boolean(smtp_secure)) {
-            log(`Step 2: Testing TLS Connection to ${resolvedIp}...`);
-            try {
-                await new Promise<void>((resolve, reject) => {
-                    const socket = tls.connect(Number(smtp_port), resolvedIp, {
-                        servername: smtp_host.trim(), // SNI
-                        rejectUnauthorized: !Boolean(ignore_certs),
-                        timeout: 5000
-                    }, () => {
-                        log('Manual TLS Handshake successful!');
-                        socket.end();
-                        resolve();
-                    });
-
-                    socket.on('error', (err) => {
-                        log(`Manual TLS Error: ${err.message}`);
-                        reject(err);
-                    });
-
-                    socket.on('timeout', () => {
-                        log('Manual TLS Timeout');
-                        socket.destroy();
-                        reject(new Error('TLS Connection Timeout'));
-                    });
+        // Step 2: Connectivity Check
+        log(`Step 2: Checking network connectivity to ${resolvedIp}:${smtp_port}...`);
+        try {
+            await new Promise<void>((resolve, reject) => {
+                const socket = new net.Socket();
+                socket.setTimeout(5000);
+                
+                socket.on('connect', () => {
+                    log('TCP Connection successful!');
+                    socket.destroy();
+                    resolve();
                 });
-            } catch (e: any) {
-                log(`Skipping manual check failure: ${e.message}`);
-                // Proceed anyway, maybe Nodemailer has better luck?
-            }
+                
+                socket.on('timeout', () => {
+                    log('TCP Connection Timed Out');
+                    socket.destroy();
+                    reject(new Error('TCP Timeout'));
+                });
+                
+                socket.on('error', (err) => {
+                    log(`TCP Connection Error: ${err.message}`);
+                    socket.destroy();
+                    reject(err);
+                });
+
+                socket.connect(Number(smtp_port), resolvedIp);
+            });
+        } catch (e: any) {
+            log(`Network Check Failed: ${e.message}`);
+            return res.status(500).json({ 
+                success: false, 
+                error: `Netzwerkfehler: Der Server kann keine Verbindung zu Port ${smtp_port} aufbauen. Vermutlich blockiert eine Firewall (ausgehend) oder der Provider (Vercel/Railway/etc.) diesen Port.`, 
+                logs 
+            });
         }
 
         // Step 3: Nodemailer
