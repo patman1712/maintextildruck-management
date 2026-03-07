@@ -207,38 +207,26 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
 
         log(`Starting Test: ${smtp_host}:${smtp_port} | User: ${smtp_user} | Secure: ${smtp_secure}`);
 
-        // 1. DNS Lookup (IPv4 only)
-        log('Step 1: DNS Lookup (IPv4)...');
-        let resolvedIp = '';
+        // Step 1: DNS Lookup (Just to log it)
+        log('Step 1: DNS Lookup...');
         try {
-            await new Promise<void>((resolve, reject) => {
-                dns.lookup(smtp_host, { family: 4 }, (err, address, family) => {
-                    if (err) {
-                        log(`DNS Lookup failed: ${err.message}`);
-                        // Don't fail here, let Nodemailer try
-                        resolve(); 
-                    } else {
-                        log(`DNS Resolved: ${address} (IPv${family})`);
-                        resolvedIp = address;
-                        resolve();
-                    }
+             await new Promise<void>((resolve) => {
+                dns.lookup(smtp_host.trim(), { family: 4 }, (err, address) => {
+                    if (err) log(`DNS Error: ${err.message}`);
+                    else log(`DNS Resolved: ${address}`);
+                    resolve();
                 });
             });
-        } catch (e) {
-            log('DNS Lookup skipped/failed.');
-        }
+        } catch (e) {}
 
-        // 2. TCP Connection Check skipped to save time and avoid timeouts
-        log('Step 2: TCP Check skipped.');
-
-        // 3. TLS Probe (New: Verify SSL Handshake before Nodemailer)
+        // Step 2: TLS Probe (Direct)
         if (Boolean(smtp_secure)) {
-            log('Step 2b: Probing TLS Handshake...');
+            log('Step 2: Probing TLS Handshake...');
             try {
                 await new Promise<void>((resolve, reject) => {
-                    const socket = tls.connect(Number(smtp_port), resolvedIp || smtp_host, {
+                    const socket = tls.connect(Number(smtp_port), smtp_host.trim(), {
+                        servername: smtp_host.trim(), // SNI
                         rejectUnauthorized: !Boolean(ignore_certs),
-                        servername: smtp_host, // CRITICAL: SNI required for shared hosts
                         timeout: 10000
                     }, () => {
                         log('TLS Handshake successful! Protocol: ' + socket.getProtocol());
@@ -248,40 +236,40 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
 
                     socket.on('error', (err) => {
                         log(`TLS Probe Error: ${err.message}`);
-                        reject(new Error(`SSL/TLS Handshake failed: ${err.message}`));
+                        reject(err);
                     });
 
                     socket.on('timeout', () => {
                         log('TLS Probe Timeout');
                         socket.destroy();
-                        reject(new Error('SSL/TLS Handshake timed out'));
+                        reject(new Error('Timeout'));
                     });
                 });
             } catch (tlsError: any) {
-                log(`Warning: TLS Probe failed (${tlsError.message}), check SSL settings.`);
+                log(`Warning: TLS Probe failed (${tlsError.message}).`);
             }
         }
 
-        // 3. Nodemailer Handshake
-        log('Step 3: SMTP Handshake & Auth...');
+        // Step 3: Nodemailer
+        log('Step 3: Sending Mail via Nodemailer...');
         const transporter = nodemailer.createTransport({
-            host: resolvedIp || smtp_host, // Use IP if resolved to avoid dual-stack issues
+            host: smtp_host.trim(),
             port: Number(smtp_port),
             secure: Boolean(smtp_secure),
             auth: {
-                user: smtp_user,
-                pass: smtp_pass,
+                user: smtp_user.trim(),
+                pass: smtp_pass
             },
             tls: {
                 rejectUnauthorized: !Boolean(ignore_certs),
-                servername: smtp_host // CRITICAL: SNI required for shared hosts
+                servername: smtp_host.trim()
             },
             logger: true,
             debug: true,
             connectionTimeout: 10000,
-            greetingTimeout: 10000, // Increased
+            greetingTimeout: 10000,
             socketTimeout: 15000
-        });
+        } as any);
 
         await transporter.verify();
         log('SMTP Handshake & Auth successful.');
