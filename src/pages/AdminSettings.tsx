@@ -43,6 +43,48 @@ export default function AdminSettings() {
   const [changelog, setChangelog] = useState<{hash: string, date: string, message: string}[]>([]);
   const [showChangelog, setShowChangelog] = useState(false);
   const [systemHealth, setSystemHealth] = useState<{diskUsage: string, dbSize: string, walSize: string, dataDir: string} | null>(null);
+  
+  // Invoice & Email Settings
+  const [globalContent, setGlobalContent] = useState<any>({});
+  const [emailConfig, setEmailConfig] = useState<any>({});
+
+  const fetchGlobalSettings = async () => {
+      try {
+          const res1 = await fetch('/api/settings/global-content');
+          const data1 = await res1.json();
+          if (data1.success) setGlobalContent(data1.data || {});
+
+          const res2 = await fetch('/api/settings/email-config');
+          const data2 = await res2.json();
+          if (data2.success) setEmailConfig(data2.data || {});
+      } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => {
+      fetchGlobalSettings();
+  }, []);
+
+  const handleSaveGlobalContent = async () => {
+      try {
+          await fetch('/api/settings/global-content', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(globalContent)
+          });
+          alert('Firmendaten gespeichert!');
+      } catch (e) { alert('Fehler beim Speichern'); }
+  };
+
+  const handleSaveEmailConfig = async () => {
+      try {
+          await fetch('/api/settings/email-config', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(emailConfig)
+          });
+          alert('E-Mail Einstellungen gespeichert!');
+      } catch (e) { alert('Fehler beim Speichern'); }
+  };
 
   const checkSystemHealth = async () => {
       try {
@@ -376,6 +418,190 @@ export default function AdminSettings() {
                         </div>
                     </div>
                 )}
+            </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-slate-700 mb-4 border-b pb-2 flex items-center">
+            <FileText size={20} className="mr-2" />
+            Rechnung & E-Mail Einstellungen
+        </h2>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Company Info */}
+            <div>
+                <h3 className="font-bold text-slate-800 mb-4">Firmendaten (für Rechnungsfuß)</h3>
+                <div className="space-y-3">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700">Firmenname</label>
+                        <input 
+                            type="text" className="w-full border border-gray-300 rounded p-2 text-sm"
+                            value={globalContent.company_name || ''}
+                            onChange={(e) => setGlobalContent({ ...globalContent, company_name: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700">Anschrift (Komplett)</label>
+                        <textarea 
+                            className="w-full border border-gray-300 rounded p-2 text-sm h-20"
+                            value={globalContent.company_address || ''}
+                            onChange={(e) => setGlobalContent({ ...globalContent, company_address: e.target.value })}
+                            placeholder="Musterstraße 1, 12345 Musterstadt"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700">Geschäftsführer</label>
+                        <input 
+                            type="text" className="w-full border border-gray-300 rounded p-2 text-sm"
+                            value={globalContent.ceo_name || ''}
+                            onChange={(e) => setGlobalContent({ ...globalContent, ceo_name: e.target.value })}
+                        />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700">Steuernummer</label>
+                            <input 
+                                type="text" className="w-full border border-gray-300 rounded p-2 text-sm"
+                                value={globalContent.tax_number || ''}
+                                onChange={(e) => setGlobalContent({ ...globalContent, tax_number: e.target.value })}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700">USt-IdNr.</label>
+                            <input 
+                                type="text" className="w-full border border-gray-300 rounded p-2 text-sm"
+                                value={globalContent.vat_id || ''}
+                                onChange={(e) => setGlobalContent({ ...globalContent, vat_id: e.target.value })}
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700">Gerichtsstand / HRB</label>
+                        <input 
+                            type="text" className="w-full border border-gray-300 rounded p-2 text-sm"
+                            value={globalContent.commercial_register || ''}
+                            onChange={(e) => setGlobalContent({ ...globalContent, commercial_register: e.target.value })}
+                        />
+                    </div>
+
+                    <h4 className="font-bold text-slate-800 mt-4 mb-2">Bankverbindung</h4>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700">Bankname</label>
+                        <input 
+                            type="text" className="w-full border border-gray-300 rounded p-2 text-sm"
+                            value={globalContent.bank_name || ''}
+                            onChange={(e) => setGlobalContent({ ...globalContent, bank_name: e.target.value })}
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700">IBAN</label>
+                            <input 
+                                type="text" className="w-full border border-gray-300 rounded p-2 text-sm"
+                                value={globalContent.bank_iban || ''}
+                                onChange={(e) => setGlobalContent({ ...globalContent, bank_iban: e.target.value })}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700">BIC</label>
+                            <input 
+                                type="text" className="w-full border border-gray-300 rounded p-2 text-sm"
+                                value={globalContent.bank_bic || ''}
+                                onChange={(e) => setGlobalContent({ ...globalContent, bank_bic: e.target.value })}
+                            />
+                        </div>
+                    </div>
+                    
+                    <button 
+                        onClick={handleSaveGlobalContent}
+                        className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 mt-2"
+                    >
+                        Firmendaten speichern
+                    </button>
+                </div>
+            </div>
+
+            {/* Email Config */}
+            <div>
+                <h3 className="font-bold text-slate-800 mb-4">E-Mail Versand (SMTP)</h3>
+                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700">Absender Name</label>
+                        <input 
+                            type="text" className="w-full border border-gray-300 rounded p-2 text-sm"
+                            value={emailConfig.sender_name || ''}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, sender_name: e.target.value })}
+                            placeholder="Main Textildruck"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700">Absender E-Mail</label>
+                        <input 
+                            type="email" className="w-full border border-gray-300 rounded p-2 text-sm"
+                            value={emailConfig.sender_email || ''}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, sender_email: e.target.value })}
+                            placeholder="info@maintextildruck.com"
+                        />
+                    </div>
+
+                    <div className="border-t border-slate-200 my-3 pt-3"></div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700">SMTP Host</label>
+                        <input 
+                            type="text" className="w-full border border-gray-300 rounded p-2 text-sm"
+                            value={emailConfig.smtp_host || ''}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, smtp_host: e.target.value })}
+                            placeholder="smtp.example.com"
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700">SMTP Port</label>
+                            <input 
+                                type="number" className="w-full border border-gray-300 rounded p-2 text-sm"
+                                value={emailConfig.smtp_port || ''}
+                                onChange={(e) => setEmailConfig({ ...emailConfig, smtp_port: parseInt(e.target.value) })}
+                                placeholder="587"
+                            />
+                        </div>
+                        <div className="flex items-center pt-6">
+                            <input 
+                                type="checkbox" id="smtp_secure"
+                                className="mr-2"
+                                checked={!!emailConfig.smtp_secure}
+                                onChange={(e) => setEmailConfig({ ...emailConfig, smtp_secure: e.target.checked })}
+                            />
+                            <label htmlFor="smtp_secure" className="text-sm font-medium text-slate-700">Secure (SSL/TLS)</label>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700">SMTP Benutzer</label>
+                        <input 
+                            type="text" className="w-full border border-gray-300 rounded p-2 text-sm"
+                            value={emailConfig.smtp_user || ''}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, smtp_user: e.target.value })}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700">SMTP Passwort</label>
+                        <input 
+                            type="password" className="w-full border border-gray-300 rounded p-2 text-sm"
+                            value={emailConfig.smtp_pass || ''}
+                            onChange={(e) => setEmailConfig({ ...emailConfig, smtp_pass: e.target.value })}
+                        />
+                    </div>
+
+                    <button 
+                        onClick={handleSaveEmailConfig}
+                        className="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-900 mt-2 w-full"
+                    >
+                        E-Mail Einstellungen speichern
+                    </button>
+                </div>
             </div>
         </div>
       </div>

@@ -123,4 +123,67 @@ router.post('/', (req: Request, res: Response) => {
   }
 });
 
+// GET /api/settings/global-content
+router.get('/global-content', (req, res) => {
+  try {
+    const content = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get();
+    res.json({ success: true, data: content });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// PUT /api/settings/global-content
+router.put('/global-content', (req, res) => {
+  try {
+    const updates = req.body;
+    const allowedKeys = [
+        'footer_logo_url', 'contact_phone', 'contact_email', 'contact_address',
+        'company_name', 'company_address', 'ceo_name', 'bank_name', 'bank_iban',
+        'bank_bic', 'tax_number', 'vat_id', 'commercial_register'
+    ]; // Add more as needed
+
+    const keysToUpdate = Object.keys(updates).filter(k => allowedKeys.includes(k));
+    
+    if (keysToUpdate.length > 0) {
+        const setClause = keysToUpdate.map(k => `${k} = ?`).join(', ');
+        const values = keysToUpdate.map(k => updates[k]);
+        
+        db.prepare(`UPDATE global_shop_content SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = 'main'`).run(...values);
+    }
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/settings/email-config
+router.get('/email-config', (req, res) => {
+  try {
+    const config = db.prepare("SELECT * FROM email_config WHERE id = 'main'").get();
+    res.json({ success: true, data: config });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// PUT /api/settings/email-config
+router.put('/email-config', (req, res) => {
+  try {
+    const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure, sender_name, sender_email } = req.body;
+    
+    db.prepare(`
+        UPDATE email_config 
+        SET smtp_host = ?, smtp_port = ?, smtp_user = ?, smtp_pass = ?, 
+            smtp_secure = ?, sender_name = ?, sender_email = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE id = 'main'
+    `).run(smtp_host, smtp_port, smtp_user, smtp_pass, smtp_secure ? 1 : 0, sender_name, sender_email);
+    
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;

@@ -585,7 +585,7 @@ const ShopDashboard: React.FC = () => {
                         <div className="grid grid-cols-2 gap-6">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    Nummernkreis Format
+                                    Bestellnummer Format
                                 </label>
                                 <input 
                                     type="text" 
@@ -594,13 +594,10 @@ const ShopDashboard: React.FC = () => {
                                     onChange={(e) => setShop({ ...shop, order_number_circle: e.target.value })}
                                     placeholder="{YEAR}-{NR}"
                                 />
-                                <p className="text-xs text-slate-500 mt-1">
-                                    Platzhalter: <code className="bg-slate-100 px-1 rounded">{'{YEAR}'}</code> (Jahr), <code className="bg-slate-100 px-1 rounded">{'{NR}'}</code> (Laufende Nummer)
-                                </p>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                                    Nächste Nummer
+                                    Nächste Bestellnummer
                                 </label>
                                 <input 
                                     type="number" 
@@ -608,9 +605,31 @@ const ShopDashboard: React.FC = () => {
                                     value={shop.next_order_number || 1}
                                     onChange={(e) => setShop({ ...shop, next_order_number: parseInt(e.target.value) || 1 })}
                                 />
-                                <p className="text-xs text-slate-500 mt-1">
-                                    Wird nach jeder Bestellung automatisch erhöht.
-                                </p>
+                            </div>
+                            
+                            {/* Invoice Settings */}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Rechnungsnummer Format
+                                </label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border border-slate-300 rounded-lg p-2 font-mono text-sm"
+                                    value={shop.invoice_number_circle || ''}
+                                    onChange={(e) => setShop({ ...shop, invoice_number_circle: e.target.value })}
+                                    placeholder="RE-{YEAR}-{NR}"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">
+                                    Nächste Rechnungsnummer
+                                </label>
+                                <input 
+                                    type="number" 
+                                    className="w-full border border-slate-300 rounded-lg p-2"
+                                    value={shop.next_invoice_number || 1}
+                                    onChange={(e) => setShop({ ...shop, next_invoice_number: parseInt(e.target.value) || 1 })}
+                                />
                             </div>
                         </div>
                     </div>
@@ -1787,7 +1806,14 @@ const ShopDashboard: React.FC = () => {
                     </div>
                 </div>
                 
-                <div className="p-6 bg-slate-50 border-t flex justify-end">
+                <div className="p-6 bg-slate-50 border-t flex justify-end items-center">
+                    <button 
+                        onClick={() => window.open(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}/invoice`, '_blank')}
+                        className="mr-auto px-6 py-3 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-50 transition-all flex items-center"
+                    >
+                        <FileText size={16} className="mr-2" />
+                        Rechnung
+                    </button>
                     <button onClick={() => setSelectedOrder(null)} className="px-8 py-3 bg-slate-800 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-700 transition-all">
                         Schließen
                     </button>

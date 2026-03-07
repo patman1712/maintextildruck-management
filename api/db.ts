@@ -847,6 +847,78 @@ try {
     );
   `);
 
+  // Migration: Add Company Details to Global Content
+  try {
+      const globalContentCols = db.prepare("PRAGMA table_info(global_shop_content)").all() as any[];
+      const hasCompanyName = globalContentCols.some(col => col.name === 'company_name');
+      if (!hasCompanyName) {
+          console.log('Migrating database: Adding company details to global_shop_content table');
+          db.exec('ALTER TABLE global_shop_content ADD COLUMN company_name TEXT');
+          db.exec('ALTER TABLE global_shop_content ADD COLUMN company_address TEXT');
+          db.exec('ALTER TABLE global_shop_content ADD COLUMN ceo_name TEXT');
+          db.exec('ALTER TABLE global_shop_content ADD COLUMN bank_name TEXT');
+          db.exec('ALTER TABLE global_shop_content ADD COLUMN bank_iban TEXT');
+          db.exec('ALTER TABLE global_shop_content ADD COLUMN bank_bic TEXT');
+          db.exec('ALTER TABLE global_shop_content ADD COLUMN tax_number TEXT');
+          db.exec('ALTER TABLE global_shop_content ADD COLUMN vat_id TEXT');
+          db.exec('ALTER TABLE global_shop_content ADD COLUMN commercial_register TEXT');
+      }
+  } catch (e) {
+      console.error('Migration error (global content details):', e);
+  }
+
+  // New table for Email Configuration
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_config (
+      id TEXT PRIMARY KEY DEFAULT 'main',
+      smtp_host TEXT,
+      smtp_port INTEGER DEFAULT 587,
+      smtp_user TEXT,
+      smtp_pass TEXT,
+      smtp_secure BOOLEAN DEFAULT 0,
+      sender_name TEXT,
+      sender_email TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Ensure default row for email config
+  try {
+      const row = db.prepare("SELECT id FROM email_config WHERE id = 'main'").get();
+      if (!row) {
+          db.prepare("INSERT INTO email_config (id) VALUES ('main')").run();
+      }
+  } catch (e) {
+      console.error('Error ensuring default email config row:', e);
+  }
+
+  // Migration: Add Invoice Number Circle to Shops
+  try {
+      const shopCols = db.prepare("PRAGMA table_info(shops)").all() as any[];
+      const hasInvoiceCircle = shopCols.some(col => col.name === 'invoice_number_circle');
+      if (!hasInvoiceCircle) {
+          console.log('Migrating database: Adding invoice_number_circle to shops table');
+          db.exec('ALTER TABLE shops ADD COLUMN invoice_number_circle TEXT'); // e.g. "RE-{YYYY}-"
+          db.exec('ALTER TABLE shops ADD COLUMN next_invoice_number INTEGER DEFAULT 1');
+      }
+  } catch (e) {
+      console.error('Migration error (invoice circle):', e);
+  }
+
+  // Migration: Add Invoice details to Orders
+  try {
+      const orderCols = db.prepare("PRAGMA table_info(orders)").all() as any[];
+      const hasInvoiceNumber = orderCols.some(col => col.name === 'invoice_number');
+      if (!hasInvoiceNumber) {
+          console.log('Migrating database: Adding invoice details to orders table');
+          db.exec('ALTER TABLE orders ADD COLUMN invoice_number TEXT');
+          db.exec('ALTER TABLE orders ADD COLUMN invoice_date DATETIME');
+          db.exec('ALTER TABLE orders ADD COLUMN invoice_path TEXT'); // Path to stored PDF
+      }
+  } catch (e) {
+      console.error('Migration error (invoice details):', e);
+  }
+
   // Ensure default row for global content
   try {
       const row = db.prepare("SELECT id FROM global_shop_content WHERE id = 'main'").get();

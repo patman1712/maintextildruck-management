@@ -1,8 +1,12 @@
 
 import { Router } from 'express';
-import db from '../db.js';
+import db, { DATA_DIR } from '../db.js';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import path from 'path';
+import fs from 'fs-extra';
+import { generateInvoice } from '../services/invoice.js';
+import { sendOrderConfirmation } from '../services/email.js';
 
 const router = Router();
 
@@ -224,6 +228,29 @@ router.get('/:shopId/orders/:customerId/:orderId', async (req, res) => {
 
     const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
     res.json({ success: true, data: { ...(order as any), items } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Admin: Download Invoice PDF
+router.get('/:shopId/admin/orders/:orderId/invoice', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const order = db.prepare('SELECT invoice_path, invoice_number FROM orders WHERE id = ?').get(orderId) as any;
+    
+    if (!order || !order.invoice_path) {
+        // Try to generate it if missing?
+        // For now, return 404
+        return res.status(404).json({ success: false, error: 'Rechnung nicht gefunden.' });
+    }
+
+    const filePath = path.join(DATA_DIR, 'invoices', order.invoice_path);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ success: false, error: 'Rechnungsdatei nicht gefunden.' });
+    }
+
+    res.download(filePath, `Rechnung_${order.invoice_number || orderId}.pdf`);
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -469,6 +496,20 @@ router.post('/:shopId/orders', async (req, res) => {
     });
 
     transaction();
+
+    // Post-order processing: Generate Invoice & Send Email
+    // We do this AFTER transaction commits to ensure data is available
+    try {
+        const invoicePath = await generateInvoice(orderId);
+        if (invoicePath) {
+            console.log(`[Order] Invoice generated: ${invoicePath}`);
+            await sendOrderConfirmation(orderId, invoicePath);
+        } else {
+            console.error('[Order] Failed to generate invoice');
+        }
+    } catch (e) {
+        console.error('[Order] Error in post-processing:', e);
+    }
 
     res.json({ success: true, data: { id: orderId, orderNumber } });
   } catch (error: any) {
