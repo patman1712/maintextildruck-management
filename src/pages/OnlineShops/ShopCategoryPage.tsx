@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useOutletContext, useParams, Link } from 'react-router-dom';
 import { ChevronRight, Heart, ChevronLeft, ChevronDown, Eye } from 'lucide-react';
 import { Shop, ShopCategory } from '../../store';
+import { ProductTile } from './components/ProductTile';
 
 interface ShopContext {
   shop: Shop;
@@ -155,70 +156,7 @@ const ShopCategoryPage: React.FC = () => {
                     <div className="col-span-full py-20 text-center text-slate-400">Keine Produkte in dieser Kategorie gefunden.</div>
                 ) : (
                     products.map(product => (
-                        <Link to={`/shop/${shopId}/product/${product.product_id}`} key={product.assignment_id} className="group relative block">
-                            {/* Product Card */}
-                            <div className="relative bg-white transition-all duration-300">
-                                {/* Wishlist Icon */}
-                                <button className="absolute top-2 left-2 z-20 p-2 text-slate-400 hover:text-red-600 transition-colors" onClick={(e) => e.preventDefault()}>
-                                    <Heart size={20} />
-                                </button>
-
-                                {/* Image Container */}
-                                <div className="relative aspect-[3/4] bg-slate-50 mb-4 overflow-hidden">
-                                    {product.files && product.files.length > 0 ? (
-                                        <img 
-                                            src={product.files[0].thumbnail_url || product.files[0].file_url} 
-                                            alt={product.name}
-                                            className="w-full h-full object-cover object-center"
-                                        />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-slate-300">
-                                            <span className="font-bold opacity-20">NO IMAGE</span>
-                                        </div>
-                                    )}
-
-                                    {/* Hover Overlay */}
-                                    <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300 flex items-center justify-center opacity-0 group-hover:opacity-100">
-                                         {/* Quick View Button */}
-                                         <button className="bg-white text-slate-900 border border-slate-200 px-6 py-3 text-xs font-bold uppercase tracking-widest shadow-xl transform translate-y-4 group-hover:translate-y-0 transition-all duration-300 hover:bg-slate-900 hover:text-white">
-                                            Quick View
-                                         </button>
-                                         
-                                         {/* Carousel Arrows (Mock) */}
-                                         <button className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 p-1 rounded-full hover:bg-white text-slate-800 hidden group-hover:block">
-                                            <ChevronLeft size={16} />
-                                         </button>
-                                         <button className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 p-1 rounded-full hover:bg-white text-slate-800 hidden group-hover:block">
-                                            <ChevronRight size={16} />
-                                         </button>
-                                    </div>
-                                    
-                                    {/* Pagination Dots (Mock) */}
-                                    <div className="absolute bottom-4 left-0 right-0 flex justify-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-slate-800"></div>
-                                        <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
-                                        <div className="w-1.5 h-1.5 rounded-full bg-slate-300"></div>
-                                    </div>
-                                </div>
-
-                                {/* Content */}
-                                <div className="text-center relative bg-white z-10">
-                                    <h3 className="text-sm font-medium text-slate-600 mb-1">{product.name}</h3>
-                                    <p className="text-lg font-bold text-slate-900 mb-2">€ {product.price > 0 ? product.price.toFixed(2) : '29.95'}</p>
-                                    
-                                    {/* Hover Options (Sizes) */}
-                                    <div className="h-0 overflow-hidden group-hover:h-auto group-hover:overflow-visible transition-all duration-300">
-                                        <div className="pt-2 flex justify-center space-x-2">
-                                            {['S', 'M', 'L', 'XL', 'XXL'].map(size => (
-                                                <button key={size} className="w-8 h-8 border border-slate-200 flex items-center justify-center text-xs font-bold hover:border-slate-800 hover:bg-slate-800 hover:text-white transition-colors">
-                                                    {size}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </Link>
+                        <ProductTile key={product.assignment_id} product={product} shopId={shopId} />
                     ))
                 )}
             </div>
