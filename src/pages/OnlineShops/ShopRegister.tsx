@@ -246,7 +246,7 @@ const ShopRegister: React.FC = () => {
                 onChange={handleChange}
               />
               <label htmlFor="data_privacy_accepted" className="text-sm text-slate-600">
-                Ich habe die <a href="#" className="underline hover:text-slate-900">Datenschutzerklärung</a> gelesen und akzeptiere diese. Ich willige ein, dass meine Daten zur Bearbeitung meines Kontos gespeichert werden.
+                Ich habe die <Link to={`/shop/${shopId}/page/datenschutz`} className="underline hover:text-slate-900" target="_blank">Datenschutzerklärung</Link> gelesen und akzeptiere diese. Ich willige ein, dass meine Daten zur Bearbeitung meines Kontos gespeichert werden.
               </label>
             </div>
 
