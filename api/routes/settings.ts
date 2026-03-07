@@ -196,6 +196,8 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, error: 'Bitte alle SMTP-Felder und eine Test-Empfänger-Adresse ausfüllen.' });
         }
 
+        console.log(`[SMTP Test] Testing connection to ${smtp_host}:${smtp_port} for ${sender_email}`);
+
         const transporter = nodemailer.createTransport({
             host: smtp_host,
             port: Number(smtp_port),
@@ -204,12 +206,18 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
                 user: smtp_user,
                 pass: smtp_pass,
             },
+            connectionTimeout: 10000, // 10 seconds
+            greetingTimeout: 5000,    // 5 seconds
+            socketTimeout: 15000      // 15 seconds
         });
 
         // 1. Verify connection
+        console.log('[SMTP Test] Verifying connection...');
         await transporter.verify();
+        console.log('[SMTP Test] Connection verified.');
 
         // 2. Send test email
+        console.log('[SMTP Test] Sending mail...');
         await transporter.sendMail({
             from: sender_email,
             to: test_email,
@@ -217,6 +225,7 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
             text: 'Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.\n\nErfolgreich gesendet!',
             html: '<h3>SMTP Test erfolgreich!</h3><p>Dies ist eine Test-Email um die SMTP-Einstellungen zu überprüfen.</p>'
         });
+        console.log('[SMTP Test] Mail sent.');
 
         res.json({ success: true, message: 'Verbindung erfolgreich & Test-Email gesendet!' });
     } catch (error: any) {

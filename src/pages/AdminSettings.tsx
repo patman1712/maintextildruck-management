@@ -97,6 +97,10 @@ export default function AdminSettings() {
       
       setTestingEmail(true);
       setTestStatus(null);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
+
       try {
           const res = await fetch('/api/settings/email-config/test', {
               method: 'POST',
@@ -104,8 +108,11 @@ export default function AdminSettings() {
               body: JSON.stringify({
                   ...emailConfig,
                   test_email: testEmailAddress
-              })
+              }),
+              signal: controller.signal
           });
+          
+          clearTimeout(timeoutId);
           
           const data = await res.json();
           if (data.success) {
@@ -114,8 +121,13 @@ export default function AdminSettings() {
               setTestStatus({ success: false, message: data.error || 'Unbekannter Fehler' });
           }
       } catch (e: any) {
-          setTestStatus({ success: false, message: "Verbindungsfehler: " + e.message });
+          if (e.name === 'AbortError') {
+              setTestStatus({ success: false, message: "Zeitüberschreitung: Der Server antwortet nicht (Timeout 20s)." });
+          } else {
+              setTestStatus({ success: false, message: "Verbindungsfehler: " + e.message });
+          }
       } finally {
+          clearTimeout(timeoutId);
           setTestingEmail(false);
       }
   };
