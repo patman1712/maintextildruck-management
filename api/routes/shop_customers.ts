@@ -49,7 +49,7 @@ router.post('/:shopId/register', async (req, res) => {
     }
 
     // Check if customer already exists for this shop
-    const existing = db.prepare('SELECT id FROM shop_customers WHERE shop_id = ? AND email = ?').get(shopId, email);
+    const existing = db.prepare('SELECT id, customer_number FROM shop_customers WHERE shop_id = ? AND email = ?').get(shopId, email) as any;
     if (existing) {
       return res.status(400).json({ success: false, error: 'Ein Konto mit dieser E-Mail existiert bereits in diesem Shop.' });
     }
@@ -57,19 +57,35 @@ router.post('/:shopId/register', async (req, res) => {
     const id = crypto.randomUUID();
     const hashedPassword = bcrypt.hashSync(password, 10);
 
-    console.log(`[Register] Creating customer: ${email} for shop: ${shopId}`);
+    // Generate Customer Number
+    let nextNr = 10000;
+    const shop = db.prepare('SELECT next_customer_number FROM shops WHERE id = ?').get(shopId) as { next_customer_number?: number };
+    if (shop && shop.next_customer_number) {
+        nextNr = shop.next_customer_number;
+    }
+    const customerNumber = `KD-${nextNr}`;
 
-    db.prepare(`
-      INSERT INTO shop_customers (
-        id, shop_id, email, password, first_name, last_name, 
-        company, street, zip, city, phone, data_privacy_accepted
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id, shopId, email, hashedPassword, first_name, last_name, 
-      company, street, zip, city, phone, data_privacy_accepted ? 1 : 0
-    );
+    // Transaction for atomic update
+    const transaction = db.transaction(() => {
+        db.prepare(`
+          INSERT INTO shop_customers (
+            id, shop_id, email, password, first_name, last_name, 
+            company, street, zip, city, phone, data_privacy_accepted, customer_number
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id, shopId, email, hashedPassword, first_name, last_name, 
+          company, street, zip, city, phone, data_privacy_accepted ? 1 : 0, customerNumber
+        );
 
-    const customer = db.prepare('SELECT id, shop_id, email, first_name, last_name, company, street, zip, city, phone FROM shop_customers WHERE id = ?').get(id);
+        // Increment shop next number
+        db.prepare('UPDATE shops SET next_customer_number = ? WHERE id = ?').run(nextNr + 1, shopId);
+    });
+
+    transaction();
+
+    console.log(`[Register] Creating customer: ${email} (${customerNumber}) for shop: ${shopId}`);
+
+    const customer = db.prepare('SELECT id, shop_id, email, first_name, last_name, company, street, zip, city, phone, customer_number FROM shop_customers WHERE id = ?').get(id);
     res.json({ success: true, data: customer });
   } catch (error: any) {
     console.error(`[Register] Error: ${error.message}`);
@@ -107,9 +123,18 @@ router.post('/:shopId/login', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Ihr Konto wurde gesperrt. Bitte kontaktieren Sie den Shop-Betreiber.' });
     }
 
-    if (!bcrypt.compareSync(password, customer.password)) {
+    const match = bcrypt.compareSync(password, customer.password);
+    if (!match) {
       console.warn(`[Login] Password mismatch: ${email}`);
-      return res.status(401).json({ success: false, error: 'Ungültige E-Mail oder Passwort.' });
+      // Debug: Check if maybe plain text (legacy)
+      if (password === customer.password) {
+          console.warn('[Login] Plain text password match (LEGACY). Migrating to hash...');
+          const newHash = bcrypt.hashSync(password, 10);
+          db.prepare('UPDATE shop_customers SET password = ? WHERE id = ?').run(newHash, customer.id);
+          // Allow login this time
+      } else {
+          return res.status(401).json({ success: false, error: 'Ungültige E-Mail oder Passwort.' });
+      }
     }
 
     console.log(`[Login] Success: ${email}`);
