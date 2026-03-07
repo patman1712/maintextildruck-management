@@ -7,6 +7,7 @@ import { UPLOAD_DIR } from './upload.js';
 import nodemailer from 'nodemailer';
 import dns from 'dns';
 import net from 'net';
+import tls from 'tls';
 
 const router = Router();
 
@@ -229,6 +230,36 @@ router.post('/email-config/test', async (req: Request, res: Response) => {
 
         // 2. TCP Connection Check skipped to save time and avoid timeouts
         log('Step 2: TCP Check skipped.');
+
+        // 3. TLS Probe (New: Verify SSL Handshake before Nodemailer)
+        if (Boolean(smtp_secure)) {
+            log('Step 2b: Probing TLS Handshake...');
+            try {
+                await new Promise<void>((resolve, reject) => {
+                    const socket = tls.connect(Number(smtp_port), resolvedIp || smtp_host, {
+                        rejectUnauthorized: !Boolean(ignore_certs),
+                        timeout: 10000
+                    }, () => {
+                        log('TLS Handshake successful! Protocol: ' + socket.getProtocol());
+                        socket.end();
+                        resolve();
+                    });
+
+                    socket.on('error', (err) => {
+                        log(`TLS Probe Error: ${err.message}`);
+                        reject(new Error(`SSL/TLS Handshake failed: ${err.message}`));
+                    });
+
+                    socket.on('timeout', () => {
+                        log('TLS Probe Timeout');
+                        socket.destroy();
+                        reject(new Error('SSL/TLS Handshake timed out'));
+                    });
+                });
+            } catch (tlsError: any) {
+                log(`Warning: TLS Probe failed (${tlsError.message}), check SSL settings.`);
+            }
+        }
 
         // 3. Nodemailer Handshake
         log('Step 3: SMTP Handshake & Auth...');
