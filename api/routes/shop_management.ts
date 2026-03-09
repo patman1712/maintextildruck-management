@@ -253,8 +253,8 @@ router.post('/:shopId/products/import', (req, res) => {
     db.prepare(`
         INSERT INTO customer_products (
             id, customer_id, product_number, name, manufacturer_info, description, 
-            size, color, weight, price, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            size, color, weight, created_at, supplier_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
     `).run(
         newProductId, 
         targetShop.customer_id, 
@@ -264,8 +264,8 @@ router.post('/:shopId/products/import', (req, res) => {
         sourceAssignment.description, 
         sourceAssignment.size, 
         sourceAssignment.color, 
-        sourceAssignment.weight, 
-        sourceAssignment.price // Base price from customer_product (often 0 or purchase price)
+        sourceAssignment.weight,
+        sourceAssignment.supplier_id // supplier_id from customer_products
     );
 
     // 3. Duplicate Files (References)
