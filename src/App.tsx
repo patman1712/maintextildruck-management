@@ -51,7 +51,16 @@ export default function App() {
 
   // Domain/Subdomain Routing Logic
   const hostname = window.location.hostname;
-  const ADMIN_DOMAINS = ['localhost', '127.0.0.1', 'maintextildruck-management.railway.app', 'www.maintextildruck.com', 'maintextildruck.com', 'app.team-shop.org'];
+  const ADMIN_DOMAINS = [
+      'localhost', 
+      '127.0.0.1', 
+      'maintextildruck-management.railway.app', 
+      'www.maintextildruck.com', 
+      'maintextildruck.com', 
+      'app.team-shop.org',
+      'manager.main-textildruck.com',
+      'www.manager.main-textildruck.com'
+  ];
   
   // If hostname is NOT in ADMIN_DOMAINS, we assume it's a shop
   // For development (localhost), we force admin mode unless a specific query param or env var is set?
