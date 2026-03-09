@@ -344,6 +344,35 @@ router.post('/:shopId/products/import', (req, res) => {
         }
     }
 
+    // 6. Ensure Variables used in Variants are assigned to Target Shop
+    // If the source product uses variables (e.g. Sizes) that are not yet enabled in the target shop, enable them.
+    if (sourceAssignment.variants) {
+        let variants: any = {};
+        try {
+            variants = typeof sourceAssignment.variants === 'string' ? JSON.parse(sourceAssignment.variants) : sourceAssignment.variants;
+        } catch (e) {
+            console.warn('Failed to parse variants during import', e);
+        }
+
+        const usedVariableIds = Object.keys(variants);
+        if (usedVariableIds.length > 0) {
+            const checkAssignment = db.prepare('SELECT id FROM shop_variable_assignments WHERE shop_id = ? AND variable_id = ?');
+            const insertAssignment = db.prepare('INSERT INTO shop_variable_assignments (id, shop_id, variable_id, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)');
+
+            for (const varId of usedVariableIds) {
+                const exists = checkAssignment.get(shopId, varId);
+                if (!exists) {
+                    // Check if variable actually exists in global table first (safety)
+                    const varExists = db.prepare('SELECT id FROM product_variables WHERE id = ?').get(varId);
+                    if (varExists) {
+                        console.log(`Auto-assigning variable ${varId} to shop ${shopId} due to product import.`);
+                        insertAssignment.run(crypto.randomUUID(), shopId, varId);
+                    }
+                }
+            }
+        }
+    }
+
     res.json({ success: true, message: 'Product duplicated successfully', newId: newAssignmentId });
 
   } catch (error: any) {
