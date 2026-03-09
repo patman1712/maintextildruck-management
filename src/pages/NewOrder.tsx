@@ -9,6 +9,7 @@ interface CustomerProduct {
     product_number: string;
     source?: 'manual' | 'shopware';
     price?: number;
+    assignment_count?: number;
     supplier_id?: string;
     files: {
         id: string;
@@ -1681,14 +1682,14 @@ export default function NewOrder() {
                             />
                         </div>
                         
-                        {customerProducts.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && (p.source !== 'shopware' || (p.price !== null && p.price !== undefined))).length === 0 ? (
+                        {customerProducts.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && (p.source !== 'shopware' || (p.assignment_count && p.assignment_count > 0))).length === 0 ? (
                             <p className="text-center text-gray-500 py-8">
                                 {productSearchTerm ? "Keine passenden Artikel gefunden." : "Keine Artikel für diesen Kunden hinterlegt."}
                             </p>
                         ) : (
                             <div className="grid grid-cols-1 gap-2">
                                 {customerProducts
-                                    .filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && (p.source !== 'shopware' || (p.price !== null && p.price !== undefined)))
+                                    .filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && (p.source !== 'shopware' || (p.assignment_count && p.assignment_count > 0)))
                                     .map((product) => (
                                     <div 
                                         key={product.id} 

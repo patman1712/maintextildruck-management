@@ -9,6 +9,7 @@ interface CustomerProduct {
     product_number: string;
     source?: 'manual' | 'shopware';
     price?: number;
+    assignment_count?: number;
     supplier_id?: string;
     files: {
         id: string;
@@ -1542,7 +1543,7 @@ export default function EditOrder() {
                             const currentOrder = orders.find(o => o.id === id);
                             const filtered = customerProducts.filter(p => 
                                 p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && 
-                                (p.source !== 'shopware' || (p.price !== null && p.price !== undefined))
+                                (p.source !== 'shopware' || (p.assignment_count && p.assignment_count > 0))
                             );
 
                             if (filtered.length === 0) {
