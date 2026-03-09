@@ -49,6 +49,18 @@ export default function App() {
   const versionCheckInterval = useRef<any>(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
+  // Domain/Subdomain Routing Logic
+  const hostname = window.location.hostname;
+  const ADMIN_DOMAINS = ['localhost', '127.0.0.1', 'maintextildruck-management.railway.app', 'www.maintextildruck.com', 'maintextildruck.com', 'app.team-shop.org'];
+  
+  // If hostname is NOT in ADMIN_DOMAINS, we assume it's a shop
+  // For development (localhost), we force admin mode unless a specific query param or env var is set?
+  // Or we just assume localhost is always admin.
+  // User wants "subs on team-shop.org".
+  // So if hostname ends with team-shop.org AND is NOT www/app/admin, it is a shop.
+  // But simplistic "not admin" check is usually enough.
+  const isShopDomain = !ADMIN_DOMAINS.includes(hostname);
+
   useEffect(() => {
     fetchData();
 
@@ -84,6 +96,30 @@ export default function App() {
         clearInterval(intervalId);
     };
   }, [fetchData]);
+
+  if (isShopDomain) {
+      return (
+         <Router>
+            <Routes>
+               <Route path="/" element={<ShopLayout />}>
+                  <Route index element={<ShopHome />} />
+                  <Route path="category/:categorySlug" element={<ShopCategoryPage />} />
+                  <Route path="product/:productId" element={<ShopProductPage />} />
+                  <Route path="login" element={<ShopLogin />} />
+                  <Route path="register" element={<ShopRegister />} />
+                  <Route path="profile" element={<ShopProfile />} />
+                  <Route path="cart" element={<ShopCartPage />} />
+                  <Route path="checkout" element={<ShopCheckoutPage />} />
+                  <Route path="orders" element={<ShopOrdersPage />} />
+                  <Route path="orders/:orderId" element={<ShopOrderDetailPage />} />
+                  <Route path="page/:pageSlug" element={<ShopContentPage />} />
+                  {/* Fallback for shop routes */}
+                  <Route path="*" element={<Navigate to="/" replace />} />
+               </Route>
+            </Routes>
+         </Router>
+      );
+  }
 
   return (
     <>

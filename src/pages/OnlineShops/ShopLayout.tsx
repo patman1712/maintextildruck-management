@@ -10,6 +10,17 @@ const ShopLayout: React.FC = () => {
   const location = useLocation();
   const { currentCustomer, logout, cart, removeFromCart, updateQuantity, isCartOpen: cartOpen, setCartOpen } = useShopStore();
   const [shop, setShop] = useState<Shop | null>(null);
+  
+  // Determine if we are on a custom domain or subdomain route
+  // If shopId is undefined, we assume we are running on a subdomain/custom domain
+  const isCustomDomain = !shopId;
+  const identifier = shopId || window.location.hostname;
+  
+  // Base URL for links
+  // If custom domain, base is empty string (root)
+  // If standard route, base is /shop/:shopId
+  const shopBaseUrl = isCustomDomain ? '' : `/shop/${shopId}`;
+
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +43,9 @@ const ShopLayout: React.FC = () => {
         const timeoutId = setTimeout(async () => {
             setIsSearching(true);
             try {
-                const res = await fetch(`/api/shops/${shopId}/search?q=${encodeURIComponent(searchQuery)}`);
+                // Use shop.id if available, otherwise identifier (might be slug/domain)
+                const targetId = shop?.id || identifier;
+                const res = await fetch(`/api/shops/${targetId}/search?q=${encodeURIComponent(searchQuery)}`);
                 const data = await res.json();
                 if (data.success) {
                     setSearchResults(data.data);
@@ -47,12 +60,12 @@ const ShopLayout: React.FC = () => {
     } else {
         setSearchResults([]);
     }
-  }, [searchQuery, shopId]);
+  }, [searchQuery, identifier, shop]);
 
   useEffect(() => {
     const fetchShop = async () => {
       try {
-        const res = await fetch(`/api/shops/${shopId}`);
+        const res = await fetch(`/api/shops/${identifier}`);
         const data = await res.json();
         if (data.success) {
           setShop(data.data);
@@ -84,10 +97,10 @@ const ShopLayout: React.FC = () => {
       }
     };
 
-    if (shopId) {
+    if (identifier) {
       fetchShop();
     }
-  }, [shopId]);
+  }, [identifier]);
 
   useEffect(() => {
     if (shippingConfig && shippingConfig.shipping_tiers && Array.isArray(shippingConfig.shipping_tiers) && shippingConfig.shipping_tiers.length > 0) {
@@ -124,8 +137,7 @@ const ShopLayout: React.FC = () => {
   const topLevelCategories = categories.filter(c => !c.parent_id).sort((a, b) => a.sort_order - b.sort_order);
   const getSubCategories = (parentId: string) => categories.filter(c => c.parent_id === parentId).sort((a, b) => a.sort_order - b.sort_order);
 
-  // Use resolved shop slug or ID for links
-  const shopBaseUrl = `/shop/${shopId}`; // shopId param from URL is usually the slug or ID used in route
+  // shopBaseUrl is already defined above
 
   return (
     <div className="font-sans text-slate-800 bg-white min-h-screen flex flex-col">

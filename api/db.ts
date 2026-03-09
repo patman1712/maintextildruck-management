@@ -944,6 +944,18 @@ try {
       console.error('Migration error (invoice details):', e);
   }
 
+  // Migration for Custom Domain
+  try {
+      const shopCols = db.prepare("PRAGMA table_info(shops)").all() as any[];
+      const hasCustomDomain = shopCols.some(col => col.name === 'custom_domain');
+      if (!hasCustomDomain) {
+        console.log('Migrating database: Adding custom_domain to shops table');
+        db.exec('ALTER TABLE shops ADD COLUMN custom_domain TEXT UNIQUE');
+      }
+  } catch (e) {
+      console.error('Migration error (custom_domain):', e);
+  }
+
   // Ensure default row for global content
   try {
       const row = db.prepare("SELECT id FROM global_shop_content WHERE id = 'main'").get();

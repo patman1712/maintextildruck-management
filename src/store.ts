@@ -126,6 +126,7 @@ export interface Shop {
   customer_id: string;
   name: string;
   domain_slug: string;
+  custom_domain?: string; // New field for custom domain/subdomain
   logo_url?: string;
   primary_color: string;
   secondary_color: string;

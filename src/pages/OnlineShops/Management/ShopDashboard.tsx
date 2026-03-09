@@ -596,6 +596,21 @@ const ShopDashboard: React.FC = () => {
                             />
                         </div>
                     </div>
+                    
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Eigene Domain / Subdomain (Optional)</label>
+                        <input 
+                            type="text" 
+                            className="w-full border border-slate-300 rounded-lg p-2"
+                            value={shop.custom_domain || ''}
+                            onChange={(e) => setShop({ ...shop, custom_domain: e.target.value })}
+                            placeholder="z.B. shop.mein-verein.de"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                            Wenn Sie eine eigene Domain (z.B. Subdomain) verwenden möchten, tragen Sie diese hier ein. 
+                            Sie müssen dann einen CNAME-Record bei Ihrem Domain-Provider setzen, der auf diese App zeigt.
+                        </p>
+                    </div>
 
                     <div className="pt-6 border-t border-slate-200">
                         <h4 className="font-bold text-slate-700 mb-4">Bestellnummern & Rechnungen</h4>

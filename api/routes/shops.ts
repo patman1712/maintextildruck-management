@@ -32,8 +32,14 @@ router.get('/:id', (req, res) => {
         // Assume UUID/ID
         shop = db.prepare('SELECT * FROM shops WHERE id = ?').get(id) as any;
     } else {
-        // Assume slug
+        // Assume slug OR custom domain
+        // First check by domain_slug
         shop = db.prepare('SELECT * FROM shops WHERE domain_slug = ?').get(id) as any;
+        
+        // If not found, check by custom_domain
+        if (!shop) {
+             shop = db.prepare('SELECT * FROM shops WHERE custom_domain = ?').get(id) as any;
+        }
     }
 
     if (!shop) {
@@ -355,17 +361,18 @@ router.get('/:id/shipping-config', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const body = req.body as any;
-    const { customer_id, name, domain_slug, logo_url, primary_color, secondary_color, template, dhl_config, paypal_config } = body;
+    const { customer_id, name, domain_slug, custom_domain, logo_url, primary_color, secondary_color, template, dhl_config, paypal_config } = body;
     const id = crypto.randomUUID();
 
     db.prepare(`
-      INSERT INTO shops (id, customer_id, name, domain_slug, logo_url, primary_color, secondary_color, template, dhl_config, paypal_config)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO shops (id, customer_id, name, domain_slug, custom_domain, logo_url, primary_color, secondary_color, template, dhl_config, paypal_config)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       customer_id,
       name,
       domain_slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      custom_domain || null,
       logo_url,
       primary_color || '#000000',
       secondary_color || '#ffffff',
@@ -395,7 +402,7 @@ router.put('/:id', (req, res) => {
     const { id } = req.params;
     const body = req.body as any;
     const { 
-        name, domain_slug, logo_url, email_logo_url,
+        name, domain_slug, custom_domain, logo_url, email_logo_url,
         primary_color, secondary_color, template, 
         dhl_config, paypal_config,
         order_number_circle, next_order_number,
@@ -409,7 +416,7 @@ router.put('/:id', (req, res) => {
 
     const query = `
       UPDATE shops 
-      SET name = ?, domain_slug = ?, logo_url = ?, email_logo_url = ?,
+      SET name = ?, domain_slug = ?, custom_domain = ?, logo_url = ?, email_logo_url = ?,
           primary_color = ?, secondary_color = ?, template = ?, 
           dhl_config = ?, paypal_config = ?,
           order_number_circle = ?, next_order_number = ?,
@@ -423,6 +430,7 @@ router.put('/:id', (req, res) => {
     stmt.run(
       name,
       domain_slug,
+      custom_domain || null,
       logo_url,
       email_logo_url || null,
       primary_color,
