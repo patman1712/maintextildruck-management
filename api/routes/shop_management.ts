@@ -224,6 +224,131 @@ router.delete('/:shopId/products/:id', (req, res) => {
   }
 });
 
+router.post('/:shopId/products/import', (req, res) => {
+  try {
+    const { shopId } = req.params; // Target Shop
+    const { source_assignment_id } = req.body; // Source Assignment ID
+    
+    // 1. Fetch Source Assignment & Product Data
+    const sourceAssignment = db.prepare(`
+        SELECT spa.*, cp.*, cp.id as real_product_id
+        FROM shop_product_assignments spa
+        JOIN customer_products cp ON spa.product_id = cp.id
+        WHERE spa.id = ?
+    `).get(source_assignment_id) as any;
+
+    if (!sourceAssignment) {
+        return res.status(404).json({ success: false, error: 'Source product not found' });
+    }
+
+    // 2. Duplicate Customer Product (Base Article)
+    const newProductId = crypto.randomUUID();
+    const newProductNumber = `${sourceAssignment.product_number}-COPY-${Date.now().toString().slice(-4)}`;
+    
+    // Check if target shop has a different customer_id? 
+    // Usually one user owns multiple shops, so customer_id should be the same.
+    // We should fetch the target shop to get its customer_id.
+    const targetShop = db.prepare('SELECT customer_id FROM shops WHERE id = ?').get(shopId) as { customer_id: string };
+    
+    db.prepare(`
+        INSERT INTO customer_products (
+            id, customer_id, product_number, name, manufacturer_info, description, 
+            size, color, weight, price, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(
+        newProductId, 
+        targetShop.customer_id, 
+        newProductNumber, 
+        `${sourceAssignment.name} (Kopie)`, // Add (Kopie) to name? Or keep exact name? User said "eigenständiges produkt". Let's keep exact name but maybe distinct number.
+        sourceAssignment.manufacturer_info, 
+        sourceAssignment.description, 
+        sourceAssignment.size, 
+        sourceAssignment.color, 
+        sourceAssignment.weight, 
+        sourceAssignment.price // Base price from customer_product (often 0 or purchase price)
+    );
+
+    // 3. Duplicate Files (References)
+    const sourceFiles = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ?').all(sourceAssignment.real_product_id) as any[];
+    const insertFile = db.prepare(`
+        INSERT INTO customer_product_files (
+            id, product_id, file_url, file_name, thumbnail_url, type, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `);
+
+    // Map old file IDs to new file IDs to update assignments later if needed
+    const fileIdMap = new Map<string, string>();
+
+    for (const file of sourceFiles) {
+        const newFileId = crypto.randomUUID();
+        insertFile.run(
+            newFileId,
+            newProductId,
+            file.file_url,
+            file.file_name,
+            file.thumbnail_url,
+            file.type
+        );
+        fileIdMap.set(file.id, newFileId);
+    }
+
+    // 4. Create New Assignment for Target Shop
+    const newAssignmentId = crypto.randomUUID();
+    
+    // If source assignment had variants, we need to deep copy them if they reference file IDs?
+    // Variants usually just string JSON.
+    // However, shop_product_images might reference file IDs.
+    
+    db.prepare(`
+      INSERT INTO shop_product_assignments (
+        id, shop_id, product_id, category_id, price, is_featured, 
+        personalization_enabled, sort_order, variants, personalization_options, is_active, supplier_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+        newAssignmentId,
+        shopId,
+        newProductId,
+        null, // Reset category, as target shop might have different categories
+        sourceAssignment.price, // Sales price
+        sourceAssignment.is_featured,
+        sourceAssignment.personalization_enabled,
+        0, // Reset sort order
+        sourceAssignment.variants,
+        sourceAssignment.personalization_options,
+        1, // Active by default
+        sourceAssignment.supplier_id
+    );
+
+    // 5. Duplicate Shop Product Images (Assignments)
+    // These link assignments to files. We need to link NEW assignment to NEW files (using map)
+    const sourceImages = db.prepare('SELECT * FROM shop_product_images WHERE shop_product_assignment_id = ?').all(source_assignment_id) as any[];
+    const insertImage = db.prepare(`
+        INSERT INTO shop_product_images (
+            id, shop_product_assignment_id, customer_product_file_id, sort_order, personalization_option_ids
+        ) VALUES (?, ?, ?, ?, ?)
+    `);
+
+    for (const img of sourceImages) {
+        const newFileId = fileIdMap.get(img.customer_product_file_id);
+        if (newFileId) {
+            insertImage.run(
+                crypto.randomUUID(),
+                newAssignmentId,
+                newFileId,
+                img.sort_order,
+                img.personalization_option_ids || '[]'
+            );
+        }
+    }
+
+    res.json({ success: true, message: 'Product duplicated successfully', newId: newAssignmentId });
+
+  } catch (error: any) {
+    console.error('Import Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // --- Shop Product Images ---
 
 router.get('/:shopId/products/:assignmentId/images', (req, res) => {

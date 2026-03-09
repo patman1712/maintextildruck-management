@@ -26,7 +26,7 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId }) => 
     
     // TODO: Connect this to backend "is_new" field later
     // For now we assume if product.is_new is true, or we could add a field in shop_products table
-    const isNew = product.is_new === 1 || product.is_new === true;
+    const isNew = product.is_featured === 1 || product.is_featured === true || product.is_new === true;
 
     return (
         <div className="group block relative bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-slate-100">

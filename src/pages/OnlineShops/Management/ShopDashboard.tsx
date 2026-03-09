@@ -51,6 +51,12 @@ const ShopDashboard: React.FC = () => {
   const [editorAssignment, setEditorAssignment] = useState<any | null>(null);
   const [isCreateMode, setIsCreateMode] = useState(false); // Track create mode
 
+  // Import Modal
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [sourceShopId, setSourceShopId] = useState('');
+  const [sourceShopProducts, setSourceShopProducts] = useState<any[]>([]);
+  const [isImporting, setIsImporting] = useState<string | null>(null); // ID of product being imported
+
   useEffect(() => {
     if (shopId) {
       const foundShop = shops.find(s => s.id === shopId);
@@ -63,6 +69,52 @@ const ShopDashboard: React.FC = () => {
       fetchShippingConfig();
     }
   }, [shopId, shops]);
+
+  useEffect(() => {
+    if (sourceShopId) {
+        fetchSourceShopProducts(sourceShopId);
+    } else {
+        setSourceShopProducts([]);
+    }
+  }, [sourceShopId]);
+
+  const fetchSourceShopProducts = async (id: string) => {
+    try {
+      const res = await fetch(`/api/shop-management/${id}/products`);
+      const data = await res.json();
+      if (data.success) {
+          setSourceShopProducts(data.data);
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const handleImportProduct = async (sourceAssignment: any) => {
+      if (!shop) return;
+      setIsImporting(sourceAssignment.id);
+      try {
+          const res = await fetch(`/api/shop-management/${shop.id}/products/import`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  source_assignment_id: sourceAssignment.id
+              })
+          });
+          const data = await res.json();
+          if (data.success) {
+              // Refresh current shop products
+              fetchShopProducts();
+              // Optional: Show success feedback
+          } else {
+              alert('Fehler beim Importieren: ' + data.error);
+          }
+      } catch (e) {
+          console.error(e);
+          alert('Ein Fehler ist aufgetreten.');
+      } finally {
+          setIsImporting(null);
+      }
+  };
+
 
   const fetchShippingConfig = async () => {
     try {
@@ -1040,9 +1092,14 @@ const ShopDashboard: React.FC = () => {
                 <div>
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="font-bold text-lg">Shop Produkte ({shopProducts.length})</h3>
-                        <button onClick={() => setShowProductModal(true)} className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-red-700">
-                            <Plus size={18} className="mr-2" /> Produkt hinzufügen
-                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowImportModal(true)} className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg flex items-center hover:bg-slate-50 transition-colors font-medium text-sm">
+                                <ExternalLink size={16} className="mr-2" /> Importieren
+                            </button>
+                            <button onClick={() => setShowProductModal(true)} className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-red-700 font-medium text-sm">
+                                <Plus size={16} className="mr-2" /> Produkt hinzufügen
+                            </button>
+                        </div>
                     </div>
 
                     <div className="space-y-4">
@@ -2044,6 +2101,97 @@ const ShopDashboard: React.FC = () => {
                     >
                         <Truck size={16} className="mr-2" />
                         Label jetzt kaufen
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden">
+                <div className="p-4 border-b flex justify-between items-center bg-slate-50">
+                    <div>
+                        <h3 className="font-bold text-lg text-slate-800">Produkte aus anderem Shop importieren</h3>
+                        <p className="text-xs text-slate-500">Kopieren Sie Produkte als Vorlage. Die Kopie ist eigenständig und nicht verknüpft.</p>
+                    </div>
+                    <button onClick={() => setShowImportModal(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                        <X size={20} className="text-slate-500" />
+                    </button>
+                </div>
+                
+                <div className="p-4 border-b bg-white">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Quell-Shop auswählen</label>
+                    <select 
+                        className="w-full border border-slate-300 rounded-lg p-3 text-slate-700 font-medium focus:ring-2 focus:ring-blue-100 outline-none"
+                        value={sourceShopId}
+                        onChange={(e) => setSourceShopId(e.target.value)}
+                    >
+                        <option value="">-- Bitte wählen --</option>
+                        {shops.filter(s => s.id !== shopId).map(s => (
+                            <option key={s.id} value={s.id}>{s.name} (/shop/{s.domain_slug})</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
+                    {sourceShopId ? (
+                        <div className="space-y-3">
+                            {sourceShopProducts.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <ShoppingBag size={48} className="mx-auto mb-4 text-slate-300" />
+                                    <p className="text-slate-500 font-medium">Dieser Shop hat keine Produkte.</p>
+                                </div>
+                            ) : (
+                                sourceShopProducts.map(p => (
+                                    <div key={p.id} className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between hover:shadow-md transition-all group">
+                                        <div className="flex items-center space-x-4">
+                                            <div className="h-12 w-12 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-100">
+                                                {p.files && p.files[0] ? (
+                                                    <img src={p.files[0].thumbnail_url || p.files[0].file_url} className="h-full w-full object-cover" />
+                                                ) : <ImageIcon size={20} className="text-slate-300" />}
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-slate-800">{p.product_name}</p>
+                                                <div className="flex items-center space-x-2 text-xs text-slate-500">
+                                                    <span className="bg-slate-100 px-1.5 py-0.5 rounded font-mono">{p.product_number}</span>
+                                                    {p.category_name && <span>in {p.category_name}</span>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleImportProduct(p)}
+                                            disabled={isImporting === p.id}
+                                            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all flex items-center shadow-sm ${
+                                                isImporting === p.id 
+                                                ? 'bg-slate-100 text-slate-400 cursor-wait' 
+                                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'
+                                            }`}
+                                        >
+                                            {isImporting === p.id ? (
+                                                <RefreshCw size={14} className="animate-spin mr-2" />
+                                            ) : (
+                                                <Plus size={14} className="mr-2" />
+                                            )}
+                                            {isImporting === p.id ? 'Import...' : 'Kopieren'}
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-400">
+                            <Layers size={48} className="mb-4 opacity-20" />
+                            <p className="font-medium">Wählen Sie oben einen Shop aus,</p>
+                            <p className="text-sm">um dessen Produkte anzuzeigen.</p>
+                        </div>
+                    )}
+                </div>
+                
+                <div className="p-4 border-t bg-white flex justify-end">
+                    <button onClick={() => setShowImportModal(false)} className="px-6 py-2 bg-slate-100 text-slate-600 font-bold rounded-lg hover:bg-slate-200 transition-colors text-sm">
+                        Schließen
                     </button>
                 </div>
             </div>

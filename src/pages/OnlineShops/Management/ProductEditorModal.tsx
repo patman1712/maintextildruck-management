@@ -33,6 +33,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     weight: assignment?.weight || 0,
     variants: assignment?.variants ? (typeof assignment.variants === 'string' ? JSON.parse(assignment.variants) : assignment.variants) : {},
     is_active: (assignment as any)?.is_active === 0 || assignment?.is_active === false ? false : true, // Default to true if undefined or 1
+    is_featured: assignment?.is_featured || false,
     supplier_id: assignment?.supplier_id || ''
   });
   
@@ -199,7 +200,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                         product_id: prodData.id,
                         category_id: null,
                         price: formData.price,
-                        is_featured: false
+                        is_featured: formData.is_featured
                     })
                 });
                 const assignData = await assignRes.json();
@@ -691,22 +692,41 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                 )}
 
                 {/* Status & Supplier */}
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                        <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Status im Shop</label>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input 
-                                type="checkbox" 
-                                className="sr-only peer" 
-                                checked={formData.is_active}
-                                onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
-                            />
-                            <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${formData.is_active ? 'peer-checked:bg-green-600' : ''}`}></div>
-                            <span className={`ml-3 text-sm font-medium ${formData.is_active ? 'text-green-600' : 'text-slate-500'}`}>
-                                {formData.is_active ? 'Aktiv (Sichtbar)' : 'Deaktiviert (Versteckt)'}
-                            </span>
-                        </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-6">
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Status im Shop</label>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    className="sr-only peer" 
+                                    checked={formData.is_active}
+                                    onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
+                                />
+                                <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${formData.is_active ? 'peer-checked:bg-green-600' : ''}`}></div>
+                                <span className={`ml-3 text-sm font-medium ${formData.is_active ? 'text-green-600' : 'text-slate-500'}`}>
+                                    {formData.is_active ? 'Aktiv (Sichtbar)' : 'Deaktiviert (Versteckt)'}
+                                </span>
+                            </label>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Highlight / Neu</label>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    className="sr-only peer" 
+                                    checked={formData.is_featured}
+                                    onChange={(e) => setFormData({...formData, is_featured: e.target.checked})}
+                                />
+                                <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${formData.is_featured ? 'peer-checked:bg-orange-500' : ''}`}></div>
+                                <span className={`ml-3 text-sm font-medium ${formData.is_featured ? 'text-orange-600' : 'text-slate-500'}`}>
+                                    {formData.is_featured ? 'Markiert als NEU' : 'Standard'}
+                                </span>
+                            </label>
+                        </div>
                     </div>
+
                     <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                         <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Lieferant</label>
                         <select 
