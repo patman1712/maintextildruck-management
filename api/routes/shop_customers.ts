@@ -10,6 +10,16 @@ import { sendOrderConfirmation } from '../services/email.js';
 
 const router = Router();
 
+// Helper to clean names (remove trailing '0' bug)
+const cleanName = (name: string | null | undefined) => {
+    if (!name) return '';
+    let cleaned = name.trim();
+    if (cleaned.endsWith('0')) {
+        cleaned = cleaned.slice(0, -1);
+    }
+    return cleaned;
+};
+
 // Helper to resolve shopId from either ID or Slug
 const resolveShopId = (idOrSlug: string): string | null => {
     // Try finding by ID first
@@ -75,8 +85,8 @@ router.post('/:shopId/register', async (req, res) => {
     // If user input is clean, maybe the DB insert is weird?
     // Or maybe the display logic?
     // Let's sanitize input just in case.
-    const cleanLastName = last_name.trim();
-    const cleanFirstName = first_name.trim();
+    const cleanLastName = cleanName(last_name);
+    const cleanFirstName = cleanName(first_name);
 
     // Transaction for atomic update
     const transaction = db.transaction(() => {
@@ -169,8 +179,16 @@ router.get('/:shopId/admin/list', (req, res) => {
         return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
     }
 
-    const customers = db.prepare('SELECT id, email, first_name, last_name, company, street, zip, city, phone, created_at, customer_number, is_blocked FROM shop_customers WHERE shop_id = ? ORDER BY created_at DESC').all(shopId);
-    res.json({ success: true, data: customers });
+    const customers = db.prepare('SELECT id, email, first_name, last_name, company, street, zip, city, phone, created_at, customer_number, is_blocked FROM shop_customers WHERE shop_id = ? ORDER BY created_at DESC').all(shopId) as any[];
+    
+    // Clean data before sending
+    const cleanedCustomers = customers.map(c => ({
+        ...c,
+        first_name: cleanName(c.first_name),
+        last_name: cleanName(c.last_name)
+    }));
+
+    res.json({ success: true, data: cleanedCustomers });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -219,13 +237,16 @@ router.put('/:shopId/profile/:customerId', async (req, res) => {
       password 
     } = req.body;
 
+    const cleanFirstName = cleanName(first_name);
+    const cleanLastName = cleanName(last_name);
+
     // Update basic info
     let query = `
       UPDATE shop_customers 
       SET email = ?, first_name = ?, last_name = ?, company = ?, 
           street = ?, zip = ?, city = ?, phone = ?
     `;
-    const params = [email, first_name, last_name, company, street, zip, city, phone];
+    const params = [email, cleanFirstName, cleanLastName, company, street, zip, city, phone];
 
     // Update password if provided
     if (password && password.trim() !== '') {
