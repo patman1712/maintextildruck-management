@@ -185,7 +185,8 @@ export default function NewOrder() {
     color: '',
     size: '',
     quantity: 1,
-    notes: ''
+    notes: '',
+    price: ''
   });
 
   const handleAddItem = () => {
@@ -198,7 +199,8 @@ export default function NewOrder() {
             color: '',
             size: '',
             quantity: 1,
-            notes: ''
+            notes: '',
+            price: ''
         });
     }
   };
@@ -549,7 +551,8 @@ export default function NewOrder() {
                 color: item.color,
                 size: item.size,
                 quantity: item.quantity,
-                notes: item.notes
+                notes: item.notes,
+                price: item.price
             });
         }
     }
@@ -615,7 +618,8 @@ export default function NewOrder() {
           color: "",
           size: productSizeInput,
           quantity: 1, // Quantity is implied in size input usually like "5x L", but we can set 1 as base
-          notes: "Aus Kundenartikel"
+          notes: "Aus Kundenartikel",
+          price: (selectedProduct as any).price || ''
       };
       
       setOrderItems([...orderItems, { ...newItemEntry, id: Math.random().toString(36).substr(2, 9), status: 'pending' }]);
@@ -1509,7 +1513,7 @@ export default function NewOrder() {
                         ))}
                     </select>
                 </div>
-                <div className="md:col-span-4">
+                <div className="md:col-span-3">
                     <label className="block text-xs font-medium text-gray-700 mb-1">Artikelname / Art.-Nr. / Farbe</label>
                     <input 
                         type="text" 
@@ -1519,7 +1523,7 @@ export default function NewOrder() {
                         onChange={(e) => setNewItem({...newItem, itemName: e.target.value})}
                     />
                 </div>
-                <div className="md:col-span-3">
+                <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Beschreibung</label>
                     <input 
                         type="text" 
@@ -1539,7 +1543,18 @@ export default function NewOrder() {
                         onChange={(e) => setNewItem({...newItem, quantity: parseInt(e.target.value) || 1})}
                     />
                 </div>
-                <div className="md:col-span-2">
+                <div className="md:col-span-1">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Preis (€)</label>
+                    <input 
+                        type="number" 
+                        step="0.01"
+                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2 text-right"
+                        placeholder="0.00"
+                        value={newItem.price}
+                        onChange={(e) => setNewItem({...newItem, price: e.target.value})}
+                    />
+                </div>
+                <div className="md:col-span-3">
                     <label className="block text-xs font-medium text-gray-700 mb-1">Notizen (Optional)</label>
                     <input 
                         type="text" 
@@ -1571,6 +1586,7 @@ export default function NewOrder() {
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Artikel / Farbe</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Größe / Anzahl</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lieferant</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Preis</th>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notiz</th>
                             <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Aktion</th>
                         </tr>
@@ -1584,6 +1600,9 @@ export default function NewOrder() {
                                 </td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
                                     {suppliers.find(s => s.id === item.supplierId)?.name || 'Unbekannt'}
+                                </td>
+                                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900 text-right font-mono">
+                                    {item.price ? `${Number(item.price).toFixed(2)} €` : '-'}
                                 </td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 italic">{item.notes}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
@@ -1661,14 +1680,14 @@ export default function NewOrder() {
                             />
                         </div>
                         
-                        {customerProducts.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && p.source !== 'shopware').length === 0 ? (
+                        {customerProducts.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase())).length === 0 ? (
                             <p className="text-center text-gray-500 py-8">
-                                {productSearchTerm ? "Keine passenden Artikel gefunden." : "Keine manuellen Artikel für diesen Kunden hinterlegt."}
+                                {productSearchTerm ? "Keine passenden Artikel gefunden." : "Keine Artikel für diesen Kunden hinterlegt."}
                             </p>
                         ) : (
                             <div className="grid grid-cols-1 gap-2">
                                 {customerProducts
-                                    .filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && p.source !== 'shopware')
+                                    .filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()))
                                     .map((product) => (
                                     <div 
                                         key={product.id} 

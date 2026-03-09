@@ -42,6 +42,7 @@ export interface OrderItem {
   size?: string;
   quantity: number;
   notes?: string;
+  price?: number;
   status: 'pending' | 'ordered' | 'received';
 }
 
@@ -366,6 +367,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                 size: i.size,
                 quantity: i.quantity,
                 notes: i.notes,
+                price: i.price,
                 status: i.status
             }))
       }));
@@ -686,7 +688,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             color: item.color,
             size: item.size,
             quantity: item.quantity,
-            notes: item.notes
+            notes: item.notes,
+            price: item.price
         })
       });
       const data = await res.json();
@@ -740,6 +743,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (updates.size !== undefined) payload.size = updates.size;
       if (updates.quantity !== undefined) payload.quantity = updates.quantity;
       if (updates.notes !== undefined) payload.notes = updates.notes;
+      if (updates.price !== undefined) payload.price = updates.price;
       if (updates.status !== undefined) payload.status = updates.status;
 
       await fetch(`/api/orders/${orderId}/items/${itemId}`, {

@@ -162,6 +162,7 @@ router.get('/:customerId', (req: Request, res: Response) => {
     try {
         const products = db.prepare(`
             SELECT p.*, 
+            (SELECT price FROM shop_product_assignments spa WHERE spa.product_id = p.id ORDER BY spa.created_at DESC LIMIT 1) as price,
             (SELECT json_group_array(json_object(
                 'id', f.id, 
                 'file_url', f.file_url, 
