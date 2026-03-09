@@ -231,7 +231,10 @@ router.post('/:shopId/products/import', (req, res) => {
     
     // 1. Fetch Source Assignment & Product Data
     const sourceAssignment = db.prepare(`
-        SELECT spa.*, cp.*, cp.id as real_product_id
+        SELECT spa.*, cp.*, 
+               spa.supplier_id as spa_supplier_id,
+               cp.supplier_id as cp_supplier_id,
+               cp.id as real_product_id
         FROM shop_product_assignments spa
         JOIN customer_products cp ON spa.product_id = cp.id
         WHERE spa.id = ?
@@ -265,7 +268,7 @@ router.post('/:shopId/products/import', (req, res) => {
         sourceAssignment.size, 
         sourceAssignment.color, 
         sourceAssignment.weight,
-        sourceAssignment.supplier_id // supplier_id from customer_products
+        sourceAssignment.cp_supplier_id // supplier_id from customer_products
     );
 
     // 3. Duplicate Files (References)
@@ -316,7 +319,7 @@ router.post('/:shopId/products/import', (req, res) => {
         sourceAssignment.variants,
         sourceAssignment.personalization_options,
         1, // Active by default
-        sourceAssignment.supplier_id
+        sourceAssignment.spa_supplier_id
     );
 
     // 5. Duplicate Shop Product Images (Assignments)
