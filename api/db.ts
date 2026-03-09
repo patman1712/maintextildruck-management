@@ -950,7 +950,12 @@ try {
       const hasCustomDomain = shopCols.some(col => col.name === 'custom_domain');
       if (!hasCustomDomain) {
         console.log('Migrating database: Adding custom_domain to shops table');
-        db.exec('ALTER TABLE shops ADD COLUMN custom_domain TEXT UNIQUE');
+        db.exec('ALTER TABLE shops ADD COLUMN custom_domain TEXT');
+        try {
+            db.exec('CREATE UNIQUE INDEX idx_shops_custom_domain ON shops(custom_domain)');
+        } catch (e) {
+            console.log('Index might already exist or error creating index:', e);
+        }
       }
   } catch (e) {
       console.error('Migration error (custom_domain):', e);
