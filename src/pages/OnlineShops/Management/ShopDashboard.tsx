@@ -1126,7 +1126,7 @@ const ShopDashboard: React.FC = () => {
                                                 <div>
                                                     <p className={`font-bold ${customer.is_blocked ? 'text-red-800' : 'text-slate-800'}`}>
                                         {customer.first_name} {customer.last_name}
-                                        {customer.is_blocked && <span className="ml-2 text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded uppercase">Gesperrt</span>}
+                                        {!!customer.is_blocked && <span className="ml-2 text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded uppercase">Gesperrt</span>}
                                     </p>
                                                     <p className="text-xs text-slate-500">{customer.email}</p>
                                                 </div>
@@ -1615,7 +1615,7 @@ const ShopDashboard: React.FC = () => {
                         <div>
                             <h3 className="font-bold text-xl text-slate-800">
                                 {selectedCustomer.first_name} {selectedCustomer.last_name}
-                                {selectedCustomer.is_blocked && <span className="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">Gesperrt</span>}
+                                {!!selectedCustomer.is_blocked && <span className="ml-2 text-xs bg-red-600 text-white px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">Gesperrt</span>}
                             </h3>
                             <p className="text-sm text-slate-500 font-mono">{selectedCustomer.customer_number || 'Keine Kundennummer'}</p>
                         </div>
