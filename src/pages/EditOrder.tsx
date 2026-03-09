@@ -1542,7 +1542,7 @@ export default function EditOrder() {
                             const currentOrder = orders.find(o => o.id === id);
                             const filtered = customerProducts.filter(p => 
                                 p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && 
-                                p.source !== 'shopware'
+                                (p.source !== 'shopware' || (p.price !== null && p.price !== undefined))
                             );
 
                             if (filtered.length === 0) {

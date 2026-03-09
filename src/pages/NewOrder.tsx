@@ -8,6 +8,7 @@ interface CustomerProduct {
     name: string;
     product_number: string;
     source?: 'manual' | 'shopware';
+    price?: number;
     supplier_id?: string;
     files: {
         id: string;
@@ -619,7 +620,7 @@ export default function NewOrder() {
           size: productSizeInput,
           quantity: 1, // Quantity is implied in size input usually like "5x L", but we can set 1 as base
           notes: "Aus Kundenartikel",
-          price: (selectedProduct as any).price || ''
+          price: selectedProduct.price || ''
       };
       
       setOrderItems([...orderItems, { ...newItemEntry, id: Math.random().toString(36).substr(2, 9), status: 'pending' }]);
@@ -1680,14 +1681,14 @@ export default function NewOrder() {
                             />
                         </div>
                         
-                        {customerProducts.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && p.source !== 'shopware').length === 0 ? (
+                        {customerProducts.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && (p.source !== 'shopware' || (p.price !== null && p.price !== undefined))).length === 0 ? (
                             <p className="text-center text-gray-500 py-8">
                                 {productSearchTerm ? "Keine passenden Artikel gefunden." : "Keine Artikel für diesen Kunden hinterlegt."}
                             </p>
                         ) : (
                             <div className="grid grid-cols-1 gap-2">
                                 {customerProducts
-                                    .filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && p.source !== 'shopware')
+                                    .filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && (p.source !== 'shopware' || (p.price !== null && p.price !== undefined)))
                                     .map((product) => (
                                     <div 
                                         key={product.id} 
