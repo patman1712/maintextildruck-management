@@ -1680,14 +1680,14 @@ export default function NewOrder() {
                             />
                         </div>
                         
-                        {customerProducts.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase())).length === 0 ? (
+                        {customerProducts.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && p.source !== 'shopware').length === 0 ? (
                             <p className="text-center text-gray-500 py-8">
                                 {productSearchTerm ? "Keine passenden Artikel gefunden." : "Keine Artikel für diesen Kunden hinterlegt."}
                             </p>
                         ) : (
                             <div className="grid grid-cols-1 gap-2">
                                 {customerProducts
-                                    .filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()))
+                                    .filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && p.source !== 'shopware')
                                     .map((product) => (
                                     <div 
                                         key={product.id} 
