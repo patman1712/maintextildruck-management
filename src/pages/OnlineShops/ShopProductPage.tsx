@@ -79,35 +79,33 @@ const ShopProductPage: React.FC = () => {
   [variantDefinitions]);
 
   const mainVariants = React.useMemo(() => 
-      variantDefinitions.filter(v => v.type !== 'back_print' && v.type !== 'size'),
+      variantDefinitions.filter(v => v.type !== 'back_print'),
   [variantDefinitions]);
 
   // Derived state (needs to be here because product is null initially)
   const availableSizes = React.useMemo(() => {
-      // 1. Check if there is a dedicated SIZE variant (Explicit Type 'size')
-      // If found, this is the primary source of sizes.
-      const sizeVariant = variantDefinitions.find(v => v.type === 'size');
-      if (sizeVariant && sizeVariant.values.length > 0) {
-          return sizeVariant.values;
-      }
+      // Logic:
+      // If we have "Main Variants" (which now INCLUDE things like "Jako Erwachsen" if they are not explicitly 'size'),
+      // then the sizes depend on the SELECTION of that variant.
       
-      // 2. Check if a Main Variant is selected and provides sizes
-      // If the user selected a variant (e.g. "Jako Erwachsen") and that variant has values (S, M, L),
-      // then those values ARE the available sizes.
+      // If we have selected a variant ID:
       if (selectedVariantId) {
           const selectedVar = variantDefinitions.find(v => v.id === selectedVariantId);
+          // If the selected variant has values (e.g. S, M, L), use them as sizes
           if (selectedVar && selectedVar.values.length > 0) {
               return selectedVar.values;
           }
       }
       
-      // 3. If we have variants that determine sizes (mainVariants), but none is selected, return empty.
-      // This forces the user to select a variant first.
+      // If we have variants but none selected -> Empty sizes to force selection
       if (mainVariants.length > 0 && !selectedVariantId) {
           return [];
       }
 
-      // 4. Fallback to product.size string (only if no variants exist)
+      // Fallback: Use product.size string or dedicated 'size' variant if no main variants exist
+      const sizeVariant = variantDefinitions.find(v => v.type === 'size');
+      if (sizeVariant && sizeVariant.values.length > 0) return sizeVariant.values;
+      
       if (product?.size) return product.size.split(',').map((s: any) => s.trim());
       
       return ['S', 'M', 'L', 'XL', 'XXL'];
