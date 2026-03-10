@@ -692,11 +692,13 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                // Grid View for Images
                                <div className="grid grid-cols-4 gap-2">
                                   {filteredCurrentFiles.map((img: any, idx: number) => (
-                                      <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden">
-                                          <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
+                                      <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded hover:z-[100] hover:shadow-lg transition-shadow">
+                                          <div className="w-full h-full rounded overflow-hidden">
+                                              <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
+                                          </div>
                                           
                                           {/* Personalization & Variant Badges */}
-                                          <div className="absolute bottom-0 left-0 right-0 flex flex-col gap-0.5">
+                                          <div className="absolute bottom-0 left-0 right-0 flex flex-col gap-0.5 pointer-events-none">
                                               {img.personalization_option_ids && img.personalization_option_ids.length > 0 && (
                                                   <div className="bg-blue-600/90 text-white text-[9px] font-bold px-1 py-0.5 truncate text-center">
                                                       {img.personalization_option_ids.map((oid: string) => personalizationOptions.find(o => o.id === oid)?.name).join(', ')}
@@ -718,7 +720,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                           </button>
                                           
                                           {/* Assign Option Overlay */}
-                                          <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 text-[10px] text-white overflow-y-auto">
+                                          <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 text-[10px] text-white overflow-visible">
                                               {/* Options Section */}
                                               <div className="font-bold mb-1 underline">Optionen:</div>
                                               <div className="space-y-1 w-full mb-2">
@@ -769,7 +771,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                           
                                                           {/* Hover Dropdown for Values */}
                                                           {isAssigned && hasValues && (
-                                                              <div className="absolute left-full top-0 ml-1 bg-slate-800 border border-slate-600 shadow-xl rounded p-2 z-[70] hidden group-hover/var:block w-40 max-h-48 overflow-y-auto">
+                                                              <div className="absolute left-full top-0 ml-0 bg-slate-800 border border-slate-600 shadow-xl rounded p-2 z-[70] hidden group-hover/var:block w-40 max-h-48 overflow-y-auto">
                                                                   <div className="text-[9px] font-bold text-slate-400 mb-2 uppercase">Zeigen bei:</div>
                                                                   <div className="space-y-1">
                                                                        <div className="flex items-center justify-between mb-1 pb-1 border-b border-slate-600">
