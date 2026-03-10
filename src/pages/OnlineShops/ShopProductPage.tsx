@@ -82,6 +82,13 @@ const ShopProductPage: React.FC = () => {
       variantDefinitions.filter(v => v.type !== 'back_print'),
   [variantDefinitions]);
 
+  // Auto-select variant if only one exists (e.g. only "Size")
+  useEffect(() => {
+      if (mainVariants.length === 1 && !selectedVariantId) {
+          setSelectedVariantId(mainVariants[0].id);
+      }
+  }, [mainVariants, selectedVariantId]);
+
   // Derived state (needs to be here because product is null initially)
   const availableSizes = React.useMemo(() => {
       // Logic:
@@ -543,32 +550,32 @@ const ShopProductPage: React.FC = () => {
                 <div className="text-xs text-slate-500">inkl. MwSt. zzgl. Versandkosten</div>
             </div>
 
-            {/* Variant Selection Buttons (Excluding Back Print) */}
-            {Object.keys(variants).length > 0 && mainVariants.length > 0 && (
+            {/* Variant Group Selection (e.g., Adult vs Kids) */}
+            {Object.keys(variants).length > 0 && mainVariants.length > 1 && (
                 <div className="mb-6">
-                    {mainVariants.map(variant => (
-                        <div key={variant.id} className="mb-6">
-                            <label className="font-bold text-sm uppercase block mb-2">{variant.name}:</label>
-                            <div className="flex flex-wrap gap-2">
-                                {variant.values.map((val: string) => {
-                                    const isSelected = selectedVariantValues[variant.id] === val;
-                                    return (
-                                        <button
-                                            key={val}
-                                            onClick={() => {
-                                                setSelectedVariantValues(prev => ({ ...prev, [variant.id]: val }));
-                                                setSelectedVariantId(variant.id); // Legacy support for price calc
-                                                setSelectedSize(''); // Reset size when variant changes
-                                            }}
-                                            className={`px-4 py-2 border rounded text-sm font-medium transition-colors ${isSelected ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'}`}
-                                        >
-                                            {val}
-                                        </button>
-                                    )
-                                })}
-                            </div>
-                        </div>
-                    ))}
+                    <label className="font-bold text-sm uppercase block mb-2">Ausführung / Modell:</label>
+                    <div className="flex flex-wrap gap-2">
+                        {mainVariants.map(variant => {
+                            const isSelected = selectedVariantId === variant.id;
+                            return (
+                                <button
+                                    key={variant.id}
+                                    onClick={() => {
+                                        setSelectedVariantId(variant.id);
+                                        setSelectedSize(''); // Reset size when group changes
+                                        setSelectedVariantValues({}); // Reset previous selection values
+                                    }}
+                                    className={`px-4 py-2 border rounded text-sm font-medium transition-colors ${
+                                        isSelected 
+                                            ? 'border-slate-800 bg-slate-800 text-white' 
+                                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'
+                                    }`}
+                                >
+                                    {variant.name}
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
             )}
             
@@ -603,7 +610,14 @@ const ShopProductPage: React.FC = () => {
                 <select 
                     className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none disabled:bg-slate-100 disabled:text-slate-400"
                     value={selectedSize}
-                    onChange={(e) => setSelectedSize(e.target.value)}
+                    onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedSize(val);
+                        // Link the size to the selected variant group for cart/price logic
+                        if (selectedVariantId && val) {
+                            setSelectedVariantValues({ [selectedVariantId]: val });
+                        }
+                    }}
                 >
                     <option value="">Bitte Grösse wählen</option>
                     {availableSizes.map((size: string) => (
@@ -701,8 +715,8 @@ const ShopProductPage: React.FC = () => {
                 disabled={
                     !selectedSize || 
                     (!!backPrintVariant && !selectedBackPrint) ||
-                    // Also disable if we have Main Variants but none selected (unless there are no main variants)
-                    (mainVariants.length > 0 && mainVariants.some(v => !selectedVariantValues[v.id]))
+                    // Require variant group selection if multiple groups exist
+                    (mainVariants.length > 0 && !selectedVariantId)
                 }
             >
                 <ShoppingCart size={20} />
