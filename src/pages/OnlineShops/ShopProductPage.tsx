@@ -84,86 +84,28 @@ const ShopProductPage: React.FC = () => {
 
   // Derived state (needs to be here because product is null initially)
   const availableSizes = React.useMemo(() => {
-      // 1. Check if there is a dedicated SIZE variant
+      // 1. Check if there is a dedicated SIZE variant (Explicit Type 'size')
+      // If found, this is the primary source of sizes.
       const sizeVariant = variantDefinitions.find(v => v.type === 'size');
       if (sizeVariant && sizeVariant.values.length > 0) {
           return sizeVariant.values;
       }
       
-      // 2. Fallback: If we have "Main Variants" (like Color), check if they imply sizes?
-      // Old logic assumed variants define sizes. New logic: Variables define options.
-      // If we have "Jako Erwachsen" (type=other), its values (S, M, L) ARE sizes?
-      // This depends on how the user configured it.
-      // If the user created a variable "Jako Erwachsen" and put "S, M, L" in values.
-      // Then this variable IS effectively a size selector, but named "Jako Erwachsen".
-      // BUT: The user screenshot shows "Jako Erwachsen" as a BUTTON group.
-      // And below that "Größe" dropdown.
-      
-      // If "Jako Erwachsen" is a button group, clicking it should probably FILTER available sizes?
-      // Or IS it the size selector itself?
-      // In the screenshot: "Jako Kindergrößen: [Jako Kindergrößen] [Jako Erwachsen]".
-      // These look like mutually exclusive OPTIONS (Variants).
-      // Below: "Größe: Bitte Größe wählen".
-      
-      // So:
-      // Variant 1: "Ausführung" (Values: Jako Kinder, Jako Erwachsen) -> Render as Buttons.
-      // Variant 2: "Größe" (Values: S, M, L...).
-      // BUT: The sizes depend on the Ausführung!
-      
-      // If I select "Jako Erwachsen", I want S-4XL.
-      // If I select "Jako Kinder", I want 116-164.
-      
-      // This "Dependent Options" logic is what `selectedVariantId` was doing before.
-      // It treated the variant selection as switching the SOURCE of sizes.
-      
-      // Let's restore that logic for "Main Variants":
-      // If we have a selected Main Variant, we use its values as the available sizes?
-      // Wait, if `mainVariants` are "Color" (Red, Blue), the sizes are usually consistent (S-XL).
-      // But here `mainVariants` are "Model Types" (Adults, Kids).
-      
-      // So: If `selectedVariantValues` has a selection for a main variant,
-      // AND that main variant's selected value maps to a specific list of sizes...
-      // But our data model is:
-      // Variants = { "var_id": { values: "Option A, Option B" } }
-      // It does NOT store "Option A -> Sizes X,Y" and "Option B -> Sizes Z,W".
-      
-      // UNLESS: The "Variants" in the screenshot (Jako Kinder, Jako Erwachsen) ARE the variables themselves?
-      // i.e. Variable 1 = "Jako Kindergrößen" (Values: 116, 128...)
-      // i.e. Variable 2 = "Jako Erwachsen" (Values: S, M...)
-      
-      // If the user assigned BOTH variables to the product.
-      // Then we have TWO "Size" variables active.
-      // This is confusing. Usually you pick ONE size.
-      
-      // User said: "Früher war schön der button jako kindergröße jako erwachsene größe".
-      // This implies the buttons were switching between the TWO variables.
-      // So the user wants to choose WHICH variable to use for size selection?
-      
-      // If `mainVariants` contains multiple items that look like size definitions (but are type='other' or 'size'),
-      // we might want to let the user pick ONE of them to populate the size dropdown.
-      
-      // Current Logic Restoration:
-      // If we have multiple "Main Variants", we treat them as "Size Categories".
-      // We render buttons for the VARIANT NAMES (e.g. "Jako Erwachsen", "Jako Kinder").
-      // Clicking one sets `selectedVariantId`.
-      // The VALUES of that selected variant become the `availableSizes`.
-      
-      if (mainVariants.length > 0) {
-          if (selectedVariantId) {
-              const variant = variantDefinitions.find(v => v.id === selectedVariantId);
-              if (variant) {
-                  return variant.values;
-              }
-          } else {
-             // If nothing selected, maybe return nothing or all?
-             // User said: "Unten ist ein leeres Drop Down".
-             return [];
+      // 2. Check if a Main Variant is selected and provides sizes
+      // If the user selected a variant (e.g. "Jako Erwachsen") and that variant has values (S, M, L),
+      // then those values ARE the available sizes.
+      if (selectedVariantId) {
+          const selectedVar = variantDefinitions.find(v => v.id === selectedVariantId);
+          if (selectedVar && selectedVar.values.length > 0) {
+              return selectedVar.values;
           }
       }
-
+      
+      // 3. Fallback to product.size string
       if (product?.size) return product.size.split(',').map((s: any) => s.trim());
+      
       return ['S', 'M', 'L', 'XL', 'XXL'];
-  }, [product, variantDefinitions, selectedVariantId, mainVariants]);
+  }, [product, variantDefinitions, selectedVariantId]);
   
   const availableBackPrints = React.useMemo(() => {
       if (backPrintVariant) return backPrintVariant.values;
@@ -752,7 +694,12 @@ const ShopProductPage: React.FC = () => {
             <button 
                 onClick={handleAddToCart}
                 className="w-full bg-slate-900 text-white py-4 font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors flex items-center justify-center space-x-2 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!selectedSize || (!!backPrintVariant && !selectedBackPrint)}
+                disabled={
+                    !selectedSize || 
+                    (!!backPrintVariant && !selectedBackPrint) ||
+                    // Also disable if we have Main Variants but none selected (unless there are no main variants)
+                    (mainVariants.length > 0 && mainVariants.some(v => !selectedVariantValues[v.id]))
+                }
             >
                 <ShoppingCart size={20} />
                 <span>In den Warenkorb</span>
