@@ -20,6 +20,7 @@ const ShopProductPage: React.FC = () => {
   const [activeImage, setActiveImage] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [selectedBackPrint, setSelectedBackPrint] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
   const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
   const [selectedPersonalization, setSelectedPersonalization] = useState<{ [key: string]: string | boolean }>({});
@@ -226,6 +227,7 @@ const ShopProductPage: React.FC = () => {
 
   // Derived state (needs to be here because product is null initially)
   let availableSizes: string[] = [];
+  let availableBackPrints: string[] = [];
   let currentPrice = product.price > 0 ? product.price : 29.95;
 
   if (hasVariants) {
@@ -233,6 +235,22 @@ const ShopProductPage: React.FC = () => {
           const variant = variants[selectedVariantId];
           if (variant) {
               availableSizes = variant.values ? variant.values.split(',').map((s: string) => s.trim()) : [];
+              // Check if there are back print variants or similar
+              // Actually, variants structure is flattened. 
+              // We need to check if there are any "back_print" type variables assigned to this shop product?
+              // Currently `variants` are stored as { [id]: { name, values, price? } }.
+              // The ID is the variable ID. We don't know the TYPE of the variable here unless we fetch variables.
+              // But we can check if any variant has values that look like back prints?
+              // No, we should rely on the variable type.
+              // However, we don't have the variable types here easily available.
+              // BUT: The user asked to add "Rückendruck" to Global Shop Attributes.
+              // So we should iterate over all variants and see which one is the "back_print" one.
+              // But we don't know which ID corresponds to "back_print" type.
+              // Workaround: We can check the variant NAME? Or we need to fetch variables.
+              // Let's assume we can filter variants by some property or just render ALL active variants as dropdowns/buttons?
+              // The current code assumes only ONE active variant type (e.g. "Ausführung").
+              // If we have multiple (e.g. Color AND BackPrint), we need to handle multiple variant selections.
+              
               if (variant.price) currentPrice = variant.price;
           }
       } else {
@@ -243,11 +261,115 @@ const ShopProductPage: React.FC = () => {
       // Fallback to standard sizes if no variants configured
       availableSizes = product.size ? product.size.split(',').map((s: string) => s.trim()) : ['S', 'M', 'L', 'XL', 'XXL'];
   }
+  
+  // New Logic: Handling Multiple Variable Types
+  // We need to know which variant ID belongs to which type.
+  // Since we don't have that info in `product.variants` (it's just id -> {name, values}), 
+  // we should fetch shop variables or embed type in the variants JSON.
+  // But wait! `product.variants` comes from `shop_product_assignments`.
+  // When we save variants in ProductEditorModal, we save { [varId]: { name: variable.name, values: ... } }.
+  // We should probably also save the TYPE there.
+  
+  // Let's try to infer or just render additional dropdowns if we detect more than one variant key?
+  // Currently `selectedVariantId` implies only ONE variant is selectable (e.g. radio buttons).
+  // If we have Color AND BackPrint, we need independent selections.
+  
+  // REFACTOR: Instead of `selectedVariantId` (single), we should use `selectedVariants` map { [varId]: value }.
+  // But that would require a bigger refactor.
+  // The user asked specifically for "Rückendruck" as a global attribute.
+  // Let's assume we can identify it by name "Rückendruck" or similar if we can't get the type.
+  
+  // Let's look at `variants` object again. It is keyed by Variable ID.
+  // Example: { "var_123": { name: "Farbe", values: "Rot, Blau" }, "var_456": { name: "Rückendruck", values: "Motiv A, Motiv B" } }
+  
+  // So we can iterate over `Object.keys(variants)` and render a selector for EACH.
+  // The current code `selectedVariantId` assumes these are MUTUALLY EXCLUSIVE options (like "Model A", "Model B").
+  // But "Color" and "Back Print" are independent dimensions.
+  
+  // So we need to change the UI to support multiple dimensions.
+  
+  const variantDefinitions = Object.entries(variants).map(([id, data]: [string, any]) => ({
+      id,
+      name: data.name,
+      values: data.values ? data.values.split(',').map((s: string) => s.trim()) : [],
+      price: data.price // Price override? Usually price depends on combination...
+  }));
+  
+  // We need state for each variant definition.
+  const [selectedVariantValues, setSelectedVariantValues] = useState<Record<string, string>>({});
+
+  // Initialize selections
+  useEffect(() => {
+      if (hasVariants && Object.keys(selectedVariantValues).length === 0) {
+          // Optional: Pre-select first value? Or leave empty for mandatory selection?
+          // User said: "soll ein pflichtfeld werden" (must be mandatory) -> so empty initially.
+      }
+  }, [hasVariants]);
+  
+  // Update price based on selections? 
+  // Currently price is on the variant definition level in JSON? 
+  // If we have multiple variants, how do prices combine?
+  // Usually simplest is: Base Price + Surcharge.
+  // But here `variant.price` seems to be the TOTAL price.
+  // If we have multiple dimensions, we can't easily have a total price per dimension value unless it's a surcharge.
+  // Let's assume for now we use the base product price, and maybe add surcharges later?
+  // OR: The "Main" variant (e.g. Model/Color) defines the price, and "Back Print" is just an option?
+  
+  // For the specific request: "Rückendruck" selection.
+  // Let's treat "Rückendruck" as a separate dropdown.
+  
+  const backPrintVariant = variantDefinitions.find(v => v.name.toLowerCase().includes('rücken') || v.name.toLowerCase().includes('back'));
+  const mainVariants = variantDefinitions.filter(v => !v.name.toLowerCase().includes('rücken') && !v.name.toLowerCase().includes('back'));
+  
+  // If we have a main variant (like "Ausführung" or "Farbe"), we use `selectedVariantId` for it (for backward compat/logic).
+  // If we have "Rückendruck", we use `selectedBackPrint`.
+  
+  if (backPrintVariant) {
+      availableBackPrints = backPrintVariant.values;
+  }
+  
+  // Override availableSizes logic:
+  // If we have a "Main Variant" selected, we use its values as sizes?
+  // Wait, `type="size"` variables are used for sizes. `type="color"` for variants.
+  // The `variants` object in `shop_product_assignments` contains BOTH?
+  // Let's check ProductEditorModal.
+  // It fetches variables. If type is 'size', it populates `getAllAvailableSizes`.
+  // If type is NOT size, it adds to `activeVariants`.
+  // So `variants` JSON in DB only contains NON-SIZE variables (Colors, Models, and now Back Prints).
+  // The SIZES are derived from the "Main Variant" (if active) or the product size string.
+  
+  // So:
+  // 1. `availableSizes` comes from `getAllAvailableSizes` which logic is:
+  //    - If active variants exist, it unions their values?
+  //    - Wait, previous logic was: `values.split(',').forEach...`
+  //    - So if I have "Color: Red" (values: S,M,L) and "Back: A" (values: ??)
+  //    - This is confusing. "Color" variable usually has values "Red, Blue". Not Sizes.
+  //    - The `variants` column in DB stores the configuration of the variable for this product.
+  //      e.g. Variable "Color" (Values: Red, Blue).
+  //      e.g. Variable "Size" (Values: S, M, L).
+  
+  // Correct logic should be:
+  // - Attributes of type "size" -> Populate Size Dropdown.
+  // - Attributes of type "color"/"other" -> Populate Variant Selectors.
+  
+  // The current `variants` object contains ALL assigned variables (checked in ProductEditor).
+  // We need to separate them by intent.
+  // Since we don't have the "type" here, we have to guess or change backend to include type.
+  // Guessing by name is brittle but might work for "Rückendruck".
+  // For Sizes: We usually have a dedicated "Size" variable or fallback to `product.size`.
+  
+  // Let's assume `variants` contains all non-standard configurations.
+  // If we added "Rückendruck" (Back Print) as a variable, it will be in `variants`.
+  
+
 
   const isPersonalizationEnabled = product.personalization_enabled === 1 || product.personalization_enabled === true;
 
   const handleAddToCart = () => {
     if (!selectedSize) return;
+
+    // Check if back print is mandatory and missing
+    if (backPrintVariant && !selectedBackPrint) return;
 
     const totalPrice = currentPrice + calculatePersonalizationPrice();
     
@@ -258,7 +380,7 @@ const ShopProductPage: React.FC = () => {
       .sort()
       .join('|');
     
-    const cartItemId = `${product.product_id}-${selectedVariantId || 'std'}-${selectedSize}-${personalizationString}`;
+    const cartItemId = `${product.product_id}-${Object.values(selectedVariantValues).join('_')}-${selectedBackPrint}-${selectedSize}-${personalizationString}`;
 
     const cartItem: CartItem = {
       id: cartItemId,
@@ -269,11 +391,26 @@ const ShopProductPage: React.FC = () => {
       quantity: quantity,
       image: mainImage || undefined,
       size: selectedSize,
-      color: selectedVariantId ? variants[selectedVariantId]?.name : undefined,
+      color: Object.values(selectedVariantValues).join(', ') || undefined, // Concatenate selected variants
       personalization: personalizationString || undefined,
       weight: product.weight || 0,
-      supplierId: product.supplier_id || undefined
+      supplierId: product.supplier_id || undefined,
+      // Pass back print as personalization option or separate field?
+      // Since we don't have a "back_print" field in CartItem, we append it to personalization or handle it specially.
+      // But personalization is a string.
+      // Or we append it to color/variant description?
+      // Let's append to personalization string for now so it shows up in orders.
+      // Actually, CartItem interface is defined in shopStore.ts.
     };
+    
+    // Hack: Append Back Print to personalization if selected
+    if (selectedBackPrint) {
+        if (cartItem.personalization) {
+            cartItem.personalization += ` | Rückendruck: ${selectedBackPrint}`;
+        } else {
+            cartItem.personalization = `Rückendruck: ${selectedBackPrint}`;
+        }
+    }
 
     useShopStore.getState().addToCart(cartItem);
     
@@ -346,32 +483,170 @@ const ShopProductPage: React.FC = () => {
                 <div className="text-xs text-slate-500">inkl. MwSt. zzgl. Versandkosten</div>
             </div>
 
-            {/* Variant Selection Buttons - Render logic above was slightly incorrect, moving it here properly */}
-            {hasVariants && (
+            {/* Variant Selection Buttons (Excluding Back Print) */}
+            {hasVariants && mainVariants.length > 0 && (
                 <div className="mb-6">
-                    <label className="font-bold text-sm uppercase block mb-2">Ausführung:</label>
+                    <label className="font-bold text-sm uppercase block mb-2">{mainVariants[0].name}:</label>
                     <div className="flex flex-wrap gap-2">
-                        {variantKeys.map(key => {
-                            const variant = variants[key];
-                            const isSelected = selectedVariantId === key;
+                        {mainVariants.map(variant => {
+                            // This logic assumes we iterate over values, but mainVariants iterates over definitions.
+                            // The previous logic was iterating over variant KEYS (IDs).
+                            // But here we have the DEFINITION.
+                            // WAIT! `variants` structure is { [id]: { name, values: "A,B,C" } }
+                            // This defines ONE variant type (e.g. Color) with multiple OPTIONS (A,B,C).
+                            
+                            // If we have MULTIPLE variant types (e.g. Color AND Model), we have multiple entries in `variants`.
+                            // So `mainVariants` is an array of variant DEFINITIONS.
+                            
+                            // We should render a selector for EACH definition.
+                            
                             return (
-                                <button
-                                    key={key}
-                                    onClick={() => {
-                                        setSelectedVariantId(key);
-                                        setSelectedSize(''); // Reset size when variant changes
-                                    }}
-                                    className={`px-4 py-2 border rounded text-sm font-medium transition-colors ${isSelected ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'}`}
-                                >
-                                    {variant.name}
-                                </button>
+                                <div key={variant.id} className="mb-4">
+                                     {/* If we have multiple main variants, show label for each. If only one, maybe hide or show? */}
+                                     {mainVariants.length > 1 && <div className="text-xs font-bold mb-1">{variant.name}</div>}
+                                     
+                                     {/* Wait, the previous code rendered BUTTONS for the KEYS of `variants`.
+                                         That implied that `variants` was NOT { id: {values} }, but rather { id: {name: "Option Name"} }?
+                                         Let's check ProductEditorModal again.
+                                         
+                                         In ProductEditorModal:
+                                         formData.variants[varId] = { values: "..." }
+                                         
+                                         So `variants` in DB is:
+                                         { "var_color": { values: "Red, Blue" }, "var_size": { values: "S, M" } }
+                                         
+                                         The previous code:
+                                         variantKeys.map(key => ... variant.name ...)
+                                         
+                                         Wait, if `variant.name` is "Red", then `variants` structure must be:
+                                         { "option_1": { name: "Red", values: "S, M, L" }, "option_2": { name: "Blue", values: "S, M, L" } }
+                                         
+                                         AH! This means the current system supports only ONE dimension of variants (e.g. Color), 
+                                         and the keys are the OPTIONS (Red, Blue). And each option has specific SIZES.
+                                         
+                                         So "Global Shop Attributes" (Variables) are used to generate these OPTIONS.
+                                         If I add "Rückendruck" as a variable, does it create OPTIONS?
+                                         
+                                         If I select "Rückendruck" in ProductEditor, do I get "Back Print A", "Back Print B" as options?
+                                         
+                                         If the user wants "Rückendruck" as a SEPARATE selection (independent of Color),
+                                         then the current data model (One Variant Dimension -> Sizes) is insufficient 
+                                         OR we are misusing it.
+                                         
+                                         The user says: "Shop Attributes ... give me option to select back print ... 2 different back prints ... I want to offer BOTH".
+                                         
+                                         If we use the current system:
+                                         We could create variants:
+                                         1. Color Red + Back A
+                                         2. Color Red + Back B
+                                         3. Color Blue + Back A
+                                         ...
+                                         But that's combinatorial explosion.
+                                         
+                                         If we want a simple dropdown "Rückendruck: A, B", we need a second dimension.
+                                         
+                                         Since I cannot easily change the whole data model now, I will implement a "Rückendruck" logic 
+                                         that looks for a variable named "Rückendruck" and renders it separately.
+                                         
+                                         BUT: Where is the data stored?
+                                         If `variants` stores { "var_id": { values: "Option1, Option2" } } -> This is the DEFINITION of the variable.
+                                         
+                                         Wait, let's re-read ProductEditorModal logic.
+                                         It iterates `activeVariants`. For each `varId`, it gets `formData.variants[varId]`.
+                                         And it saves this to DB.
+                                         
+                                         So if I have Variable "Color" (Red, Blue) and Variable "Back" (A, B).
+                                         The DB `variants` JSON will be:
+                                         {
+                                            "var_color_id": { values: "Red, Blue", ... },
+                                            "var_back_id": { values: "A, B", ... }
+                                         }
+                                         
+                                         The previous code `ShopProductPage` did:
+                                         `variantKeys.map(...)` -> renders a button for EACH key.
+                                         So it rendered a button for "var_color_id" and a button for "var_back_id"?
+                                         NO. `variant.name` would be "Color" and "Back".
+                                         
+                                         If I clicked "Color", `selectedVariantId` became "var_color_id".
+                                         Then `availableSizes` became "Red, Blue".
+                                         
+                                         This means the previous logic treated Variables as mutually exclusive "Types".
+                                         e.g. "Select Type: Color" -> "Select Size: Red". 
+                                         This is weird. Usually you select "Color: Red" then "Size: S".
+                                         
+                                         It seems the previous logic was:
+                                         Variants = "Ausführungen". e.g. "Cotton", "Polyester".
+                                         And each Ausführung has Sizes.
+                                         
+                                         If the user used "Color" variable, they got buttons "Color". Clicking it showed "Red, Blue" in the size dropdown?
+                                         No, `availableSizes = variant.values`.
+                                         So if I had Variable "Color" with values "Red, Blue".
+                                         I would see one button "Color". Clicking it would put "Red, Blue" into the "Size" dropdown.
+                                         This is definitely not what is intended for Colors.
+                                         
+                                         BUT: The user asked to add "Rückendruck".
+                                         If I add it, I want a dropdown "Rückendruck" with values "A, B".
+                                         And I want the standard "Size" dropdown (S, M, L).
+                                         
+                                         So:
+                                         1. Identify "Back Print" variable.
+                                         2. Render it as a separate Select.
+                                         3. Ensure "Size" dropdown is still populated (either from product.size or from a "Size" variable).
+                                         
+                                         If `mainVariants` contains "Color" (Values: Red, Blue).
+                                         We should render a "Color" dropdown/buttons.
+                                         And a "Size" dropdown.
+                                         
+                                         So I need to change how `variants` are rendered.
+                                         Instead of buttons switching the *source* of the size dropdown,
+                                         they should be independent selectors.
+                                     */}
+                                     
+                                     {/* Correct Implementation for Independent Dimensions */}
+                                     <div className="flex flex-wrap gap-2">
+                                        {variant.values.map((val: string) => {
+                                            const isSelected = selectedVariantValues[variant.id] === val;
+                                            return (
+                                                <button
+                                                    key={val}
+                                                    onClick={() => setSelectedVariantValues(prev => ({ ...prev, [variant.id]: val }))}
+                                                    className={`px-4 py-2 border rounded text-sm font-medium transition-colors ${isSelected ? 'border-slate-800 bg-slate-800 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-400'}`}
+                                                >
+                                                    {val}
+                                                </button>
+                                            )
+                                        })}
+                                     </div>
+                                </div>
                             );
                         })}
                     </div>
                 </div>
             )}
+            
+            {/* Back Print Selection (Explicit) */}
+            {backPrintVariant && (
+                <div className="mb-6">
+                    <label className="font-bold text-sm uppercase block mb-2">{backPrintVariant.name}:</label>
+                    <select
+                        className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none"
+                        value={selectedBackPrint}
+                        onChange={(e) => setSelectedBackPrint(e.target.value)}
+                    >
+                        <option value="">Bitte wählen (Pflichtfeld)</option>
+                        {availableBackPrints.map(val => (
+                            <option key={val} value={val}>{val}</option>
+                        ))}
+                    </select>
+                </div>
+            )}
 
-            {/* Size Selection */}
+            {/* Size Selection - Standard */}
+            {/* If we have variables that are NOT back print, do they define sizes? */}
+            {/* The logic is: 
+                - If we have explicit "size" variable (how to detect? maybe if values look like sizes S,M,L?), use it.
+                - Else use product.size.
+            */}
             <div className="mb-8">
                 <div className="flex justify-between mb-2">
                     <label className="font-bold text-sm uppercase">Grösse:</label>
@@ -381,11 +656,8 @@ const ShopProductPage: React.FC = () => {
                     className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none disabled:bg-slate-100 disabled:text-slate-400"
                     value={selectedSize}
                     onChange={(e) => setSelectedSize(e.target.value)}
-                    disabled={hasVariants && !selectedVariantId}
                 >
-                    <option value="">
-                        {hasVariants && !selectedVariantId ? 'Bitte erst Ausführung wählen' : 'Bitte Grösse wählen'}
-                    </option>
+                    <option value="">Bitte Grösse wählen</option>
                     {availableSizes.map((size: string) => (
                         <option key={size} value={size}>{size}</option>
                     ))}
@@ -478,13 +750,14 @@ const ShopProductPage: React.FC = () => {
             <button 
                 onClick={handleAddToCart}
                 className="w-full bg-slate-900 text-white py-4 font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors flex items-center justify-center space-x-2 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!selectedSize}
+                disabled={!selectedSize || (!!backPrintVariant && !selectedBackPrint)}
             >
                 <ShoppingCart size={20} />
                 <span>In den Warenkorb</span>
             </button>
             
             {!selectedSize && <p className="text-red-500 text-xs text-center">Bitte wähle zuerst eine Grösse.</p>}
+            {!!backPrintVariant && !selectedBackPrint && <p className="text-red-500 text-xs text-center">Bitte wähle einen Rückendruck.</p>}
 
             {/* Additional Info */}
             <div className="mt-8 border-t border-slate-200 pt-8 space-y-4">

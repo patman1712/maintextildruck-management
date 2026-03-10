@@ -385,6 +385,7 @@ const OnlineShops: React.FC = () => {
                             >
                                 <option value="size">Größe (Size)</option>
                                 <option value="color">Farbe (Color)</option>
+                                <option value="back_print">Rückendruck (Back Print)</option>
                             </select>
                         </div>
                         <div className="md:col-span-2">
