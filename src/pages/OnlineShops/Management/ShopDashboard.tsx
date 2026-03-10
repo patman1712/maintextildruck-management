@@ -1956,9 +1956,10 @@ const ShopDashboard: React.FC = () => {
                                     <tr key={item.id}>
                                         <td className="px-6 py-4">
                                             <div className="font-bold text-slate-800">{item.item_name}</div>
-                                            <div className="flex gap-2 mt-1">
+                                            <div className="flex gap-2 mt-1 flex-wrap">
                                                 {item.size && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Größe: {item.size}</span>}
-                                                {item.color && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Farbe: {item.color}</span>}
+                                                {/* Only show color if it's different from size */}
+                                                {item.color && item.color !== item.size && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Farbe: {item.color}</span>}
                                             </div>
                                             {item.notes && <div className="text-[10px] text-blue-600 font-medium mt-1 italic">Personalisierung: {formatPersonalization(item.notes)}</div>}
                                         </td>

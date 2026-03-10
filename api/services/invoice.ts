@@ -235,7 +235,8 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
             if (item.size) extraLines.push(`Größe: ${item.size}`);
             
             // Filter out "Kindergrößen" or empty/irrelevant color info
-            if (item.color && !item.color.includes('Kindergrößen') && item.color.trim() !== '') {
+            // Also filter if color matches size (redundant)
+            if (item.color && !item.color.includes('Kindergrößen') && item.color.trim() !== '' && item.color !== item.size) {
                 extraLines.push(`Farbe: ${item.color}`);
             }
             

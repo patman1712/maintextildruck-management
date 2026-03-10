@@ -264,7 +264,8 @@ export default function OrderDetails() {
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="text-sm font-medium text-gray-900">{item.itemName}</div>
                                         {item.itemNumber && <div className="text-xs text-gray-500">Art: {item.itemNumber}</div>}
-                                        {item.color && <div className="text-xs text-gray-500">Farbe: {item.color}</div>}
+                                        {/* Hide color if it matches size (legacy issue) */}
+                                        {item.color && item.color !== item.size && <div className="text-xs text-gray-500">Farbe: {item.color}</div>}
                                         {item.notes && <div className="text-xs text-blue-600 italic mt-1">Personalisierung: {formatPersonalization(item.notes)}</div>}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

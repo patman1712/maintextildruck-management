@@ -112,7 +112,7 @@ const ShopOrderDetailPage: React.FC = () => {
                         <h4 className="font-bold text-slate-800">{item.item_name}</h4>
                         <div className="mt-1 flex flex-wrap gap-2">
                           {item.size && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase">Größe: {item.size}</span>}
-                          {item.color && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase">Farbe: {item.color}</span>}
+                          {item.color && item.color !== item.size && <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase">Farbe: {item.color}</span>}
                         </div>
                         {item.notes && <div className="text-[10px] text-blue-600 font-medium mt-2 italic">Personalisierung: {formatPersonalization(item.notes)}</div>}
                       </div>

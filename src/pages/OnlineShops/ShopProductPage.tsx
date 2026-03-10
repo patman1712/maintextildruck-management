@@ -469,7 +469,10 @@ const ShopProductPage: React.FC = () => {
       quantity: quantity,
       image: mainImage || undefined,
       size: selectedSize,
-      color: Object.values(selectedVariantValues).join(', ') || undefined, // Concatenate selected variants
+      // Filter out size from color field to prevent duplicate display
+      color: Object.values(selectedVariantValues)
+          .filter(v => v !== selectedSize)
+          .join(', ') || undefined, 
       personalization: personalizationString || undefined,
       weight: product.weight || 0,
       supplierId: product.supplier_id || undefined,
