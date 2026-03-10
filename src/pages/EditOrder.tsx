@@ -1568,15 +1568,15 @@ export default function EditOrder() {
                                                 <p className="font-medium text-gray-800">{product.name}</p>
                                                 <div className="flex items-center space-x-2 text-xs text-gray-500 mt-1">
                                                     {product.product_number && <span className="bg-gray-100 px-1.5 py-0.5 rounded font-mono">{product.product_number}</span>}
-                                                    {product.source?.toLowerCase() === 'manual' ? (
-                                                        <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded flex items-center">
-                                                            <User size={10} className="mr-1" />
-                                                            Manuell
-                                                        </span>
-                                                    ) : (
+                                                    {((product.assignment_count && product.assignment_count > 0) || (product.price !== null && product.price !== undefined)) ? (
                                                         <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded flex items-center">
                                                             <ShoppingCart size={10} className="mr-1" />
                                                             Online Shop
+                                                        </span>
+                                                    ) : (
+                                                        <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded flex items-center">
+                                                            <User size={10} className="mr-1" />
+                                                            Manuell
                                                         </span>
                                                     )}
                                                     {product.supplier_id && suppliers.find(s => s.id === product.supplier_id) && (
