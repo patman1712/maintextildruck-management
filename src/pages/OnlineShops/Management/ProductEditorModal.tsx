@@ -713,14 +713,14 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
 
                                           <button 
                                               onClick={() => handleRemoveFile(img.id)}
-                                              className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 z-10 cursor-pointer"
+                                              className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 z-30 cursor-pointer"
                                               title="Entfernen"
                                           >
                                               <Trash2 size={12} />
                                           </button>
                                           
                                           {/* Assign Option Overlay */}
-                                          <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 text-[10px] text-white overflow-visible">
+                                          <div className="absolute top-0 left-0 right-0 bg-black/95 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col p-2 text-[10px] text-white z-20 rounded shadow-2xl min-h-full h-fit">
                                               {/* Options Section */}
                                               <div className="font-bold mb-1 underline">Optionen:</div>
                                               <div className="space-y-1 w-full mb-2">
