@@ -1128,8 +1128,8 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                 <div>
                     <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Verfügbare Größen & Varianten</label>
                     <div className="flex flex-wrap gap-2 mb-2">
-                        {/* Dynamic Presets from Variables */}
-                        {shopVariables.filter((v: any) => v.type === 'size').map((v: any) => {
+                        {/* Dynamic Presets from Variables - Filter to allow size, color, back_print etc. */}
+                        {shopVariables.filter((v: any) => v.type === 'size' || v.type === 'color' || v.type === 'back_print' || !v.type).map((v: any) => {
                             const isActive = activeVariants.includes(v.id);
                             return (
                                 <button 
