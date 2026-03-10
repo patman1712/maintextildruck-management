@@ -1103,195 +1103,127 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
     const version = customer.shopware_version || '6';
 
     try {
-        let products = [];
+        let products: any[] = [];
         const baseUrl = customer.shopware_url.replace(/\/$/, '');
 
         if (version === '5') {
             // Shopware 5 Logic
             const rawProducts = await getShopware5Products(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
             
-            products = rawProducts.map((p: any) => ({
-                id: String(p.id),
-                name: p.name,
-                productNumber: p.mainDetail?.number || p.mainDetail?.ordernumber || '',
-                active: p.active,
-                stock: p.mainDetail?.inStock,
-                imageUrl: p.images?.[0]?.link, // Shopware 5 often provides 'link' or 'path'
-                variants: p.details // Usually included if we fetch list, but 'details' might be empty in list view
-            }));
-
-            // If we want variants, we need to ensure we have them. 
-            // In standard SW5 API list call, 'details' might not be populated with all variants.
-            // We need to fetch details or check if 'configuratorSet' exists.
-            
-            // To get all variants, we often need to fetch article details.
-            // Let's expand products array by flattening variants.
-            
-            // NOTE: Fetching details for ALL products is heavy. 
-            // But user asked for it: "kann man da auch alle varianten einzeln abrufen?"
-            
-            // Let's modify the strategy:
-            // 1. We have 'products' which are main articles.
-            // 2. We will expand this list.
-            
-            const expandedProducts = [];
-            
-            // We need to fetch details for products to get variants
-            // We do this in batches.
+            // Fetch details for ALL products to get images/description/manufacturer
+            // This is heavy but requested by user to have ALL info
+            const detailedProducts = [];
             const batchSize = 5;
-            for (let i = 0; i < products.length; i += batchSize) {
-                const batch = products.slice(i, i + batchSize);
+            
+            for (let i = 0; i < rawProducts.length; i += batchSize) {
+                const batch = rawProducts.slice(i, i + batchSize);
                 await Promise.all(batch.map(async (p: any) => {
-                    // Fetch full details including variants
                     const details = await getShopware5ArticleDetails(baseUrl, customer.shopware_access_key, customer.shopware_secret_key, p.id);
-                    
                     if (details) {
-                         // Add Main Detail (already in p but let's refresh)
-                         // Actually, details.mainDetail is the main variant.
-                         // details.details contains OTHER variants.
-                         
-                         // Main Variant
-                         const mainName = details.name;
-                         const mainVariantName = details.mainDetail?.additionaltext ? `${mainName} - ${details.mainDetail.additionaltext}` : mainName;
-                         
-                         // Resolve Image for Main
-                         let mainImage = p.imageUrl;
-                         if (!mainImage && details.images && details.images.length > 0) {
-                             const img = details.images.find((img: any) => img.main === 1) || details.images[0];
-                             if (img.link) mainImage = img.link;
-                             else if (img.path) {
-                                 const ext = img.extension || 'jpg';
-                                 const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-                                 mainImage = `${cleanBaseUrl}/media/image/${img.path}.${ext}`;
-                             }
-                         }
+                        // Collect images
+                        let images = [];
+                        if (details.images && Array.isArray(details.images)) {
+                            images = details.images.map((img: any) => {
+                                if (img.link) return img.link;
+                                if (img.path) {
+                                    const ext = img.extension || 'jpg';
+                                    return `${baseUrl}/media/image/${img.path}.${ext}`;
+                                }
+                                return null;
+                            }).filter((url: any) => url);
+                        } else if (p.images && p.images[0]?.link) {
+                            images.push(p.images[0].link);
+                        }
 
-                         expandedProducts.push({
-                             id: `${p.id}_main`, // Unique ID for our DB
-                             shopware_product_id: String(p.id), // Parent ID
-                             name: mainVariantName,
-                             productNumber: details.mainDetail?.number,
-                             active: details.active,
-                             stock: details.mainDetail?.inStock,
-                             imageUrl: mainImage
-                         });
-                         
-                         // Other Variants
-                         if (details.details && Array.isArray(details.details)) {
-                             for (const v of details.details) {
-                                 // Construct Variant Name & Attributes
-                                 let variantSuffix = v.additionaltext;
-                                 let size = null;
-                                 let color = null;
-                                 
-                                 if (v.configuratorOptions && Array.isArray(v.configuratorOptions)) {
-                                     // Parse options for size/color
-                                     for (const opt of v.configuratorOptions) {
-                                         const groupName = opt.group?.name || opt.groupName || '';
-                                         const optName = opt.name || opt.option || '';
-                                         
-                                         if (groupName.toLowerCase().includes('größe') || groupName.toLowerCase().includes('size')) {
-                                             size = optName;
-                                         } else if (groupName.toLowerCase().includes('farbe') || groupName.toLowerCase().includes('color')) {
-                                             color = optName;
-                                         }
-                                     }
-                                     
-                                     // If additionaltext is missing, build suffix from options
-                                     if (!variantSuffix) {
-                                         variantSuffix = v.configuratorOptions.map((opt: any) => opt.name || opt.option).join(' / ');
-                                     }
-                                 }
-                                 
-                                 const vName = variantSuffix ? `${mainName} - ${variantSuffix}` : `${mainName} (Var ${v.number})`;
+                        // Description
+                        const description = details.descriptionLong || details.description || '';
+                        
+                        // Manufacturer
+                        const manufacturer = details.supplierName || (details.supplier ? details.supplier.name : '');
 
-                                 expandedProducts.push({
-                                     id: `${p.id}_${v.id}`,
-                                     shopware_product_id: String(p.id),
-                                     name: vName,
-                                     productNumber: v.number,
-                                     active: v.active,
-                                     stock: v.inStock,
-                                     imageUrl: mainImage,
-                                     size: size,
-                                     color: color
-                                 });
-                             }
-                         }
-                    } else {
-                        // Fallback if detail fetch fails
-                        expandedProducts.push({
+                        // Weight
+                        const weight = details.mainDetail?.weight || 0;
+
+                        // We only want ONE product per article ID, not variants!
+                        // So we just take the main detail.
+                        
+                        detailedProducts.push({
                             id: String(p.id),
-                            shopware_product_id: String(p.id),
                             name: p.name,
-                            productNumber: p.productNumber,
+                            productNumber: details.mainDetail?.number || p.mainDetail?.number,
                             active: p.active,
-                            stock: p.stock,
-                            imageUrl: p.imageUrl,
-                            size: null,
+                            stock: details.mainDetail?.inStock,
+                            imageUrl: images[0] || null, // Main image
+                            images: images, // All images
+                            description: description,
+                            manufacturer: manufacturer,
+                            weight: weight,
+                            size: null, // We ignore variants now as requested
                             color: null
                         });
                     }
                 }));
             }
-            
-            products = expandedProducts;
-            
+            products = detailedProducts;
+
         } else {
             // Shopware 6 Logic
             const token = await getShopware6Token(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
             
-            // SW6: fetch products with children association to get variants
-            const response = await fetch(`${baseUrl}/api/product?limit=100&associations[cover][]&associations[children][associations][options][associations][group][]`, {
+            // SW6: fetch products with media, description, manufacturer
+            const response = await fetch(`${baseUrl}/api/search/product`, {
+                method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
                     'Accept': 'application/json'
-                }
+                },
+                body: JSON.stringify({
+                    limit: 100,
+                    includes: {
+                        product: ['id', 'name', 'productNumber', 'active', 'stock', 'cover', 'media', 'description', 'manufacturer', 'weight']
+                    },
+                    associations: {
+                        cover: {},
+                        media: {
+                            associations: {
+                                media: {}
+                            }
+                        },
+                        manufacturer: {}
+                    }
+                })
             });
 
-            if (!response.ok) {
-                throw new Error(`Failed to fetch products: ${response.statusText}`);
-            }
+            if (!response.ok) throw new Error(`Failed to fetch products: ${response.statusText}`);
 
             const data = await response.json();
             
-            products = [];
-            
-            // Iterate SW6 products
-            for (const p of data.data) {
-                // Main product (parent)
-                // If it has children, we might want to list children instead?
-                // Or list parent + children.
-                
-                // For now, let's just map the main ones, but check if we can extract options if it is a variant itself (parentId != null)
-                // SW6 often returns parents and children in the same list if not filtered.
-                
-                // Let's extract options if available
-                let size = null;
-                let color = null;
-                
-                if (p.options && Array.isArray(p.options)) {
-                    for (const opt of p.options) {
-                        const groupName = opt.group?.name || '';
-                        if (groupName.toLowerCase().includes('größe') || groupName.toLowerCase().includes('size')) {
-                            size = opt.name;
-                        } else if (groupName.toLowerCase().includes('farbe') || groupName.toLowerCase().includes('color')) {
-                            color = opt.name;
-                        }
-                    }
+            products = data.data.map((p: any) => {
+                // Collect images
+                let images = [];
+                if (p.media && Array.isArray(p.media)) {
+                    // Sort by position if available?
+                    images = p.media.map((m: any) => m.media?.url).filter((url: any) => url);
+                } else if (p.cover?.media?.url) {
+                    images.push(p.cover.media.url);
                 }
 
-                products.push({
+                return {
                     id: p.id,
                     name: p.name,
                     productNumber: p.productNumber,
                     active: p.active,
                     stock: p.stock,
                     imageUrl: p.cover?.media?.url,
-                    size,
-                    color
-                });
-            }
+                    images: images,
+                    description: p.description,
+                    manufacturer: p.manufacturer?.name || '',
+                    weight: p.weight || 0,
+                    size: null,
+                    color: null
+                };
+            });
         }
 
         // Sync with local DB (upsert)
@@ -1302,36 +1234,64 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                 const existing = existingProducts.find(ep => ep.shopware_product_id === p.id);
                 
                 if (existing) {
-                    // Update existing product with new details (size/color) if missing?
-                    // User said "not overwrite", but we just added new columns.
-                    // Maybe we should update ONLY the new columns if they are null?
-                    // For now, respect "don't overwrite" rule for existing rows to avoid losing manual edits?
-                    // Actually, let's update size/color if they are present in new data, as these are new fields.
-                    if (p.size || p.color) {
-                         db.prepare("UPDATE customer_products SET size = ?, color = ? WHERE id = ?")
-                           .run(p.size, p.color, existing.id);
+                    // Update existing product with new extended details
+                    db.prepare(`
+                        UPDATE customer_products 
+                        SET shopware_description = ?, shopware_manufacturer = ?, shopware_images = ?, weight = ?
+                        WHERE id = ?
+                    `).run(
+                        p.description, 
+                        p.manufacturer, 
+                        JSON.stringify(p.images), 
+                        p.weight, 
+                        existing.id
+                    );
+                    
+                    // Also update core fields if they are empty? 
+                    // User said: "importiere alle vorschaubilder vorder und rückseiten und auch die beschreibung und herstellerangeben"
+                    // Maybe we should update description/manufacturer_info in core columns too if empty?
+                    db.prepare(`
+                        UPDATE customer_products 
+                        SET description = COALESCE(description, ?), 
+                            manufacturer_info = COALESCE(manufacturer_info, ?)
+                        WHERE id = ?
+                    `).run(p.description, p.manufacturer, existing.id);
+
+                    // Sync Images to customer_product_files (View type)
+                    // We want to add all images from Shopware as 'view' files if they don't exist
+                    if (p.images && p.images.length > 0) {
+                        const existingFiles = db.prepare("SELECT file_url FROM customer_product_files WHERE product_id = ? AND type = 'view'").all(existing.id) as any[];
+                        const existingUrls = new Set(existingFiles.map(f => f.file_url));
+                        
+                        for (const imgUrl of p.images) {
+                            if (!existingUrls.has(imgUrl)) {
+                                const fileId = Math.random().toString(36).substr(2, 9);
+                                db.prepare("INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type) VALUES (?, ?, ?, ?, ?, 'view')")
+                                  .run(fileId, existing.id, imgUrl, 'Shopware Bild', imgUrl);
+                            }
+                        }
                     }
-                    
-                    // DO NOT overwrite files. 
-                    // If we wanted to update the image, we would check if a 'view' type file exists and update it, 
-                    // but we must NEVER touch 'print' files that the user manually uploaded.
-                    
-                    // Only add the Shopware image if NO view image exists at all?
-                    // Or add it as a new view if it's different?
-                    // For now, user request is "not overwrite print data".
-                    // The code below (in the else block) only runs for NEW products.
-                    // So for existing products, we do nothing with files here, which is correct.
-                    
-                    continue;
+
                 } else {
                     const newId = Math.random().toString(36).substr(2, 9);
-                    db.prepare("INSERT INTO customer_products (id, customer_id, name, product_number, source, shopware_product_id, size, color) VALUES (?, ?, ?, ?, 'shopware', ?, ?, ?)")
-                      .run(newId, customerId, p.name, p.productNumber, p.id, p.size, p.color);
+                    db.prepare(`
+                        INSERT INTO customer_products (
+                            id, customer_id, name, product_number, source, shopware_product_id, 
+                            description, manufacturer_info, weight, 
+                            shopware_description, shopware_manufacturer, shopware_images
+                        ) VALUES (?, ?, ?, ?, 'shopware', ?, ?, ?, ?, ?, ?, ?)
+                    `).run(
+                        newId, customerId, p.name, p.productNumber, p.id, 
+                        p.description, p.manufacturer, p.weight,
+                        p.description, p.manufacturer, JSON.stringify(p.images)
+                    );
 
-                    if (p.imageUrl) {
-                        const fileId = Math.random().toString(36).substr(2, 9);
-                        db.prepare("INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type) VALUES (?, ?, ?, ?, ?, 'view')")
-                          .run(fileId, newId, p.imageUrl, 'Shopware Bild', p.imageUrl);
+                    if (p.images && p.images.length > 0) {
+                        for (const imgUrl of p.images) {
+                            const fileId = Math.random().toString(36).substr(2, 9);
+                            db.prepare("INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type) VALUES (?, ?, ?, ?, ?, 'view')")
+                              .run(fileId, newId, imgUrl, 'Shopware Bild', imgUrl);
+                        }
                     }
                 }
             }

@@ -533,6 +533,24 @@ try {
     db.exec('ALTER TABLE customer_products ADD COLUMN weight DECIMAL(10, 3) DEFAULT 0');
   }
 
+  const hasDescriptionShopware = customerProductCols.some(col => col.name === 'shopware_description');
+  if (!hasDescriptionShopware) {
+    console.log('Migrating database: Adding shopware_description to customer_products table');
+    db.exec('ALTER TABLE customer_products ADD COLUMN shopware_description TEXT');
+  }
+
+  const hasManufacturerShopware = customerProductCols.some(col => col.name === 'shopware_manufacturer');
+  if (!hasManufacturerShopware) {
+    console.log('Migrating database: Adding shopware_manufacturer to customer_products table');
+    db.exec('ALTER TABLE customer_products ADD COLUMN shopware_manufacturer TEXT');
+  }
+
+  const hasShopwareImages = customerProductCols.some(col => col.name === 'shopware_images');
+  if (!hasShopwareImages) {
+      console.log('Migrating database: Adding shopware_images to customer_products table');
+      db.exec('ALTER TABLE customer_products ADD COLUMN shopware_images TEXT'); // JSON array of image URLs
+  }
+
   // Migration for Shop Orders
   const orderCols = db.prepare("PRAGMA table_info(orders)").all() as any[];
   const hasShopId = orderCols.some(col => col.name === 'shop_id');
