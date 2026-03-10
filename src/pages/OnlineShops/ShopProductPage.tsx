@@ -579,29 +579,7 @@ const ShopProductPage: React.FC = () => {
                 </div>
             )}
             
-            {/* Back Print Selection (Explicit) */}
-            {backPrintVariant && (
-                <div className="mb-6">
-                    <label className="font-bold text-sm uppercase block mb-2">{backPrintVariant.name}:</label>
-                    <select
-                        className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none"
-                        value={selectedBackPrint}
-                        onChange={(e) => setSelectedBackPrint(e.target.value)}
-                    >
-                        <option value="">Bitte wählen (Pflichtfeld)</option>
-                        {availableBackPrints.map(val => (
-                            <option key={val} value={val}>{val}</option>
-                        ))}
-                    </select>
-                </div>
-            )}
-
             {/* Size Selection - Standard */}
-            {/* If we have variables that are NOT back print, do they define sizes? */}
-            {/* The logic is: 
-                - If we have explicit "size" variable (how to detect? maybe if values look like sizes S,M,L?), use it.
-                - Else use product.size.
-            */}
             <div className="mb-8">
                 <div className="flex justify-between mb-2">
                     <label className="font-bold text-sm uppercase">Grösse:</label>
@@ -625,6 +603,23 @@ const ShopProductPage: React.FC = () => {
                     ))}
                 </select>
             </div>
+
+            {/* Back Print Selection (Explicit) */}
+            {backPrintVariant && (
+                <div className="mb-6">
+                    <label className="font-bold text-sm uppercase block mb-2">{backPrintVariant.name}:</label>
+                    <select
+                        className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none"
+                        value={selectedBackPrint}
+                        onChange={(e) => setSelectedBackPrint(e.target.value)}
+                    >
+                        <option value="">Bitte wählen (Pflichtfeld)</option>
+                        {availableBackPrints.map(val => (
+                            <option key={val} value={val}>{val}</option>
+                        ))}
+                    </select>
+                </div>
+            )}
 
             {/* Personalization Section */}
             {isPersonalizationEnabled && personalizationOptions.length > 0 && (
