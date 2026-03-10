@@ -422,9 +422,14 @@ router.post('/:shopId/orders', async (req, res) => {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
+      // 2. Create Order Items and Collect Files
+      // We aggregate files globally for the entire order to prevent duplicate entries for same file
+      const orderAggregatedFiles = new Map<string, { file: any, quantity: number, type: string }>();
+
       for (const item of items) {
         let supplierId = 'manual';
         if (item.productId) {
+            // ... (supplier logic unchanged)
             // 1. Check Shop Assignment first (overrides base product)
             const assignment = db.prepare('SELECT supplier_id FROM shop_product_assignments WHERE shop_id = ? AND product_id = ?').get(shopId, item.productId) as { supplier_id: string };
             
@@ -453,18 +458,16 @@ router.post('/:shopId/orders', async (req, res) => {
         );
         
         // 2.1 Copy files from Product to Order (Preview & Print Data)
-        // Find the original product to get its files
         if (item.productId) {
-            // Get assignment to check for shop-specific images/filtering
             const assignment = db.prepare('SELECT id, variants FROM shop_product_assignments WHERE shop_id = ? AND product_id = ?').get(shopId, item.productId) as any;
             
             let filesToProcess: any[] = [];
             let useAssignments = false;
 
             if (assignment) {
-                // Check if shop has specific images assigned
+                // Check if shop has specific images assigned - INCLUDE size_restrictions
                 const assignedImages = db.prepare(`
-                    SELECT cpf.*, spi.variant_ids
+                    SELECT cpf.*, spi.variant_ids, spi.size_restrictions
                     FROM shop_product_images spi
                     JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
                     WHERE spi.shop_product_assignment_id = ?
@@ -474,39 +477,32 @@ router.post('/:shopId/orders', async (req, res) => {
                     filesToProcess = assignedImages;
                     useAssignments = true;
                 } else {
-                    // Fallback to all product files
                     filesToProcess = db.prepare(`
                         SELECT * FROM customer_product_files WHERE product_id = ?
                     `).all(item.productId) as any[];
                 }
             } else {
-                // Fallback (should not happen for shop orders)
                 filesToProcess = db.prepare(`
                     SELECT * FROM customer_product_files WHERE product_id = ?
                 `).all(item.productId) as any[];
             }
             
-            // Determine active variant ID for the ordered item if possible
+            // Determine active variant ID
             let activeVariantIds: string[] = [];
             if (assignment && assignment.variants && item.color) {
                 try {
                     const variants = JSON.parse(assignment.variants);
-                    // item.color usually holds the Variant Name (e.g. "Jako Erwachsen") or value
-                    // Let's try to match item.color to a variant name
                     for (const [varId, varData] of Object.entries(variants) as any) {
                         if (varData.name === item.color) {
                             activeVariantIds.push(varId);
                         }
                     }
                 } catch (e) {
-                    console.error('Error parsing variants for order file filtering:', e);
+                    console.error('Error parsing variants:', e);
                 }
             }
 
             // 2.1.1 Print & Vector Data
-            // We use a Map to aggregate identical files by URL to sum up their quantities
-            const aggregatedFiles = new Map<string, { file: any, quantity: number }>();
-
             for (const file of filesToProcess) {
                 if (['print', 'vector', 'photoshop'].includes(file.type)) {
                      let isIncluded = true;
@@ -516,120 +512,92 @@ router.post('/:shopId/orders', async (req, res) => {
                          try {
                              const allowedVariants = JSON.parse(file.variant_ids);
                              if (allowedVariants.length > 0) {
-                                 // If file is restricted to certain variants, check if our item matches
                                  const match = activeVariantIds.some(id => allowedVariants.includes(id));
                                  if (!match) isIncluded = false;
                              }
-                         } catch (e) {
-                             // If parse error, assume no filter
-                         }
+                         } catch (e) {}
                      }
 
                      // Check Size Restrictions - STRICT MODE
-                     // If size restrictions exist, the item MUST match one of them.
                      if (isIncluded && useAssignments && file.size_restrictions) {
                          try {
                              const allowedSizes = JSON.parse(file.size_restrictions);
-                             // Only apply filter if there are restrictions. Empty array means "all sizes".
                              if (allowedSizes.length > 0) {
                                  if (item.size) {
-                                     // Normalize comparison (trim)
                                      const itemSize = String(item.size).trim();
                                      const match = allowedSizes.some((s: string) => s.trim() === itemSize);
                                      if (!match) isIncluded = false;
                                  } else {
-                                     // If item has no size but file has restrictions, we exclude it to be safe
-                                     // (e.g. a "S" print on a OneSize item? Probably not wanted unless specified)
                                      isIncluded = false;
                                  }
                              }
-                         } catch (e) {
-                             // If parse error, assume no filter
-                         }
+                         } catch (e) {}
                      }
 
                      if (isIncluded) {
-                         const existing = aggregatedFiles.get(file.file_url);
+                         const existing = orderAggregatedFiles.get(file.file_url);
+                         const qtyToAdd = (item.quantity || 1) * (file.quantity || 1); // Account for multiple prints per item if configured
+                         
                          if (existing) {
-                             existing.quantity += (item.quantity || 1);
+                             existing.quantity += qtyToAdd;
                          } else {
-                             aggregatedFiles.set(file.file_url, { 
+                             orderAggregatedFiles.set(file.file_url, { 
                                  file: file, 
-                                 quantity: (item.quantity || 1) 
+                                 quantity: qtyToAdd,
+                                 type: file.type
                              });
                          }
                      }
                  }
             }
 
-            // Insert aggregated files
-            for (const { file, quantity } of aggregatedFiles.values()) {
-                 insertFile.run(
-                    crypto.randomUUID(),
-                    orderId,
-                    shop.customer_id, // Owner
-                    file.file_name,
-                    file.file_url,
-                    file.type,
-                     'active',
-                     'pending', // print_status
-                     quantity,
-                     new Date().toISOString()
-                  );
-            }
-
-            // 2.1.2 Preview Image (Specific one selected by user)
-            // If item.image is provided, it's the URL of the selected preview image
+            // 2.1.2 Preview Image
             if (item.image) {
                 const selectedPreview = filesToProcess.find(f => f.file_url === item.image);
-                if (selectedPreview) {
-                    insertFile.run(
-                        crypto.randomUUID(),
-                        orderId,
-                        shop.customer_id,
-                        selectedPreview.file_name || 'Vorschau',
-                        selectedPreview.file_url,
-                        'preview',
-                        'active',
-                        'pending', // print_status
-                        1, // Preview always quantity 1
-                        new Date().toISOString()
-                    );
-                } else {
-                    // Fallback: If selected URL not found in product files, still add it as a preview
-                    insertFile.run(
-                        crypto.randomUUID(),
-                        orderId,
-                        shop.customer_id,
-                        'Vorschau',
-                        item.image,
-                        'preview',
-                        'active',
-                        'pending', // print_status
-                        1,
-                        new Date().toISOString()
-                    );
+                const previewUrl = selectedPreview ? selectedPreview.file_url : item.image;
+                const previewName = selectedPreview ? (selectedPreview.file_name || 'Vorschau') : 'Vorschau';
+                
+                // Aggregate previews too to avoid duplicates
+                const existing = orderAggregatedFiles.get(previewUrl);
+                if (!existing) {
+                    orderAggregatedFiles.set(previewUrl, {
+                        file: { file_name: previewName, file_url: previewUrl, type: 'preview' },
+                        quantity: 1, // Preview usually 1 per unique design
+                        type: 'preview'
+                    });
                 }
             } else {
-                // Legacy Fallback: Add all previews if none specific selected
+                // Legacy Fallback
                 for (const file of filesToProcess) {
                     if (file.type === 'preview' || file.type === 'view') {
-                         insertFile.run(
-                            crypto.randomUUID(),
-                            orderId,
-                            shop.customer_id,
-                            file.file_name,
-                            file.file_url,
-                            'preview',
-                            'active',
-                            'pending', // print_status
-                            1,
-                            new Date().toISOString()
-                         );
+                         const existing = orderAggregatedFiles.get(file.file_url);
+                         if (!existing) {
+                             orderAggregatedFiles.set(file.file_url, {
+                                 file: file,
+                                 quantity: 1,
+                                 type: 'preview'
+                             });
+                         }
                     }
                 }
             }
         }
+      } // End item loop
+
+      // Insert all aggregated files
+      for (const { file, quantity, type } of orderAggregatedFiles.values()) {
+           insertFile.run(
+              crypto.randomUUID(),
+              orderId,
+              shop.customer_id,
+              file.file_name || 'Datei',
+              file.file_url,
+              type,
+               'active',
+               'pending',
+               quantity,
+               new Date().toISOString()
+            );
       }
       
       // Update orders.files JSON cache
