@@ -426,32 +426,43 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       handleAssignImageToSizes(fileId, newSizes);
   };
 
-  // Helper to get all available sizes
-  const getAllAvailableSizes = React.useMemo(() => {
-      let sizes: string[] = [];
+  // Helper to get grouped available sizes
+  const groupedSizes = React.useMemo(() => {
+      const groups: { name: string, id: string, sizes: string[] }[] = [];
+      
       if (activeVariants.length > 0) {
           activeVariants.forEach(varId => {
               const variant = formData.variants[varId];
-              // Or fallback to variable definition if not in formData yet
               const variable = shopVariables.find(v => v.id === varId);
               const values = variant?.values || variable?.values || '';
               if (values) {
-                  values.split(',').forEach((s: string) => {
-                      const trimmed = s.trim();
-                      if (trimmed && !sizes.includes(trimmed)) sizes.push(trimmed);
-                  });
+                  const sizes = values.split(',')
+                    .map((s: string) => s.trim())
+                    .filter((s: string) => s !== '');
+                  
+                  if (sizes.length > 0) {
+                      groups.push({
+                          name: variable?.name || 'Unbekannt',
+                          id: varId,
+                          sizes: sizes
+                      });
+                  }
               }
           });
-      } else {
-          // Standard sizes
-          if (formData.size) {
-              formData.size.split(',').forEach((s: string) => {
-                  const trimmed = s.trim();
-                  if (trimmed && !sizes.includes(trimmed)) sizes.push(trimmed);
+      } else if (formData.size) {
+          const sizes = formData.size.split(',')
+            .map((s: string) => s.trim())
+            .filter((s: string) => s !== '');
+          
+          if (sizes.length > 0) {
+              groups.push({
+                  name: 'Standard-Größen',
+                  id: 'standard',
+                  sizes: sizes
               });
           }
       }
-      return sizes;
+      return groups;
   }, [activeVariants, formData.variants, formData.size, shopVariables]);
 
   // Filter logic for tabs
@@ -704,29 +715,56 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                    )}
 
                                                    {/* Size Assignment Badge */}
-                                                   {getAllAvailableSizes.length > 0 && (
+                                                   {groupedSizes.length > 0 && (
                                                        <div className="relative group inline-block">
                                                            <button className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors flex items-center ${(file.size_restrictions && file.size_restrictions.length > 0) ? 'bg-purple-600 text-white border-purple-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-300'}`}>
                                                                <span className="mr-1">Größen:</span>
-                                                               {(file.size_restrictions && file.size_restrictions.length > 0) ? file.size_restrictions.join(', ') : 'Alle'}
+                                                               {(file.size_restrictions && file.size_restrictions.length > 0) ? `${file.size_restrictions.length} gewählt` : 'Alle'}
                                                            </button>
                                                            
                                                            {/* Size Dropdown */}
-                                                           <div className="absolute left-0 top-full mt-1 bg-white border border-slate-200 shadow-lg rounded p-2 z-50 hidden group-hover:block w-48 max-h-48 overflow-y-auto">
-                                                               <div className="text-[10px] font-bold text-slate-400 mb-1 uppercase">Gültig für Größen:</div>
-                                                               <div className="space-y-1">
-                                                                   {getAllAvailableSizes.map(size => {
-                                                                       const isSelected = (file.size_restrictions || []).includes(size);
+                                                           <div className="absolute left-0 top-full mt-1 bg-white border border-slate-200 shadow-xl rounded p-2 z-50 hidden group-hover:block w-56 max-h-64 overflow-y-auto">
+                                                               <div className="text-[10px] font-bold text-slate-400 mb-2 uppercase">Gültig für Größen:</div>
+                                                               <div className="space-y-3">
+                                                                   {groupedSizes.map(group => {
+                                                                       const currentRestrictions = file.size_restrictions || [];
+                                                                       const allGroupSizesSelected = group.sizes.every(s => currentRestrictions.includes(s));
+                                                                       
                                                                        return (
-                                                                           <label key={size} className="flex items-center space-x-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
-                                                                               <input 
-                                                                                   type="checkbox" 
-                                                                                   checked={isSelected}
-                                                                                   onChange={() => toggleImageSize(file.id, size, file.size_restrictions || [])}
-                                                                                   className="h-3 w-3 rounded text-purple-600 focus:ring-0"
-                                                                               />
-                                                                               <span className="text-xs text-slate-700 font-mono">{size}</span>
-                                                                           </label>
+                                                                           <div key={group.id} className="border-b border-slate-100 last:border-0 pb-2 last:pb-0">
+                                                                               <div className="flex items-center justify-between mb-1">
+                                                                                   <span className="text-[10px] font-bold text-slate-600 truncate max-w-[120px]" title={group.name}>{group.name}</span>
+                                                                                   <button 
+                                                                                       onClick={(e) => {
+                                                                                           e.preventDefault();
+                                                                                           e.stopPropagation();
+                                                                                           const newSizes = allGroupSizesSelected
+                                                                                               ? currentRestrictions.filter((s: string) => !group.sizes.includes(s))
+                                                                                               : [...new Set([...currentRestrictions, ...group.sizes])];
+                                                                                           handleAssignImageToSizes(file.id, newSizes);
+                                                                                       }}
+                                                                                       className="text-[9px] text-blue-600 hover:text-blue-800 hover:underline cursor-pointer bg-transparent border-0 p-0"
+                                                                                   >
+                                                                                       {allGroupSizesSelected ? 'Keine' : 'Alle'}
+                                                                                   </button>
+                                                                               </div>
+                                                                               <div className="space-y-1 pl-1">
+                                                                                   {group.sizes.map(size => {
+                                                                                       const isSelected = currentRestrictions.includes(size);
+                                                                                       return (
+                                                                                           <label key={`${group.id}-${size}`} className="flex items-center space-x-2 cursor-pointer hover:bg-slate-50 p-0.5 rounded">
+                                                                                               <input 
+                                                                                                   type="checkbox" 
+                                                                                                   checked={isSelected}
+                                                                                                   onChange={() => toggleImageSize(file.id, size, currentRestrictions)}
+                                                                                                   className="h-3 w-3 rounded text-purple-600 focus:ring-0"
+                                                                                               />
+                                                                                               <span className="text-xs text-slate-700 font-mono">{size}</span>
+                                                                                           </label>
+                                                                                       );
+                                                                                   })}
+                                                                               </div>
+                                                                           </div>
                                                                        );
                                                                    })}
                                                                </div>
