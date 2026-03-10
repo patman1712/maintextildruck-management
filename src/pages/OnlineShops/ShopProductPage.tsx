@@ -625,7 +625,14 @@ const ShopProductPage: React.FC = () => {
                     <select
                         className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none"
                         value={selectedBackPrint}
-                        onChange={(e) => setSelectedBackPrint(e.target.value)}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            setSelectedBackPrint(val);
+                            // Sync with generic variant values for robust filtering
+                            if (backPrintVariant) {
+                                setSelectedVariantValues(prev => ({ ...prev, [backPrintVariant.id]: val }));
+                            }
+                        }}
                     >
                         <option value="">Bitte wählen (Pflichtfeld)</option>
                         {availableBackPrints.map(val => (
