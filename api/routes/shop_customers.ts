@@ -465,9 +465,9 @@ router.post('/:shopId/orders', async (req, res) => {
             let useAssignments = false;
 
             if (assignment) {
-                // Check if shop has specific images assigned - INCLUDE size_restrictions
+                // Check if shop has specific images assigned - INCLUDE size_restrictions and attribute_restrictions
                 const assignedImages = db.prepare(`
-                    SELECT cpf.*, spi.variant_ids, spi.size_restrictions
+                    SELECT cpf.*, spi.variant_ids, spi.size_restrictions, spi.attribute_restrictions
                     FROM shop_product_images spi
                     JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
                     WHERE spi.shop_product_assignment_id = ?
@@ -487,14 +487,49 @@ router.post('/:shopId/orders', async (req, res) => {
                 `).all(item.productId) as any[];
             }
             
-            // Determine active variant ID
+            // Determine active variant ID and selected values
             let activeVariantIds: string[] = [];
-            if (assignment && assignment.variants && item.color) {
+            let selectedVariantValues: Record<string, string> = {};
+
+            if (assignment && assignment.variants) {
                 try {
                     const variants = JSON.parse(assignment.variants);
+                    
+                    // Parse item.color (e.g. "Red, Motiv A")
+                    // And item.personalization (e.g. "... | Rückendruck: Motiv A")
+                    
+                    const colorValues = item.color ? item.color.split(',').map((s: string) => s.trim()) : [];
+                    
+                    // Also check personalization for explicit "Rückendruck: X" entries
+                    if (item.personalization) {
+                        const parts = item.personalization.split('|');
+                        parts.forEach((part: string) => {
+                            if (part.includes(':')) {
+                                const [key, val] = part.split(':').map((s: string) => s.trim());
+                                // If key is "Rückendruck", add value
+                                if (key.includes('Rückendruck')) {
+                                    colorValues.push(val);
+                                }
+                            }
+                        });
+                    }
+
                     for (const [varId, varData] of Object.entries(variants) as any) {
+                        // Old Logic: Check if Variant Name matches item.color (legacy)
                         if (varData.name === item.color) {
                             activeVariantIds.push(varId);
+                        }
+                        
+                        // New Logic: Check if any VALUE of this variant is present in the selection
+                        if (varData.values) {
+                            const possibleValues = varData.values.split(',').map((s: string) => s.trim());
+                            // Find intersection between possibleValues and colorValues
+                            const selectedValue = possibleValues.find((v: string) => colorValues.includes(v));
+                            
+                            if (selectedValue) {
+                                activeVariantIds.push(varId); // It is active
+                                selectedVariantValues[varId] = selectedValue; // Store specific value
+                            }
                         }
                     }
                 } catch (e) {
@@ -516,6 +551,39 @@ router.post('/:shopId/orders', async (req, res) => {
                                  if (!match) isIncluded = false;
                              }
                          } catch (e) {}
+                     }
+                     
+                     // Check Attribute Restrictions (Values)
+                     if (isIncluded && useAssignments && file.attribute_restrictions) {
+                         try {
+                             const restrictions = typeof file.attribute_restrictions === 'string' 
+                                ? JSON.parse(file.attribute_restrictions) 
+                                : file.attribute_restrictions;
+                             
+                             if (Object.keys(restrictions).length > 0) {
+                                 for (const [varId, allowedValues] of Object.entries(restrictions) as any) {
+                                     // If restriction exists for this variable
+                                     if (allowedValues && allowedValues.length > 0) {
+                                         const selectedValue = selectedVariantValues[varId];
+                                         if (selectedValue) {
+                                             // If user selected a value, it MUST be in the allowed list
+                                             if (!allowedValues.includes(selectedValue)) {
+                                                 isIncluded = false;
+                                                 break;
+                                             }
+                                         } else {
+                                             // If user did NOT select a value for this restricted variable -> Exclude?
+                                             // E.g. File requires "Motiv A". User selected nothing for Back Print.
+                                             // Then we shouldn't print Motiv A.
+                                             isIncluded = false;
+                                             break;
+                                         }
+                                     }
+                                 }
+                             }
+                         } catch (e) {
+                             console.error("Error checking attribute restrictions", e);
+                         }
                      }
 
                      // Check Size Restrictions - STRICT MODE

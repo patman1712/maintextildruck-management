@@ -449,29 +449,67 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       handleAssignImageToSizes(fileId, newSizes);
   };
 
-  // Helper to get grouped available sizes
+  const handleAssignImageToAttributes = async (fileId: string, attributes: Record<string, string[]>) => {
+      if (!assignment) return;
+      try {
+          // Optimistic update
+          setCurrentFiles(prev => prev.map(img => 
+              img.id === fileId ? { ...img, attribute_restrictions: attributes } : img
+          ));
+
+          const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ attribute_restrictions: attributes })
+          });
+          const data = await res.json();
+          if (!data.success) {
+             console.error("Failed to update attributes");
+          }
+      } catch (e) { console.error(e); }
+  };
+
+  const toggleImageAttribute = (fileId: string, varId: string, value: string, currentAttributes: Record<string, string[]>) => {
+      const currentValues = currentAttributes?.[varId] || [];
+      const newValues = currentValues.includes(value)
+          ? currentValues.filter(v => v !== value)
+          : [...currentValues, value];
+      
+      const newAttributes = { ...currentAttributes, [varId]: newValues };
+      if (newValues.length === 0) delete newAttributes[varId];
+      
+      handleAssignImageToAttributes(fileId, newAttributes);
+  };
+
+  // Helper to get grouped available sizes (ONLY type='size' or standard)
   const groupedSizes = React.useMemo(() => {
       const groups: { name: string, id: string, sizes: string[] }[] = [];
       
       if (activeVariants.length > 0) {
           activeVariants.forEach(varId => {
-              const variant = formData.variants[varId];
               const variable = shopVariables.find(v => v.id === varId);
+              // Only include if type is size or undefined (legacy)
+              // But wait, if user didn't set type? Default is 'size'?
+              // Let's assume explicit types 'color', 'back_print' are NOT sizes.
+              if (variable && variable.type !== 'size' && variable.type) return;
+
+              const variant = formData.variants[varId];
               const values = variant?.values || variable?.values || '';
               
               const sizes = values ? values.split(',')
                 .map((s: string) => s.trim())
                 .filter((s: string) => s !== '') : [];
               
-              // Always add the group if the variant is active, even if sizes are empty
-              // This ensures the user sees the variant in the menu
               groups.push({
                   name: variable?.name || 'Unbekannt',
                   id: varId,
                   sizes: sizes
               });
           });
-      } else if (formData.size) {
+      } 
+      
+      // If no variant-based sizes found, check standard size field
+      if (groups.length === 0 && formData.size) {
           const sizes = formData.size.split(',')
             .map((s: string) => s.trim())
             .filter((s: string) => s !== '');
@@ -486,6 +524,33 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       }
       return groups;
   }, [activeVariants, formData.variants, formData.size, shopVariables]);
+
+  // Helper to get grouped attributes (color, back_print, etc.)
+  const groupedAttributes = React.useMemo(() => {
+      const groups: { name: string, id: string, values: string[] }[] = [];
+      
+      if (activeVariants.length > 0) {
+          activeVariants.forEach(varId => {
+              const variable = shopVariables.find(v => v.id === varId);
+              // Include if type is NOT size
+              if (!variable || variable.type === 'size' || !variable.type) return;
+
+              const variant = formData.variants[varId];
+              const vals = variant?.values || variable?.values || '';
+              
+              const values = vals ? vals.split(',')
+                .map((s: string) => s.trim())
+                .filter((s: string) => s !== '') : [];
+              
+              groups.push({
+                  name: variable?.name || 'Unbekannt',
+                  id: varId,
+                  values: values
+              });
+          });
+      }
+      return groups;
+  }, [activeVariants, formData.variants, shopVariables]);
 
   // Filter logic for tabs
   const filteredCurrentFiles = currentFiles.filter(f => {
@@ -720,23 +785,79 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                         
                         {/* Variant Assignment for Print Files */}
                         {activeVariants.length > 0 && (
-                                                       <div className="flex flex-wrap gap-1 mb-1">
-                                                           {activeVariants.map(varId => {
-                                                               const variable = shopVariables.find(v => v.id === varId);
-                                                               if (!variable) return null;
-                                                               const isAssigned = (file.variant_ids || []).includes(varId);
-                                                               return (
-                                                                   <button 
-                                                                       key={varId}
-                                                                       onClick={() => toggleImageVariant(file.id, varId, file.variant_ids || [])}
-                                                                       className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${isAssigned ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-300'}`}
-                                                                   >
-                                                                       {variable.name}
-                                                                   </button>
-                                                               );
-                                                           })}
-                                                       </div>
-                                                   )}
+                            <div className="flex flex-wrap gap-1 mb-1">
+                                {activeVariants.map(varId => {
+                                    const variable = shopVariables.find(v => v.id === varId);
+                                    if (!variable) return null;
+                                    
+                                    const isAssigned = (file.variant_ids || []).includes(varId);
+                                    
+                                    // Determine if this is a "values" variable (not size) that needs detailed assignment
+                                    // If we have values in groupedAttributes for this varId, it means it's not a size.
+                                    const attributeGroup = groupedAttributes.find(g => g.id === varId);
+                                    const hasValues = attributeGroup && attributeGroup.values.length > 0;
+                                    
+                                    const currentAttributeRestrictions = file.attribute_restrictions?.[varId] || [];
+                                    const selectedCount = currentAttributeRestrictions.length;
+                                    const isRestricted = selectedCount > 0;
+                                    
+                                    return (
+                                        <div key={varId} className="relative group inline-block">
+                                            <button 
+                                                onClick={() => {
+                                                    // Standard toggle behavior for "is assigned to this variant group"
+                                                    toggleImageVariant(file.id, varId, file.variant_ids || [])
+                                                }}
+                                                className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors flex items-center ${isAssigned ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                                            >
+                                                <span>{variable.name}</span>
+                                                {isRestricted && <span className="ml-1 opacity-75">({selectedCount})</span>}
+                                            </button>
+                                            
+                                            {/* Attribute Value Dropdown (only if assigned and has values) */}
+                                            {isAssigned && hasValues && (
+                                                <div className="absolute left-0 top-full mt-1 bg-white border border-slate-200 shadow-xl rounded p-2 z-[70] hidden group-hover:block w-48 max-h-64 overflow-y-auto">
+                                                    <div className="text-[10px] font-bold text-slate-400 mb-2 uppercase">Gültig für:</div>
+                                                    <div className="space-y-1">
+                                                        <div className="flex items-center justify-between mb-1 pb-1 border-b border-slate-100">
+                                                            <span className="text-[10px] text-slate-500 italic">Alle Optionen</span>
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.preventDefault(); e.stopPropagation();
+                                                                    // Toggle ALL
+                                                                    const allSelected = attributeGroup!.values.every(v => currentAttributeRestrictions.includes(v));
+                                                                    const newValues = allSelected ? [] : attributeGroup!.values;
+                                                                    const newAttributes = { ...(file.attribute_restrictions || {}), [varId]: newValues };
+                                                                    if (newValues.length === 0) delete newAttributes[varId];
+                                                                    handleAssignImageToAttributes(file.id, newAttributes);
+                                                                }}
+                                                                className="text-[9px] text-blue-600 hover:underline"
+                                                            >
+                                                                {attributeGroup!.values.every(v => currentAttributeRestrictions.includes(v)) ? 'Keine' : 'Alle'}
+                                                            </button>
+                                                        </div>
+                                                        {attributeGroup!.values.map(val => {
+                                                            const isSelected = currentAttributeRestrictions.includes(val);
+                                                            return (
+                                                                <label key={val} className="flex items-center space-x-2 cursor-pointer hover:bg-slate-50 p-0.5 rounded">
+                                                                    <input 
+                                                                        type="checkbox" 
+                                                                        checked={isSelected}
+                                                                        onChange={() => toggleImageAttribute(file.id, varId, val, file.attribute_restrictions || {})}
+                                                                        className="h-3 w-3 rounded text-blue-600 focus:ring-0"
+                                                                    />
+                                                                    <span className="text-xs text-slate-700 font-mono">{val}</span>
+                                                                </label>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
 
                                                    {/* Size Assignment Badge */}
                                                    {groupedSizes.length > 0 && (

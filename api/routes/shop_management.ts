@@ -533,6 +533,7 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
             personalization_option_ids: [], // default
             variant_ids: [],
             size_restrictions: [],
+            attribute_restrictions: {}, // default
             ...(fileDetails || {}) // Merge file details (url, name, etc.)
         };
 
@@ -545,7 +546,7 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
 router.put('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
     try {
         const { assignmentId, fileId } = req.params;
-        const { personalization_option_ids, variant_ids, size_restrictions } = req.body; // Expect arrays
+        const { personalization_option_ids, variant_ids, size_restrictions, attribute_restrictions } = req.body; // Expect arrays
 
         // Also update the legacy single column with the first ID or null, just in case
         const legacyId = (personalization_option_ids && personalization_option_ids.length > 0) ? personalization_option_ids[0] : null;
@@ -571,15 +572,34 @@ router.put('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
              params.push(JSON.stringify(size_restrictions));
         }
         
+        if (attribute_restrictions !== undefined) {
+             updates.push('attribute_restrictions = ?');
+             params.push(JSON.stringify(attribute_restrictions));
+        }
+        
         if (updates.length > 0) {
-            params.push(assignmentId);
-            params.push(fileId);
+            // Check if fileId is actually a link ID (UUID) or a customer_product_file_id (Integer/String)
+            // The frontend sends `img.id` which is now the LINK ID (UUID).
+            // But the query below uses `customer_product_file_id = ?`.
+            // This is wrong if we want to update a SPECIFIC assignment (link).
+            // We should check if we can update by `id` (PK) first.
             
-            db.prepare(`
+            // Try updating by Primary Key `id` first (assuming fileId is the link ID)
+            const result = db.prepare(`
                 UPDATE shop_product_images 
                 SET ${updates.join(', ')}
-                WHERE shop_product_assignment_id = ? AND customer_product_file_id = ?
-            `).run(...params);
+                WHERE id = ? AND shop_product_assignment_id = ?
+            `).run(...params, fileId, assignmentId);
+            
+            if (result.changes === 0) {
+                 // Fallback: Update by customer_product_file_id (legacy behavior)
+                 // This updates ALL assignments of this file for this product
+                 db.prepare(`
+                    UPDATE shop_product_images 
+                    SET ${updates.join(', ')}
+                    WHERE shop_product_assignment_id = ? AND customer_product_file_id = ?
+                 `).run(...params, assignmentId, fileId);
+            }
         }
 
         res.json({ success: true });

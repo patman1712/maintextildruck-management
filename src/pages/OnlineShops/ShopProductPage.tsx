@@ -180,7 +180,42 @@ const ShopProductPage: React.FC = () => {
   const hasSelectedPersonalization = Object.values(selectedPersonalization).some(v => !!v);
 
   const displayedImages = images.filter((img: any) => {
-      // Standard images (no personalization requirements)
+      // 1. Check Attribute Restrictions (Back Print, Color, etc.)
+      if (img.attribute_restrictions) {
+          let restrictions: Record<string, string[]> = {};
+          if (typeof img.attribute_restrictions === 'string') {
+               try { restrictions = JSON.parse(img.attribute_restrictions); } catch (e) {}
+          } else {
+               restrictions = img.attribute_restrictions;
+          }
+          
+          if (Object.keys(restrictions).length > 0) {
+              // Iterate all restrictions
+              for (const [varId, allowedValues] of Object.entries(restrictions)) {
+                   // Check against selected Back Print
+                   if (backPrintVariant && backPrintVariant.id === varId) {
+                       if (selectedBackPrint) {
+                           if (!allowedValues.includes(selectedBackPrint)) return false;
+                       } else {
+                           // If file is restricted to a Back Print option, but none selected yet -> Hide
+                           return false;
+                       }
+                   }
+                   // Check against other variants (Color etc.)
+                   else if (selectedVariantValues[varId]) {
+                       if (!allowedValues.includes(selectedVariantValues[varId])) return false;
+                   } 
+                   // If restriction exists but no value selected for that variant -> Hide
+                   else {
+                       // Exception: If we haven't rendered the selector yet? No, we render all.
+                       // So if restriction exists, we must have a match.
+                       return false;
+                   }
+              }
+          }
+      }
+
+      // 2. Standard images (no personalization requirements)
       if (!img.personalization_option_ids || img.personalization_option_ids.length === 0) {
           // Hide standard images if ANY personalized image is currently valid and active
           const activeOptionIds = Object.keys(selectedPersonalization).filter(k => !!selectedPersonalization[k]);

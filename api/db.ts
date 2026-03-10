@@ -304,10 +304,24 @@ db.exec(`
     customer_product_file_id TEXT NOT NULL,
     sort_order INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    personalization_option_ids TEXT, -- JSON array of option IDs
+    variant_ids TEXT, -- JSON array of variant IDs (global variables)
+    size_restrictions TEXT, -- JSON array of sizes
+    attribute_restrictions TEXT, -- JSON object { [varId]: ["Value A", "Value B"] }
     FOREIGN KEY(shop_product_assignment_id) REFERENCES shop_product_assignments(id) ON DELETE CASCADE,
     FOREIGN KEY(customer_product_file_id) REFERENCES customer_product_files(id) ON DELETE CASCADE
   )
 `);
+
+// Migration for existing tables
+try {
+    const columns = db.prepare("PRAGMA table_info(shop_product_images)").all() as any[];
+    if (!columns.some(c => c.name === 'attribute_restrictions')) {
+        db.prepare("ALTER TABLE shop_product_images ADD COLUMN attribute_restrictions TEXT").run();
+    }
+} catch (e) {
+    console.error("Migration failed:", e);
+}
 
 // Add variants column to shop_product_assignments
 try {
