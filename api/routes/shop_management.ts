@@ -467,16 +467,32 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
         const { file_id } = req.body;
         const id = crypto.randomUUID();
 
-        // Check if already assigned
-        const exists = db.prepare('SELECT id FROM shop_product_images WHERE shop_product_assignment_id = ? AND customer_product_file_id = ?').get(assignmentId, file_id);
-        if (exists) return res.json({ success: true, message: 'Already assigned' });
+        // Check if already assigned - REMOVED to allow multiple assignments of the same file (e.g. for different variants)
+        // const exists = db.prepare('SELECT id FROM shop_product_images WHERE shop_product_assignment_id = ? AND customer_product_file_id = ?').get(assignmentId, file_id);
+        // if (exists) return res.json({ success: true, message: 'Already assigned', data: exists }); // Return existing if found
 
+        // Insert new assignment
         db.prepare(`
             INSERT INTO shop_product_images (id, shop_product_assignment_id, customer_product_file_id, sort_order, personalization_option_ids)
             VALUES (?, ?, ?, 0, '[]')
         `).run(id, assignmentId, file_id);
+        
+        // Return the newly created assignment object so frontend can add it
+        // We need to fetch the file details to return a complete object similar to what GET returns
+        const fileDetails = db.prepare('SELECT * FROM customer_product_files WHERE id = ?').get(file_id);
+        
+        const newAssignment = {
+            id: id, // The ID of the LINK
+            shop_product_assignment_id: assignmentId,
+            customer_product_file_id: file_id,
+            sort_order: 0,
+            personalization_option_ids: [], // default
+            variant_ids: [],
+            size_restrictions: [],
+            ...fileDetails // Merge file details (url, name, etc.)
+        };
 
-        res.json({ success: true });
+        res.json({ success: true, data: newAssignment });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }

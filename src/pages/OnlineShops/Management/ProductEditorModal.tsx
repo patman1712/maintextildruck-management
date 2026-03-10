@@ -694,11 +694,11 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                </div>
                            ) : (
                                // List View for Print Files
-                               <div className="space-y-2">
-                                   {filteredCurrentFiles.map((file: any) => (
-                                       <div key={file.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded hover:shadow-sm">
-                                           <div className="flex items-center space-x-3 overflow-hidden flex-1">
-                                               <div className="h-10 w-10 bg-slate-100 rounded flex items-center justify-center text-slate-500 flex-shrink-0 overflow-hidden border border-slate-200">
+    <div className="space-y-2">
+        {filteredCurrentFiles.map((file: any) => (
+            <div key={file.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded hover:shadow-sm">
+                <div className="flex items-center space-x-3 min-w-0 flex-1">
+                    <div className="h-10 w-10 bg-slate-100 rounded flex items-center justify-center text-slate-500 flex-shrink-0 overflow-hidden border border-slate-200">
                                                    {file.thumbnail_url ? (
                                                        <img src={file.thumbnail_url} className="h-full w-full object-cover" />
                                                    ) : (
@@ -738,7 +738,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                            </button>
                                                            
                                                            {/* Size Dropdown */}
-                                                           <div className="absolute left-0 top-full mt-1 bg-white border border-slate-200 shadow-xl rounded p-2 z-50 hidden group-hover:block w-56 max-h-64 overflow-y-auto">
+    <div className="absolute left-0 top-full mt-1 bg-white border border-slate-200 shadow-xl rounded p-2 z-[70] hidden group-hover:block w-56 max-h-64 overflow-y-auto">
                                                                <div className="text-[10px] font-bold text-slate-400 mb-2 uppercase">Gültig für Größen:</div>
                                                                <div className="space-y-3">
                                                                    {groupedSizes.map(group => {
