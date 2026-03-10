@@ -389,7 +389,7 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
         
         // Get currently assigned images
         const assignedImages = db.prepare(`
-            SELECT cpf.*, spi.id as assignment_image_id, spi.sort_order, spi.personalization_option_id, spi.personalization_option_ids, spi.variant_ids, spi.size_restrictions
+            SELECT cpf.*, spi.id as assignment_image_id, spi.sort_order, spi.personalization_option_id, spi.personalization_option_ids, spi.variant_ids, spi.size_restrictions, spi.attribute_restrictions
             FROM shop_product_images spi
             JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
             WHERE spi.shop_product_assignment_id = ?
@@ -416,6 +416,11 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
                  img.size_restrictions = img.size_restrictions ? JSON.parse(img.size_restrictions) : [];
              } catch (e) {
                  img.size_restrictions = [];
+             }
+             try {
+                 img.attribute_restrictions = img.attribute_restrictions ? JSON.parse(img.attribute_restrictions) : {};
+             } catch (e) {
+                 img.attribute_restrictions = {};
              }
              return img;
         });
