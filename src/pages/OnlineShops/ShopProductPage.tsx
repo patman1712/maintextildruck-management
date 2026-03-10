@@ -52,7 +52,7 @@ const ShopProductPage: React.FC = () => {
 
   const variantDefinitions = React.useMemo(() => {
       return Object.entries(variants).map(([id, data]: [string, any]) => {
-          const variable = shopVariables.find(v => v.id === id);
+          const variable = shopVariables.find(v => String(v.id) === String(id));
           const name = variable?.name || data.name || 'Unbekannt';
           
           // Determine type: Explicit type OR guess by name
@@ -236,7 +236,7 @@ const ShopProductPage: React.FC = () => {
               // Iterate all restrictions
               for (const [varId, allowedValues] of Object.entries(restrictions)) {
                    // Check against selected Back Print
-                   if (backPrintVariant && backPrintVariant.id === varId) {
+                   if (backPrintVariant && String(backPrintVariant.id) === String(varId)) {
                        if (selectedBackPrint) {
                            if (!allowedValues.includes(selectedBackPrint)) return false;
                        } else {
@@ -244,13 +244,27 @@ const ShopProductPage: React.FC = () => {
                            return false;
                        }
                    }
+                   else if (varId === 'standard') {
+                       // Standard restriction (e.g. Size S, M) - Check against selectedSize
+                       if (selectedSize) {
+                            if (!allowedValues.includes(selectedSize)) return false;
+                       } else {
+                            // Restriction exists but no size selected yet -> Hide? 
+                            // Or show if we assume unselected means "all sizes"? 
+                            // Usually restrictions mean "Only show for these".
+                            return false;
+                       }
+                   }
                    // Check against other variants (Color etc.)
-                   else if (selectedVariantValues[varId]) {
-                       if (!allowedValues.includes(selectedVariantValues[varId])) return false;
-                   } 
-                   // If restriction exists but no value selected for that variant -> Hide
                    else {
-                       return false;
+                       const selectedVal = selectedVariantValues[varId];
+                       if (selectedVal) {
+                           if (!allowedValues.includes(selectedVal)) return false;
+                       } 
+                       // If restriction exists but no value selected for that variant -> Hide
+                       else {
+                           return false;
+                       }
                    }
               }
           } else {
@@ -268,7 +282,7 @@ const ShopProductPage: React.FC = () => {
               
               if (img.variant_ids && img.variant_ids.length > 0) {
                   // Check if any of the assigned variant IDs is the Back Print ID
-                  if (backPrintVariant && img.variant_ids.includes(backPrintVariant.id)) {
+                  if (backPrintVariant && img.variant_ids.map((id: any) => String(id)).includes(String(backPrintVariant.id))) {
                       // If image is associated with Back Print, but no back print is selected -> Hide
                       if (!selectedBackPrint) return false;
                   }
