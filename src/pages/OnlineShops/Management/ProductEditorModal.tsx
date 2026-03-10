@@ -324,15 +324,16 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       }
   };
 
-  const handleRemoveFile = async (fileId: string) => {
+  const handleRemoveFile = async (assignmentId: string) => {
       if (!assignment) return;
       try {
-          const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
+          const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${assignmentId}`, {
               method: 'DELETE'
           });
           const data = await res.json();
           if (data.success) {
-              setCurrentFiles(currentFiles.filter(img => img.id !== fileId));
+              // Only remove the specific assignment (link) from the list, not all instances of the file
+              setCurrentFiles(prev => prev.filter(img => img.id !== assignmentId));
           }
       } catch (e) { console.error(e); }
   };
@@ -645,7 +646,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
 
                                           <button 
                                               onClick={() => handleRemoveFile(img.id)}
-                                              className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 z-10"
+                                              className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 z-10 cursor-pointer"
                                               title="Entfernen"
                                           >
                                               <Trash2 size={12} />

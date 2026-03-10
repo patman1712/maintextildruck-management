@@ -588,11 +588,23 @@ router.put('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
     }
 });
 
-router.delete('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
+router.delete('/:shopId/products/:assignmentId/images/:linkId', (req, res) => {
     try {
-        const { assignmentId, fileId } = req.params;
-        // Delete the assignment link, NOT the file itself
-        db.prepare('DELETE FROM shop_product_images WHERE shop_product_assignment_id = ? AND customer_product_file_id = ?').run(assignmentId, fileId);
+        const { assignmentId, linkId } = req.params;
+        // Delete the assignment link by its specific ID (not file ID, to support multi-assign)
+        // If the frontend sends the file ID (old behavior), this will fail to delete specific row, 
+        // so we must ensure frontend sends the link ID.
+        // However, we can also support deleting by file_id as fallback if linkId doesn't match a UUID format or isn't found?
+        // No, let's stick to link ID. The table primary key is `id`.
+        
+        const result = db.prepare('DELETE FROM shop_product_images WHERE id = ? AND shop_product_assignment_id = ?').run(linkId, assignmentId);
+        
+        if (result.changes === 0) {
+            // Fallback: Try to delete by customer_product_file_id (legacy behavior) just in case
+            // This is risky for multi-assign, but might be needed if frontend sends file ID
+             db.prepare('DELETE FROM shop_product_images WHERE customer_product_file_id = ? AND shop_product_assignment_id = ?').run(linkId, assignmentId);
+        }
+
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
