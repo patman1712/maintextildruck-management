@@ -909,23 +909,23 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
 
                 {/* Description */}
                 <div>
-                    <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Beschreibung</label>
+                    <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Beschreibung (HTML erlaubt)</label>
                     <textarea 
-                        className="w-full border border-slate-300 rounded p-3 text-sm h-32 focus:ring-2 focus:ring-slate-500 outline-none resize-none"
+                        className="w-full border border-slate-300 rounded p-3 text-sm h-32 focus:ring-2 focus:ring-slate-500 outline-none resize-y font-mono"
                         value={formData.description}
                         onChange={(e) => setFormData({...formData, description: e.target.value})}
-                        placeholder="Produktbeschreibung hier eingeben..."
+                        placeholder="Produktbeschreibung hier eingeben... (HTML-Tags erlaubt)"
                     />
                 </div>
 
                 {/* Manufacturer Info */}
                 <div>
-                    <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Herstellerangaben</label>
+                    <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Herstellerangaben (HTML erlaubt)</label>
                     <textarea 
-                        className="w-full border border-slate-300 rounded p-3 text-sm h-24 focus:ring-2 focus:ring-slate-500 outline-none resize-none"
+                        className="w-full border border-slate-300 rounded p-3 text-sm h-24 focus:ring-2 focus:ring-slate-500 outline-none resize-y font-mono"
                         value={formData.manufacturer_info}
                         onChange={(e) => setFormData({...formData, manufacturer_info: e.target.value})}
-                        placeholder="Material, Pflegehinweise, etc..."
+                        placeholder="Material, Pflegehinweise, etc... (HTML-Tags erlaubt)"
                     />
                 </div>
 

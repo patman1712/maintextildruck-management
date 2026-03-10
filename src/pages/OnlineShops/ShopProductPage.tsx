@@ -500,7 +500,7 @@ const ShopProductPage: React.FC = () => {
                     {expandedSection === 'description' && (
                         <div className="mt-4 text-sm text-slate-600 leading-relaxed animate-in fade-in slide-in-from-top-2">
                             {product.description ? (
-                                <div className="whitespace-pre-wrap">{product.description}</div>
+                                <div dangerouslySetInnerHTML={{ __html: product.description }} className="prose prose-sm max-w-none text-slate-600" />
                             ) : (
                                 <p className="italic text-slate-400">Keine Beschreibung verfügbar.</p>
                             )}
@@ -520,7 +520,7 @@ const ShopProductPage: React.FC = () => {
                     {expandedSection === 'manufacturer' && (
                         <div className="mt-4 text-sm text-slate-600 leading-relaxed animate-in fade-in slide-in-from-top-2">
                             {product.manufacturer_info ? (
-                                <div className="whitespace-pre-wrap">{product.manufacturer_info}</div>
+                                <div dangerouslySetInnerHTML={{ __html: product.manufacturer_info }} className="prose prose-sm max-w-none text-slate-600" />
                             ) : (
                                 <p className="italic text-slate-400">Keine Herstellerangaben verfügbar.</p>
                             )}
