@@ -101,11 +101,17 @@ const ShopProductPage: React.FC = () => {
           }
       }
       
-      // 3. Fallback to product.size string
+      // 3. If we have variants that determine sizes (mainVariants), but none is selected, return empty.
+      // This forces the user to select a variant first.
+      if (mainVariants.length > 0 && !selectedVariantId) {
+          return [];
+      }
+
+      // 4. Fallback to product.size string (only if no variants exist)
       if (product?.size) return product.size.split(',').map((s: any) => s.trim());
       
       return ['S', 'M', 'L', 'XL', 'XXL'];
-  }, [product, variantDefinitions, selectedVariantId]);
+  }, [product, variantDefinitions, selectedVariantId, mainVariants]);
   
   const availableBackPrints = React.useMemo(() => {
       if (backPrintVariant) return backPrintVariant.values;
