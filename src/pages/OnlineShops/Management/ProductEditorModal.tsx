@@ -457,15 +457,19 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       handleAssignImageToSizes(fileId, newSizes);
   };
 
-  const handleAssignImageToAttributes = async (fileId: string, attributes: Record<string, string[]>) => {
+  const handleAssignImageToAttributes = async (fileId: string, attributes: Record<string, string[]>, assignmentImageId?: string) => {
       if (!assignment) return;
       try {
           // Optimistic update
           setCurrentFiles(prev => prev.map(img => 
-              img.id === fileId ? { ...img, attribute_restrictions: attributes } : img
+              (assignmentImageId && img.assignment_image_id === assignmentImageId) 
+                  ? { ...img, attribute_restrictions: attributes } 
+                  : (!assignmentImageId && img.id === fileId) ? { ...img, attribute_restrictions: attributes } : img
           ));
 
-          const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
+          const targetId = assignmentImageId || fileId;
+
+          const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${targetId}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ attribute_restrictions: attributes })
@@ -477,7 +481,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       } catch (e) { console.error(e); }
   };
 
-  const toggleImageAttribute = (fileId: string, varId: string, value: string, currentAttributes: Record<string, string[]>) => {
+  const toggleImageAttribute = (fileId: string, varId: string, value: string, currentAttributes: Record<string, string[]>, assignmentImageId?: string) => {
       // Safety check: ensure currentAttributes is an object
       const safeAttributes = (typeof currentAttributes === 'object' && currentAttributes !== null) ? currentAttributes : {};
       
@@ -489,7 +493,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       const newAttributes = { ...safeAttributes, [varId]: newValues };
       if (newValues.length === 0) delete newAttributes[varId];
       
-      handleAssignImageToAttributes(fileId, newAttributes);
+      handleAssignImageToAttributes(fileId, newAttributes, assignmentImageId);
   };
 
   // Helper to get grouped available sizes (ONLY type='size' or standard)
@@ -794,7 +798,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                                                     const newValues = allSelected ? [] : attributeGroup!.values;
                                                                                     const newAttributes = { ...(img.attribute_restrictions || {}), [varId]: newValues };
                                                                                     if (newValues.length === 0) delete newAttributes[varId];
-                                                                                    handleAssignImageToAttributes(img.id, newAttributes);
+                                                                                    handleAssignImageToAttributes(img.id, newAttributes, img.assignment_image_id);
                                                                                 }}
                                                                                 className="text-[9px] text-blue-300 hover:text-white hover:underline"
                                                                             >
@@ -808,7 +812,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                                                     <input 
                                                                                         type="checkbox" 
                                                                                         checked={isSelected}
-                                                                                        onChange={() => toggleImageAttribute(img.id, varId, val, img.attribute_restrictions || {})}
+                                                                                        onChange={() => toggleImageAttribute(img.id, varId, val, img.attribute_restrictions || {}, img.assignment_image_id)}
                                                                                         className="h-3 w-3 rounded text-blue-500 focus:ring-0 bg-slate-700 border-slate-500"
                                                                                     />
                                                                                     <span className="text-[10px] text-slate-200 font-mono">{val}</span>
@@ -893,7 +897,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                                     const newValues = allSelected ? [] : attributeGroup!.values;
                                                                     const newAttributes = { ...(file.attribute_restrictions || {}), [varId]: newValues };
                                                                     if (newValues.length === 0) delete newAttributes[varId];
-                                                                    handleAssignImageToAttributes(file.id, newAttributes);
+                                                                    handleAssignImageToAttributes(file.id, newAttributes, file.assignment_image_id);
                                                                 }}
                                                                 className="text-[9px] text-blue-600 hover:underline"
                                                             >
@@ -903,14 +907,14 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                         {attributeGroup!.values.map(val => {
                                                             const isSelected = currentAttributeRestrictions.includes(val);
                                                             return (
-                                                                <label key={val} className="flex items-center space-x-2 cursor-pointer hover:bg-slate-50 p-0.5 rounded">
+                                                                <label key={val} className="flex items-center space-x-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
                                                                     <input 
                                                                         type="checkbox" 
                                                                         checked={isSelected}
-                                                                        onChange={() => toggleImageAttribute(file.id, varId, val, file.attribute_restrictions || {})}
-                                                                        className="h-3 w-3 rounded text-blue-600 focus:ring-0"
+                                                                        onChange={() => toggleImageAttribute(file.id, varId, val, file.attribute_restrictions || {}, file.assignment_image_id)}
+                                                                        className="h-3 w-3 rounded text-blue-600 focus:ring-0 border-slate-300"
                                                                     />
-                                                                    <span className="text-xs text-slate-700 font-mono">{val}</span>
+                                                                    <span className="text-[10px] text-slate-600 font-mono">{val}</span>
                                                                 </label>
                                                             );
                                                         })}
