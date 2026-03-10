@@ -21,6 +21,7 @@ console.log(`Using database at: ${dbPath}`);
 
 const db = new Database(dbPath);
 db.pragma('temp_store = MEMORY');
+db.pragma('foreign_keys = ON'); // Enable foreign key constraints
 
 // Initialize tables
 db.exec(`

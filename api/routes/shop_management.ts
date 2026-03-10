@@ -471,6 +471,17 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
         // const exists = db.prepare('SELECT id FROM shop_product_images WHERE shop_product_assignment_id = ? AND customer_product_file_id = ?').get(assignmentId, file_id);
         // if (exists) return res.json({ success: true, message: 'Already assigned', data: exists }); // Return existing if found
 
+        // Verify existence of foreign keys manually to provide better error messages
+        const assignmentExists = db.prepare('SELECT id FROM shop_product_assignments WHERE id = ?').get(assignmentId);
+        if (!assignmentExists) {
+            return res.status(404).json({ success: false, error: 'Product assignment not found' });
+        }
+
+        const fileExists = db.prepare('SELECT id FROM customer_product_files WHERE id = ?').get(file_id);
+        if (!fileExists) {
+            return res.status(404).json({ success: false, error: 'File not found' });
+        }
+
         // Insert new assignment
         db.prepare(`
             INSERT INTO shop_product_images (id, shop_product_assignment_id, customer_product_file_id, sort_order, personalization_option_ids)
