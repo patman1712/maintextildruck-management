@@ -418,8 +418,8 @@ router.post('/:shopId/orders', async (req, res) => {
       
       const insertFile = db.prepare(`
         INSERT INTO files (
-            id, order_id, customer_id, name, path, type, status, quantity, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            id, order_id, customer_id, name, path, type, status, print_status, quantity, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const item of items) {
@@ -591,6 +591,7 @@ router.post('/:shopId/orders', async (req, res) => {
                         selectedPreview.file_url,
                         'preview',
                         'active',
+                        'pending', // print_status
                         1, // Preview always quantity 1
                         new Date().toISOString()
                     );
@@ -604,6 +605,7 @@ router.post('/:shopId/orders', async (req, res) => {
                         item.image,
                         'preview',
                         'active',
+                        'pending', // print_status
                         1,
                         new Date().toISOString()
                     );
@@ -620,6 +622,7 @@ router.post('/:shopId/orders', async (req, res) => {
                             file.file_url,
                             'preview',
                             'active',
+                            'pending', // print_status
                             1,
                             new Date().toISOString()
                          );
