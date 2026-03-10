@@ -24,19 +24,79 @@ const ShopProductPage: React.FC = () => {
   const [quantity, setQuantity] = useState(1);
   const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
   const [selectedPersonalization, setSelectedPersonalization] = useState<{ [key: string]: string | boolean }>({});
+  const [selectedVariantValues, setSelectedVariantValues] = useState<Record<string, string>>({});
+  const [expandedSection, setExpandedSection] = useState<'description' | 'manufacturer' | null>('description');
+
+  // Parse Variants - Safe default
+  const variants = React.useMemo(() => {
+      if (!product || !product.variants) return {};
+      try {
+          return (typeof product.variants === 'string') 
+              ? JSON.parse(product.variants) 
+              : product.variants;
+      } catch (e) {
+          console.error("Failed to parse variants JSON", e);
+          return {};
+      }
+  }, [product]);
+
+  const variantDefinitions = React.useMemo(() => {
+      return Object.entries(variants).map(([id, data]: [string, any]) => ({
+          id,
+          name: data.name,
+          values: data.values ? data.values.split(',').map((s: string) => s.trim()) : [],
+          price: data.price
+      }));
+  }, [variants]);
+
+  const backPrintVariant = React.useMemo(() => 
+      variantDefinitions.find(v => v.name.toLowerCase().includes('rücken') || v.name.toLowerCase().includes('back')),
+  [variantDefinitions]);
+
+  const mainVariants = React.useMemo(() => 
+      variantDefinitions.filter(v => !v.name.toLowerCase().includes('rücken') && !v.name.toLowerCase().includes('back')),
+  [variantDefinitions]);
+
+  // Derived state (needs to be here because product is null initially)
+  const availableSizes = React.useMemo(() => {
+      if (!product) return [];
+      const hasVariants = Object.keys(variants).length > 0;
+      
+      if (hasVariants) {
+          if (selectedVariantId) {
+              const variant = variants[selectedVariantId];
+              if (variant) {
+                  return variant.values ? variant.values.split(',').map((s: string) => s.trim()) : [];
+              }
+          }
+          return [];
+      } else {
+          return product.size ? product.size.split(',').map((s: string) => s.trim()) : ['S', 'M', 'L', 'XL', 'XXL'];
+      }
+  }, [product, variants, selectedVariantId]);
+  
+  const availableBackPrints = React.useMemo(() => {
+      if (backPrintVariant) return backPrintVariant.values;
+      return [];
+  }, [backPrintVariant]);
+
+  const currentPrice = React.useMemo(() => {
+      if (!product) return 0;
+      let price = product.price > 0 ? product.price : 29.95;
+      if (selectedVariantId && variants[selectedVariantId] && variants[selectedVariantId].price) {
+          price = variants[selectedVariantId].price;
+      }
+      return price;
+  }, [product, variants, selectedVariantId]);
 
   useEffect(() => {
     // Parse Personalization Options from Product Assignment
-    let options: any[] = [];
     if (product && product.personalization_options) {
         try {
             const selectedIds = typeof product.personalization_options === 'string' 
                 ? JSON.parse(product.personalization_options) 
                 : product.personalization_options;
             
-            // We need to fetch the full details for these IDs.
-            // Ideally the backend should join this, but for now we fetch all options and filter.
-            // Or we could fetch just the ones we need.
             fetch('/api/personalization')
                 .then(res => res.json())
                 .then(data => {
@@ -52,97 +112,14 @@ const ShopProductPage: React.FC = () => {
     }
   }, [product]);
 
-  const toggleOption = (option: any) => {
-      setSelectedPersonalization(prev => {
-          const wasSelected = !!prev[option.id];
-          let newState;
-          
-          if (wasSelected) {
-              newState = { ...prev };
-              delete newState[option.id];
-          } else {
-              newState = { ...prev, [option.id]: true }; 
-          }
-          
-          // Image Logic: Find the best matching image for the NEW state
-          // We need to find an image where ALL its required options are selected in newState
-          
-          // Get all currently selected option IDs (including the one just toggled)
-          const selectedIds = Object.keys(newState).filter(k => !!newState[k]);
-          
-          // Find images that have personalization requirements
-          const personalizedImages = images.filter((img: any) => 
-              img.personalization_option_ids && img.personalization_option_ids.length > 0
-          );
-          
-          // Try to find an image where ALL required options are present in selectedIds
-          // We prefer images with MORE matching options (specificity)
-          let bestMatch = null;
-          let maxMatchCount = 0;
-          
-          for (const img of personalizedImages) {
-              const requiredIds = img.personalization_option_ids;
-              const allRequiredPresent = requiredIds.every((id: string) => selectedIds.includes(id));
-              
-              if (allRequiredPresent) {
-                  // This image is a candidate. Check if it's more specific than previous candidate
-                  if (requiredIds.length > maxMatchCount) {
-                      maxMatchCount = requiredIds.length;
-                      bestMatch = img;
-                  }
-              }
-          }
-          
-          if (bestMatch) {
-              setActiveImage(bestMatch.file_url);
-          } else {
-              // No matching personalized image found.
-              // If we were viewing a personalized image that is no longer valid, revert to standard.
-              // Or just revert to standard if no match found?
-              
-              // Check if currently active image is a personalized one that is now invalid
-              const activeImgObj = images.find((i: any) => i.file_url === activeImage);
-              const activeIsPersonalized = activeImgObj && activeImgObj.personalization_option_ids && activeImgObj.personalization_option_ids.length > 0;
-              
-              if (activeIsPersonalized) {
-                   // Switch to standard
-                   const standardImage = images.find((img: any) => !img.personalization_option_ids || img.personalization_option_ids.length === 0);
-                   if (standardImage) setActiveImage(standardImage.file_url);
-              } else if (!activeImage) {
-                   const standardImage = images.find((img: any) => !img.personalization_option_ids || img.personalization_option_ids.length === 0);
-                   if (standardImage) setActiveImage(standardImage.file_url);
-              }
-          }
-          
-          return newState;
-      });
-  };
+  // Initialize selections
+  useEffect(() => {
+      const hasVariants = Object.keys(variants).length > 0;
+      if (hasVariants && Object.keys(selectedVariantValues).length === 0) {
+          // Optional: Pre-select first value? Or leave empty for mandatory selection?
+      }
+  }, [variants, selectedVariantValues]);
 
-  const setOptionValue = (optionId: string, value: string) => {
-      setSelectedPersonalization(prev => ({
-          ...prev,
-          [optionId]: value
-      }));
-  };
-
-  const calculatePersonalizationPrice = () => {
-      let total = 0;
-      Object.keys(selectedPersonalization).forEach(key => {
-          const option = personalizationOptions.find(o => o.id === key);
-          if (option && selectedPersonalization[key]) {
-              // Only add price if it's selected (true) or has a value (string)
-              if (typeof selectedPersonalization[key] === 'boolean' && selectedPersonalization[key] === true) {
-                  total += option.price_adjustment || 0;
-              } else if (typeof selectedPersonalization[key] === 'string' && selectedPersonalization[key] !== '') {
-                   total += option.price_adjustment || 0;
-              }
-          }
-      });
-      return total;
-  };
-
-  const [expandedSection, setExpandedSection] = useState<'description' | 'manufacturer' | null>('description');
-  
   useEffect(() => {
     const fetchProduct = async () => {
       try {
@@ -168,200 +145,161 @@ const ShopProductPage: React.FC = () => {
     }
   }, [shopId, productId]);
 
+  const images = React.useMemo(() => {
+      if (!product || !product.files) return [];
+      return (product.files || []).filter((f: any) => !f.type || f.type === 'view' || f.type === 'preview' || (f.thumbnail_url && f.type !== 'print' && f.type !== 'vector' && f.type !== 'internal'));
+  }, [product]);
+
+  const displayedImages = React.useMemo(() => {
+      return images.filter((img: any) => {
+          // 1. Check Attribute Restrictions (Back Print, Color, etc.)
+          if (img.attribute_restrictions) {
+              let restrictions: Record<string, string[]> = {};
+              if (typeof img.attribute_restrictions === 'string') {
+                   try { restrictions = JSON.parse(img.attribute_restrictions); } catch (e) {}
+              } else {
+                   restrictions = img.attribute_restrictions;
+              }
+              
+              if (Object.keys(restrictions).length > 0) {
+                  // Iterate all restrictions
+                  for (const [varId, allowedValues] of Object.entries(restrictions)) {
+                       // Check against selected Back Print
+                       if (backPrintVariant && backPrintVariant.id === varId) {
+                           if (selectedBackPrint) {
+                               if (!allowedValues.includes(selectedBackPrint)) return false;
+                           } else {
+                               // If file is restricted to a Back Print option, but none selected yet -> Hide
+                               return false;
+                           }
+                       }
+                       // Check against other variants (Color etc.)
+                       else if (selectedVariantValues[varId]) {
+                           if (!allowedValues.includes(selectedVariantValues[varId])) return false;
+                       } 
+                       // If restriction exists but no value selected for that variant -> Hide
+                       else {
+                           return false;
+                       }
+                  }
+              }
+          }
+    
+          // 2. Standard images (no personalization requirements)
+          if (!img.personalization_option_ids || img.personalization_option_ids.length === 0) {
+              // Hide standard images if ANY personalized image is currently valid and active
+              const activeOptionIds = Object.keys(selectedPersonalization).filter(k => !!selectedPersonalization[k]);
+              
+              const hasActivePersonalizedImage = images.some((i: any) => 
+                  i.personalization_option_ids && 
+                  i.personalization_option_ids.length > 0 &&
+                  i.personalization_option_ids.every((id: string) => activeOptionIds.includes(id))
+              );
+              
+              if (hasActivePersonalizedImage) return false; 
+              return true; 
+          } 
+          
+          // Personalized images
+          else {
+              const requiredIds = img.personalization_option_ids;
+              const activeOptionIds = Object.keys(selectedPersonalization).filter(k => !!selectedPersonalization[k]);
+              
+              // Show only if ALL required options for this image are currently selected
+              return requiredIds.every((id: string) => activeOptionIds.includes(id));
+          }
+      });
+  }, [images, backPrintVariant, selectedBackPrint, selectedVariantValues, selectedPersonalization]);
+
+  const toggleOption = (option: any) => {
+      setSelectedPersonalization(prev => {
+          const wasSelected = !!prev[option.id];
+          let newState;
+          
+          if (wasSelected) {
+              newState = { ...prev };
+              delete newState[option.id];
+          } else {
+              newState = { ...prev, [option.id]: true }; 
+          }
+          
+          // Image Logic
+          const selectedIds = Object.keys(newState).filter(k => !!newState[k]);
+          const personalizedImages = images.filter((img: any) => 
+              img.personalization_option_ids && img.personalization_option_ids.length > 0
+          );
+          
+          let bestMatch = null;
+          let maxMatchCount = 0;
+          
+          for (const img of personalizedImages) {
+              const requiredIds = img.personalization_option_ids;
+              const allRequiredPresent = requiredIds.every((id: string) => selectedIds.includes(id));
+              
+              if (allRequiredPresent) {
+                  if (requiredIds.length > maxMatchCount) {
+                      maxMatchCount = requiredIds.length;
+                      bestMatch = img;
+                  }
+              }
+          }
+          
+          if (bestMatch) {
+              setActiveImage(bestMatch.file_url);
+          } else {
+              const activeImgObj = images.find((i: any) => i.file_url === activeImage);
+              const activeIsPersonalized = activeImgObj && activeImgObj.personalization_option_ids && activeImgObj.personalization_option_ids.length > 0;
+              
+              if (activeIsPersonalized) {
+                   const standardImage = images.find((img: any) => !img.personalization_option_ids || img.personalization_option_ids.length === 0);
+                   if (standardImage) setActiveImage(standardImage.file_url);
+              } else if (!activeImage) {
+                   const standardImage = images.find((img: any) => !img.personalization_option_ids || img.personalization_option_ids.length === 0);
+                   if (standardImage) setActiveImage(standardImage.file_url);
+              }
+          }
+          
+          return newState;
+      });
+  };
+
+  // Auto-select first image of newly filtered set if active image becomes hidden
+  useEffect(() => {
+      if (displayedImages.length > 0) {
+          const isActiveVisible = displayedImages.some((img: any) => img.file_url === activeImage);
+          if (!isActiveVisible) {
+              setActiveImage(displayedImages[0].file_url || displayedImages[0].thumbnail_url);
+          }
+      }
+  }, [displayedImages, activeImage]);
+
+  const setOptionValue = (optionId: string, value: string) => {
+      setSelectedPersonalization(prev => ({
+          ...prev,
+          [optionId]: value
+      }));
+  };
+
+  const calculatePersonalizationPrice = () => {
+      let total = 0;
+      Object.keys(selectedPersonalization).forEach(key => {
+          const option = personalizationOptions.find(o => o.id === key);
+          if (option && selectedPersonalization[key]) {
+              if (typeof selectedPersonalization[key] === 'boolean' && selectedPersonalization[key] === true) {
+                  total += option.price_adjustment || 0;
+              } else if (typeof selectedPersonalization[key] === 'string' && selectedPersonalization[key] !== '') {
+                   total += option.price_adjustment || 0;
+              }
+          }
+      });
+      return total;
+  };
+  
   if (loading) return <div className="container mx-auto p-8 text-center">Lade Produkt...</div>;
   if (!product) return <div className="container mx-auto p-8 text-center">Produkt nicht gefunden.</div>;
 
-  const images = (product.files || []).filter((f: any) => !f.type || f.type === 'view' || f.type === 'preview' || (f.thumbnail_url && f.type !== 'print' && f.type !== 'vector' && f.type !== 'internal'));
-  
-  // Filter images: 
-  // 1. If NO personalization is selected, show ONLY standard images (no personalization_option_id)
-  // 2. If personalization IS selected, show standard images AND the specific image for that option
-  
-  const hasSelectedPersonalization = Object.values(selectedPersonalization).some(v => !!v);
-
-  const displayedImages = images.filter((img: any) => {
-      // 1. Check Attribute Restrictions (Back Print, Color, etc.)
-      if (img.attribute_restrictions) {
-          let restrictions: Record<string, string[]> = {};
-          if (typeof img.attribute_restrictions === 'string') {
-               try { restrictions = JSON.parse(img.attribute_restrictions); } catch (e) {}
-          } else {
-               restrictions = img.attribute_restrictions;
-          }
-          
-          if (Object.keys(restrictions).length > 0) {
-              // Iterate all restrictions
-              for (const [varId, allowedValues] of Object.entries(restrictions)) {
-                   // Check against selected Back Print
-                   if (backPrintVariant && backPrintVariant.id === varId) {
-                       if (selectedBackPrint) {
-                           if (!allowedValues.includes(selectedBackPrint)) return false;
-                       } else {
-                           // If file is restricted to a Back Print option, but none selected yet -> Hide
-                           return false;
-                       }
-                   }
-                   // Check against other variants (Color etc.)
-                   else if (selectedVariantValues[varId]) {
-                       if (!allowedValues.includes(selectedVariantValues[varId])) return false;
-                   } 
-                   // If restriction exists but no value selected for that variant -> Hide
-                   else {
-                       // Exception: If we haven't rendered the selector yet? No, we render all.
-                       // So if restriction exists, we must have a match.
-                       return false;
-                   }
-              }
-          }
-      }
-
-      // 2. Standard images (no personalization requirements)
-      if (!img.personalization_option_ids || img.personalization_option_ids.length === 0) {
-          // Hide standard images if ANY personalized image is currently valid and active
-          const activeOptionIds = Object.keys(selectedPersonalization).filter(k => !!selectedPersonalization[k]);
-          
-          const hasActivePersonalizedImage = images.some((i: any) => 
-              i.personalization_option_ids && 
-              i.personalization_option_ids.length > 0 &&
-              i.personalization_option_ids.every((id: string) => activeOptionIds.includes(id))
-          );
-          
-          if (hasActivePersonalizedImage) return false; 
-          return true; 
-      } 
-      
-      // Personalized images
-      else {
-          const requiredIds = img.personalization_option_ids;
-          const activeOptionIds = Object.keys(selectedPersonalization).filter(k => !!selectedPersonalization[k]);
-          
-          // Show only if ALL required options for this image are currently selected
-          return requiredIds.every((id: string) => activeOptionIds.includes(id));
-      }
-  });
-
-  // Fallback image if no files
   const mainImage = activeImage || (displayedImages.length > 0 ? displayedImages[0].file_url : null);
-  
-  // Parse Variants
-  // If product.variants is undefined, it defaults to {}.
-  // If product.variants is null or empty string, we should treat it as no variants.
-  // The backend might return null for variants column.
-  let variants = {};
-  try {
-      variants = (product.variants && typeof product.variants === 'string') 
-          ? JSON.parse(product.variants) 
-          : (product.variants || {});
-  } catch (e) {
-      console.error("Failed to parse variants JSON", e);
-      variants = {};
-  }
-  
-  const variantKeys = Object.keys(variants);
-  const hasVariants = variantKeys.length > 0;
-
-  // Derived state (needs to be here because product is null initially)
-  let availableSizes: string[] = [];
-  let availableBackPrints: string[] = [];
-  let currentPrice = product.price > 0 ? product.price : 29.95;
-
-  if (hasVariants) {
-      if (selectedVariantId) {
-          const variant = variants[selectedVariantId];
-          if (variant) {
-              availableSizes = variant.values ? variant.values.split(',').map((s: string) => s.trim()) : [];
-              // Check if there are back print variants or similar
-              // Actually, variants structure is flattened. 
-              // We need to check if there are any "back_print" type variables assigned to this shop product?
-              // Currently `variants` are stored as { [id]: { name, values, price? } }.
-              // The ID is the variable ID. We don't know the TYPE of the variable here unless we fetch variables.
-              // But we can check if any variant has values that look like back prints?
-              // No, we should rely on the variable type.
-              // However, we don't have the variable types here easily available.
-              // BUT: The user asked to add "Rückendruck" to Global Shop Attributes.
-              // So we should iterate over all variants and see which one is the "back_print" one.
-              // But we don't know which ID corresponds to "back_print" type.
-              // Workaround: We can check the variant NAME? Or we need to fetch variables.
-              // Let's assume we can filter variants by some property or just render ALL active variants as dropdowns/buttons?
-              // The current code assumes only ONE active variant type (e.g. "Ausführung").
-              // If we have multiple (e.g. Color AND BackPrint), we need to handle multiple variant selections.
-              
-              if (variant.price) currentPrice = variant.price;
-          }
-      } else {
-          // If variants exist but none selected, availableSizes stays empty to force selection
-          availableSizes = [];
-      }
-  } else {
-      // Fallback to standard sizes if no variants configured
-      availableSizes = product.size ? product.size.split(',').map((s: string) => s.trim()) : ['S', 'M', 'L', 'XL', 'XXL'];
-  }
-  
-  // New Logic: Handling Multiple Variable Types
-  // We need to know which variant ID belongs to which type.
-  // Since we don't have that info in `product.variants` (it's just id -> {name, values}), 
-  // we should fetch shop variables or embed type in the variants JSON.
-  // But wait! `product.variants` comes from `shop_product_assignments`.
-  // When we save variants in ProductEditorModal, we save { [varId]: { name: variable.name, values: ... } }.
-  // We should probably also save the TYPE there.
-  
-  // Let's try to infer or just render additional dropdowns if we detect more than one variant key?
-  // Currently `selectedVariantId` implies only ONE variant is selectable (e.g. radio buttons).
-  // If we have Color AND BackPrint, we need independent selections.
-  
-  // REFACTOR: Instead of `selectedVariantId` (single), we should use `selectedVariants` map { [varId]: value }.
-  // But that would require a bigger refactor.
-  // The user asked specifically for "Rückendruck" as a global attribute.
-  // Let's assume we can identify it by name "Rückendruck" or similar if we can't get the type.
-  
-  // Let's look at `variants` object again. It is keyed by Variable ID.
-  // Example: { "var_123": { name: "Farbe", values: "Rot, Blau" }, "var_456": { name: "Rückendruck", values: "Motiv A, Motiv B" } }
-  
-  // So we can iterate over `Object.keys(variants)` and render a selector for EACH.
-  // The current code `selectedVariantId` assumes these are MUTUALLY EXCLUSIVE options (like "Model A", "Model B").
-  // But "Color" and "Back Print" are independent dimensions.
-  
-  // So we need to change the UI to support multiple dimensions.
-  
-  const variantDefinitions = Object.entries(variants).map(([id, data]: [string, any]) => ({
-      id,
-      name: data.name,
-      values: data.values ? data.values.split(',').map((s: string) => s.trim()) : [],
-      price: data.price // Price override? Usually price depends on combination...
-  }));
-  
-  // We need state for each variant definition.
-  const [selectedVariantValues, setSelectedVariantValues] = useState<Record<string, string>>({});
-
-  // Initialize selections
-  useEffect(() => {
-      if (hasVariants && Object.keys(selectedVariantValues).length === 0) {
-          // Optional: Pre-select first value? Or leave empty for mandatory selection?
-          // User said: "soll ein pflichtfeld werden" (must be mandatory) -> so empty initially.
-      }
-  }, [hasVariants]);
-  
-  // Update price based on selections? 
-  // Currently price is on the variant definition level in JSON? 
-  // If we have multiple variants, how do prices combine?
-  // Usually simplest is: Base Price + Surcharge.
-  // But here `variant.price` seems to be the TOTAL price.
-  // If we have multiple dimensions, we can't easily have a total price per dimension value unless it's a surcharge.
-  // Let's assume for now we use the base product price, and maybe add surcharges later?
-  // OR: The "Main" variant (e.g. Model/Color) defines the price, and "Back Print" is just an option?
-  
-  // For the specific request: "Rückendruck" selection.
-  // Let's treat "Rückendruck" as a separate dropdown.
-  
-  const backPrintVariant = variantDefinitions.find(v => v.name.toLowerCase().includes('rücken') || v.name.toLowerCase().includes('back'));
-  const mainVariants = variantDefinitions.filter(v => !v.name.toLowerCase().includes('rücken') && !v.name.toLowerCase().includes('back'));
-  
-  // If we have a main variant (like "Ausführung" or "Farbe"), we use `selectedVariantId` for it (for backward compat/logic).
-  // If we have "Rückendruck", we use `selectedBackPrint`.
-  
-  if (backPrintVariant) {
-      availableBackPrints = backPrintVariant.values;
-  }
+  const hasVariants = Object.keys(variants).length > 0;
   
   // Override availableSizes logic:
   // If we have a "Main Variant" selected, we use its values as sizes?
