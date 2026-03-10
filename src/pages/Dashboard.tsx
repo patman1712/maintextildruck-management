@@ -157,28 +157,35 @@ export default function DashboardLayout() {
                     onClick={() => setMobileMenuOpen(false)} 
                     menuSettings={{}}
                 />
-                
-                <div className="pt-4 mt-2 border-t border-red-800/50">
-                    {(sidebarOpen || mobileMenuOpen) && <p className="px-4 text-xs font-bold text-red-300 uppercase mb-2 animate-in fade-in">Onlineshops</p>}
-                    <NavItem 
-                        item={{ id: 'shops_manage', label: 'Verwaltung', to: '/dashboard/shops', icon: ShoppingBag }} 
-                        isOpen={sidebarOpen || mobileMenuOpen} 
-                        onClick={() => setMobileMenuOpen(false)} 
-                        menuSettings={{}}
-                    />
-                    {shops.map(shop => (
-                         <Link
-                            key={shop.id}
-                            to={`/dashboard/shops/${shop.id}`}
-                            className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group text-red-100 hover:bg-white/10 hover:text-white`}
-                            title={!sidebarOpen && !mobileMenuOpen ? shop.name : undefined}
-                        >
-                            <span className="text-red-300 group-hover:text-white min-w-[24px]"><ShoppingBag size={20} /></span>
-                            {(sidebarOpen || mobileMenuOpen) && <span className="font-medium whitespace-nowrap text-sm truncate">{shop.name}</span>}
-                        </Link>
-                    ))}
-                </div>
              </>
+          )}
+
+          {/* Onlineshops Section - Controlled via Menu Settings */}
+          {(currentUser?.role === 'admin' || (menuSettings['shops_manage'] !== false || menuSettings['shops_list'] !== false)) && (
+            <div className="pt-4 mt-2 border-t border-red-800/50">
+                {(sidebarOpen || mobileMenuOpen) && <p className="px-4 text-xs font-bold text-red-300 uppercase mb-2 animate-in fade-in">Onlineshops</p>}
+                
+                <NavItem 
+                    item={{ id: 'shops_manage', label: 'Verwaltung', to: '/dashboard/shops', icon: ShoppingBag }} 
+                    isOpen={sidebarOpen || mobileMenuOpen} 
+                    onClick={() => setMobileMenuOpen(false)} 
+                    menuSettings={menuSettings}
+                    isAdmin={currentUser?.role === 'admin'}
+                />
+                
+                {(currentUser?.role === 'admin' || menuSettings['shops_list'] !== false) && shops.map(shop => (
+                     <Link
+                        key={shop.id}
+                        to={`/dashboard/shops/${shop.id}`}
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group text-red-100 hover:bg-white/10 hover:text-white`}
+                        title={!sidebarOpen && !mobileMenuOpen ? shop.name : undefined}
+                    >
+                        <span className="text-red-300 group-hover:text-white min-w-[24px]"><ShoppingBag size={20} /></span>
+                        {(sidebarOpen || mobileMenuOpen) && <span className="font-medium whitespace-nowrap text-sm truncate">{shop.name}</span>}
+                    </Link>
+                ))}
+            </div>
           )}
         </nav>
 

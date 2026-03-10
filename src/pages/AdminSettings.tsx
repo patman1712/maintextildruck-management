@@ -18,6 +18,8 @@ const MENU_ITEMS = [
   { id: 'preview_generator', label: 'Vorschau-Generator', icon: ImageIcon },
   { id: 'vector', label: 'Bildvektor', icon: Zap },
   { id: 'customers', label: 'Kundendateien', icon: Users },
+  { id: 'shops_manage', label: 'Onlineshops: Verwaltung', icon: ShoppingBag },
+  { id: 'shops_list', label: 'Onlineshops: Shop-Liste', icon: ShoppingBag },
 ];
 
 const SMTP_PRESETS = {
