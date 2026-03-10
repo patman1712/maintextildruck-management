@@ -310,7 +310,7 @@ const ShopDashboard: React.FC = () => {
       
       const payload = { ...currentProduct, ...updates };
 
-      await fetch(`/api/shop-management/${shopId}/products/${id}`, {
+      const res = await fetch(`/api/shop-management/${shop.id}/products/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -322,11 +322,11 @@ const ShopDashboard: React.FC = () => {
             is_active: payload.is_active, // Include is_active in payload
             supplier_id: payload.supplier_id, // Include supplier_id
             // Also update product details if provided in updates
-            manufacturer_info: updates.manufacturer_info,
-            description: updates.description,
-            size: updates.size,
-            weight: updates.weight,
-            color: updates.color,
+            manufacturer_info: updates.manufacturer_info !== undefined ? updates.manufacturer_info : payload.manufacturer_info,
+            description: updates.description !== undefined ? updates.description : payload.description,
+            size: updates.size !== undefined ? updates.size : payload.size,
+            weight: updates.weight !== undefined ? updates.weight : payload.weight,
+            color: updates.color !== undefined ? updates.color : payload.color,
             variants: updates.variants !== undefined ? updates.variants : payload.variants,
             personalization_options: updates.personalization_options !== undefined ? updates.personalization_options : payload.personalization_options
         })
