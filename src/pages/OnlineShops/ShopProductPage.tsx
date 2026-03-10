@@ -84,6 +84,8 @@ const ShopProductPage: React.FC = () => {
       if (!product) return 0;
       let price = product.price > 0 ? product.price : 29.95;
       
+      const hasVariants = Object.keys(variants).length > 0;
+
       // If variant is selected, use its price
       if (selectedVariantId && variants[selectedVariantId] && variants[selectedVariantId].price) {
           price = variants[selectedVariantId].price;
@@ -108,10 +110,10 @@ const ShopProductPage: React.FC = () => {
       }
       
       return price;
-  }, [product, variants, selectedVariantId, hasVariants]);
+  }, [product, variants, selectedVariantId]);
 
   // Derived state to show "Ab" (From) prefix
-  const showFromPrice = !selectedVariantId && hasVariants;
+  const showFromPrice = !selectedVariantId && Object.keys(variants).length > 0;
 
   useEffect(() => {
     // Parse Personalization Options from Product Assignment
@@ -506,7 +508,7 @@ const ShopProductPage: React.FC = () => {
             </div>
 
             {/* Variant Selection Buttons (Excluding Back Print) */}
-            {hasVariants && mainVariants.length > 0 && (
+            {Object.keys(variants).length > 0 && mainVariants.length > 0 && (
                 <div className="mb-6">
                     <label className="font-bold text-sm uppercase block mb-2">{mainVariants[0].name}:</label>
                     <div className="flex flex-wrap gap-2">
