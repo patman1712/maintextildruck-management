@@ -152,35 +152,56 @@ const ShopProductPage: React.FC = () => {
 
   const displayedImages = React.useMemo(() => {
       return images.filter((img: any) => {
-          // 1. Check Attribute Restrictions (Back Print, Color, etc.)
+          // 0. Parse attribute restrictions safely
+          let restrictions: Record<string, string[]> = {};
           if (img.attribute_restrictions) {
-              let restrictions: Record<string, string[]> = {};
               if (typeof img.attribute_restrictions === 'string') {
                    try { restrictions = JSON.parse(img.attribute_restrictions); } catch (e) {}
               } else {
                    restrictions = img.attribute_restrictions;
               }
-              
-              if (Object.keys(restrictions).length > 0) {
-                  // Iterate all restrictions
-                  for (const [varId, allowedValues] of Object.entries(restrictions)) {
-                       // Check against selected Back Print
-                       if (backPrintVariant && backPrintVariant.id === varId) {
-                           if (selectedBackPrint) {
-                               if (!allowedValues.includes(selectedBackPrint)) return false;
-                           } else {
-                               // If file is restricted to a Back Print option, but none selected yet -> Hide
-                               return false;
-                           }
-                       }
-                       // Check against other variants (Color etc.)
-                       else if (selectedVariantValues[varId]) {
-                           if (!allowedValues.includes(selectedVariantValues[varId])) return false;
-                       } 
-                       // If restriction exists but no value selected for that variant -> Hide
-                       else {
+          }
+
+          // 1. Check Attribute Restrictions (Back Print, Color, etc.)
+          if (Object.keys(restrictions).length > 0) {
+              // Iterate all restrictions
+              for (const [varId, allowedValues] of Object.entries(restrictions)) {
+                   // Check against selected Back Print
+                   if (backPrintVariant && backPrintVariant.id === varId) {
+                       if (selectedBackPrint) {
+                           if (!allowedValues.includes(selectedBackPrint)) return false;
+                       } else {
+                           // If file is restricted to a Back Print option, but none selected yet -> Hide
                            return false;
                        }
+                   }
+                   // Check against other variants (Color etc.)
+                   else if (selectedVariantValues[varId]) {
+                       if (!allowedValues.includes(selectedVariantValues[varId])) return false;
+                   } 
+                   // If restriction exists but no value selected for that variant -> Hide
+                   else {
+                       return false;
+                   }
+              }
+          } else {
+              // New Logic: If image has NO restrictions but belongs to a variant group (like Back Print),
+              // we should probably hide it unless it's a "general" back print image?
+              // But usually, back print images are specific to a value (Motiv A, Motiv B).
+              // If an image is assigned to the "Back Print" variant GROUP but has NO value restrictions,
+              // it means "Show for ANY Back Print selection"? Or "Show always"?
+              
+              // The user requirement is: "Show back print images ONLY when back print is selected".
+              // This implies that images associated with Back Print should be hidden if selectedBackPrint is empty.
+              
+              // We need to know if this image is "associated" with Back Print.
+              // We can check `img.variant_ids` (array of variant IDs this image belongs to).
+              
+              if (img.variant_ids && img.variant_ids.length > 0) {
+                  // Check if any of the assigned variant IDs is the Back Print ID
+                  if (backPrintVariant && img.variant_ids.includes(backPrintVariant.id)) {
+                      // If image is associated with Back Print, but no back print is selected -> Hide
+                      if (!selectedBackPrint) return false;
                   }
               }
           }
