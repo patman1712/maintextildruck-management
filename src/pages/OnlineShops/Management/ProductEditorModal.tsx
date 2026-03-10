@@ -399,6 +399,61 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       handleAssignImageToVariants(fileId, newVariantIds);
   };
 
+  const handleAssignImageToSizes = async (fileId: string, sizes: string[]) => {
+      if (!assignment) return;
+      try {
+          const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ size_restrictions: sizes })
+          });
+          const data = await res.json();
+          if (data.success) {
+              setCurrentFiles(currentFiles.map(img => 
+                  img.id === fileId ? { ...img, size_restrictions: sizes } : img
+              ));
+          }
+      } catch (e) { console.error(e); }
+  };
+
+  const toggleImageSize = (fileId: string, size: string, currentSizes: string[]) => {
+      // Ensure currentSizes is an array
+      const safeSizes = Array.isArray(currentSizes) ? currentSizes : [];
+      
+      const newSizes = safeSizes.includes(size)
+          ? safeSizes.filter(s => s !== size)
+          : [...safeSizes, size];
+      handleAssignImageToSizes(fileId, newSizes);
+  };
+
+  // Helper to get all available sizes
+  const getAllAvailableSizes = React.useMemo(() => {
+      let sizes: string[] = [];
+      if (activeVariants.length > 0) {
+          activeVariants.forEach(varId => {
+              const variant = formData.variants[varId];
+              // Or fallback to variable definition if not in formData yet
+              const variable = shopVariables.find(v => v.id === varId);
+              const values = variant?.values || variable?.values || '';
+              if (values) {
+                  values.split(',').forEach((s: string) => {
+                      const trimmed = s.trim();
+                      if (trimmed && !sizes.includes(trimmed)) sizes.push(trimmed);
+                  });
+              }
+          });
+      } else {
+          // Standard sizes
+          if (formData.size) {
+              formData.size.split(',').forEach((s: string) => {
+                  const trimmed = s.trim();
+                  if (trimmed && !sizes.includes(trimmed)) sizes.push(trimmed);
+              });
+          }
+      }
+      return sizes;
+  }, [activeVariants, formData.variants, formData.size, shopVariables]);
+
   // Filter logic for tabs
   const filteredCurrentFiles = currentFiles.filter(f => {
       if (activeTab === 'view') {
@@ -630,7 +685,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                    
                                                    {/* Variant Assignment for Print Files */}
                                                    {activeVariants.length > 0 && (
-                                                       <div className="flex flex-wrap gap-1">
+                                                       <div className="flex flex-wrap gap-1 mb-1">
                                                            {activeVariants.map(varId => {
                                                                const variable = shopVariables.find(v => v.id === varId);
                                                                if (!variable) return null;
@@ -645,6 +700,37 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                                    </button>
                                                                );
                                                            })}
+                                                       </div>
+                                                   )}
+
+                                                   {/* Size Assignment Badge */}
+                                                   {getAllAvailableSizes.length > 0 && (
+                                                       <div className="relative group inline-block">
+                                                           <button className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors flex items-center ${(file.size_restrictions && file.size_restrictions.length > 0) ? 'bg-purple-600 text-white border-purple-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-300'}`}>
+                                                               <span className="mr-1">Größen:</span>
+                                                               {(file.size_restrictions && file.size_restrictions.length > 0) ? file.size_restrictions.join(', ') : 'Alle'}
+                                                           </button>
+                                                           
+                                                           {/* Size Dropdown */}
+                                                           <div className="absolute left-0 top-full mt-1 bg-white border border-slate-200 shadow-lg rounded p-2 z-50 hidden group-hover:block w-48 max-h-48 overflow-y-auto">
+                                                               <div className="text-[10px] font-bold text-slate-400 mb-1 uppercase">Gültig für Größen:</div>
+                                                               <div className="space-y-1">
+                                                                   {getAllAvailableSizes.map(size => {
+                                                                       const isSelected = (file.size_restrictions || []).includes(size);
+                                                                       return (
+                                                                           <label key={size} className="flex items-center space-x-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
+                                                                               <input 
+                                                                                   type="checkbox" 
+                                                                                   checked={isSelected}
+                                                                                   onChange={() => toggleImageSize(file.id, size, file.size_restrictions || [])}
+                                                                                   className="h-3 w-3 rounded text-purple-600 focus:ring-0"
+                                                                               />
+                                                                               <span className="text-xs text-slate-700 font-mono">{size}</span>
+                                                                           </label>
+                                                                       );
+                                                                   })}
+                                                               </div>
+                                                           </div>
                                                        </div>
                                                    )}
                                                </div>

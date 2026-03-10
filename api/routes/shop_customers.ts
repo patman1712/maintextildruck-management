@@ -522,6 +522,22 @@ router.post('/:shopId/orders', async (req, res) => {
                          }
                      }
 
+                     // Check Size Restrictions
+                     if (useAssignments && file.size_restrictions) {
+                         try {
+                             const allowedSizes = JSON.parse(file.size_restrictions);
+                             if (allowedSizes.length > 0 && item.size) {
+                                 // Check if item size is in allowed sizes
+                                 // Normalize comparison (trim)
+                                 const itemSize = String(item.size).trim();
+                                 const match = allowedSizes.some((s: string) => s.trim() === itemSize);
+                                 if (!match) continue; // Skip this file
+                             }
+                         } catch (e) {
+                             // If parse error, assume no filter
+                         }
+                     }
+
                      // Calculate total quantity needed for this file based on order item quantity
                      // Default file quantity is 1 (per product). So if customer buys 9 products, we need 9 prints.
                      // If file itself has a quantity (e.g. front and back print needed per shirt?), we should multiply.

@@ -389,14 +389,14 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
         
         // Get currently assigned images
         const assignedImages = db.prepare(`
-            SELECT cpf.*, spi.id as assignment_image_id, spi.sort_order, spi.personalization_option_id, spi.personalization_option_ids, spi.variant_ids
+            SELECT cpf.*, spi.id as assignment_image_id, spi.sort_order, spi.personalization_option_id, spi.personalization_option_ids, spi.variant_ids, spi.size_restrictions
             FROM shop_product_images spi
             JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
             WHERE spi.shop_product_assignment_id = ?
             ORDER BY spi.sort_order ASC
         `).all(assignmentId);
 
-        // Parse JSON for option_ids and variant_ids
+        // Parse JSON for option_ids, variant_ids, and size_restrictions
         const assignedImagesParsed = assignedImages.map((img: any) => {
              try {
                  img.personalization_option_ids = img.personalization_option_ids ? JSON.parse(img.personalization_option_ids) : [];
@@ -411,6 +411,11 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
                  img.variant_ids = img.variant_ids ? JSON.parse(img.variant_ids) : [];
              } catch (e) {
                  img.variant_ids = [];
+             }
+             try {
+                 img.size_restrictions = img.size_restrictions ? JSON.parse(img.size_restrictions) : [];
+             } catch (e) {
+                 img.size_restrictions = [];
              }
              return img;
         });
@@ -480,7 +485,7 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
 router.put('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
     try {
         const { assignmentId, fileId } = req.params;
-        const { personalization_option_ids, variant_ids } = req.body; // Expect arrays
+        const { personalization_option_ids, variant_ids, size_restrictions } = req.body; // Expect arrays
 
         // Also update the legacy single column with the first ID or null, just in case
         const legacyId = (personalization_option_ids && personalization_option_ids.length > 0) ? personalization_option_ids[0] : null;
@@ -499,6 +504,11 @@ router.put('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
         if (variant_ids !== undefined) {
              updates.push('variant_ids = ?');
              params.push(JSON.stringify(variant_ids));
+        }
+
+        if (size_restrictions !== undefined) {
+             updates.push('size_restrictions = ?');
+             params.push(JSON.stringify(size_restrictions));
         }
         
         if (updates.length > 0) {

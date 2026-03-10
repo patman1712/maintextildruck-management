@@ -343,6 +343,12 @@ try {
     console.log('Migrating database: Adding variant_ids to shop_product_images table');
     db.exec('ALTER TABLE shop_product_images ADD COLUMN variant_ids TEXT'); // JSON array of assigned variable IDs
   }
+
+  const hasSizeRestrictions = shopProductImageCols.some(col => col.name === 'size_restrictions');
+  if (!hasSizeRestrictions) {
+    console.log('Migrating database: Adding size_restrictions to shop_product_images table');
+    db.exec('ALTER TABLE shop_product_images ADD COLUMN size_restrictions TEXT'); // JSON array of allowed size strings
+  }
   // Migration: Fix missing customer_id for shop orders
   try {
       const ordersWithMissingCustomer = db.prepare("SELECT count(*) as count FROM orders WHERE shop_id IS NOT NULL AND customer_id IS NULL").get() as any;
