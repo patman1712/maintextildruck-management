@@ -292,7 +292,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       }
   }, [shopId, assignment?.id]);
 
-  const handleAddFile = async (fileId: string) => {
+      const handleAddFile = async (fileId: string) => {
       if (!assignment) return;
       try {
           const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images`, {
@@ -301,13 +301,27 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
               body: JSON.stringify({ file_id: fileId })
           });
           const data = await res.json();
+          
           if (data.success) {
-              const assigned = availableFiles.find(img => img.id === fileId);
-              if (assigned) {
-                  setCurrentFiles([...currentFiles, assigned]);
+              // The backend returns the new assignment record in data.data
+              // If not, we fall back to finding the original file info and giving it a temp ID
+              const originalFile = availableFiles.find(img => img.id === fileId);
+              
+              if (data.data) {
+                   setCurrentFiles(prev => [...prev, data.data]);
+              } else if (originalFile) {
+                   // Fallback: This might be risky if ID is not unique, but better than nothing
+                   // Ideally backend always returns the new record with a unique ID
+                   setCurrentFiles(prev => [...prev, { ...originalFile, id: `temp-${Date.now()}` }]);
               }
+          } else {
+              console.error("Failed to add file:", data.error);
+              alert("Fehler beim Hinzufügen: " + (data.error || "Unbekannter Fehler"));
           }
-      } catch (e) { console.error(e); }
+      } catch (e) { 
+          console.error(e);
+          alert("Ein Verbindungsfehler ist aufgetreten.");
+      }
   };
 
   const handleRemoveFile = async (fileId: string) => {
@@ -486,18 +500,19 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
         }
     });
 
-    // 2. Deduplicate by URL and check against current files
+    // 2. Deduplicate by URL but allow re-adding same file to assignments
+    // We only want to deduplicate the "Available Files" list so it doesn't show duplicates of ITSELF.
+    // But we should NOT filter out files just because they are already in 'currentFiles', 
+    // because the user might want to assign the same print file twice (e.g. for different variants).
     const uniqueMap = new Map();
     
     rawFiltered.forEach(f => {
-        // Skip if this specific file ID is already assigned
-        if (currentFiles.some(c => c.id === f.id)) return;
-        
-        // Also skip if ANY file with this URL is already assigned
-        if (f.file_url && currentFiles.some(c => c.file_url === f.file_url)) return;
+        // REMOVED: check against currentFiles to allow multi-assign
+        // if (currentFiles.some(c => c.id === f.id)) return;
+        // if (f.file_url && currentFiles.some(c => c.file_url === f.file_url)) return;
 
         const key = f.file_url;
-        if (!key) return; // Should not happen given schema
+        if (!key) return; 
 
         if (!uniqueMap.has(key)) {
             uniqueMap.set(key, { 
@@ -513,7 +528,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     });
 
     return Array.from(uniqueMap.values());
-  }, [availableFiles, currentFiles, activeTab]);
+  }, [availableFiles, activeTab]); // Removed currentFiles from dependency to avoid re-filtering when adding
 
   const mainImage = currentFiles.find(f => f.type === 'view' || f.type === 'preview' || f.thumbnail_url)?.file_url;
 
