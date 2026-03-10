@@ -372,7 +372,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
           });
           const data = await res.json();
           if (data.success) {
-              setCurrentFiles(currentFiles.map(img => 
+              setCurrentFiles(prev => prev.map(img => 
                   img.id === fileId ? { ...img, personalization_option_ids: optionIds } : img
               ));
           }
@@ -380,25 +380,30 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
   };
 
   const toggleImageOption = (fileId: string, optionId: string, currentOptionIds: string[]) => {
-      const newOptionIds = currentOptionIds.includes(optionId)
-          ? currentOptionIds.filter(id => id !== optionId)
-          : [...currentOptionIds, optionId];
+      const safeOptionIds = Array.isArray(currentOptionIds) ? currentOptionIds : [];
+      const newOptionIds = safeOptionIds.includes(optionId)
+          ? safeOptionIds.filter(id => id !== optionId)
+          : [...safeOptionIds, optionId];
       handleAssignImageToOptions(fileId, newOptionIds);
   };
 
   const handleAssignImageToVariants = async (fileId: string, variantIds: string[]) => {
       if (!assignment) return;
       try {
+          // Optimistic update
+          setCurrentFiles(prev => prev.map(img => 
+              img.id === fileId ? { ...img, variant_ids: variantIds } : img
+          ));
+
           const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ variant_ids: variantIds })
           });
           const data = await res.json();
-          if (data.success) {
-              setCurrentFiles(currentFiles.map(img => 
-                  img.id === fileId ? { ...img, variant_ids: variantIds } : img
-              ));
+          if (!data.success) {
+              // Revert on failure (optional, but good practice)
+              console.error("Failed to update variants");
           }
       } catch (e) { console.error(e); }
   };
@@ -416,16 +421,19 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
   const handleAssignImageToSizes = async (fileId: string, sizes: string[]) => {
       if (!assignment) return;
       try {
+          // Optimistic update
+          setCurrentFiles(prev => prev.map(img => 
+              img.id === fileId ? { ...img, size_restrictions: sizes } : img
+          ));
+
           const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ size_restrictions: sizes })
           });
           const data = await res.json();
-          if (data.success) {
-              setCurrentFiles(currentFiles.map(img => 
-                  img.id === fileId ? { ...img, size_restrictions: sizes } : img
-              ));
+          if (!data.success) {
+             console.error("Failed to update sizes");
           }
       } catch (e) { console.error(e); }
   };
@@ -699,18 +707,18 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
             <div key={file.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded hover:shadow-sm">
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
                     <div className="h-10 w-10 bg-slate-100 rounded flex items-center justify-center text-slate-500 flex-shrink-0 overflow-hidden border border-slate-200">
-                                                   {file.thumbnail_url ? (
-                                                       <img src={file.thumbnail_url} className="h-full w-full object-cover" />
-                                                   ) : (
-                                                       <FileText size={20} />
-                                                   )}
-                                               </div>
-                                               <div className="truncate flex-1">
-                                                   <p className="font-bold text-sm text-slate-800 truncate">{file.file_name}</p>
-                                                   <p className="text-xs text-slate-500 uppercase mb-1">{file.type}</p>
-                                                   
-                                                   {/* Variant Assignment for Print Files */}
-                                                   {activeVariants.length > 0 && (
+                        {file.thumbnail_url ? (
+                            <img src={file.thumbnail_url} className="h-full w-full object-cover" />
+                        ) : (
+                            <FileText size={20} />
+                        )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm text-slate-800 truncate">{file.file_name}</p>
+                        <p className="text-xs text-slate-500 uppercase mb-1">{file.type}</p>
+                        
+                        {/* Variant Assignment for Print Files */}
+                        {activeVariants.length > 0 && (
                                                        <div className="flex flex-wrap gap-1 mb-1">
                                                            {activeVariants.map(varId => {
                                                                const variable = shopVariables.find(v => v.id === varId);
