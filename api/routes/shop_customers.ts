@@ -504,65 +504,78 @@ router.post('/:shopId/orders', async (req, res) => {
             }
 
             // 2.1.1 Print & Vector Data
+            // We use a Map to aggregate identical files by URL to sum up their quantities
+            const aggregatedFiles = new Map<string, { file: any, quantity: number }>();
+
             for (const file of filesToProcess) {
                 if (['print', 'vector', 'photoshop'].includes(file.type)) {
+                     let isIncluded = true;
+
                      // Check filtering if using assigned images
                      if (useAssignments && file.variant_ids) {
                          try {
                              const allowedVariants = JSON.parse(file.variant_ids);
                              if (allowedVariants.length > 0) {
                                  // If file is restricted to certain variants, check if our item matches
-                                 // If no active variant determined (e.g. no color/variant selected), skip restricted files?
-                                 // Or if item has no variant, maybe it shouldn't get variant-restricted files.
                                  const match = activeVariantIds.some(id => allowedVariants.includes(id));
-                                 if (!match) continue; // Skip this file
+                                 if (!match) isIncluded = false;
                              }
                          } catch (e) {
                              // If parse error, assume no filter
                          }
                      }
 
-                     // Check Size Restrictions
-                     if (useAssignments && file.size_restrictions) {
+                     // Check Size Restrictions - STRICT MODE
+                     // If size restrictions exist, the item MUST match one of them.
+                     if (isIncluded && useAssignments && file.size_restrictions) {
                          try {
                              const allowedSizes = JSON.parse(file.size_restrictions);
-                             if (allowedSizes.length > 0 && item.size) {
-                                 // Check if item size is in allowed sizes
-                                 // Normalize comparison (trim)
-                                 const itemSize = String(item.size).trim();
-                                 const match = allowedSizes.some((s: string) => s.trim() === itemSize);
-                                 if (!match) continue; // Skip this file
+                             // Only apply filter if there are restrictions. Empty array means "all sizes".
+                             if (allowedSizes.length > 0) {
+                                 if (item.size) {
+                                     // Normalize comparison (trim)
+                                     const itemSize = String(item.size).trim();
+                                     const match = allowedSizes.some((s: string) => s.trim() === itemSize);
+                                     if (!match) isIncluded = false;
+                                 } else {
+                                     // If item has no size but file has restrictions, we exclude it to be safe
+                                     // (e.g. a "S" print on a OneSize item? Probably not wanted unless specified)
+                                     isIncluded = false;
+                                 }
                              }
                          } catch (e) {
                              // If parse error, assume no filter
                          }
                      }
 
-                     // Calculate total quantity needed for this file based on order item quantity
-                     // Default file quantity is 1 (per product). So if customer buys 9 products, we need 9 prints.
-                     // If file itself has a quantity (e.g. front and back print needed per shirt?), we should multiply.
-                     // Assuming customer_product_files doesn't have a quantity field yet, or if it does, use it.
-                     // Currently customer_product_files schema: id, product_id, file_name, file_url, type, created_at...
-                     // Wait, shopware.ts line 923 suggests: const fileQty = (pFile.quantity || 1) * quantity;
-                     
-                     // Let's check if customer_product_files has quantity. 
-                     // Looking at db.ts schema for customer_product_files... it does NOT seem to have quantity.
-                     // But let's assume 1 per product for now.
-                     
-                     const fileQuantity = item.quantity; 
-
-                     insertFile.run(
-                        crypto.randomUUID(),
-                        orderId,
-                        shop.customer_id, // Owner
-                        file.file_name,
-                        file.file_url,
-                        file.type,
-                         'active',
-                         fileQuantity,
-                         new Date().toISOString()
-                      );
+                     if (isIncluded) {
+                         const existing = aggregatedFiles.get(file.file_url);
+                         if (existing) {
+                             existing.quantity += (item.quantity || 1);
+                         } else {
+                             aggregatedFiles.set(file.file_url, { 
+                                 file: file, 
+                                 quantity: (item.quantity || 1) 
+                             });
+                         }
+                     }
                  }
+            }
+
+            // Insert aggregated files
+            for (const { file, quantity } of aggregatedFiles.values()) {
+                 insertFile.run(
+                    crypto.randomUUID(),
+                    orderId,
+                    shop.customer_id, // Owner
+                    file.file_name,
+                    file.file_url,
+                    file.type,
+                     'active',
+                     'pending', // print_status
+                     quantity,
+                     new Date().toISOString()
+                  );
             }
 
             // 2.1.2 Preview Image (Specific one selected by user)
