@@ -1229,6 +1229,33 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
         // Sync with local DB (upsert)
         const existingProducts = db.prepare("SELECT id, shopware_product_id FROM customer_products WHERE customer_id = ? AND source = 'shopware'").all(customerId) as any[];
         
+        // CLEANUP: Delete products that are no longer in the fetched Shopware list
+        // This handles:
+        // 1. Products deleted in Shopware
+        // 2. Old variant products (since we now only fetch main articles)
+        const validShopwareIds = new Set(products.map(p => String(p.id)));
+        const productsToDelete = existingProducts.filter(ep => !validShopwareIds.has(String(ep.shopware_product_id)));
+        
+        if (productsToDelete.length > 0) {
+            console.log(`Cleaning up ${productsToDelete.length} obsolete Shopware products for customer ${customer.name}`);
+            const deleteIds = productsToDelete.map(p => p.id);
+            
+            const deleteTransaction = db.transaction((ids: string[]) => {
+                const deleteFiles = db.prepare('DELETE FROM customer_product_files WHERE product_id = ?');
+                const deleteProduct = db.prepare('DELETE FROM customer_products WHERE id = ?');
+                // Also delete assignments?
+                const deleteAssignments = db.prepare('DELETE FROM shop_product_assignments WHERE product_id = ?');
+
+                for (const id of ids) {
+                    deleteFiles.run(id);
+                    deleteAssignments.run(id);
+                    deleteProduct.run(id);
+                }
+            });
+            
+            deleteTransaction(deleteIds);
+        }
+
         const upsertTransaction = db.transaction((productsToSync: any[]) => {
             for (const p of productsToSync) {
                 const existing = existingProducts.find(ep => ep.shopware_product_id === p.id);
