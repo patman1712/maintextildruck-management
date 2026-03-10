@@ -372,6 +372,33 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       handleAssignImageToOptions(fileId, newOptionIds);
   };
 
+  const handleAssignImageToVariants = async (fileId: string, variantIds: string[]) => {
+      if (!assignment) return;
+      try {
+          const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ variant_ids: variantIds })
+          });
+          const data = await res.json();
+          if (data.success) {
+              setCurrentFiles(currentFiles.map(img => 
+                  img.id === fileId ? { ...img, variant_ids: variantIds } : img
+              ));
+          }
+      } catch (e) { console.error(e); }
+  };
+
+  const toggleImageVariant = (fileId: string, variantId: string, currentVariantIds: string[]) => {
+      // Ensure currentVariantIds is an array
+      const safeVariantIds = Array.isArray(currentVariantIds) ? currentVariantIds : [];
+      
+      const newVariantIds = safeVariantIds.includes(variantId)
+          ? safeVariantIds.filter(id => id !== variantId)
+          : [...safeVariantIds, variantId];
+      handleAssignImageToVariants(fileId, newVariantIds);
+  };
+
   // Filter logic for tabs
   const filteredCurrentFiles = currentFiles.filter(f => {
       if (activeTab === 'view') {
@@ -513,12 +540,19 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                       <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden">
                                           <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
                                           
-                                          {/* Personalization Badge */}
-                                          {img.personalization_option_ids && img.personalization_option_ids.length > 0 && (
-                                              <div className="absolute bottom-0 left-0 right-0 bg-blue-600/90 text-white text-[9px] font-bold px-1 py-0.5 truncate text-center">
-                                                  {img.personalization_option_ids.map((oid: string) => personalizationOptions.find(o => o.id === oid)?.name).join(', ')}
-                                              </div>
-                                          )}
+                                          {/* Personalization & Variant Badges */}
+                                          <div className="absolute bottom-0 left-0 right-0 flex flex-col gap-0.5">
+                                              {img.personalization_option_ids && img.personalization_option_ids.length > 0 && (
+                                                  <div className="bg-blue-600/90 text-white text-[9px] font-bold px-1 py-0.5 truncate text-center">
+                                                      {img.personalization_option_ids.map((oid: string) => personalizationOptions.find(o => o.id === oid)?.name).join(', ')}
+                                                  </div>
+                                              )}
+                                              {img.variant_ids && img.variant_ids.length > 0 && (
+                                                  <div className="bg-green-600/90 text-white text-[9px] font-bold px-1 py-0.5 truncate text-center">
+                                                      {img.variant_ids.map((vid: string) => shopVariables.find(v => v.id === vid)?.name).join(', ')}
+                                                  </div>
+                                              )}
+                                          </div>
 
                                           <button 
                                               onClick={() => handleRemoveFile(img.id)}
@@ -529,9 +563,10 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                           </button>
                                           
                                           {/* Assign Option Overlay */}
-                                          <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 text-xs text-white overflow-y-auto">
-                                              <div className="font-bold mb-1 underline">Zuordnung:</div>
-                                              <div className="space-y-1 w-full">
+                                          <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2 text-[10px] text-white overflow-y-auto">
+                                              {/* Options Section */}
+                                              <div className="font-bold mb-1 underline">Optionen:</div>
+                                              <div className="space-y-1 w-full mb-2">
                                                   {personalizationOptions.filter(o => selectedPersonalizationIds.includes(o.id)).map(opt => {
                                                       const isSelected = img.personalization_option_ids?.includes(opt.id);
                                                       return (
@@ -540,15 +575,33 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                                   type="checkbox" 
                                                                   checked={isSelected}
                                                                   onChange={() => toggleImageOption(img.id, opt.id, img.personalization_option_ids || [])}
-                                                                  className="rounded text-blue-500 focus:ring-0"
+                                                                  className="h-3 w-3 rounded text-blue-500 focus:ring-0"
                                                               />
                                                               <span className="truncate">{opt.name}</span>
                                                           </label>
                                                       );
                                                   })}
-                                                  {personalizationOptions.filter(o => selectedPersonalizationIds.includes(o.id)).length === 0 && (
-                                                      <div className="text-[10px] italic text-slate-400">Keine Optionen aktiviert</div>
-                                                  )}
+                                              </div>
+
+                                              {/* Variants Section */}
+                                              <div className="font-bold mb-1 underline">Varianten:</div>
+                                              <div className="space-y-1 w-full">
+                                                  {activeVariants.map(varId => {
+                                                      const variable = shopVariables.find(v => v.id === varId);
+                                                      if (!variable) return null;
+                                                      const isSelected = (img.variant_ids || []).includes(varId);
+                                                      return (
+                                                          <label key={varId} className="flex items-center space-x-2 cursor-pointer hover:bg-white/10 p-1 rounded">
+                                                              <input 
+                                                                  type="checkbox" 
+                                                                  checked={isSelected}
+                                                                  onChange={() => toggleImageVariant(img.id, varId, img.variant_ids || [])}
+                                                                  className="h-3 w-3 rounded text-green-500 focus:ring-0"
+                                                              />
+                                                              <span className="truncate">{variable.name}</span>
+                                                          </label>
+                                                      );
+                                                  })}
                                               </div>
                                           </div>
                                       </div>
@@ -563,7 +616,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                <div className="space-y-2">
                                    {filteredCurrentFiles.map((file: any) => (
                                        <div key={file.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded hover:shadow-sm">
-                                           <div className="flex items-center space-x-3 overflow-hidden">
+                                           <div className="flex items-center space-x-3 overflow-hidden flex-1">
                                                <div className="h-10 w-10 bg-slate-100 rounded flex items-center justify-center text-slate-500 flex-shrink-0 overflow-hidden border border-slate-200">
                                                    {file.thumbnail_url ? (
                                                        <img src={file.thumbnail_url} className="h-full w-full object-cover" />
@@ -571,12 +624,32 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                        <FileText size={20} />
                                                    )}
                                                </div>
-                                               <div className="truncate">
+                                               <div className="truncate flex-1">
                                                    <p className="font-bold text-sm text-slate-800 truncate">{file.file_name}</p>
-                                                   <p className="text-xs text-slate-500 uppercase">{file.type}</p>
+                                                   <p className="text-xs text-slate-500 uppercase mb-1">{file.type}</p>
+                                                   
+                                                   {/* Variant Assignment for Print Files */}
+                                                   {activeVariants.length > 0 && (
+                                                       <div className="flex flex-wrap gap-1">
+                                                           {activeVariants.map(varId => {
+                                                               const variable = shopVariables.find(v => v.id === varId);
+                                                               if (!variable) return null;
+                                                               const isAssigned = (file.variant_ids || []).includes(varId);
+                                                               return (
+                                                                   <button 
+                                                                       key={varId}
+                                                                       onClick={() => toggleImageVariant(file.id, varId, file.variant_ids || [])}
+                                                                       className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${isAssigned ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-300'}`}
+                                                                   >
+                                                                       {variable.name}
+                                                                   </button>
+                                                               );
+                                                           })}
+                                                       </div>
+                                                   )}
                                                </div>
                                            </div>
-                                           <div className="flex items-center space-x-2">
+                                           <div className="flex items-center space-x-2 ml-2">
                                                <a href={file.file_url} target="_blank" rel="noreferrer" className="p-1 text-slate-400 hover:text-blue-600">
                                                    <Download size={16} />
                                                </a>

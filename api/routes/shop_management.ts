@@ -389,14 +389,14 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
         
         // Get currently assigned images
         const assignedImages = db.prepare(`
-            SELECT cpf.*, spi.id as assignment_image_id, spi.sort_order, spi.personalization_option_id, spi.personalization_option_ids
+            SELECT cpf.*, spi.id as assignment_image_id, spi.sort_order, spi.personalization_option_id, spi.personalization_option_ids, spi.variant_ids
             FROM shop_product_images spi
             JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
             WHERE spi.shop_product_assignment_id = ?
             ORDER BY spi.sort_order ASC
         `).all(assignmentId);
 
-        // Parse JSON for option_ids
+        // Parse JSON for option_ids and variant_ids
         const assignedImagesParsed = assignedImages.map((img: any) => {
              try {
                  img.personalization_option_ids = img.personalization_option_ids ? JSON.parse(img.personalization_option_ids) : [];
@@ -406,6 +406,11 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
                  }
              } catch (e) {
                  img.personalization_option_ids = [];
+             }
+             try {
+                 img.variant_ids = img.variant_ids ? JSON.parse(img.variant_ids) : [];
+             } catch (e) {
+                 img.variant_ids = [];
              }
              return img;
         });
@@ -475,16 +480,37 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
 router.put('/:shopId/products/:assignmentId/images/:fileId', (req, res) => {
     try {
         const { assignmentId, fileId } = req.params;
-        const { personalization_option_ids } = req.body; // Expect array of IDs
+        const { personalization_option_ids, variant_ids } = req.body; // Expect arrays
 
         // Also update the legacy single column with the first ID or null, just in case
         const legacyId = (personalization_option_ids && personalization_option_ids.length > 0) ? personalization_option_ids[0] : null;
 
-        db.prepare(`
-            UPDATE shop_product_images 
-            SET personalization_option_ids = ?, personalization_option_id = ?
-            WHERE shop_product_assignment_id = ? AND customer_product_file_id = ?
-        `).run(JSON.stringify(personalization_option_ids || []), legacyId, assignmentId, fileId);
+        // Build update query dynamically or just update both
+        let updates = [];
+        let params = [];
+        
+        if (personalization_option_ids !== undefined) {
+             updates.push('personalization_option_ids = ?');
+             params.push(JSON.stringify(personalization_option_ids));
+             updates.push('personalization_option_id = ?');
+             params.push(legacyId);
+        }
+        
+        if (variant_ids !== undefined) {
+             updates.push('variant_ids = ?');
+             params.push(JSON.stringify(variant_ids));
+        }
+        
+        if (updates.length > 0) {
+            params.push(assignmentId);
+            params.push(fileId);
+            
+            db.prepare(`
+                UPDATE shop_product_images 
+                SET ${updates.join(', ')}
+                WHERE shop_product_assignment_id = ? AND customer_product_file_id = ?
+            `).run(...params);
+        }
 
         res.json({ success: true });
     } catch (error: any) {

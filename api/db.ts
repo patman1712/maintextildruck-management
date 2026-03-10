@@ -337,6 +337,12 @@ try {
     console.log('Migrating database: Adding personalization_options to shop_product_assignments table');
     db.exec('ALTER TABLE shop_product_assignments ADD COLUMN personalization_options TEXT'); // JSON array of selected option IDs
   }
+
+  const hasVariantIds = shopProductImageCols.some(col => col.name === 'variant_ids');
+  if (!hasVariantIds) {
+    console.log('Migrating database: Adding variant_ids to shop_product_images table');
+    db.exec('ALTER TABLE shop_product_images ADD COLUMN variant_ids TEXT'); // JSON array of assigned variable IDs
+  }
   // Migration: Fix missing customer_id for shop orders
   try {
       const ordersWithMissingCustomer = db.prepare("SELECT count(*) as count FROM orders WHERE shop_id IS NOT NULL AND customer_id IS NULL").get() as any;

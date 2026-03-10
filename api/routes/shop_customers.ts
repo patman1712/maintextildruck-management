@@ -455,14 +455,73 @@ router.post('/:shopId/orders', async (req, res) => {
         // 2.1 Copy files from Product to Order (Preview & Print Data)
         // Find the original product to get its files
         if (item.productId) {
-            // Get all files for this product
-            const productFiles = db.prepare(`
-                SELECT * FROM customer_product_files WHERE product_id = ?
-            `).all(item.productId) as any[];
+            // Get assignment to check for shop-specific images/filtering
+            const assignment = db.prepare('SELECT id, variants FROM shop_product_assignments WHERE shop_id = ? AND product_id = ?').get(shopId, item.productId) as any;
             
-            // 2.1.1 Print & Vector Data (Always copy all)
-            for (const file of productFiles) {
+            let filesToProcess: any[] = [];
+            let useAssignments = false;
+
+            if (assignment) {
+                // Check if shop has specific images assigned
+                const assignedImages = db.prepare(`
+                    SELECT cpf.*, spi.variant_ids
+                    FROM shop_product_images spi
+                    JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
+                    WHERE spi.shop_product_assignment_id = ?
+                `).all(assignment.id) as any[];
+
+                if (assignedImages.length > 0) {
+                    filesToProcess = assignedImages;
+                    useAssignments = true;
+                } else {
+                    // Fallback to all product files
+                    filesToProcess = db.prepare(`
+                        SELECT * FROM customer_product_files WHERE product_id = ?
+                    `).all(item.productId) as any[];
+                }
+            } else {
+                // Fallback (should not happen for shop orders)
+                filesToProcess = db.prepare(`
+                    SELECT * FROM customer_product_files WHERE product_id = ?
+                `).all(item.productId) as any[];
+            }
+            
+            // Determine active variant ID for the ordered item if possible
+            let activeVariantIds: string[] = [];
+            if (assignment && assignment.variants && item.color) {
+                try {
+                    const variants = JSON.parse(assignment.variants);
+                    // item.color usually holds the Variant Name (e.g. "Jako Erwachsen") or value
+                    // Let's try to match item.color to a variant name
+                    for (const [varId, varData] of Object.entries(variants) as any) {
+                        if (varData.name === item.color) {
+                            activeVariantIds.push(varId);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error parsing variants for order file filtering:', e);
+                }
+            }
+
+            // 2.1.1 Print & Vector Data
+            for (const file of filesToProcess) {
                 if (['print', 'vector', 'photoshop'].includes(file.type)) {
+                     // Check filtering if using assigned images
+                     if (useAssignments && file.variant_ids) {
+                         try {
+                             const allowedVariants = JSON.parse(file.variant_ids);
+                             if (allowedVariants.length > 0) {
+                                 // If file is restricted to certain variants, check if our item matches
+                                 // If no active variant determined (e.g. no color/variant selected), skip restricted files?
+                                 // Or if item has no variant, maybe it shouldn't get variant-restricted files.
+                                 const match = activeVariantIds.some(id => allowedVariants.includes(id));
+                                 if (!match) continue; // Skip this file
+                             }
+                         } catch (e) {
+                             // If parse error, assume no filter
+                         }
+                     }
+
                      // Calculate total quantity needed for this file based on order item quantity
                      // Default file quantity is 1 (per product). So if customer buys 9 products, we need 9 prints.
                      // If file itself has a quantity (e.g. front and back print needed per shirt?), we should multiply.
@@ -493,7 +552,7 @@ router.post('/:shopId/orders', async (req, res) => {
             // 2.1.2 Preview Image (Specific one selected by user)
             // If item.image is provided, it's the URL of the selected preview image
             if (item.image) {
-                const selectedPreview = productFiles.find(f => f.file_url === item.image);
+                const selectedPreview = filesToProcess.find(f => f.file_url === item.image);
                 if (selectedPreview) {
                     insertFile.run(
                         crypto.randomUUID(),
@@ -522,7 +581,7 @@ router.post('/:shopId/orders', async (req, res) => {
                 }
             } else {
                 // Legacy Fallback: Add all previews if none specific selected
-                for (const file of productFiles) {
+                for (const file of filesToProcess) {
                     if (file.type === 'preview' || file.type === 'view') {
                          insertFile.run(
                             crypto.randomUUID(),
