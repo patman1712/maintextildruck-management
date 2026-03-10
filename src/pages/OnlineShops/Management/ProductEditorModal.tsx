@@ -284,7 +284,15 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
               .then(res => res.json())
               .then(data => {
                   if (data.success) {
-                      setCurrentFiles(data.data.assigned);
+                      // Ensure attributes are parsed correctly
+                      const parsedAssigned = data.data.assigned.map((img: any) => ({
+                          ...img,
+                          variant_ids: typeof img.variant_ids === 'string' ? JSON.parse(img.variant_ids) : (img.variant_ids || []),
+                          personalization_option_ids: typeof img.personalization_option_ids === 'string' ? JSON.parse(img.personalization_option_ids) : (img.personalization_option_ids || []),
+                          size_restrictions: typeof img.size_restrictions === 'string' ? JSON.parse(img.size_restrictions) : (img.size_restrictions || []),
+                          attribute_restrictions: typeof img.attribute_restrictions === 'string' ? JSON.parse(img.attribute_restrictions) : (img.attribute_restrictions || {})
+                      }));
+                      setCurrentFiles(parsedAssigned);
                       setAvailableFiles(data.data.available);
                   }
               })
@@ -470,12 +478,15 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
   };
 
   const toggleImageAttribute = (fileId: string, varId: string, value: string, currentAttributes: Record<string, string[]>) => {
-      const currentValues = currentAttributes?.[varId] || [];
+      // Safety check: ensure currentAttributes is an object
+      const safeAttributes = (typeof currentAttributes === 'object' && currentAttributes !== null) ? currentAttributes : {};
+      
+      const currentValues = safeAttributes[varId] || [];
       const newValues = currentValues.includes(value)
           ? currentValues.filter(v => v !== value)
           : [...currentValues, value];
       
-      const newAttributes = { ...currentAttributes, [varId]: newValues };
+      const newAttributes = { ...safeAttributes, [varId]: newValues };
       if (newValues.length === 0) delete newAttributes[varId];
       
       handleAssignImageToAttributes(fileId, newAttributes);

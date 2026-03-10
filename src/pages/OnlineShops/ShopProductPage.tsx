@@ -83,11 +83,35 @@ const ShopProductPage: React.FC = () => {
   const currentPrice = React.useMemo(() => {
       if (!product) return 0;
       let price = product.price > 0 ? product.price : 29.95;
+      
+      // If variant is selected, use its price
       if (selectedVariantId && variants[selectedVariantId] && variants[selectedVariantId].price) {
           price = variants[selectedVariantId].price;
+      } 
+      // If no variant is selected, but variants exist, find the lowest price
+      else if (hasVariants) {
+          let minPrice = Infinity;
+          let found = false;
+          
+          Object.values(variants).forEach((v: any) => {
+              if (v.price && v.price > 0) {
+                  if (v.price < minPrice) {
+                      minPrice = v.price;
+                      found = true;
+                  }
+              }
+          });
+          
+          if (found) {
+              price = minPrice;
+          }
       }
+      
       return price;
-  }, [product, variants, selectedVariantId]);
+  }, [product, variants, selectedVariantId, hasVariants]);
+
+  // Derived state to show "Ab" (From) prefix
+  const showFromPrice = !selectedVariantId && hasVariants;
 
   useEffect(() => {
     // Parse Personalization Options from Product Assignment
@@ -320,7 +344,8 @@ const ShopProductPage: React.FC = () => {
   if (!product) return <div className="container mx-auto p-8 text-center">Produkt nicht gefunden.</div>;
 
   const mainImage = activeImage || (displayedImages.length > 0 ? displayedImages[0].file_url : null);
-  const hasVariants = Object.keys(variants).length > 0;
+  // Re-declare hasVariants here if needed, or use the one derived from variants object
+  const variantsExist = Object.keys(variants).length > 0;
   
   // Override availableSizes logic:
   // If we have a "Main Variant" selected, we use its values as sizes?
@@ -473,7 +498,10 @@ const ShopProductPage: React.FC = () => {
         <div>
             <h1 className="text-3xl font-black uppercase italic tracking-tighter mb-2">{product.name}</h1>
             <div className="flex items-center justify-between mb-6">
-                <div className="text-2xl font-bold">€ {currentPrice.toFixed(2)}</div>
+                <div className="text-2xl font-bold">
+                    {showFromPrice && <span className="text-sm font-normal text-slate-500 mr-1">Ab</span>}
+                    € {currentPrice.toFixed(2)}
+                </div>
                 <div className="text-xs text-slate-500">inkl. MwSt. zzgl. Versandkosten</div>
             </div>
 
