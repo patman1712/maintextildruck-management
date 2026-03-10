@@ -479,7 +479,7 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
         
         // Return the newly created assignment object so frontend can add it
         // We need to fetch the file details to return a complete object similar to what GET returns
-        const fileDetails = db.prepare('SELECT * FROM customer_product_files WHERE id = ?').get(file_id);
+        const fileDetails = db.prepare('SELECT * FROM customer_product_files WHERE id = ?').get(file_id) as any;
         
         const newAssignment = {
             id: id, // The ID of the LINK
@@ -489,7 +489,7 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
             personalization_option_ids: [], // default
             variant_ids: [],
             size_restrictions: [],
-            ...fileDetails // Merge file details (url, name, etc.)
+            ...(fileDetails || {}) // Merge file details (url, name, etc.)
         };
 
         res.json({ success: true, data: newAssignment });
