@@ -477,9 +477,42 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
             return res.status(404).json({ success: false, error: 'Product assignment not found' });
         }
 
-        const fileExists = db.prepare('SELECT id FROM customer_product_files WHERE id = ?').get(file_id);
+        let fileExists = db.prepare('SELECT id FROM customer_product_files WHERE id = ?').get(file_id);
+        
+        // If not in customer_product_files, check if it's in global files and migrate it
         if (!fileExists) {
-            return res.status(404).json({ success: false, error: 'File not found' });
+            const globalFile = db.prepare('SELECT * FROM files WHERE id = ?').get(file_id) as any;
+            if (globalFile) {
+                // Migrate global file to customer_product_file
+                // We need the product_id from the assignment
+                const assignment = db.prepare('SELECT product_id FROM shop_product_assignments WHERE id = ?').get(assignmentId) as any;
+                
+                if (assignment) {
+                    try {
+                        db.prepare(`
+                            INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        `).run(
+                            globalFile.id, 
+                            assignment.product_id, 
+                            globalFile.path, 
+                            globalFile.name, 
+                            globalFile.thumbnail, 
+                            globalFile.type || 'print',
+                            globalFile.created_at
+                        );
+                        fileExists = { id: globalFile.id };
+                    } catch (err) {
+                        console.error("Migration failed:", err);
+                        // If insertion failed, check if it exists now (maybe race condition or ID collision)
+                        fileExists = db.prepare('SELECT id FROM customer_product_files WHERE id = ?').get(file_id);
+                    }
+                }
+            }
+        }
+
+        if (!fileExists) {
+            return res.status(404).json({ success: false, error: 'File not found in product files or global files' });
         }
 
         // Insert new assignment
