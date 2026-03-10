@@ -738,26 +738,77 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                   })}
                                               </div>
 
-                                              {/* Variants Section */}
-                                              <div className="font-bold mb-1 underline">Varianten:</div>
-                                              <div className="space-y-1 w-full">
-                                                  {activeVariants.map(varId => {
-                                                      const variable = shopVariables.find(v => v.id === varId);
-                                                      if (!variable) return null;
-                                                      const isSelected = (img.variant_ids || []).includes(varId);
-                                                      return (
-                                                          <label key={varId} className="flex items-center space-x-2 cursor-pointer hover:bg-white/10 p-1 rounded">
+                                          {/* Variants Section */}
+                                          <div className="font-bold mb-1 underline">Varianten:</div>
+                                          <div className="space-y-1 w-full relative">
+                                              {activeVariants.map(varId => {
+                                                  const variable = shopVariables.find(v => v.id === varId);
+                                                  if (!variable) return null;
+                                                  
+                                                  const isAssigned = (img.variant_ids || []).includes(varId);
+                                                  
+                                                  // Detailed attribute logic for preview images
+                                                  const attributeGroup = groupedAttributes.find(g => g.id === varId);
+                                                  const hasValues = attributeGroup && attributeGroup.values.length > 0;
+                                                  
+                                                  const currentAttributeRestrictions = img.attribute_restrictions?.[varId] || [];
+                                                  const isRestricted = currentAttributeRestrictions.length > 0;
+
+                                                  return (
+                                                      <div key={varId} className="relative group/var w-full">
+                                                          <label className="flex items-center space-x-2 cursor-pointer hover:bg-white/10 p-1 rounded">
                                                               <input 
                                                                   type="checkbox" 
-                                                                  checked={isSelected}
+                                                                  checked={isAssigned}
                                                                   onChange={() => toggleImageVariant(img.id, varId, img.variant_ids || [])}
                                                                   className="h-3 w-3 rounded text-green-500 focus:ring-0"
                                                               />
-                                                              <span className="truncate">{variable.name}</span>
+                                                              <span className="truncate flex-1">{variable.name}</span>
+                                                              {isRestricted && <span className="ml-1 opacity-75 text-[9px]">({currentAttributeRestrictions.length})</span>}
                                                           </label>
-                                                      );
-                                                  })}
-                                              </div>
+                                                          
+                                                          {/* Hover Dropdown for Values */}
+                                                          {isAssigned && hasValues && (
+                                                              <div className="absolute left-full top-0 ml-1 bg-slate-800 border border-slate-600 shadow-xl rounded p-2 z-[70] hidden group-hover/var:block w-40 max-h-48 overflow-y-auto">
+                                                                  <div className="text-[9px] font-bold text-slate-400 mb-2 uppercase">Zeigen bei:</div>
+                                                                  <div className="space-y-1">
+                                                                       <div className="flex items-center justify-between mb-1 pb-1 border-b border-slate-600">
+                                                                            <span className="text-[9px] text-slate-400 italic">Alle</span>
+                                                                            <button 
+                                                                                onClick={(e) => {
+                                                                                    e.preventDefault(); e.stopPropagation();
+                                                                                    const allSelected = attributeGroup!.values.every(v => currentAttributeRestrictions.includes(v));
+                                                                                    const newValues = allSelected ? [] : attributeGroup!.values;
+                                                                                    const newAttributes = { ...(img.attribute_restrictions || {}), [varId]: newValues };
+                                                                                    if (newValues.length === 0) delete newAttributes[varId];
+                                                                                    handleAssignImageToAttributes(img.id, newAttributes);
+                                                                                }}
+                                                                                className="text-[9px] text-blue-300 hover:text-white hover:underline"
+                                                                            >
+                                                                                {attributeGroup!.values.every(v => currentAttributeRestrictions.includes(v)) ? 'Keine' : 'Alle'}
+                                                                            </button>
+                                                                        </div>
+                                                                        {attributeGroup!.values.map(val => {
+                                                                            const isSelected = currentAttributeRestrictions.includes(val);
+                                                                            return (
+                                                                                <label key={val} className="flex items-center space-x-2 cursor-pointer hover:bg-slate-700 p-1 rounded">
+                                                                                    <input 
+                                                                                        type="checkbox" 
+                                                                                        checked={isSelected}
+                                                                                        onChange={() => toggleImageAttribute(img.id, varId, val, img.attribute_restrictions || {})}
+                                                                                        className="h-3 w-3 rounded text-blue-500 focus:ring-0 bg-slate-700 border-slate-500"
+                                                                                    />
+                                                                                    <span className="text-[10px] text-slate-200 font-mono">{val}</span>
+                                                                                </label>
+                                                                            );
+                                                                        })}
+                                                                  </div>
+                                                              </div>
+                                                          )}
+                                                      </div>
+                                                  );
+                                              })}
+                                          </div>
                                           </div>
                                       </div>
                                   ))}
