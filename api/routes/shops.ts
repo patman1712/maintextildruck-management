@@ -160,14 +160,14 @@ router.get('/:id/products', (req, res) => {
     if (assignmentIds.length > 0) {
         const placeholders = assignmentIds.map(() => '?').join(',');
         const assignedImages = db.prepare(`
-            SELECT cpf.*, spi.shop_product_assignment_id, spi.sort_order, spi.personalization_option_id, spi.personalization_option_ids
+            SELECT cpf.*, spi.shop_product_assignment_id, spi.sort_order, spi.personalization_option_id, spi.personalization_option_ids, spi.variant_ids, spi.size_restrictions, spi.attribute_restrictions
             FROM shop_product_images spi
             JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
             WHERE spi.shop_product_assignment_id IN (${placeholders})
             ORDER BY spi.sort_order ASC, spi.created_at ASC
         `).all(...assignmentIds) as any[];
 
-        // Parse JSON for option_ids
+        // Parse JSON for option_ids, variant_ids, and size_restrictions
         assignedImages.forEach((img: any) => {
              try {
                  img.personalization_option_ids = img.personalization_option_ids ? JSON.parse(img.personalization_option_ids) : [];
@@ -177,6 +177,21 @@ router.get('/:id/products', (req, res) => {
                  }
              } catch (e) {
                  img.personalization_option_ids = [];
+             }
+             try {
+                 img.variant_ids = img.variant_ids ? JSON.parse(img.variant_ids) : [];
+             } catch (e) {
+                 img.variant_ids = [];
+             }
+             try {
+                 img.size_restrictions = img.size_restrictions ? JSON.parse(img.size_restrictions) : [];
+             } catch (e) {
+                 img.size_restrictions = [];
+             }
+             try {
+                 img.attribute_restrictions = img.attribute_restrictions ? JSON.parse(img.attribute_restrictions) : {};
+             } catch (e) {
+                 img.attribute_restrictions = {};
              }
         });
 
