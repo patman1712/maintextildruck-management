@@ -435,19 +435,18 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
               const variant = formData.variants[varId];
               const variable = shopVariables.find(v => v.id === varId);
               const values = variant?.values || variable?.values || '';
-              if (values) {
-                  const sizes = values.split(',')
-                    .map((s: string) => s.trim())
-                    .filter((s: string) => s !== '');
-                  
-                  if (sizes.length > 0) {
-                      groups.push({
-                          name: variable?.name || 'Unbekannt',
-                          id: varId,
-                          sizes: sizes
-                      });
-                  }
-              }
+              
+              const sizes = values ? values.split(',')
+                .map((s: string) => s.trim())
+                .filter((s: string) => s !== '') : [];
+              
+              // Always add the group if the variant is active, even if sizes are empty
+              // This ensures the user sees the variant in the menu
+              groups.push({
+                  name: variable?.name || 'Unbekannt',
+                  id: varId,
+                  sizes: sizes
+              });
           });
       } else if (formData.size) {
           const sizes = formData.size.split(',')
@@ -471,8 +470,9 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
           // View tab: Show view, preview, or images (by extension/thumbnail) unless explicitly print/vector
           return f.type === 'view' || f.type === 'preview' || (!f.type && f.thumbnail_url); 
       } else {
-          // Print tab: Show print, vector, photoshop, internal
-          return ['print', 'vector', 'photoshop', 'internal'].includes(f.type) || (!f.type && !f.thumbnail_url);
+          // Print tab: Show print, vector, photoshop, internal, OR anything that is NOT view/preview
+          // This includes files with thumbnails that are not explicitly marked as view/preview
+          return ['print', 'vector', 'photoshop', 'internal'].includes(f.type) || (f.type !== 'view' && f.type !== 'preview');
       }
   });
 
@@ -482,7 +482,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
         if (activeTab === 'view') {
             return f.type === 'view' || f.type === 'preview' || (!f.type && f.thumbnail_url);
         } else {
-            return ['print', 'vector', 'photoshop', 'internal'].includes(f.type) || (!f.type && !f.thumbnail_url);
+            return ['print', 'vector', 'photoshop', 'internal'].includes(f.type) || (f.type !== 'view' && f.type !== 'preview');
         }
     });
 
@@ -749,20 +749,24 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                                                    </button>
                                                                                </div>
                                                                                <div className="space-y-1 pl-1">
-                                                                                   {group.sizes.map(size => {
-                                                                                       const isSelected = currentRestrictions.includes(size);
-                                                                                       return (
-                                                                                           <label key={`${group.id}-${size}`} className="flex items-center space-x-2 cursor-pointer hover:bg-slate-50 p-0.5 rounded">
-                                                                                               <input 
-                                                                                                   type="checkbox" 
-                                                                                                   checked={isSelected}
-                                                                                                   onChange={() => toggleImageSize(file.id, size, currentRestrictions)}
-                                                                                                   className="h-3 w-3 rounded text-purple-600 focus:ring-0"
-                                                                                               />
-                                                                                               <span className="text-xs text-slate-700 font-mono">{size}</span>
-                                                                                           </label>
-                                                                                       );
-                                                                                   })}
+                                                                                   {group.sizes.length === 0 ? (
+                                                                                       <div className="text-[10px] text-red-500 italic pl-1">Keine Größen definiert.</div>
+                                                                                   ) : (
+                                                                                       group.sizes.map(size => {
+                                                                                           const isSelected = currentRestrictions.includes(size);
+                                                                                           return (
+                                                                                               <label key={`${group.id}-${size}`} className="flex items-center space-x-2 cursor-pointer hover:bg-slate-50 p-0.5 rounded">
+                                                                                                   <input 
+                                                                                                       type="checkbox" 
+                                                                                                       checked={isSelected}
+                                                                                                       onChange={() => toggleImageSize(file.id, size, currentRestrictions)}
+                                                                                                       className="h-3 w-3 rounded text-purple-600 focus:ring-0"
+                                                                                                   />
+                                                                                                   <span className="text-xs text-slate-700 font-mono">{size}</span>
+                                                                                               </label>
+                                                                                           );
+                                                                                       })
+                                                                                   )}
                                                                                </div>
                                                                            </div>
                                                                        );
