@@ -1541,10 +1541,12 @@ export default function EditOrder() {
                         
                         {(() => {
                             const currentOrder = orders.find(o => o.id === id);
-                            const filtered = customerProducts.filter(p => 
-                                p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && 
-                                (p.source !== 'shopware' || (p.assignment_count && p.assignment_count > 0))
-                            );
+                            const filtered = customerProducts.filter(p => {
+                                const isShopware = p.source?.toLowerCase() === 'shopware';
+                                const isAssigned = (p.assignment_count && p.assignment_count > 0) || (p.price !== null && p.price !== undefined);
+                                const matchesSearch = p.name.toLowerCase().includes(productSearchTerm.toLowerCase());
+                                return matchesSearch && (!isShopware || isAssigned);
+                            });
 
                             if (filtered.length === 0) {
                                 return (

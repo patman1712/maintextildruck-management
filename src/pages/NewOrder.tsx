@@ -1682,14 +1682,24 @@ export default function NewOrder() {
                             />
                         </div>
                         
-                        {customerProducts.filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && (p.source !== 'shopware' || (p.assignment_count && p.assignment_count > 0))).length === 0 ? (
+                        {customerProducts.filter(p => {
+                            const isShopware = p.source?.toLowerCase() === 'shopware';
+                            const isAssigned = (p.assignment_count && p.assignment_count > 0) || (p.price !== null && p.price !== undefined);
+                            const matchesSearch = p.name.toLowerCase().includes(productSearchTerm.toLowerCase());
+                            return matchesSearch && (!isShopware || isAssigned);
+                        }).length === 0 ? (
                             <p className="text-center text-gray-500 py-8">
                                 {productSearchTerm ? "Keine passenden Artikel gefunden." : "Keine Artikel für diesen Kunden hinterlegt."}
                             </p>
                         ) : (
                             <div className="grid grid-cols-1 gap-2">
                                 {customerProducts
-                                    .filter(p => p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) && (p.source !== 'shopware' || (p.assignment_count && p.assignment_count > 0)))
+                                    .filter(p => {
+                                        const isShopware = p.source?.toLowerCase() === 'shopware';
+                                        const isAssigned = (p.assignment_count && p.assignment_count > 0) || (p.price !== null && p.price !== undefined);
+                                        const matchesSearch = p.name.toLowerCase().includes(productSearchTerm.toLowerCase());
+                                        return matchesSearch && (!isShopware || isAssigned);
+                                    })
                                     .map((product) => (
                                     <div 
                                         key={product.id} 
