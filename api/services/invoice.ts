@@ -58,52 +58,46 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
 
         // --- Header ---
         
-        // Shop Logo (Left)
-        // Logic: Prefer email_logo_url, then logo_url
-        const logoUrl = shop.email_logo_url || shop.logo_url;
+        // Shop Logos (Left)
+        // Logic: Show BOTH logos if available (email_logo_url AND logo_url) side by side
+        const logosToPrint = [];
+        if (shop.logo_url) logosToPrint.push(shop.logo_url);
+        if (shop.email_logo_url && shop.email_logo_url !== shop.logo_url) logosToPrint.push(shop.email_logo_url);
+        
         let logoAdded = false;
+        let currentLogoX = 20;
+        const logoWidth = 40; // Smaller width to fit two
+        const logoSpacing = 5;
 
-        if (logoUrl) {
+        if (logosToPrint.length > 0) {
             try {
-                let logoPath = logoUrl;
-                let absolutePath = '';
+                for (const logoUrl of logosToPrint) {
+                    let logoPath = logoUrl;
+                    let absolutePath = '';
 
-                if (logoPath.startsWith('http')) {
-                    // Skip remote images for now unless we implement fetching
-                    // If it's localhost, we might be able to map it?
-                    // Usually uploads are local.
-                } else {
-                    // Local path
-                    // If starts with /uploads/, map to UPLOAD_DIR
-                    if (logoPath.startsWith('/uploads/')) {
-                        const filename = path.basename(logoPath);
-                        absolutePath = path.join(UPLOAD_DIR, filename);
-                    } else if (logoPath.startsWith('/')) {
-                        // Relative to root? or public?
-                        absolutePath = path.join(process.cwd(), logoPath);
+                    if (logoPath.startsWith('http')) {
+                        // Skip remote
                     } else {
-                         // Relative?
-                         absolutePath = path.join(process.cwd(), logoPath);
-                    }
+                        // Local path
+                        if (logoPath.startsWith('/uploads/')) {
+                            const filename = path.basename(logoPath);
+                            absolutePath = path.join(UPLOAD_DIR, filename);
+                        } else if (logoPath.startsWith('/')) {
+                            absolutePath = path.join(process.cwd(), logoPath);
+                        } else {
+                             absolutePath = path.join(process.cwd(), logoPath);
+                        }
 
-                    if (fs.existsSync(absolutePath)) {
-                         const ext = path.extname(absolutePath).slice(1).toUpperCase(); // PNG, JPG, JPEG
-                         // jspdf needs format.
-                         let format = ext;
-                         if (format === 'JPG') format = 'JPEG';
-                         
-                         const imgData = fs.readFileSync(absolutePath);
-                         // Keep aspect ratio
-                         // We want max width 60, max height 30
-                         // We don't know dimensions easily without sharp/image-size.
-                         // jsPDF addImage(data, format, x, y, w, h)
-                         // If w/h are not provided, it uses default? No.
-                         // We'll set width 50, height auto (undefined) might not work in all versions.
-                         // Let's assume square or landscape.
-                         doc.addImage(imgData, format, 20, 15, 50, 0); // 0 height = auto keep aspect ratio
-                         logoAdded = true;
-                    } else {
-                        console.warn('Logo file not found at:', absolutePath);
+                        if (fs.existsSync(absolutePath)) {
+                             const ext = path.extname(absolutePath).slice(1).toUpperCase();
+                             let format = ext;
+                             if (format === 'JPG') format = 'JPEG';
+                             
+                             const imgData = fs.readFileSync(absolutePath);
+                             doc.addImage(imgData, format, currentLogoX, 15, logoWidth, 0); 
+                             logoAdded = true;
+                             currentLogoX += logoWidth + logoSpacing;
+                        }
                     }
                 }
             } catch (e) {

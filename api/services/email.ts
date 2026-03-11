@@ -53,18 +53,24 @@ export const sendOrderConfirmation = async (orderId: string, invoicePath: string
         // Fetch Shop Branding if available
         let branding = {
             logo_url: '',
+            email_logo_url: '',
             primary_color: '#3b82f6', // blue-500 default
+            secondary_color: '#1e40af', // darker blue default
             company_name: config.sender_name,
             footer_text: ''
         };
 
         if (order.shop_id) {
-            const shop = db.prepare('SELECT logo_url, primary_color, name FROM shops WHERE id = ?').get(order.shop_id) as any;
+            const shop = db.prepare('SELECT logo_url, email_logo_url, primary_color, secondary_color, name FROM shops WHERE id = ?').get(order.shop_id) as any;
             if (shop) {
                 if (shop.logo_url && shop.logo_url.startsWith('http')) {
                     branding.logo_url = shop.logo_url;
                 }
+                if (shop.email_logo_url && shop.email_logo_url.startsWith('http')) {
+                    branding.email_logo_url = shop.email_logo_url;
+                }
                 if (shop.primary_color) branding.primary_color = shop.primary_color;
+                if (shop.secondary_color) branding.secondary_color = shop.secondary_color;
                 if (shop.name) branding.company_name = shop.name;
             }
         }
@@ -81,6 +87,24 @@ export const sendOrderConfirmation = async (orderId: string, invoicePath: string
 
         const subject = `Ihre Bestellung #${order.order_number} bei ${branding.company_name}`;
         
+        // Prepare Logos HTML
+        let logosHtml = '';
+        // Prefer email logo if exists, or show both if distinct
+        // User requested: "auch in der email an den kunden sollten die logos zu sehen sein" -> implied plural "logos"
+        // Let's try to show both if available and different
+        if (branding.logo_url && branding.email_logo_url && branding.logo_url !== branding.email_logo_url) {
+             logosHtml = `
+                <img src="${branding.logo_url}" alt="${branding.company_name}" style="max-height: 60px; max-width: 150px; margin-right: 15px; vertical-align: middle;">
+                <img src="${branding.email_logo_url}" alt="" style="max-height: 60px; max-width: 150px; vertical-align: middle;">
+             `;
+        } else if (branding.email_logo_url) {
+             logosHtml = `<img src="${branding.email_logo_url}" alt="${branding.company_name}" style="max-height: 70px; max-width: 250px;">`;
+        } else if (branding.logo_url) {
+             logosHtml = `<img src="${branding.logo_url}" alt="${branding.company_name}" style="max-height: 70px; max-width: 250px;">`;
+        } else {
+             logosHtml = `<h1>${branding.company_name}</h1>`;
+        }
+
         // Professional HTML Template
         const html = `
 <!DOCTYPE html>
@@ -92,8 +116,8 @@ export const sendOrderConfirmation = async (orderId: string, invoicePath: string
     <style>
         body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
         .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        .header { background-color: ${branding.primary_color}; padding: 30px; text-align: center; }
-        .header h1 { color: #ffffff; margin: 0; font-size: 24px; font-weight: 600; }
+        .header { background-color: #ffffff; padding: 30px; text-align: center; border-bottom: 4px solid ${branding.primary_color}; }
+        .header h1 { color: ${branding.primary_color}; margin: 0; font-size: 24px; font-weight: 600; }
         .content { padding: 40px 30px; }
         .order-info { background-color: #f8f9fa; padding: 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid ${branding.primary_color}; }
         .order-info p { margin: 5px 0; }
@@ -104,11 +128,11 @@ export const sendOrderConfirmation = async (orderId: string, invoicePath: string
 <body>
     <div class="container">
         <div class="header">
-            ${branding.logo_url ? `<img src="${branding.logo_url}" alt="${branding.company_name}" style="max-height: 60px; max-width: 200px;">` : `<h1>${branding.company_name}</h1>`}
+            ${logosHtml}
         </div>
         
         <div class="content">
-            <h2>Vielen Dank für Ihre Bestellung!</h2>
+            <h2 style="color: ${branding.secondary_color || '#333'}">Vielen Dank für Ihre Bestellung!</h2>
             <p>Guten Tag ${order.customer_name},</p>
             <p>wir haben Ihre Bestellung erhalten und freuen uns, diese für Sie produzieren zu dürfen.</p>
             
