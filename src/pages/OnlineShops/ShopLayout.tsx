@@ -87,6 +87,18 @@ const ShopLayout: React.FC = () => {
             })
             .catch(console.error);
 
+          // SECURITY FIX: Check if current logged-in customer belongs to this shop
+          // If not, logout immediately to prevent cross-shop session leakage
+          if (currentCustomer && currentCustomer.shop_id !== data.data.id) {
+              console.warn('Customer session mismatch - logging out', { 
+                  expected: data.data.id, 
+                  actual: currentCustomer.shop_id 
+              });
+              logout();
+              // Also clear cart as products likely belong to the other shop
+              useShopStore.getState().clearCart();
+          }
+
         } else {
           setError('Shop nicht gefunden');
         }
