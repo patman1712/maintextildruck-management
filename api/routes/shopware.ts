@@ -1187,6 +1187,9 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                 },
                 body: JSON.stringify({
                     limit: 100,
+                    filter: [
+                        { type: 'equals', field: 'parentId', value: null }
+                    ],
                     includes: {
                         // Include translated field for fallback names
                         product: ['id', 'name', 'productNumber', 'active', 'stock', 'cover', 'media', 'description', 'manufacturer', 'weight', 'translated']
