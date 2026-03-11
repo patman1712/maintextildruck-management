@@ -232,6 +232,7 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
 
             // Extra info (size, color, notes)
             let extraLines = [];
+            if (item.item_number) extraLines.push(`Art-Nr: ${item.item_number}`);
             if (item.size) extraLines.push(`Größe: ${item.size}`);
             
             // Filter out "Kindergrößen" or empty/irrelevant color info
