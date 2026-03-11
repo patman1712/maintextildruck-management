@@ -1188,7 +1188,8 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                 body: JSON.stringify({
                     limit: 100,
                     includes: {
-                        product: ['id', 'name', 'productNumber', 'active', 'stock', 'cover', 'media', 'description', 'manufacturer', 'weight']
+                        // Include translated field for fallback names
+                        product: ['id', 'name', 'productNumber', 'active', 'stock', 'cover', 'media', 'description', 'manufacturer', 'weight', 'translated']
                     },
                     associations: {
                         cover: {},
@@ -1216,9 +1217,12 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                     images.push(p.cover.media.url);
                 }
 
+                // Robust name fallback: name -> translated.name -> productNumber -> Default
+                const productName = p.name || p.translated?.name || p.productNumber || 'Unnamed Product';
+
                 return {
                     id: p.id,
-                    name: p.name,
+                    name: productName,
                     productNumber: p.productNumber,
                     active: p.active,
                     stock: p.stock,
