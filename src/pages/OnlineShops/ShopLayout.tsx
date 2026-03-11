@@ -219,7 +219,7 @@ const ShopLayout: React.FC = () => {
                             </Link>
 
                             {/* Mega Menu Dropdown */}
-                            {hasSub && (
+                            {(hasSub || cat.image_url) && (
                                 <div className="absolute top-full left-0 w-max max-w-[1000px] shadow-xl border-t border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50 -ml-4 rounded-b-lg overflow-hidden flex" style={{ backgroundColor: primaryColor }}>
                                     
                                     {/* Optional Category Image (Left Side) */}
@@ -244,30 +244,47 @@ const ShopLayout: React.FC = () => {
                                         </div>
                                     )}
 
-                                    <div className="grid grid-cols-3 gap-8 p-8 w-[600px]">
-                                        {subCats.map(sub => (
-                                            <div key={sub.id} className="space-y-2">
-                                                {sub.image_url ? (
-                                                    <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="block aspect-video bg-white/10 rounded-lg overflow-hidden mb-3 border border-white/20 hover:opacity-90 transition-opacity">
-                                                        <img src={sub.image_url} alt={sub.name} className="w-full h-full object-cover" />
+                                    {hasSub ? (
+                                        <div className="grid grid-cols-3 gap-8 p-8 w-[600px]">
+                                            {subCats.map(sub => (
+                                                <div key={sub.id} className="space-y-2">
+                                                    {sub.image_url ? (
+                                                        <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="block aspect-video bg-white/10 rounded-lg overflow-hidden mb-3 border border-white/20 hover:opacity-90 transition-opacity">
+                                                            <img src={sub.image_url} alt={sub.name} className="w-full h-full object-cover" />
+                                                        </Link>
+                                                    ) : null}
+                                                    <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="font-bold block hover:opacity-80 transition-opacity text-base" style={{ color: secondaryColor }}>
+                                                        {sub.name}
                                                     </Link>
-                                                ) : null}
-                                                <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="font-bold block hover:opacity-80 transition-opacity text-base" style={{ color: secondaryColor }}>
-                                                    {sub.name}
-                                                </Link>
-                                                {/* Level 3 Categories (if any) */}
-                                                <ul className="space-y-1.5">
-                                                    {getSubCategories(sub.id).map(lvl3 => (
-                                                        <li key={lvl3.id}>
-                                                            <Link to={`${shopBaseUrl}/category/${lvl3.slug}`} className="text-sm hover:opacity-100 opacity-70 transition-opacity block py-0.5" style={{ color: secondaryColor }}>
-                                                                {lvl3.name}
-                                                            </Link>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        ))}
-                                    </div>
+                                                    {/* Level 3 Categories (if any) */}
+                                                    <ul className="space-y-1.5">
+                                                        {getSubCategories(sub.id).map(lvl3 => (
+                                                            <li key={lvl3.id}>
+                                                                <Link to={`${shopBaseUrl}/category/${lvl3.slug}`} className="text-sm hover:opacity-100 opacity-70 transition-opacity block py-0.5" style={{ color: secondaryColor }}>
+                                                                    {lvl3.name}
+                                                                </Link>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        // If no subcategories but has image, show some default links or just the image panel
+                                        // But since we are flex, if subCats is empty, the right side is empty. 
+                                        // Let's add a placeholder or just keep it simple.
+                                        // Actually, if only image is there, the menu might look weird if empty on right.
+                                        // Let's just render "Alle Produkte" link big on the right if no subcats?
+                                        <div className="p-8 w-64 flex flex-col justify-center">
+                                             <Link 
+                                                to={`${shopBaseUrl}/category/${cat.slug}`}
+                                                className="font-black text-xl hover:opacity-80 transition-opacity flex items-center"
+                                                style={{ color: secondaryColor }}
+                                            >
+                                                Alle Produkte <ArrowRight size={20} className="ml-2" />
+                                            </Link>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
