@@ -220,23 +220,46 @@ const ShopLayout: React.FC = () => {
 
                             {/* Mega Menu Dropdown */}
                             {hasSub && (
-                                <div className="absolute top-full left-0 w-[600px] shadow-xl border-t border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50 -ml-4 rounded-b-lg overflow-hidden" style={{ backgroundColor: primaryColor }}>
-                                    <div className="grid grid-cols-3 gap-6 p-8">
+                                <div className="absolute top-full left-0 w-max max-w-[1000px] shadow-xl border-t border-white/10 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform translate-y-2 group-hover:translate-y-0 z-50 -ml-4 rounded-b-lg overflow-hidden flex" style={{ backgroundColor: primaryColor }}>
+                                    
+                                    {/* Optional Category Image (Left Side) */}
+                                    {cat.image_url && (
+                                        <div className="w-64 p-6 bg-white/5 border-r border-white/10 flex-shrink-0 hidden md:block">
+                                            <div className="aspect-[3/4] rounded-lg overflow-hidden relative mb-4 shadow-sm bg-white/5">
+                                                <img src={cat.image_url} alt={cat.name} className="absolute inset-0 w-full h-full object-cover" />
+                                            </div>
+                                            <h3 className="font-black uppercase text-lg mb-2 leading-tight" style={{ color: secondaryColor }}>{cat.name}</h3>
+                                            {cat.description && (
+                                                <p className="text-sm opacity-80 line-clamp-4 mb-4" style={{ color: secondaryColor }}>
+                                                    {cat.description}
+                                                </p>
+                                            )}
+                                            <Link 
+                                                to={`${shopBaseUrl}/category/${cat.slug}`}
+                                                className="inline-block text-xs font-bold uppercase tracking-wider underline decoration-2 underline-offset-4 hover:opacity-80"
+                                                style={{ color: secondaryColor }}
+                                            >
+                                                Alle Produkte
+                                            </Link>
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-3 gap-8 p-8 w-[600px]">
                                         {subCats.map(sub => (
                                             <div key={sub.id} className="space-y-2">
                                                 {sub.image_url ? (
-                                                    <div className="aspect-video bg-white/10 rounded-lg overflow-hidden mb-3 border border-white/20">
+                                                    <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="block aspect-video bg-white/10 rounded-lg overflow-hidden mb-3 border border-white/20 hover:opacity-90 transition-opacity">
                                                         <img src={sub.image_url} alt={sub.name} className="w-full h-full object-cover" />
-                                                    </div>
+                                                    </Link>
                                                 ) : null}
-                                                <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="font-bold block hover:opacity-80 transition-opacity" style={{ color: secondaryColor }}>
+                                                <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="font-bold block hover:opacity-80 transition-opacity text-base" style={{ color: secondaryColor }}>
                                                     {sub.name}
                                                 </Link>
                                                 {/* Level 3 Categories (if any) */}
-                                                <ul className="space-y-1">
+                                                <ul className="space-y-1.5">
                                                     {getSubCategories(sub.id).map(lvl3 => (
                                                         <li key={lvl3.id}>
-                                                            <Link to={`${shopBaseUrl}/category/${lvl3.slug}`} className="text-sm hover:opacity-100 opacity-70 transition-opacity" style={{ color: secondaryColor }}>
+                                                            <Link to={`${shopBaseUrl}/category/${lvl3.slug}`} className="text-sm hover:opacity-100 opacity-70 transition-opacity block py-0.5" style={{ color: secondaryColor }}>
                                                                 {lvl3.name}
                                                             </Link>
                                                         </li>
