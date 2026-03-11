@@ -372,7 +372,11 @@ export const useAppStore = create<AppState>((set, get) => ({
                 quantity: i.quantity,
                 notes: i.notes,
                 price: i.price,
-                status: i.status
+                status: i.status,
+                orderedBy: i.ordered_by,
+                orderedAt: i.ordered_at,
+                receivedBy: i.received_by,
+                receivedAt: i.received_at
             }))
       }));
       

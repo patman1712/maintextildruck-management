@@ -526,11 +526,25 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const deleteOrder = useAppStore((state) => state.deleteOrder);
 
   const updateStatus = async (orderId: string, itemId: string, status: 'pending' | 'ordered' | 'received') => {
-    // Optimistically update local state if needed, but for now we rely on store update
-    await updateOrderItem(orderId, itemId, { 
+    // Optimistically update local state
+    const now = new Date().toISOString();
+    const user = currentUser?.name || 'Unbekannt';
+    
+    const updates: any = { 
         status,
-        updatedBy: currentUser?.name || 'Unbekannt'
-    } as any);
+        updatedBy: user // For backend
+    };
+
+    // For local optimistic update
+    if (status === 'ordered') {
+        updates.orderedBy = user;
+        updates.orderedAt = now;
+    } else if (status === 'received') {
+        updates.receivedBy = user;
+        updates.receivedAt = now;
+    }
+
+    await updateOrderItem(orderId, itemId, updates);
   };
 
   const handleDelete = async (orderId: string, itemId: string) => {
