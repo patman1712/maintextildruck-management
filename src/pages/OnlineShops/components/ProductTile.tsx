@@ -11,13 +11,47 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId }) => 
     
     // Parse variants if available
     let sizes: string[] = [];
+    let displayPrice = product.price > 0 ? product.price : 29.95;
+    let showFrom = false;
+
     try {
         if (product.variants) {
             const variants = typeof product.variants === 'string' ? JSON.parse(product.variants) : product.variants;
-            // Find size variable
-            const sizeVar = variants.find((v: any) => v.name === 'Größe' || v.name === 'Size');
+            const variantValues = Object.values(variants) as any[];
+            
+            // 1. Find sizes
+            // Try to find explicit 'size' type first (if we had access to variable types, but we don't here easily without fetching)
+            // So we guess by name or fallback to standard logic
+            const sizeVar = variantValues.find((v: any) => v.name && (v.name.toLowerCase().includes('größe') || v.name.toLowerCase().includes('size')));
             if (sizeVar && sizeVar.values) {
-                sizes = sizeVar.values;
+                // Handle comma separated string or array
+                sizes = Array.isArray(sizeVar.values) ? sizeVar.values : sizeVar.values.split(',').map((s: string) => s.trim());
+            }
+
+            // 2. Calculate Min Price
+            if (variantValues.length > 0) {
+                let minPrice = Infinity;
+                let foundVariantPrice = false;
+
+                variantValues.forEach(v => {
+                    if (v.price && v.price > 0) {
+                        foundVariantPrice = true;
+                        if (v.price < minPrice) minPrice = v.price;
+                    }
+                });
+
+                if (foundVariantPrice && minPrice < Infinity) {
+                    displayPrice = minPrice;
+                    showFrom = true;
+                } else if (variantValues.length > 0) {
+                    // If variants exist but have same price as base (or 0 meaning base), 
+                    // we might still want "Ab" if there are multiple options? 
+                    // Usually "Ab" implies price difference. 
+                    // But user said "bis zur auswahl ab schreiben" -> write "ab" until selection.
+                    // If simply having variants implies "Ab" (like "Ab 29.95" because maybe XXL is more expensive?),
+                    // let's follow the logic: if variants exist, show "Ab".
+                    showFrom = true;
+                }
             }
         }
     } catch (e) {
@@ -87,7 +121,8 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId }) => 
                     
                     <div className="mt-auto pt-3 flex items-center justify-between border-t border-slate-50">
                         <span className="font-extrabold text-lg text-slate-900">
-                            € {product.price > 0 ? product.price.toFixed(2) : '29.95'}
+                            {showFrom && <span className="text-xs font-normal text-slate-500 mr-1">Ab</span>}
+                            € {displayPrice.toFixed(2)}
                         </span>
                         <span className="text-xs font-bold text-red-600 uppercase opacity-0 group-hover:opacity-100 transition-opacity -translate-x-2 group-hover:translate-x-0 duration-300">
                             Zum Produkt
