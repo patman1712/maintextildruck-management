@@ -157,6 +157,19 @@ router.get('/:id/products', (req, res) => {
     
     // 1. Get all assigned images for these shop products
     const assignmentIds = products.map((p: any) => p.assignment_id);
+    
+    // NEW: Fetch all category assignments for these products
+    let categoryMappings: any[] = [];
+    if (assignmentIds.length > 0) {
+        const placeholders = assignmentIds.map(() => '?').join(',');
+        categoryMappings = db.prepare(`
+            SELECT spac.shop_product_assignment_id, spac.category_id, sc.slug
+            FROM shop_product_assignment_categories spac
+            JOIN shop_categories sc ON spac.category_id = sc.id
+            WHERE spac.shop_product_assignment_id IN (${placeholders})
+        `).all(...assignmentIds);
+    }
+
     if (assignmentIds.length > 0) {
         const placeholders = assignmentIds.map(() => '?').join(',');
         const assignedImages = db.prepare(`
@@ -213,16 +226,34 @@ router.get('/:id/products', (req, res) => {
             `).all(...productIdsNeedingFallback);
         }
 
-        // 3. Attach images to products
+        // 3. Attach images AND categories to products
         products.forEach((p: any) => {
+            // Attach images
             if (assignmentsWithImages.has(p.assignment_id)) {
                 p.files = assignedImages.filter((img: any) => img.shop_product_assignment_id === p.assignment_id);
             } else {
                 p.files = fallbackImages.filter((img: any) => img.product_id === p.product_id);
             }
+            
+            // Attach extra categories
+            const myCategories = categoryMappings.filter((m: any) => m.shop_product_assignment_id === p.assignment_id);
+            p.category_ids = myCategories.map((m: any) => m.category_id);
+            p.category_slugs = myCategories.map((m: any) => m.slug);
+            
+            // Ensure the primary category is included if not already (legacy fallback)
+            if (p.category_id && !p.category_ids.includes(p.category_id)) {
+                p.category_ids.push(p.category_id);
+                if (p.category_slug && !p.category_slugs.includes(p.category_slug)) {
+                    p.category_slugs.push(p.category_slug);
+                }
+            }
         });
     } else {
-        products.forEach((p: any) => p.files = []);
+        products.forEach((p: any) => {
+            p.files = [];
+            p.category_ids = p.category_id ? [p.category_id] : [];
+            p.category_slugs = p.category_slug ? [p.category_slug] : [];
+        });
     }
 
     res.json({ success: true, data: products });

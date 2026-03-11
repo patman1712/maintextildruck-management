@@ -315,6 +315,7 @@ const ShopDashboard: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             category_id: payload.category_id,
+            category_ids: updates.category_ids !== undefined ? updates.category_ids : payload.category_ids,
             price: payload.price,
             is_featured: payload.is_featured,
             personalization_enabled: payload.personalization_enabled,
@@ -2205,6 +2206,7 @@ const ShopDashboard: React.FC = () => {
             isOpen={!!editorAssignment || isCreateMode}
             assignment={isCreateMode ? undefined : editorAssignment}
             shopId={shopId!}
+            categories={categories}
             customerId={shop.customer_id} // Pass customer ID for manual product creation
             onClose={() => {
                 setEditorAssignment(null);

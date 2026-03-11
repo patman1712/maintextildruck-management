@@ -232,6 +232,18 @@ db.exec(`
 `);
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS shop_product_assignment_categories (
+    id TEXT PRIMARY KEY,
+    shop_product_assignment_id TEXT NOT NULL,
+    category_id TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(shop_product_assignment_id) REFERENCES shop_product_assignments(id) ON DELETE CASCADE,
+    FOREIGN KEY(category_id) REFERENCES shop_categories(id) ON DELETE CASCADE,
+    UNIQUE(shop_product_assignment_id, category_id)
+  )
+`);
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS product_variables (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -378,6 +390,25 @@ try {
       }
   } catch (e) {
       console.error('Migration error (fix shop orders):', e);
+  }
+
+  // Migration: Populate shop_product_assignment_categories from existing category_id
+  try {
+      const assignmentCategoriesCount = db.prepare("SELECT count(*) as count FROM shop_product_assignment_categories").get() as any;
+      if (assignmentCategoriesCount.count === 0) {
+          console.log('Migrating database: Moving existing categories to shop_product_assignment_categories table');
+          db.exec(`
+              INSERT OR IGNORE INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id)
+              SELECT 
+                  lower(hex(randomblob(16))), -- generate UUID
+                  id, 
+                  category_id 
+              FROM shop_product_assignments 
+              WHERE category_id IS NOT NULL
+          `);
+      }
+  } catch (e) {
+      console.error('Migration error (category junction):', e);
   }
 } catch (error) {
   console.error('Migration error (variants/personalization):', error);

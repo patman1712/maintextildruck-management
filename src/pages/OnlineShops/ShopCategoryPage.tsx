@@ -42,12 +42,17 @@ const ShopCategoryPage: React.FC = () => {
               categories.filter(c => c.parent_id === currentCategory.id).forEach(c => categoryIds.add(c.id));
           }
 
-          const filtered = data.data.filter((p: any) => 
-            // If viewing "all", show everything? No, usually specific category page.
-            // Check if product's category_id matches or is a child
-            p.category_slug === categorySlug || 
-            (currentCategory && p.category_id && categoryIds.has(p.category_id))
-          );
+          const filtered = data.data.filter((p: any) => {
+            // Check if ANY of the product's category slugs match the current category slug
+            if (p.category_slugs && p.category_slugs.includes(categorySlug)) return true;
+            
+            // Check if ANY of the product's category IDs match the current category or its children
+            if (currentCategory && p.category_ids && p.category_ids.some((id: string) => categoryIds.has(id))) return true;
+
+            // Fallback to legacy single category check
+            return p.category_slug === categorySlug || 
+                   (currentCategory && p.category_id && categoryIds.has(p.category_id));
+          });
           setProducts(filtered);
         }
       } catch (err) {

@@ -101,10 +101,32 @@ router.get('/:shopId/products', (req, res) => {
       ORDER BY spa.sort_order ASC
     `).all(shopId) as any[];
 
+    // Fetch categories for all products efficiently
+    const assignmentIds = products.map(p => p.id);
+    let allCategoryMappings: any[] = [];
+    
+    if (assignmentIds.length > 0) {
+        allCategoryMappings = db.prepare(`
+            SELECT shop_product_assignment_id, category_id 
+            FROM shop_product_assignment_categories 
+            WHERE shop_product_assignment_id IN (${assignmentIds.map(() => '?').join(',')})
+        `).all(...assignmentIds);
+    }
+
     // Fetch files for each product. 
     // Logic: If there are entries in shop_product_images, use ONLY those.
     // If NO entries in shop_product_images, fallback to ALL customer_product_files (legacy behavior).
     const productsWithFiles = products.map(p => {
+        // Attach category_ids
+        p.category_ids = allCategoryMappings
+            .filter(m => m.shop_product_assignment_id === p.id)
+            .map(m => m.category_id);
+            
+        // If category_ids is empty but category_id exists (legacy), include it
+        if (p.category_ids.length === 0 && p.category_id) {
+            p.category_ids = [p.category_id];
+        }
+
         const assignedImages = db.prepare(`
             SELECT cpf.* 
             FROM shop_product_images spi
@@ -140,7 +162,7 @@ router.get('/:shopId/products', (req, res) => {
 router.post('/:shopId/products', (req, res) => {
   try {
     const { shopId } = req.params;
-    const { product_id, category_id, price, is_featured, sort_order } = req.body;
+    const { product_id, category_id, category_ids, price, is_featured, sort_order } = req.body;
     const id = crypto.randomUUID();
 
     // Check if already assigned
@@ -149,10 +171,25 @@ router.post('/:shopId/products', (req, res) => {
       return res.status(400).json({ success: false, error: 'Product already assigned to this shop' });
     }
 
+    const primaryCategoryId = (category_ids && category_ids.length > 0) ? category_ids[0] : category_id;
+
     db.prepare(`
       INSERT INTO shop_product_assignments (id, shop_id, product_id, category_id, price, is_featured, personalization_enabled, sort_order)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, shopId, product_id, category_id, price, is_featured ? 1 : 0, 0, sort_order || 0);
+    `).run(id, shopId, product_id, primaryCategoryId, price, is_featured ? 1 : 0, 0, sort_order || 0);
+
+    // Insert into junction table
+    if (category_ids && Array.isArray(category_ids)) {
+        const insertCat = db.prepare('INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)');
+        const transaction = db.transaction(() => {
+            for (const catId of category_ids) {
+                insertCat.run(crypto.randomUUID(), id, catId);
+            }
+        });
+        transaction();
+    } else if (category_id) {
+        db.prepare('INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)').run(crypto.randomUUID(), id, category_id);
+    }
 
     const assignment = db.prepare('SELECT * FROM shop_product_assignments WHERE id = ?').get(id);
     res.json({ success: true, data: assignment });
@@ -164,7 +201,10 @@ router.post('/:shopId/products', (req, res) => {
 router.put('/:shopId/products/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { category_id, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size, variants, personalization_options, weight } = req.body;
+    const { category_id, category_ids, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size, variants, personalization_options, weight } = req.body;
+
+    // Use primary category from array if available, or single value
+    const primaryCategoryId = (category_ids && category_ids.length > 0) ? category_ids[0] : category_id;
 
     // Update assignment
     db.prepare(`
@@ -172,7 +212,7 @@ router.put('/:shopId/products/:id', (req, res) => {
       SET category_id = ?, price = ?, is_featured = ?, personalization_enabled = ?, sort_order = ?, variants = ?, personalization_options = ?, is_active = ?, supplier_id = ?
       WHERE id = ?
     `).run(
-        category_id, 
+        primaryCategoryId, 
         price, 
         is_featured ? 1 : 0, 
         personalization_enabled ? 1 : 0, 
@@ -183,6 +223,29 @@ router.put('/:shopId/products/:id', (req, res) => {
         req.body.supplier_id || null,
         id
     );
+
+    // Update Category Junction Table
+    if (category_ids && Array.isArray(category_ids)) {
+        // Delete old mappings
+        db.prepare('DELETE FROM shop_product_assignment_categories WHERE shop_product_assignment_id = ?').run(id);
+        
+        // Insert new mappings
+        const insertCat = db.prepare('INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)');
+        
+        // Use a transaction for better performance
+        const transaction = db.transaction(() => {
+            for (const catId of category_ids) {
+                insertCat.run(crypto.randomUUID(), id, catId);
+            }
+        });
+        transaction();
+    } else if (category_id) {
+        // Fallback: If only category_id provided (legacy), ensure it's in the junction table
+        // First check if it matches the only entry? Or just reset?
+        // Let's reset to be safe
+        db.prepare('DELETE FROM shop_product_assignment_categories WHERE shop_product_assignment_id = ?').run(id);
+        db.prepare('INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)').run(crypto.randomUUID(), id, category_id);
+    }
 
     console.log(`Updated product assignment ${id}: is_active=${req.body.is_active === false || req.body.is_active === 0 ? 0 : 1}`);
 

@@ -1,21 +1,22 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Save, Image as ImageIcon, Plus, Trash2, ArrowRight, FileText, Download } from 'lucide-react';
-import { ShopProductAssignment, Product } from '../../../store';
+import { ShopProductAssignment, Product, ShopCategory } from '../../../store';
 
 interface ProductEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
   // Assignment is optional for "Create Mode"
-  assignment?: ShopProductAssignment & { product_name?: string, product_number?: string, manufacturer_info?: string, description?: string, size?: string, color?: string, weight?: number };
+  assignment?: ShopProductAssignment & { product_name?: string, product_number?: string, manufacturer_info?: string, description?: string, size?: string, color?: string, weight?: number, category_ids?: string[] };
   product?: Product; // The base product details
   shopId: string;
+  categories?: ShopCategory[];
   customerId?: string; // Required for creating new manual products
   onSave: (id: string, updates: any) => Promise<void>;
   onCreate?: (newAssignment: any) => void; // Callback when a new product is created
 }
 
-const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose, assignment, product, shopId, customerId, onSave, onCreate }) => {
+const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose, assignment, product, shopId, categories = [], customerId, onSave, onCreate }) => {
   if (!isOpen) return null;
 
   const isCreateMode = !assignment;
@@ -34,7 +35,8 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     variants: assignment?.variants ? (typeof assignment.variants === 'string' ? JSON.parse(assignment.variants) : assignment.variants) : {},
     is_active: (assignment as any)?.is_active === 0 || assignment?.is_active === false ? false : true, // Default to true if undefined or 1
     is_featured: assignment?.is_featured || false,
-    supplier_id: assignment?.supplier_id || ''
+    supplier_id: assignment?.supplier_id || '',
+    category_ids: assignment?.category_ids || (assignment?.category_id ? [assignment.category_id] : [])
   });
   
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -198,7 +200,8 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         product_id: prodData.id,
-                        category_id: null,
+                        category_id: formData.category_ids && formData.category_ids.length > 0 ? formData.category_ids[0] : null,
+                        category_ids: formData.category_ids,
                         price: formData.price,
                         is_featured: formData.is_featured
                     })
@@ -1141,18 +1144,65 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                         </div>
                     </div>
 
-                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                        <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Lieferant</label>
-                        <select 
-                            className="w-full border border-slate-300 rounded p-2 text-sm"
-                            value={formData.supplier_id}
-                            onChange={(e) => setFormData({...formData, supplier_id: e.target.value})}
-                        >
-                            <option value="">Kein Lieferant gewählt</option>
-                            {suppliers.map(s => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                        </select>
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-4">
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Lieferant</label>
+                            <select 
+                                className="w-full border border-slate-300 rounded p-2 text-sm"
+                                value={formData.supplier_id}
+                                onChange={(e) => setFormData({...formData, supplier_id: e.target.value})}
+                            >
+                                <option value="">Kein Lieferant gewählt</option>
+                                {suppliers.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Categories Selection */}
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Kategorien</label>
+                            <div className="max-h-32 overflow-y-auto bg-white border border-slate-300 rounded p-2 space-y-1">
+                                {categories.length === 0 && <p className="text-xs text-slate-400 italic">Keine Kategorien vorhanden.</p>}
+                                {categories.filter(c => !c.parent_id).map(parent => (
+                                    <div key={parent.id}>
+                                        <label className="flex items-center space-x-2 p-1 hover:bg-slate-50 rounded cursor-pointer">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={formData.category_ids?.includes(parent.id)}
+                                                onChange={(e) => {
+                                                    const newIds = e.target.checked 
+                                                        ? [...(formData.category_ids || []), parent.id]
+                                                        : (formData.category_ids || []).filter(id => id !== parent.id);
+                                                    setFormData({...formData, category_ids: newIds});
+                                                }}
+                                                className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
+                                            />
+                                            <span className="text-sm font-medium text-slate-700">{parent.name}</span>
+                                        </label>
+                                        {/* Subcategories */}
+                                        <div className="ml-6 border-l-2 border-slate-100 pl-2 mt-1 space-y-1">
+                                            {categories.filter(sub => sub.parent_id === parent.id).map(sub => (
+                                                <label key={sub.id} className="flex items-center space-x-2 p-1 hover:bg-slate-50 rounded cursor-pointer">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={formData.category_ids?.includes(sub.id)}
+                                                        onChange={(e) => {
+                                                            const newIds = e.target.checked 
+                                                                ? [...(formData.category_ids || []), sub.id]
+                                                                : (formData.category_ids || []).filter(id => id !== sub.id);
+                                                            setFormData({...formData, category_ids: newIds});
+                                                        }}
+                                                        className="rounded text-blue-600 focus:ring-blue-500 h-3 w-3"
+                                                    />
+                                                    <span className="text-sm text-slate-600">{sub.name}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 </div>
 
