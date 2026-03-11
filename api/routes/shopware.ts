@@ -6,7 +6,10 @@ const router = Router();
 // --- Helper Functions ---
 
 async function getShopware6Token(baseUrl: string, accessKey: string, secretKey: string) {
-    const url = baseUrl.replace(/\/$/, '');
+    // Clean URL: remove trailing slashes and common API/Admin suffixes to avoid double paths
+    let url = baseUrl.trim().replace(/\/$/, '');
+    url = url.replace(/\/api$/, '');
+    url = url.replace(/\/admin$/, '');
     
     try {
         const response = await fetch(`${url}/api/oauth/token`, {
@@ -23,6 +26,9 @@ async function getShopware6Token(baseUrl: string, accessKey: string, secretKey: 
         });
 
         if (!response.ok) {
+            // Detailed error log to help debugging
+            const errorBody = await response.text().catch(() => 'No body');
+            console.error(`Shopware 6 Auth Failed: ${response.status} ${response.statusText}`, errorBody);
             throw new Error(`Authentication failed: ${response.statusText} (${response.status})`);
         }
 
