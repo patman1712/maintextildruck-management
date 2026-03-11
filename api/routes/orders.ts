@@ -433,7 +433,27 @@ router.put('/:orderId/items/:itemId', (req: Request, res: Response) => {
     if (updates.quantity !== undefined) { fields.push('quantity = ?'); values.push(updates.quantity); }
     if (updates.price !== undefined) { fields.push('price = ?'); values.push(updates.price); }
     if (updates.notes !== undefined) { fields.push('notes = ?'); values.push(updates.notes); }
-    if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
+    if (updates.status !== undefined) { 
+        fields.push('status = ?'); 
+        values.push(updates.status);
+
+        // Tracking Logic
+        if (updates.status === 'ordered') {
+            fields.push('ordered_at = ?');
+            values.push(new Date().toISOString());
+            if (updates.updatedBy) {
+                fields.push('ordered_by = ?');
+                values.push(updates.updatedBy);
+            }
+        } else if (updates.status === 'received') {
+            fields.push('received_at = ?');
+            values.push(new Date().toISOString());
+            if (updates.updatedBy) {
+                fields.push('received_by = ?');
+                values.push(updates.updatedBy);
+            }
+        }
+    }
     
     if (fields.length === 0) return res.json({ success: true, message: 'No changes' });
     

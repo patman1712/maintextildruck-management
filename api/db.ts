@@ -1037,6 +1037,21 @@ try {
       console.error('Migration error (custom_domain):', e);
   }
 
+  // Migration: Add tracking columns to order_items
+  try {
+      const orderItemCols = db.prepare("PRAGMA table_info(order_items)").all() as any[];
+      const hasOrderedBy = orderItemCols.some(col => col.name === 'ordered_by');
+      if (!hasOrderedBy) {
+          console.log('Migrating database: Adding tracking columns to order_items table');
+          db.exec('ALTER TABLE order_items ADD COLUMN ordered_by TEXT');
+          db.exec('ALTER TABLE order_items ADD COLUMN ordered_at DATETIME');
+          db.exec('ALTER TABLE order_items ADD COLUMN received_by TEXT');
+          db.exec('ALTER TABLE order_items ADD COLUMN received_at DATETIME');
+      }
+  } catch (e) {
+      console.error('Migration error (order_items tracking):', e);
+  }
+
   // Ensure default row for global content
   try {
       const row = db.prepare("SELECT id FROM global_shop_content WHERE id = 'main'").get();

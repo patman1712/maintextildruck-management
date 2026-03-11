@@ -527,7 +527,10 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
   const updateStatus = async (orderId: string, itemId: string, status: 'pending' | 'ordered' | 'received') => {
     // Optimistically update local state if needed, but for now we rely on store update
-    await updateOrderItem(orderId, itemId, { status });
+    await updateOrderItem(orderId, itemId, { 
+        status,
+        updatedBy: currentUser?.name || 'Unbekannt'
+    } as any);
   };
 
   const handleDelete = async (orderId: string, itemId: string) => {
@@ -864,6 +867,18 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                          {item.color && <span className="text-gray-600">Farbe: {item.color}</span>}
                                                     </div>
                                                     {item.notes && <div className="text-xs text-gray-400 italic mt-0.5 break-words">{item.notes}</div>}
+                                                    {item.status === 'ordered' && item.orderedBy && (
+                                                        <div className="text-xs text-yellow-600 mt-0.5 flex items-center gap-1">
+                                                            <Clock size={12} />
+                                                            <span>Bestellt: {item.orderedBy} {item.orderedAt && `am ${new Date(item.orderedAt).toLocaleDateString()}`}</span>
+                                                        </div>
+                                                    )}
+                                                    {item.status === 'received' && item.receivedBy && (
+                                                        <div className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
+                                                            <CheckCircle size={12} />
+                                                            <span>Erhalten: {item.receivedBy} {item.receivedAt && `am ${new Date(item.receivedAt).toLocaleDateString()}`}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 
                                                 <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-50">

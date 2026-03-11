@@ -44,6 +44,10 @@ export interface OrderItem {
   notes?: string;
   price?: number;
   status: 'pending' | 'ordered' | 'received';
+  orderedBy?: string;
+  orderedAt?: string;
+  receivedBy?: string;
+  receivedAt?: string;
 }
 
 export interface Order {
@@ -745,6 +749,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (updates.notes !== undefined) payload.notes = updates.notes;
       if (updates.price !== undefined) payload.price = updates.price;
       if (updates.status !== undefined) payload.status = updates.status;
+      if ((updates as any).updatedBy) payload.updatedBy = (updates as any).updatedBy;
 
       await fetch(`/api/orders/${orderId}/items/${itemId}`, {
         method: 'PUT',
