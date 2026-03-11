@@ -242,39 +242,69 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
             
             // Check for personalization notes
             if (item.notes) {
-                 let notesParsed = false;
-                 // Try JSON
-                 try {
-                     const notesObj = JSON.parse(item.notes);
-                     if (typeof notesObj === 'object' && notesObj !== null) {
-                         Object.entries(notesObj).forEach(([k, v]) => {
-                             // Check if k is a known option ID
-                             const label = optionMap.get(k) || k;
-                             let valStr = String(v);
-                             extraLines.push(`${label}: ${valStr}`);
+                let notesParsed = false;
+                
+                // 1. Try JSON first
+                try {
+                    const notesObj = JSON.parse(item.notes);
+                    if (typeof notesObj === 'object' && notesObj !== null) {
+                        Object.entries(notesObj).forEach(([k, v]) => {
+                            const label = optionMap.get(k) || k;
+                            const valStr = String(v);
+                            if (valStr === 'false') return;
+                            if (valStr === 'true') {
+                                extraLines.push(label);
+                            } else {
+                                extraLines.push(`${label}: ${valStr}`);
+                            }
+                        });
+                        notesParsed = true;
+                    }
+                } catch (e) { /* ignore */ }
+                
+                // 2. Try pipe-separated or legacy colon format (e.g. "UUID1:Val1|UUID2:Val2")
+                if (!notesParsed) {
+                    // Check if it looks like a structured string (contains : or |)
+                    if (item.notes.includes(':') || item.notes.includes('|')) {
+                         const parts = item.notes.split('|').map((p: string) => p.trim()).filter((p: string) => p.length > 0);
+                         let resolvedAny = false;
+                         
+                         parts.forEach((part: string) => {
+                             const colonIndex = part.indexOf(':');
+                             if (colonIndex > -1) {
+                                 const key = part.substring(0, colonIndex).trim();
+                                 const val = part.substring(colonIndex + 1).trim();
+                                 
+                                 // Look up key in optionMap (UUID -> Name)
+                                 const label = optionMap.get(key) || key;
+                                 
+                                 if (val === 'false') return;
+                                 if (val === 'true') {
+                                     extraLines.push(label);
+                                 } else {
+                                     extraLines.push(`${label}: ${val}`);
+                                 }
+                                 resolvedAny = true;
+                             } else {
+                                 // If it's part of a piped string but has no colon, just show it
+                                 if (parts.length > 1 || item.notes.includes('|')) {
+                                     extraLines.push(part);
+                                     resolvedAny = true;
+                                 }
+                             }
                          });
-                         notesParsed = true;
-                     }
-                 } catch (e) { /* ignore */ }
-                 
-                 if (!notesParsed) {
-                     // Check for UUID:Value format
-                     const parts = item.notes.split(':');
-                     if (parts.length === 2) {
-                         const [key, val] = parts;
-                         if (optionMap.has(key)) {
-                             extraLines.push(`${optionMap.get(key)}: ${val}`);
-                             notesParsed = true;
-                         }
-                     }
-                 }
+                         
+                         if (resolvedAny) notesParsed = true;
+                    }
+                }
 
-                 if (!notesParsed) {
-                      // Fallback: If it looks like a raw code but we couldn't resolve it,
-                      // and user wants "Initialen: PS", maybe we can guess?
-                      // If it's just text, show it.
-                      extraLines.push(`Hinweis: ${item.notes}`);
-                 }
+                if (!notesParsed) {
+                     // Fallback: If it looks like a raw code but we couldn't resolve it,
+                     // and user wants "Initialen: PS", maybe we can guess?
+                     // If it's just text, show it, but prefix with "Hinweis" only if it's long or unusual
+                     // Or just print it directly to be cleaner as requested "es würde langen wenn da steht trikotnummer - spielername"
+                     extraLines.push(item.notes);
+                }
             }
 
             let extraY = y + (splitName.length * 4);
