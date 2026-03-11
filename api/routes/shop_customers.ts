@@ -500,6 +500,14 @@ router.post('/:shopId/orders', async (req, res) => {
                     
                     const colorValues = item.color ? item.color.split(',').map((s: string) => s.trim()) : [];
                     
+                    // CRITICAL FIX: Also check item.size!
+                    // Since we hide redundant sizes from item.color in the frontend,
+                    // we must explicitly include item.size here so that variant groups (e.g. "Jako Erwachsen") 
+                    // are correctly identified as active when a size is selected.
+                    if (item.size) {
+                        colorValues.push(String(item.size).trim());
+                    }
+                    
                     // Also check personalization for explicit "Rückendruck: X" entries
                     if (item.personalization) {
                         const parts = item.personalization.split('|');
