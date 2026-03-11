@@ -40,6 +40,7 @@ const ShopDashboard: React.FC = () => {
   
   // Forms
   const [newCategory, setNewCategory] = useState({ name: '', slug: '', parent_id: '', image_url: '' });
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [assignProductSearch, setAssignProductSearch] = useState('');
   const [showProductModal, setShowProductModal] = useState(false);
   
@@ -230,23 +231,44 @@ const ShopDashboard: React.FC = () => {
     }
   };
 
-  const handleAddCategory = async () => {
+  const handleSaveCategory = async () => {
     if (!newCategory.name || !shop) return;
     try {
-      const res = await fetch(`/api/shop-management/${shop.id}/categories`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            name: newCategory.name,
-            slug: newCategory.slug || newCategory.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-            parent_id: newCategory.parent_id || null,
-            image_url: newCategory.image_url || null
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-          setCategories([...categories, data.data]);
-          setNewCategory({ name: '', slug: '', parent_id: '', image_url: '' });
+      if (editingCategoryId) {
+          // Update
+          const res = await fetch(`/api/shop-management/${shop.id}/categories/${editingCategoryId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: newCategory.name,
+                slug: newCategory.slug || newCategory.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                parent_id: newCategory.parent_id || null,
+                image_url: newCategory.image_url || null
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+              setCategories(categories.map(c => c.id === editingCategoryId ? data.data : c));
+              setNewCategory({ name: '', slug: '', parent_id: '', image_url: '' });
+              setEditingCategoryId(null);
+          }
+      } else {
+          // Create
+          const res = await fetch(`/api/shop-management/${shop.id}/categories`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: newCategory.name,
+                slug: newCategory.slug || newCategory.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                parent_id: newCategory.parent_id || null,
+                image_url: newCategory.image_url || null
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+              setCategories([...categories, data.data]);
+              setNewCategory({ name: '', slug: '', parent_id: '', image_url: '' });
+          }
       }
     } catch (e) { console.error(e); }
   };
@@ -1042,9 +1064,22 @@ const ShopDashboard: React.FC = () => {
                                 </label>
                             </div>
                         </div>
-                        <button onClick={handleAddCategory} className="bg-slate-800 text-white px-4 py-2 h-10 rounded-lg hover:bg-slate-700 mb-0.5">
-                            Hinzufügen
-                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={handleSaveCategory} className="bg-slate-800 text-white px-4 py-2 h-10 rounded-lg hover:bg-slate-700 mb-0.5">
+                                {editingCategoryId ? 'Speichern' : 'Hinzufügen'}
+                            </button>
+                            {editingCategoryId && (
+                                <button 
+                                    onClick={() => {
+                                        setEditingCategoryId(null);
+                                        setNewCategory({ name: '', slug: '', parent_id: '', image_url: '' });
+                                    }} 
+                                    className="bg-slate-100 text-slate-600 px-4 py-2 h-10 rounded-lg hover:bg-slate-200 mb-0.5"
+                                >
+                                    Abbrechen
+                                </button>
+                            )}
+                        </div>
                     </div>
                     
                     <div className="space-y-2">
@@ -1058,6 +1093,15 @@ const ShopDashboard: React.FC = () => {
                                         <span className="font-bold text-slate-800">{cat.name}</span>
                                         <div className="flex items-center space-x-2">
                                             <span className="text-xs text-slate-400 font-mono bg-white px-2 py-1 rounded border border-slate-200">/{cat.slug}</span>
+                                            <button 
+                                                onClick={() => {
+                                                    setEditingCategoryId(cat.id);
+                                                    setNewCategory({ name: cat.name, slug: cat.slug, parent_id: cat.parent_id || '', image_url: cat.image_url || '' });
+                                                }} 
+                                                className="text-slate-400 hover:text-blue-600 p-1"
+                                            >
+                                                <Edit2 size={18} />
+                                            </button>
                                             <button onClick={() => handleDeleteCategory(cat.id)} className="text-slate-400 hover:text-red-600 p-1">
                                                 <Trash2 size={18} />
                                             </button>
@@ -1075,6 +1119,15 @@ const ShopDashboard: React.FC = () => {
                                                 </div>
                                                 <div className="flex items-center space-x-2">
                                                     <span className="text-xs text-slate-400 font-mono bg-slate-50 px-2 py-0.5 rounded">/{sub.slug}</span>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setEditingCategoryId(sub.id);
+                                                            setNewCategory({ name: sub.name, slug: sub.slug, parent_id: sub.parent_id || '', image_url: sub.image_url || '' });
+                                                        }} 
+                                                        className="text-slate-300 hover:text-blue-600 p-1"
+                                                    >
+                                                        <Edit2 size={16} />
+                                                    </button>
                                                     <button onClick={() => handleDeleteCategory(sub.id)} className="text-slate-300 hover:text-red-600 p-1">
                                                         <Trash2 size={16} />
                                                     </button>
