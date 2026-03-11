@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
@@ -57,6 +57,8 @@ const ShopDashboard: React.FC = () => {
   const [sourceShopId, setSourceShopId] = useState('');
   const [sourceShopProducts, setSourceShopProducts] = useState<any[]>([]);
   const [isImporting, setIsImporting] = useState<string | null>(null); // ID of product being imported
+  
+  const categoryFormRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (shopId) {
@@ -1002,8 +1004,10 @@ const ShopDashboard: React.FC = () => {
 
             {activeTab === 'categories' && (
                 <div>
-                    <div className="flex mb-6 space-x-4 items-end">
-                        <div className="flex-1 space-y-2">
+                    <div ref={categoryFormRef} className="mb-6 bg-slate-50 p-6 rounded-xl border border-slate-200">
+                        <h4 className="font-bold text-slate-800 mb-4">{editingCategoryId ? 'Kategorie bearbeiten' : 'Neue Kategorie erstellen'}</h4>
+                        <div className="flex space-x-4 items-end">
+                            <div className="flex-1 space-y-2">
                              <input 
                                 type="text" 
                                 placeholder="Neue Kategorie Name"
@@ -1081,6 +1085,7 @@ const ShopDashboard: React.FC = () => {
                             )}
                         </div>
                     </div>
+                </div>
                     
                     <div className="space-y-2">
                         {categories.length === 0 ? (
@@ -1097,6 +1102,7 @@ const ShopDashboard: React.FC = () => {
                                                 onClick={() => {
                                                     setEditingCategoryId(cat.id);
                                                     setNewCategory({ name: cat.name, slug: cat.slug, parent_id: cat.parent_id || '', image_url: cat.image_url || '' });
+                                                    categoryFormRef.current?.scrollIntoView({ behavior: 'smooth' });
                                                 }} 
                                                 className="text-slate-400 hover:text-blue-600 p-1"
                                             >
@@ -1123,6 +1129,7 @@ const ShopDashboard: React.FC = () => {
                                                         onClick={() => {
                                                             setEditingCategoryId(sub.id);
                                                             setNewCategory({ name: sub.name, slug: sub.slug, parent_id: sub.parent_id || '', image_url: sub.image_url || '' });
+                                                            categoryFormRef.current?.scrollIntoView({ behavior: 'smooth' });
                                                         }} 
                                                         className="text-slate-300 hover:text-blue-600 p-1"
                                                     >
