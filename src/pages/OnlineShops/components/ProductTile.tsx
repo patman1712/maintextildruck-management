@@ -105,20 +105,6 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId }) => 
                         </h3>
                     </div>
                     
-                    {/* Size Preview (Optional - small dots or text) */}
-                    {sizes.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2 mb-3">
-                            {sizes.slice(0, 5).map(size => (
-                                <span key={size} className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
-                                    {size}
-                                </span>
-                            ))}
-                            {sizes.length > 5 && (
-                                <span className="text-[10px] text-slate-400 px-1 py-0.5">+</span>
-                            )}
-                        </div>
-                    )}
-                    
                     <div className="mt-auto pt-3 flex items-center justify-between border-t border-slate-50">
                         <span className="font-extrabold text-lg text-slate-900">
                             {showFrom && <span className="text-xs font-normal text-slate-500 mr-1">Ab</span>}
