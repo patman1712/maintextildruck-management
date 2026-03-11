@@ -13,16 +13,17 @@ async function getShopware6Token(baseUrl: string, accessKey: string, secretKey: 
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
             body: JSON.stringify({
                 grant_type: 'client_credentials',
-                client_id: accessKey,
-                client_secret: secretKey,
+                client_id: accessKey.trim(),
+                client_secret: secretKey.trim(),
             }),
         });
 
         if (!response.ok) {
-            throw new Error(`Authentication failed: ${response.statusText}`);
+            throw new Error(`Authentication failed: ${response.statusText} (${response.status})`);
         }
 
         const data = await response.json();
