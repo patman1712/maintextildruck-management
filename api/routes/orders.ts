@@ -418,7 +418,7 @@ router.post('/:orderId/items', (req: Request, res: Response) => {
 // POST split order item (Partial Delivery)
 router.post('/:orderId/items/:itemId/split', (req: Request, res: Response) => {
   const { orderId, itemId } = req.params;
-  const { receivedQuantity, remainingNotes, expectedDate } = req.body;
+  const { receivedQuantity, remainingNotes, expectedDate, receivedNotes } = req.body;
   
   if (!receivedQuantity) {
       return res.status(400).json({ success: false, error: 'Received quantity required' });
@@ -432,8 +432,8 @@ router.post('/:orderId/items/:itemId/split', (req: Request, res: Response) => {
           return res.status(404).json({ success: false, error: 'Item not found' });
       }
       
-      if (receivedQuantity >= item.quantity) {
-          return res.status(400).json({ success: false, error: 'Received quantity must be less than total quantity for partial delivery' });
+      if (receivedQuantity > item.quantity) {
+          return res.status(400).json({ success: false, error: 'Received quantity cannot exceed total quantity' });
       }
       
       const remainingQuantity = item.quantity - receivedQuantity;
@@ -443,41 +443,42 @@ router.post('/:orderId/items/:itemId/split', (req: Request, res: Response) => {
       // Transaction to ensure atomicity
       const transaction = db.transaction(() => {
           // 2. Update original item to be the "Received" part
-          // We keep the original ID for the received part so it moves to "Completed" history naturally
-          // Or should we keep original ID for the "Remaining" part?
-          // User said: "die teillieferung soll dann stehen bleiben das was erhalten wurde soll dann zu den erledigten sachen"
-          // Usually, "Received" moves to completed. "Remaining" stays in open.
-          // If we change the original item to "Received", it moves to completed.
-          // The new item will be "Ordered" (Remaining) and appear in the open list.
           
+          let updatedReceivedNotes = item.notes || '';
+          if (receivedNotes) {
+             updatedReceivedNotes = updatedReceivedNotes ? `${updatedReceivedNotes} | ${receivedNotes}` : receivedNotes;
+          }
+
           db.prepare(`
               UPDATE order_items 
-              SET quantity = ?, status = 'received', received_at = ?, received_by = ?
+              SET quantity = ?, status = 'received', received_at = ?, received_by = ?, notes = ?
               WHERE id = ?
-          `).run(receivedQuantity, now, 'System', itemId); // received_by could be passed from frontend
+          `).run(receivedQuantity, now, 'System', updatedReceivedNotes, itemId); // received_by could be passed from frontend
           
-          // 3. Create new item for "Remaining" part
-          let newNotes = item.notes || '';
-          if (remainingNotes) newNotes += ` | ${remainingNotes}`;
-          if (expectedDate) newNotes += ` | Erwartet: ${expectedDate}`;
-          
-          db.prepare(`
-              INSERT INTO order_items (
-                  id, order_id, supplier_id, item_name, item_number, manual_order_number, 
-                  color, size, quantity, notes, price, status, ordered_by, ordered_at
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ordered', ?, ?)
-          `).run(
-              newItemId, orderId, item.supplier_id, item.item_name, item.item_number, item.manual_order_number,
-              item.color, item.size, remainingQuantity, newNotes, item.price, 
-              item.ordered_by, item.ordered_at // Preserve original ordering info
-          );
+          // 3. Create new item for "Remaining" part (only if there is remaining quantity)
+          if (remainingQuantity > 0) {
+            let newNotes = item.notes || ''; // Copy original notes to remaining part too? Usually yes.
+            if (remainingNotes) newNotes += ` | ${remainingNotes}`;
+            if (expectedDate) newNotes += ` | Erwartet: ${expectedDate}`;
+            
+            db.prepare(`
+                INSERT INTO order_items (
+                    id, order_id, supplier_id, item_name, item_number, manual_order_number, 
+                    color, size, quantity, notes, price, status, ordered_by, ordered_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ordered', ?, ?)
+            `).run(
+                newItemId, orderId, item.supplier_id, item.item_name, item.item_number, item.manual_order_number,
+                item.color, item.size, remainingQuantity, newNotes, item.price, 
+                item.ordered_by, item.ordered_at // Preserve original ordering info
+            );
+          }
       });
       
       transaction();
       
       // Fetch updated/new items to return
       const updatedItem = db.prepare('SELECT * FROM order_items WHERE id = ?').get(itemId);
-      const newItem = db.prepare('SELECT * FROM order_items WHERE id = ?').get(newItemId);
+      const newItem = remainingQuantity > 0 ? db.prepare('SELECT * FROM order_items WHERE id = ?').get(newItemId) : null;
       
       res.json({ success: true, updatedItem, newItem });
       

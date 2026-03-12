@@ -230,7 +230,7 @@ interface AppState {
   
   addOrderItem: (orderId: string, item: Omit<OrderItem, 'id' | 'orderId' | 'status'>) => Promise<void>;
   updateOrderItem: (orderId: string, itemId: string, updates: Partial<OrderItem>) => Promise<void>;
-  splitOrderItem: (orderId: string, itemId: string, receivedQuantity: number, remainingNotes?: string, expectedDate?: string) => Promise<void>;
+  splitOrderItem: (orderId: string, itemId: string, receivedQuantity: number, remainingNotes?: string, expectedDate?: string, receivedNotes?: string) => Promise<void>;
   deleteOrderItem: (orderId: string, itemId: string) => Promise<void>;
   ensureManualOrder: () => Promise<string>;
   
@@ -766,12 +766,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  splitOrderItem: async (orderId, itemId, receivedQuantity, remainingNotes, expectedDate) => {
+  splitOrderItem: async (orderId, itemId, receivedQuantity, remainingNotes, expectedDate, receivedNotes) => {
       try {
           const res = await fetch(`/api/orders/${orderId}/items/${itemId}/split`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ receivedQuantity, remainingNotes, expectedDate })
+              body: JSON.stringify({ receivedQuantity, remainingNotes, expectedDate, receivedNotes })
           });
           const data = await res.json();
           
@@ -807,13 +807,13 @@ export const useAppStore = create<AppState>((set, get) => ({
                           });
 
                           const updatedItem = mapItem(data.updatedItem);
-                          const newItem = mapItem(data.newItem);
+                          const newItem = data.newItem ? mapItem(data.newItem) : null;
 
                           return {
                               ...o,
                               orderItems: o.orderItems
                                   .map(i => i.id === itemId ? updatedItem : i) // Update original
-                                  .concat(newItem) // Add new
+                                  .concat(newItem ? [newItem] : []) // Add new if exists
                           };
                       }
                       return o;

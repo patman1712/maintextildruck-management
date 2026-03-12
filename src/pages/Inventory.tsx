@@ -294,18 +294,20 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const [splitReceivedQuantity, setSplitReceivedQuantity] = useState(1);
   const [splitRemainingDate, setSplitRemainingDate] = useState('');
   const [splitRemainingNotes, setSplitRemainingNotes] = useState('');
+  const [splitReceivedNotes, setSplitReceivedNotes] = useState('');
 
   const handleSplitClick = (item: OrderItem) => {
       setSplitItem(item);
       setSplitReceivedQuantity(1); // Default to 1 received
       setSplitRemainingDate('');
       setSplitRemainingNotes('');
+      setSplitReceivedNotes('');
       setShowSplitModal(true);
   };
 
   const handleSplitSubmit = async () => {
       if (!splitItem) return;
-      await splitOrderItem(splitItem.orderId, splitItem.id, splitReceivedQuantity, splitRemainingNotes, splitRemainingDate);
+      await splitOrderItem(splitItem.orderId, splitItem.id, splitReceivedQuantity, splitRemainingNotes, splitRemainingDate, splitReceivedNotes);
       setShowSplitModal(false);
       setSplitItem(null);
   };
@@ -941,7 +943,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                         
                                                         {((!showCompleted && item.status === 'ordered') || (showCompleted && currentUser?.role === 'admin')) && (
                                                             <div className="flex space-x-1">
-                                                                {!showCompleted && item.quantity > 1 && (
+                                                                {!showCompleted && (
                                                                     <button
                                                                         onClick={() => handleSplitClick(item)}
                                                                         className="p-1.5 text-blue-600 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200"
@@ -1251,41 +1253,62 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                             <input 
                                 type="number" 
                                 min="1" 
-                                max={splitItem.quantity - 1}
+                                max={splitItem.quantity}
                                 className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500 font-bold text-lg"
                                 value={splitReceivedQuantity}
-                                onChange={(e) => setSplitReceivedQuantity(Math.min(splitItem.quantity - 1, Math.max(1, parseInt(e.target.value) || 1)))}
+                                onChange={(e) => setSplitReceivedQuantity(Math.min(splitItem.quantity, Math.max(1, parseInt(e.target.value) || 1)))}
                             />
                             <p className="text-xs text-gray-500 mt-1">
                                 Diese {splitReceivedQuantity} Stück werden als "Erledigt" markiert. 
-                                Die restlichen {splitItem.quantity - splitReceivedQuantity} Stück bleiben offen.
+                                {splitItem.quantity - splitReceivedQuantity > 0 ? (
+                                    <span>Die restlichen {splitItem.quantity - splitReceivedQuantity} Stück bleiben offen.</span>
+                                ) : (
+                                    <span className="text-green-600 font-bold">Die Bestellung ist damit komplett.</span>
+                                )}
                             </p>
-                        </div>
-
-                        <div className="pt-4 border-t border-gray-100">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Wann wird der <span className="text-yellow-600 font-bold">Rest</span> erwartet?
-                            </label>
-                            <input 
-                                type="date" 
-                                className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
-                                value={splitRemainingDate}
-                                onChange={(e) => setSplitRemainingDate(e.target.value)}
-                            />
                         </div>
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Notiz zur Restlieferung (Optional)
+                                Notiz zur Lieferung (Was wurde geliefert?)
                             </label>
                             <input 
                                 type="text" 
                                 className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
-                                placeholder="z.B. Kommt mit nächster Lieferung"
-                                value={splitRemainingNotes}
-                                onChange={(e) => setSplitRemainingNotes(e.target.value)}
+                                placeholder="z.B. 1x S, 1x M, 3x XL..."
+                                value={splitReceivedNotes}
+                                onChange={(e) => setSplitReceivedNotes(e.target.value)}
                             />
                         </div>
+
+                        {splitItem.quantity - splitReceivedQuantity > 0 && (
+                            <div className="pt-4 border-t border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Wann wird der <span className="text-yellow-600 font-bold">Rest</span> erwartet?
+                                    </label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                        value={splitRemainingDate}
+                                        onChange={(e) => setSplitRemainingDate(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="mt-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Notiz zur Restlieferung (Optional)
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder="z.B. Kommt mit nächster Lieferung"
+                                        value={splitRemainingNotes}
+                                        onChange={(e) => setSplitRemainingNotes(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
                     
                     <div className="flex justify-end space-x-3 pt-2 border-t border-gray-100">
