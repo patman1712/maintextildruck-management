@@ -296,6 +296,42 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const [splitRemainingNotes, setSplitRemainingNotes] = useState('');
   const [splitReceivedNotes, setSplitReceivedNotes] = useState('');
 
+  // Edit Order Item State
+  const [editingOrderItem, setEditingOrderItem] = useState<OrderItem | null>(null);
+  const [editItemForm, setEditItemForm] = useState({
+      itemName: '',
+      itemNumber: '',
+      color: '',
+      size: '',
+      quantity: 1,
+      notes: ''
+  });
+
+  const handleEditOrderItemClick = (item: OrderItem) => {
+      setEditingOrderItem(item);
+      setEditItemForm({
+          itemName: item.itemName,
+          itemNumber: item.itemNumber || '',
+          color: item.color || '',
+          size: item.size || '',
+          quantity: item.quantity,
+          notes: item.notes || ''
+      });
+  };
+
+  const handleEditOrderItemSubmit = async () => {
+      if (!editingOrderItem) return;
+      await updateOrderItem(editingOrderItem.orderId, editingOrderItem.id, {
+          itemName: editItemForm.itemName,
+          itemNumber: editItemForm.itemNumber,
+          color: editItemForm.color,
+          size: editItemForm.size,
+          quantity: editItemForm.quantity,
+          notes: editItemForm.notes
+      });
+      setEditingOrderItem(null);
+  };
+
   const handleSplitClick = (item: OrderItem) => {
       setSplitItem(item);
       setSplitReceivedQuantity(1); // Default to 1 received
@@ -388,6 +424,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   });
   
   const [pendingItems, setPendingItems] = useState<any[]>([]);
+  const [editingTempId, setEditingTempId] = useState<string | null>(null);
   
   const [currentItem, setCurrentItem] = useState({
       supplierId: '',
@@ -476,14 +513,38 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const addCurrentItemToPending = () => {
       if (!currentItem.itemName) return;
       
-      setPendingItems(prev => [...prev, {
-          ...currentItem,
-          _tempId: Math.random().toString(),
-          supplierId: currentItem.supplierId || manualOrderSettings.defaultSupplierId,
-          manualOrderNumber: manualOrderSettings.manualOrderNumber,
-          quantity: currentItem.quantity, // Use the calculated/manual quantity
-          size: currentItem.size
-      }]);
+      if (editingTempId) {
+          // Update existing pending item
+          setPendingItems(prev => prev.map(item => {
+              if (item._tempId === editingTempId) {
+                  return {
+                      ...item,
+                      supplierId: currentItem.supplierId || manualOrderSettings.defaultSupplierId,
+                      itemName: currentItem.itemName,
+                      itemNumber: currentItem.itemNumber,
+                      manualOrderNumber: manualOrderSettings.manualOrderNumber,
+                      color: currentItem.color,
+                      size: currentItem.size,
+                      quantity: currentItem.quantity,
+                      notes: currentItem.notes,
+                      files: currentItem.files
+                  };
+              }
+              return item;
+          }));
+          setEditingTempId(null);
+      } else {
+          // Add new item
+          setPendingItems(prev => [...prev, {
+              ...currentItem,
+              _tempId: Math.random().toString(),
+              supplierId: currentItem.supplierId || manualOrderSettings.defaultSupplierId,
+              manualOrderNumber: manualOrderSettings.manualOrderNumber,
+              quantity: currentItem.quantity, // Use the calculated/manual quantity
+              size: currentItem.size
+          }]);
+      }
+      
       // Reset current item
       setCurrentItem(prev => ({
           ...prev,
@@ -495,6 +556,20 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
           notes: '',
           files: []
       }));
+  };
+
+  const editPendingItem = (item: any) => {
+      setCurrentItem({
+          supplierId: item.supplierId || '',
+          itemName: item.itemName || '',
+          itemNumber: item.itemNumber || '',
+          color: item.color || '',
+          size: item.size || '',
+          quantity: item.quantity || 1,
+          notes: item.notes || '',
+          files: item.files || []
+      });
+      setEditingTempId(item._tempId);
   };
 
   const removePendingItem = (tempId: string) => {
@@ -999,17 +1074,33 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                     {/* Individual Actions */}
                                                     <div className="flex space-x-2">
                                                         {!showCompleted && item.status === 'pending' && (
-                                                            <button 
-                                                                onClick={() => updateStatus(item.orderId, item.id, 'ordered')}
-                                                                className="p-1.5 text-yellow-600 hover:bg-yellow-50 rounded border border-transparent hover:border-yellow-200"
-                                                                title="Manuell als 'Bestellt' markieren"
-                                                            >
-                                                                <ShoppingCart size={18} />
-                                                            </button>
+                                                            <>
+                                                                <button 
+                                                                    onClick={() => handleEditOrderItemClick(item)}
+                                                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200"
+                                                                    title="Bearbeiten"
+                                                                >
+                                                                    <Edit size={18} />
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => updateStatus(item.orderId, item.id, 'ordered')}
+                                                                    className="p-1.5 text-yellow-600 hover:bg-yellow-50 rounded border border-transparent hover:border-yellow-200"
+                                                                    title="Manuell als 'Bestellt' markieren"
+                                                                >
+                                                                    <ShoppingCart size={18} />
+                                                                </button>
+                                                            </>
                                                         )}
                                                         
                                                         {((!showCompleted && item.status === 'ordered') || (showCompleted && currentUser?.role === 'admin')) && (
                                                             <div className="flex space-x-1">
+                                                                <button 
+                                                                    onClick={() => handleEditOrderItemClick(item)}
+                                                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200"
+                                                                    title="Bearbeiten"
+                                                                >
+                                                                    <Edit size={18} />
+                                                                </button>
                                                                 {!showCompleted && (
                                                                     <button
                                                                         onClick={() => handleSplitClick(item)}
@@ -1171,15 +1262,29 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                     />
                                 </div>
 
-                                <div className="md:col-span-2 flex items-end">
+                                <div className="md:col-span-2 flex items-end space-x-2">
                                     <button
                                         onClick={addCurrentItemToPending}
                                         disabled={!currentItem.itemName}
-                                        className="w-full bg-slate-800 text-white px-4 py-2 rounded-md hover:bg-slate-900 disabled:opacity-50 text-sm flex items-center justify-center h-[38px]"
+                                        className={`w-full ${editingTempId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-800 hover:bg-slate-900'} text-white px-4 py-2 rounded-md disabled:opacity-50 text-sm flex items-center justify-center h-[38px]`}
                                     >
-                                        <Plus size={16} className="mr-2" />
-                                        Hinzufügen
+                                        {editingTempId ? <Save size={16} className="mr-2" /> : <Plus size={16} className="mr-2" />}
+                                        {editingTempId ? 'Speichern' : 'Hinzufügen'}
                                     </button>
+                                    {editingTempId && (
+                                        <button
+                                            onClick={() => {
+                                                setEditingTempId(null);
+                                                setCurrentItem({
+                                                    supplierId: '', itemName: '', itemNumber: '', color: '', size: '', quantity: 1, notes: '', files: []
+                                                });
+                                            }}
+                                            className="bg-gray-200 text-gray-700 px-3 py-2 rounded-md hover:bg-gray-300 h-[38px]"
+                                            title="Abbrechen"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -1226,10 +1331,18 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                         {suppliers.find(s => s.id === item.supplierId)?.name || 'Standard'}
                                                     </td>
                                                     <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 italic">{item.notes}</td>
-                                                    <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
+                                                    <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                                        <button 
+                                                            onClick={() => editPendingItem(item)}
+                                                            className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
+                                                            title="Bearbeiten"
+                                                        >
+                                                            <Edit size={16} />
+                                                        </button>
                                                         <button 
                                                             onClick={() => removePendingItem(item._tempId)}
                                                             className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
+                                                            title="Löschen"
                                                         >
                                                             <Trash2 size={16} />
                                                         </button>
@@ -1367,6 +1480,98 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                         >
                             <Scissors size={16} className="mr-2" />
                             Teillieferung speichern
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {/* EDIT ORDER ITEM MODAL */}
+        {editingOrderItem && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200">
+                    <div className="flex items-center text-blue-600 mb-4">
+                        <div className="bg-blue-100 p-2 rounded-full mr-3">
+                            <Edit size={24} />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-800">Position bearbeiten</h3>
+                    </div>
+                    
+                    <div className="space-y-4 mb-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Artikelname</label>
+                            <input 
+                                type="text" 
+                                className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                value={editItemForm.itemName}
+                                onChange={(e) => setEditItemForm({...editItemForm, itemName: e.target.value})}
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Art.-Nr.</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                    value={editItemForm.itemNumber}
+                                    onChange={(e) => setEditItemForm({...editItemForm, itemNumber: e.target.value})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Farbe</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                    value={editItemForm.color}
+                                    onChange={(e) => setEditItemForm({...editItemForm, color: e.target.value})}
+                                />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Größe</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                    value={editItemForm.size}
+                                    onChange={(e) => setEditItemForm({...editItemForm, size: e.target.value})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Anzahl</label>
+                                <input 
+                                    type="number" 
+                                    min="1"
+                                    className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                    value={editItemForm.quantity}
+                                    onChange={(e) => setEditItemForm({...editItemForm, quantity: parseInt(e.target.value) || 1})}
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Notiz</label>
+                            <input 
+                                type="text" 
+                                className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                value={editItemForm.notes}
+                                onChange={(e) => setEditItemForm({...editItemForm, notes: e.target.value})}
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="flex justify-end space-x-3 pt-2 border-t border-gray-100">
+                        <button 
+                            onClick={() => setEditingOrderItem(null)}
+                            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+                        >
+                            Abbrechen
+                        </button>
+                        <button 
+                            onClick={handleEditOrderItemSubmit}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors flex items-center font-medium"
+                        >
+                            <Save size={16} className="mr-2" />
+                            Speichern
                         </button>
                     </div>
                 </div>
