@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useAppStore, Supplier, OrderItem } from '@/store';
-import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, RotateCcw, Search, User, Package, ChevronDown, ChevronRight, Save, X, Scissors } from 'lucide-react';
+import { Plus, Edit, Edit2, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, RotateCcw, Search, User, Package, ChevronDown, ChevronRight, Save, X, Scissors } from 'lucide-react';
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState<'orders' | 'completed' | 'suppliers'>('orders');
@@ -951,8 +951,28 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                             {item.quantity > 1 && !/(\d+)\s*[xX]/.test(item.size) ? `${item.quantity}x ` : ''}{item.size}
                                                          </span>
                                                          {item.color && <span className="text-gray-600">Farbe: {item.color}</span>}
+                                                         
+                                                         {/* Inline Note Edit Button */}
+                                                         {(!showCompleted && (item.status === 'ordered' || item.status === 'pending')) && (
+                                                             <button 
+                                                                 onClick={(e) => {
+                                                                     e.stopPropagation();
+                                                                     const note = prompt('Notiz hinzufügen/bearbeiten:', item.notes || '');
+                                                                     if (note !== null) {
+                                                                         updateOrderItem(item.orderId, item.id, { notes: note });
+                                                                     }
+                                                                 }}
+                                                                 className="text-gray-400 hover:text-blue-600 p-0.5 rounded hover:bg-blue-50 transition-colors"
+                                                                 title="Notiz bearbeiten"
+                                                             >
+                                                                 <Edit2 size={12} />
+                                                             </button>
+                                                         )}
                                                     </div>
-                                                    {item.notes && <div className="text-xs text-gray-400 italic mt-0.5 break-words">{item.notes}</div>}
+                                                    {item.notes && <div className="text-xs text-gray-500 italic mt-0.5 break-words bg-yellow-50 px-1.5 py-0.5 rounded inline-block border border-yellow-100">
+                                                        <span className="font-semibold text-yellow-700 mr-1">Notiz:</span>
+                                                        {item.notes}
+                                                    </div>}
                                                     {item.status === 'ordered' && item.orderedBy && (
                                                         <div className="text-xs text-yellow-600 mt-0.5 flex items-center gap-1">
                                                             <Clock size={12} />
