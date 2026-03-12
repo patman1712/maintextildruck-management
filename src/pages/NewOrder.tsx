@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Upload, Plus, X, User, Calendar, FileText, ShoppingCart, Trash2, Package, Shield, Layers } from "lucide-react";
+import { Upload, Plus, X, User, Calendar, FileText, ShoppingCart, Trash2, Package, Shield, Layers, Edit } from "lucide-react";
 import { useAppStore, Order } from "@/store";
 import { useNavigate } from "react-router-dom";
 
@@ -180,6 +180,7 @@ export default function NewOrder() {
   
   // Order Items logic (local state for new order creation)
   const [orderItems, setOrderItems] = useState<any[]>([]);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [newItem, setNewItem] = useState({
     supplierId: '',
     itemName: '',
@@ -193,7 +194,17 @@ export default function NewOrder() {
 
   const handleAddItem = () => {
     if (newItem.supplierId && newItem.itemName) {
-        setOrderItems([...orderItems, { ...newItem, id: Math.random().toString(36).substr(2, 9), status: 'pending' }]);
+        if (editingIndex !== null) {
+            // Update existing item
+            const updatedItems = [...orderItems];
+            updatedItems[editingIndex] = { ...newItem, id: orderItems[editingIndex].id, status: orderItems[editingIndex].status };
+            setOrderItems(updatedItems);
+            setEditingIndex(null);
+        } else {
+            // Add new item
+            setOrderItems([...orderItems, { ...newItem, id: Math.random().toString(36).substr(2, 9), status: 'pending' }]);
+        }
+        
         setNewItem({
             supplierId: '',
             itemName: '',
@@ -205,6 +216,35 @@ export default function NewOrder() {
             price: ''
         });
     }
+  };
+
+  const handleEditItem = (index: number) => {
+    const item = orderItems[index];
+    setNewItem({
+        supplierId: item.supplierId,
+        itemName: item.itemName,
+        itemNumber: item.itemNumber || '',
+        color: item.color || '',
+        size: item.size,
+        quantity: item.quantity,
+        notes: item.notes || '',
+        price: item.price || ''
+    });
+    setEditingIndex(index);
+  };
+
+  const handleCancelEdit = () => {
+    setNewItem({
+        supplierId: '',
+        itemName: '',
+        itemNumber: '',
+        color: '',
+        size: '',
+        quantity: 1,
+        notes: '',
+        price: ''
+    });
+    setEditingIndex(null);
   };
 
   const removeOrderItem = (index: number) => {
@@ -1566,15 +1606,34 @@ export default function NewOrder() {
                         onChange={(e) => setNewItem({...newItem, notes: e.target.value})}
                     />
                 </div>
-                <div className="md:col-span-12 flex items-end justify-end">
+                <div className="md:col-span-12 flex items-end justify-end space-x-2">
+                    {editingIndex !== null && (
+                        <button 
+                            type="button"
+                            onClick={handleCancelEdit}
+                            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm hover:bg-gray-300 flex items-center"
+                        >
+                            <X size={16} className="mr-1" />
+                            Abbrechen
+                        </button>
+                    )}
                     <button 
                         type="button"
                         onClick={handleAddItem}
                         disabled={!newItem.supplierId || !newItem.itemName}
-                        className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        className={`${editingIndex !== null ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'} text-white px-4 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center`}
                     >
-                        <Plus size={16} className="mr-1" />
-                        Hinzufügen
+                        {editingIndex !== null ? (
+                            <>
+                                <Edit size={16} className="mr-1" />
+                                Aktualisieren
+                            </>
+                        ) : (
+                            <>
+                                <Plus size={16} className="mr-1" />
+                                Hinzufügen
+                            </>
+                        )}
                     </button>
                 </div>
             </div>
@@ -1608,13 +1667,24 @@ export default function NewOrder() {
                                 </td>
                                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500 italic">{item.notes}</td>
                                 <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
-                                    <button 
-                                        type="button" 
-                                        onClick={() => removeOrderItem(index)}
-                                        className="text-red-600 hover:text-red-900"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
+                                    <div className="flex justify-end space-x-2">
+                                        <button 
+                                            type="button" 
+                                            onClick={() => handleEditItem(index)}
+                                            className="text-blue-600 hover:text-blue-900"
+                                            title="Bearbeiten"
+                                        >
+                                            <Edit size={16} />
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => removeOrderItem(index)}
+                                            className="text-red-600 hover:text-red-900"
+                                            title="Löschen"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}

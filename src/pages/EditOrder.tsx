@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Upload, X, User, Calendar, FileText, ArrowLeft, ShoppingCart, Trash2, Plus, Package, Shield, Layers } from "lucide-react";
-import { useAppStore, Order } from "@/store";
+import { Upload, X, User, Calendar, FileText, ArrowLeft, ShoppingCart, Trash2, Plus, Package, Shield, Layers, Edit } from "lucide-react";
+import { useAppStore, Order, OrderItem } from "@/store";
 import { useNavigate, useParams } from "react-router-dom";
 
 interface CustomerProduct {
@@ -35,8 +35,11 @@ export default function EditOrder() {
   // Order Items logic
   const addOrderItem = useAppStore((state) => state.addOrderItem);
   const deleteOrderItem = useAppStore((state) => state.deleteOrderItem);
+  const updateOrderItem = useAppStore((state) => state.updateOrderItem);
   const orderItems = orders.find(o => o.id === id)?.orderItems || [];
   
+  const [editingItem, setEditingItem] = useState<OrderItem | null>(null);
+
   const [newItem, setNewItem] = useState({
     supplierId: '',
     itemName: '',
@@ -50,7 +53,22 @@ export default function EditOrder() {
 
   const handleAddItem = async () => {
     if (id && newItem.supplierId && newItem.itemName) {
-        await addOrderItem(id, newItem);
+        if (editingItem) {
+            await updateOrderItem(id, editingItem.id, {
+                supplierId: newItem.supplierId,
+                itemName: newItem.itemName,
+                itemNumber: newItem.itemNumber,
+                color: newItem.color,
+                size: newItem.size,
+                quantity: newItem.quantity,
+                price: newItem.price,
+                notes: newItem.notes
+            });
+            setEditingItem(null);
+        } else {
+            await addOrderItem(id, newItem);
+        }
+        
         setNewItem({
             supplierId: '',
             itemName: '',
@@ -62,6 +80,34 @@ export default function EditOrder() {
             notes: ''
         });
     }
+  };
+
+  const handleEditItem = (item: OrderItem) => {
+    setEditingItem(item);
+    setNewItem({
+        supplierId: item.supplierId,
+        itemName: item.itemName,
+        itemNumber: item.itemNumber || '',
+        color: item.color || '',
+        size: item.size || '',
+        quantity: item.quantity,
+        price: item.price || 0,
+        notes: item.notes || ''
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingItem(null);
+    setNewItem({
+        supplierId: '',
+        itemName: '',
+        itemNumber: '',
+        color: '',
+        size: '',
+        quantity: 1,
+        price: 0,
+        notes: ''
+    });
   };
 
   useEffect(() => {
@@ -1096,15 +1142,34 @@ export default function EditOrder() {
                         onChange={(e) => setNewItem({...newItem, notes: e.target.value})}
                     />
                 </div>
-                <div className="md:col-span-12 flex items-end justify-end">
+                <div className="md:col-span-12 flex items-end justify-end space-x-2">
+                    {editingItem && (
+                        <button 
+                            type="button"
+                            onClick={handleCancelEdit}
+                            className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm hover:bg-gray-300 flex items-center"
+                        >
+                            <X size={16} className="mr-1" />
+                            Abbrechen
+                        </button>
+                    )}
                     <button 
                         type="button"
                         onClick={handleAddItem}
                         disabled={!newItem.supplierId || !newItem.itemName}
-                        className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        className={`${editingItem ? 'bg-blue-600 hover:bg-blue-700' : 'bg-red-600 hover:bg-red-700'} text-white px-4 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center`}
                     >
-                        <Plus size={16} className="mr-1" />
-                        Hinzufügen
+                        {editingItem ? (
+                            <>
+                                <Edit size={16} className="mr-1" />
+                                Aktualisieren
+                            </>
+                        ) : (
+                            <>
+                                <Plus size={16} className="mr-1" />
+                                Hinzufügen
+                            </>
+                        )}
                     </button>
                 </div>
             </div>
@@ -1144,15 +1209,26 @@ export default function EditOrder() {
                                     </span>
                                 </td>
                                 <td className="px-4 py-2 whitespace-nowrap text-right text-sm font-medium">
-                                    {id && (
+                                    <div className="flex justify-end space-x-2">
                                         <button 
                                             type="button" 
-                                            onClick={() => deleteOrderItem(id, item.id)}
-                                            className="text-red-600 hover:text-red-900"
+                                            onClick={() => handleEditItem(item)}
+                                            className="text-blue-600 hover:text-blue-900"
+                                            title="Bearbeiten"
                                         >
-                                            <Trash2 size={16} />
+                                            <Edit size={16} />
                                         </button>
-                                    )}
+                                        {id && (
+                                            <button 
+                                                type="button" 
+                                                onClick={() => deleteOrderItem(id, item.id)}
+                                                className="text-red-600 hover:text-red-900"
+                                                title="Löschen"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ))}
