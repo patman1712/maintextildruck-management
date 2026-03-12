@@ -301,7 +301,11 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
       setSplitReceivedQuantity(1); // Default to 1 received
       setSplitRemainingDate('');
       setSplitRemainingNotes('');
-      setSplitReceivedNotes('');
+      
+      // Auto-fill received notes with the full item description
+      const quantityPrefix = item.quantity > 1 && !/(\d+)\s*[xX]/.test(item.size || '') ? `${item.quantity}x ` : '';
+      setSplitReceivedNotes(`${quantityPrefix}${item.size || ''}`.trim());
+      
       setShowSplitModal(true);
   };
 
@@ -1278,7 +1282,6 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                     
                     <div className="mb-6 bg-gray-50 p-3 rounded border border-gray-200 text-sm">
                         <div className="font-bold text-gray-900 mb-1">{splitItem.itemName}</div>
-                        <div className="text-gray-600">Gesamtmenge: <span className="font-mono font-bold">{splitItem.quantity} Stück</span></div>
                     </div>
 
                     <div className="space-y-4 mb-6">
