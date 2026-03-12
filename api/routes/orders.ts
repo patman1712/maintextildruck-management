@@ -442,8 +442,11 @@ router.post('/:orderId/items/:itemId/split', (req: Request, res: Response) => {
       
       // Transaction to ensure atomicity
       const transaction = db.transaction(() => {
-          // If full delivery, we just mark the original item as received
-          if (remainingQuantity <= 0) {
+          // Check if user explicitly wants to keep a "Remaining" part (Partial Delivery) even if quantity is exhausted
+          const forcePartial = !!remainingNotes || !!expectedDate;
+
+          // If full delivery (no remaining quantity AND no remaining notes), we just mark the original item as received
+          if (remainingQuantity <= 0 && !forcePartial) {
               let updatedReceivedNotes = item.notes || '';
               // For full delivery, update size to match the received notes if provided
               const newReceivedSize = receivedNotes || item.size;
@@ -464,12 +467,16 @@ router.post('/:orderId/items/:itemId/split', (req: Request, res: Response) => {
               
               // Use remainingNotes as the new SIZE description if provided, otherwise keep original
               const newRemainingSize = remainingNotes || item.size;
+              
+              // If forced partial but remainingQuantity <= 0, we set it to 0 to keep it visible but technically empty
+              // Or should we duplicate quantity? Let's use 0 to avoid inflating totals.
+              const finalRemainingQuantity = remainingQuantity <= 0 ? 0 : remainingQuantity;
 
               db.prepare(`
                   UPDATE order_items 
                   SET quantity = ?, status = 'ordered', notes = ?, size = ?
                   WHERE id = ?
-              `).run(remainingQuantity, updatedRemainingNotes, newRemainingSize, itemId);
+              `).run(finalRemainingQuantity, updatedRemainingNotes, newRemainingSize, itemId);
               
               // 2. Create new item (Received)
               // Use receivedNotes as the new SIZE description if provided
@@ -492,7 +499,9 @@ router.post('/:orderId/items/:itemId/split', (req: Request, res: Response) => {
       
       // Fetch updated/new items to return
       const updatedItem = db.prepare('SELECT * FROM order_items WHERE id = ?').get(itemId);
-      const newItem = remainingQuantity > 0 ? db.prepare('SELECT * FROM order_items WHERE id = ?').get(newItemId) : null;
+      // If we forced partial, we definitely created a new item, so fetch it regardless of remainingQuantity check
+      const forcePartial = !!remainingNotes || !!expectedDate;
+      const newItem = (remainingQuantity > 0 || forcePartial) ? db.prepare('SELECT * FROM order_items WHERE id = ?').get(newItemId) : null;
       
       res.json({ success: true, updatedItem, newItem });
       
