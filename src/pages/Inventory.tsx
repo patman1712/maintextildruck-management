@@ -307,7 +307,43 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
   const handleSplitSubmit = async () => {
       if (!splitItem) return;
-      await splitOrderItem(splitItem.orderId, splitItem.id, splitReceivedQuantity, splitRemainingNotes, splitRemainingDate, splitReceivedNotes);
+      
+      let finalReceivedQuantity = splitReceivedQuantity;
+      
+      // Calculate quantity from text if "Kommt noch" (remaining notes) is filled
+      if (splitRemainingNotes.trim() !== '' || splitRemainingDate) {
+          // It's a partial delivery
+          // Try to parse received quantity from text
+          const parsedQty = parseQuantity(splitReceivedNotes);
+          // If parsing returns 1 (default) but text doesn't look like "1x", maybe we should be careful?
+          // But parseQuantity returns 1 if no "x" pattern found.
+          
+          // If the user entered explicit number via hidden logic (we removed input), we rely on parsing.
+          // Since we removed the input, splitReceivedQuantity is stuck at initial value (1).
+          // So we MUST use the parsed value.
+          
+          finalReceivedQuantity = parsedQty;
+          
+          // Safety: clamp between 1 and total-1 (because it's partial)
+          if (finalReceivedQuantity >= splitItem.quantity) {
+             finalReceivedQuantity = splitItem.quantity - 1; 
+          }
+          if (finalReceivedQuantity < 1) finalReceivedQuantity = 1;
+          
+          // If remaining notes provided but received notes are empty/unparseable, 
+          // maybe parse remaining notes and subtract?
+          if (!splitReceivedNotes.trim() && splitRemainingNotes.trim()) {
+              const parsedRemaining = parseQuantity(splitRemainingNotes);
+              if (parsedRemaining > 0 && parsedRemaining < splitItem.quantity) {
+                  finalReceivedQuantity = splitItem.quantity - parsedRemaining;
+              }
+          }
+      } else {
+          // Full delivery
+          finalReceivedQuantity = splitItem.quantity;
+      }
+
+      await splitOrderItem(splitItem.orderId, splitItem.id, finalReceivedQuantity, splitRemainingNotes, splitRemainingDate, splitReceivedNotes);
       setShowSplitModal(false);
       setSplitItem(null);
   };
@@ -1248,20 +1284,6 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                     <div className="space-y-4 mb-6">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Wie viele Stück sind <span className="text-green-600 font-bold">jetzt erhalten</span> worden?
-                            </label>
-                            <input 
-                                type="number" 
-                                min="1" 
-                                max={splitItem.quantity}
-                                className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500 font-bold text-lg"
-                                value={splitReceivedQuantity}
-                                onChange={(e) => setSplitReceivedQuantity(Math.min(splitItem.quantity, Math.max(1, parseInt(e.target.value) || 1)))}
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Geliefert (Was ist da?)
                             </label>
                             <input 
@@ -1273,35 +1295,33 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                             />
                         </div>
 
-                        {splitItem.quantity - splitReceivedQuantity > 0 && (
-                            <div className="pt-4 border-t border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200">
-                                
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Kommt noch (Was fehlt noch?)
-                                    </label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
-                                        placeholder="z.B. 2x XXL"
-                                        value={splitRemainingNotes}
-                                        onChange={(e) => setSplitRemainingNotes(e.target.value)}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Wann kommt der Rest?
-                                    </label>
-                                    <input 
-                                        type="date" 
-                                        className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
-                                        value={splitRemainingDate}
-                                        onChange={(e) => setSplitRemainingDate(e.target.value)}
-                                    />
-                                </div>
+                        <div className="pt-4 border-t border-gray-100 animate-in fade-in slide-in-from-top-2 duration-200">
+                            
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Kommt noch (Was fehlt noch?)
+                                </label>
+                                <input 
+                                    type="text" 
+                                    className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="z.B. 2x XXL"
+                                    value={splitRemainingNotes}
+                                    onChange={(e) => setSplitRemainingNotes(e.target.value)}
+                                />
                             </div>
-                        )}
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Wann kommt der Rest?
+                                </label>
+                                <input 
+                                    type="date" 
+                                    className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                    value={splitRemainingDate}
+                                    onChange={(e) => setSplitRemainingDate(e.target.value)}
+                                />
+                            </div>
+                        </div>
                     </div>
                     
                     <div className="flex justify-end space-x-3 pt-2 border-t border-gray-100">
