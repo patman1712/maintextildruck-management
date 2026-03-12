@@ -285,7 +285,6 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const updateOrder = useAppStore((state) => state.updateOrder);
   const currentUser = useAppStore((state) => state.currentUser);
   const addOrderItem = useAppStore((state) => state.addOrderItem);
-  const updateOrderItem = useAppStore((state) => state.updateOrderItem);
   const splitOrderItem = useAppStore((state) => state.splitOrderItem);
   const ensureManualOrder = useAppStore((state) => state.ensureManualOrder);
 
