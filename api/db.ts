@@ -1052,6 +1052,19 @@ try {
       console.error('Migration error (order_items tracking):', e);
   }
 
+  // Migration: Add price_per_value to product_variables
+  try {
+      const variableCols = db.prepare("PRAGMA table_info(product_variables)").all() as any[];
+      const hasPricePerValue = variableCols.some(col => col.name === 'price_per_value');
+      if (!hasPricePerValue) {
+          console.log('Migrating database: Adding price_per_value to product_variables table');
+          db.exec('ALTER TABLE product_variables ADD COLUMN price_per_value BOOLEAN DEFAULT 0');
+          db.exec('ALTER TABLE product_variables ADD COLUMN variable_prices TEXT'); // JSON object { "Value": Price }
+      }
+  } catch (e) {
+      console.error('Migration error (product_variables prices):', e);
+  }
+
   // Ensure default row for global content
   try {
       const row = db.prepare("SELECT id FROM global_shop_content WHERE id = 'main'").get();

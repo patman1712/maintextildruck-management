@@ -9,16 +9,17 @@ const router = Router();
 router.get('/', (req, res) => {
   try {
     const variables = db.prepare(`
-      SELECT v.id, v.name, v.type, v.variable_values as "values", v.created_at, 
+      SELECT v.id, v.name, v.type, v.variable_values as "values", v.price_per_value, v.variable_prices, v.created_at, 
       (SELECT json_group_array(shop_id) FROM shop_variable_assignments WHERE variable_id = v.id) as assigned_shop_ids
       FROM product_variables v 
       ORDER BY v.created_at DESC
     `).all();
     
-    // Parse assigned_shop_ids from JSON string to array
+    // Parse assigned_shop_ids and variable_prices
     const data = variables.map((v: any) => ({
         ...v,
-        assigned_shop_ids: v.assigned_shop_ids ? JSON.parse(v.assigned_shop_ids) : []
+        assigned_shop_ids: v.assigned_shop_ids ? JSON.parse(v.assigned_shop_ids) : [],
+        variable_prices: v.variable_prices ? JSON.parse(v.variable_prices) : {}
     }));
 
     res.json({ success: true, data });
@@ -30,25 +31,20 @@ router.get('/', (req, res) => {
 // Create variable
 router.post('/', (req, res) => {
   try {
-    const { name, type, values, shop_ids } = req.body;
+    const { name, type, values, shop_ids, price_per_value, variable_prices } = req.body;
     
     if (!name || !type || !values) {
         return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
     const id = crypto.randomUUID();
-    
-    // Values: If array, join or stringify. If string, keep.
-    // Ideally we store as string for simplicity if it's comma separated sizes, 
-    // or JSON string if it's complex (like colors with hex codes).
-    // For now, let's assume it's a string (e.g. "S, M, L" or "#fff|#000").
-    // The frontend will handle formatting.
     const valuesStr = Array.isArray(values) ? values.join(',') : values;
+    const pricesStr = variable_prices ? JSON.stringify(variable_prices) : null;
 
     db.prepare(`
-      INSERT INTO product_variables (id, name, type, variable_values)
-      VALUES (?, ?, ?, ?)
-    `).run(id, name, type, valuesStr);
+      INSERT INTO product_variables (id, name, type, variable_values, price_per_value, variable_prices)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, name, type, valuesStr, price_per_value ? 1 : 0, pricesStr);
 
     // Assign to shops
     if (shop_ids && Array.isArray(shop_ids)) {
@@ -58,7 +54,7 @@ router.post('/', (req, res) => {
         }
     }
 
-    const variable = db.prepare('SELECT id, name, type, variable_values as "values", created_at FROM product_variables WHERE id = ?').get(id);
+    const variable = db.prepare('SELECT id, name, type, variable_values as "values", price_per_value, variable_prices, created_at FROM product_variables WHERE id = ?').get(id);
     res.json({ success: true, data: variable });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -69,15 +65,16 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { name, type, values, shop_ids } = req.body;
+    const { name, type, values, shop_ids, price_per_value, variable_prices } = req.body;
 
     const valuesStr = Array.isArray(values) ? values.join(',') : values;
+    const pricesStr = variable_prices ? JSON.stringify(variable_prices) : null;
 
     db.prepare(`
       UPDATE product_variables 
-      SET name = ?, type = ?, variable_values = ?
+      SET name = ?, type = ?, variable_values = ?, price_per_value = ?, variable_prices = ?
       WHERE id = ?
-    `).run(name, type, valuesStr, id);
+    `).run(name, type, valuesStr, price_per_value ? 1 : 0, pricesStr, id);
 
     // Update assignments
     if (shop_ids && Array.isArray(shop_ids)) {
@@ -91,7 +88,7 @@ router.put('/:id', (req, res) => {
         }
     }
 
-    const variable = db.prepare('SELECT id, name, type, variable_values as "values", created_at FROM product_variables WHERE id = ?').get(id);
+    const variable = db.prepare('SELECT id, name, type, variable_values as "values", price_per_value, variable_prices, created_at FROM product_variables WHERE id = ?').get(id);
     res.json({ success: true, data: variable });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -114,12 +111,18 @@ router.get('/shop/:shopId', (req, res) => {
     try {
         const { shopId } = req.params;
         const variables = db.prepare(`
-            SELECT v.id, v.name, v.type, v.variable_values as "values", v.created_at 
+            SELECT v.id, v.name, v.type, v.variable_values as "values", v.price_per_value, v.variable_prices, v.created_at 
             FROM product_variables v
             JOIN shop_variable_assignments sva ON v.id = sva.variable_id
             WHERE sva.shop_id = ?
         `).all(shopId);
-        res.json({ success: true, data: variables });
+        
+        const data = variables.map((v: any) => ({
+            ...v,
+            variable_prices: v.variable_prices ? JSON.parse(v.variable_prices) : {}
+        }));
+
+        res.json({ success: true, data });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }

@@ -155,6 +155,45 @@ const ShopProductPage: React.FC = () => {
       return price;
   }, [product, variants, selectedVariantId]);
 
+  const variablePriceAdjustment = React.useMemo(() => {
+      let adjustment = 0;
+      if (!shopVariables.length) return 0;
+
+      // 1. Check Active Main Variant (Value is in selectedSize)
+      if (selectedSize) {
+           if (selectedVariantId) {
+               // Specific variable selected
+               const v = shopVariables.find(v => String(v.id) === String(selectedVariantId));
+               if (v && v.price_per_value && v.variable_prices && v.variable_prices[selectedSize]) {
+                   adjustment += v.variable_prices[selectedSize];
+               }
+           } else {
+               // No specific variant selected (Legacy Mode or simple Size)
+               // Check all 'size' variables for a match
+               const sizeVars = shopVariables.filter(v => v.type === 'size' && v.price_per_value);
+               for (const v of sizeVars) {
+                   const values = v.values ? v.values.split(',').map((s: string) => s.trim()) : [];
+                   if (values.includes(selectedSize)) {
+                       if (v.variable_prices && v.variable_prices[selectedSize]) {
+                           adjustment += v.variable_prices[selectedSize];
+                           break; // Stop after first match to avoid double counting if multiple variables have same value
+                       }
+                   }
+               }
+           }
+      }
+
+      // 2. Check Back Print
+      if (selectedBackPrint && backPrintVariant) {
+           const v = shopVariables.find(v => String(v.id) === String(backPrintVariant.id));
+           if (v && v.price_per_value && v.variable_prices && v.variable_prices[selectedBackPrint]) {
+               adjustment += v.variable_prices[selectedBackPrint];
+           }
+      }
+
+      return adjustment;
+  }, [selectedSize, selectedBackPrint, backPrintVariant, shopVariables, selectedVariantId]);
+
   // Derived state to show "Ab" (From) prefix
   const showFromPrice = !selectedVariantId && Object.keys(variants).length > 0;
 
@@ -449,7 +488,7 @@ const ShopProductPage: React.FC = () => {
     // Check if back print is mandatory and missing
     if (backPrintVariant && !selectedBackPrint) return;
 
-    const totalPrice = currentPrice + calculatePersonalizationPrice();
+    const totalPrice = currentPrice + variablePriceAdjustment + calculatePersonalizationPrice();
     
     // Create a unique ID for this specific product + options combo
     const personalizationString = Object.entries(selectedPersonalization)
@@ -562,7 +601,7 @@ const ShopProductPage: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
                 <div className="text-2xl font-bold">
                     {showFromPrice && <span className="text-sm font-normal text-slate-500 mr-1">Ab</span>}
-                    € {currentPrice.toFixed(2)}
+                    € {(currentPrice + variablePriceAdjustment).toFixed(2)}
                 </div>
                 <div className="text-xs text-slate-500">inkl. MwSt. zzgl. Versandkosten</div>
             </div>
@@ -615,9 +654,23 @@ const ShopProductPage: React.FC = () => {
                     }}
                 >
                     <option value="">Bitte Grösse wählen</option>
-                    {availableSizes.map((size: string) => (
-                        <option key={size} value={size}>{size}</option>
-                    ))}
+                    {availableSizes.map((size: string) => {
+                        let surcharge = 0;
+                        const sizeVars = shopVariables.filter(v => v.type === 'size' && v.price_per_value);
+                        for (const v of sizeVars) {
+                            const values = v.values ? v.values.split(',').map((s: string) => s.trim()) : [];
+                            if (values.includes(size)) {
+                                if (v.variable_prices && v.variable_prices[size]) {
+                                    surcharge += v.variable_prices[size];
+                                }
+                            }
+                        }
+                        return (
+                            <option key={size} value={size}>
+                                {size} {surcharge > 0 ? `(+ € ${surcharge.toFixed(2)})` : ''}
+                            </option>
+                        );
+                    })}
                 </select>
             </div>
 
@@ -638,9 +691,20 @@ const ShopProductPage: React.FC = () => {
                         }}
                     >
                         <option value="">Bitte wählen (Pflichtfeld)</option>
-                        {availableBackPrints.map(val => (
-                            <option key={val} value={val}>{val}</option>
-                        ))}
+                        {availableBackPrints.map(val => {
+                            let surcharge = 0;
+                            if (backPrintVariant) {
+                                const v = shopVariables.find(v => String(v.id) === String(backPrintVariant.id));
+                                if (v && v.price_per_value && v.variable_prices && v.variable_prices[val]) {
+                                    surcharge += v.variable_prices[val];
+                                }
+                            }
+                            return (
+                                <option key={val} value={val}>
+                                    {val} {surcharge > 0 ? `(+ € ${surcharge.toFixed(2)})` : ''}
+                                </option>
+                            );
+                        })}
                     </select>
                 </div>
             )}
@@ -723,7 +787,7 @@ const ShopProductPage: React.FC = () => {
                 
                 <div className="text-right">
                     <div className="text-xs font-bold uppercase text-slate-500 mb-1">Gesamtpreis:</div>
-                    <div className="text-3xl font-bold">€ {((currentPrice + calculatePersonalizationPrice()) * quantity).toFixed(2)}</div>
+                    <div className="text-3xl font-bold">€ {((currentPrice + variablePriceAdjustment + calculatePersonalizationPrice()) * quantity).toFixed(2)}</div>
                 </div>
             </div>
 

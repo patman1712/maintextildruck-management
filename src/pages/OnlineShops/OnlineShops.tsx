@@ -348,7 +348,7 @@ const OnlineShops: React.FC = () => {
                     Globale Shop-Attribute (Größen, Farben)
                 </div>
                 <button 
-                    onClick={() => setEditingVariable({ name: '', type: 'size', values: '', shop_ids: [] })}
+                    onClick={() => setEditingVariable({ name: '', type: 'size', values: '', shop_ids: [], price_per_value: false, variable_prices: {} })}
                     className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center"
                 >
                     <Plus size={16} className="mr-1" /> Neu
@@ -398,6 +398,60 @@ const OnlineShops: React.FC = () => {
                                 onChange={e => setEditingVariable({...editingVariable, values: e.target.value})}
                             />
                             <p className="text-xs text-gray-400 mt-1">Geben Sie die verfügbaren Optionen getrennt durch Kommas ein.</p>
+                            
+                            <div className="mt-4 border-t pt-4">
+                                <label className="flex items-center space-x-2 mb-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={editingVariable.price_per_value || false}
+                                        onChange={e => setEditingVariable({...editingVariable, price_per_value: e.target.checked})}
+                                        className="rounded text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span className="text-sm font-bold text-slate-700">Individuelle Preise pro Wert aktivieren</span>
+                                </label>
+                                <p className="text-xs text-gray-500 mb-2 pl-6">
+                                    Wenn aktiviert, können Sie für jeden Wert einen eigenen Aufpreis festlegen.
+                                </p>
+
+                                {editingVariable.price_per_value && (
+                                    <div className="bg-white border border-slate-200 rounded p-3 max-h-60 overflow-y-auto shadow-inner">
+                                        <div className="grid grid-cols-3 gap-2 text-xs font-bold text-slate-400 uppercase mb-2 border-b pb-1">
+                                            <div className="col-span-1">Wert</div>
+                                            <div className="col-span-2">Aufpreis (€)</div>
+                                        </div>
+                                        {editingVariable.values ? (
+                                            editingVariable.values.split(',').map((val: string, idx: number) => {
+                                                const v = val.trim();
+                                                if (!v) return null;
+                                                return (
+                                                    <div key={idx} className="grid grid-cols-3 gap-2 items-center py-1 border-b border-slate-50 last:border-0">
+                                                        <span className="text-sm text-slate-700 font-medium truncate" title={v}>{v}</span>
+                                                        <div className="col-span-2 flex items-center">
+                                                            <span className="text-slate-400 mr-2">€</span>
+                                                            <input
+                                                                type="number"
+                                                                step="0.01"
+                                                                placeholder="0.00"
+                                                                className="w-full border border-slate-200 p-1.5 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                                                                value={editingVariable.variable_prices?.[v] || ''}
+                                                                onChange={e => {
+                                                                    const newPrices = { ...(editingVariable.variable_prices || {}) };
+                                                                    newPrices[v] = parseFloat(e.target.value);
+                                                                    setEditingVariable({ ...editingVariable, variable_prices: newPrices });
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        ) : (
+                                            <div className="text-center text-gray-400 text-sm py-2">
+                                                Bitte geben Sie zuerst Werte oben ein.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="md:col-span-2">
                             <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Verfügbar in Shops</label>
