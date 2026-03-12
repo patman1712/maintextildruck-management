@@ -445,35 +445,35 @@ router.post('/:orderId/items/:itemId/split', (req: Request, res: Response) => {
           // If full delivery, we just mark the original item as received
           if (remainingQuantity <= 0) {
               let updatedReceivedNotes = item.notes || '';
-              if (receivedNotes) {
-                 updatedReceivedNotes = updatedReceivedNotes ? `${updatedReceivedNotes} | ${receivedNotes}` : receivedNotes;
-              }
+              // For full delivery, update size to match the received notes if provided
+              const newReceivedSize = receivedNotes || item.size;
 
               db.prepare(`
                   UPDATE order_items 
-                  SET quantity = ?, status = 'received', received_at = ?, received_by = ?, notes = ?
+                  SET quantity = ?, status = 'received', received_at = ?, received_by = ?, notes = ?, size = ?
                   WHERE id = ?
-              `).run(receivedQuantity, now, 'System', updatedReceivedNotes, itemId);
+              `).run(receivedQuantity, now, 'System', updatedReceivedNotes, newReceivedSize, itemId);
           } else {
               // If partial delivery, we want the "Remaining" part to stay as the original item (to preserve ID/context)
               // And the "Received" part to be split off as a new item (which goes to history)
               
               // 1. Update original item (Remaining)
               let updatedRemainingNotes = item.notes || '';
-              if (remainingNotes) updatedRemainingNotes += ` | ${remainingNotes}`;
+              // Don't append remainingNotes to notes anymore, as it goes to size
               if (expectedDate) updatedRemainingNotes += ` | Erwartet: ${expectedDate}`;
               
+              // Use remainingNotes as the new SIZE description if provided, otherwise keep original
+              const newRemainingSize = remainingNotes || item.size;
+
               db.prepare(`
                   UPDATE order_items 
-                  SET quantity = ?, status = 'ordered', notes = ?
+                  SET quantity = ?, status = 'ordered', notes = ?, size = ?
                   WHERE id = ?
-              `).run(remainingQuantity, updatedRemainingNotes, itemId);
+              `).run(remainingQuantity, updatedRemainingNotes, newRemainingSize, itemId);
               
               // 2. Create new item (Received)
-              let newReceivedNotes = item.notes || '';
-              if (receivedNotes) {
-                  newReceivedNotes = newReceivedNotes ? `${newReceivedNotes} | ${receivedNotes}` : receivedNotes;
-              }
+              // Use receivedNotes as the new SIZE description if provided
+              const newReceivedSize = receivedNotes || item.size;
               
               db.prepare(`
                   INSERT INTO order_items (
@@ -482,7 +482,7 @@ router.post('/:orderId/items/:itemId/split', (req: Request, res: Response) => {
                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received', ?, ?, ?, ?)
               `).run(
                   newItemId, orderId, item.supplier_id, item.item_name, item.item_number, item.manual_order_number,
-                  item.color, item.size, receivedQuantity, newReceivedNotes, item.price, 
+                  item.color, newReceivedSize, receivedQuantity, item.notes, item.price, 
                   'System', now, item.ordered_by, item.ordered_at
               );
           }
