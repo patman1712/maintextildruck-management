@@ -29,13 +29,17 @@ const ShopProductPage: React.FC = () => {
   const [shopVariables, setShopVariables] = useState<any[]>([]);
 
   useEffect(() => {
-    if (shopId) {
-      fetch(`/api/variables/shop/${shopId}`)
+    if (shop?.id) {
+      fetch(`/api/variables/shop/${shop.id}`)
         .then(res => res.json())
-        .then(data => { if (data.success) setShopVariables(data.data); })
+        .then(data => { 
+            if (data.success) {
+                setShopVariables(data.data); 
+            }
+        })
         .catch(err => console.error("Error fetching variables", err));
     }
-  }, [shopId]);
+  }, [shop?.id]);
 
   // Parse Variants - Safe default
   const variants = React.useMemo(() => {
