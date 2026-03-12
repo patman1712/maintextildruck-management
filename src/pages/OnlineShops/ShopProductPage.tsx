@@ -117,9 +117,11 @@ const ShopProductPage: React.FC = () => {
       const sizeVariant = variantDefinitions.find(v => v.type === 'size');
       if (sizeVariant && sizeVariant.values.length > 0) return sizeVariant.values;
       
-      if (product?.size) return product.size.split(',').map((s: any) => s.trim());
+      if (product?.size && product.size.trim().length > 0) {
+          return product.size.split(',').map((s: any) => s.trim()).filter((s: string) => s !== '');
+      }
       
-      return ['S', 'M', 'L', 'XL', 'XXL'];
+      return []; 
   }, [product, variantDefinitions, selectedVariantId, mainVariants]);
   
   const availableBackPrints = React.useMemo(() => {
@@ -487,7 +489,7 @@ const ShopProductPage: React.FC = () => {
   const isPersonalizationEnabled = product.personalization_enabled === 1 || product.personalization_enabled === true;
 
   const handleAddToCart = () => {
-    if (!selectedSize) return;
+    if (availableSizes.length > 0 && !selectedSize) return;
 
     // Check if back print is mandatory and missing
     if (backPrintVariant && !selectedBackPrint) return;
@@ -511,7 +513,7 @@ const ShopProductPage: React.FC = () => {
       price: totalPrice,
       quantity: quantity,
       image: mainImage || undefined,
-      size: selectedSize,
+      size: selectedSize || undefined,
       // Filter out size from color field to prevent duplicate display
       color: Object.values(selectedVariantValues)
           .filter(v => v !== selectedSize)
@@ -640,6 +642,7 @@ const ShopProductPage: React.FC = () => {
             )}
             
             {/* Size Selection - Standard */}
+            {availableSizes.length > 0 && (
             <div className="mb-8">
                 <div className="flex justify-between mb-2">
                     <label className="font-bold text-sm uppercase">Grösse:</label>
@@ -677,6 +680,7 @@ const ShopProductPage: React.FC = () => {
                     })}
                 </select>
             </div>
+            )}
 
             {/* Back Print Selection (Explicit) */}
             {backPrintVariant && (
@@ -800,7 +804,7 @@ const ShopProductPage: React.FC = () => {
                 onClick={handleAddToCart}
                 className="w-full bg-slate-900 text-white py-4 font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors flex items-center justify-center space-x-2 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={
-                    !selectedSize || 
+                    (availableSizes.length > 0 && !selectedSize) || 
                     (!!backPrintVariant && !selectedBackPrint) ||
                     // Require variant group selection if multiple groups exist
                     (mainVariants.length > 0 && !selectedVariantId)
@@ -810,7 +814,7 @@ const ShopProductPage: React.FC = () => {
                 <span>In den Warenkorb</span>
             </button>
             
-            {!selectedSize && <p className="text-red-500 text-xs text-center">Bitte wähle zuerst eine Grösse.</p>}
+            {availableSizes.length > 0 && !selectedSize && <p className="text-red-500 text-xs text-center">Bitte wähle zuerst eine Grösse.</p>}
             {!!backPrintVariant && !selectedBackPrint && <p className="text-red-500 text-xs text-center">Bitte wähle einen Rückendruck.</p>}
 
             {/* Additional Info */}
