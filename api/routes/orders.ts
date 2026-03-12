@@ -442,35 +442,49 @@ router.post('/:orderId/items/:itemId/split', (req: Request, res: Response) => {
       
       // Transaction to ensure atomicity
       const transaction = db.transaction(() => {
-          // 2. Update original item to be the "Received" part
-          
-          let updatedReceivedNotes = item.notes || '';
-          if (receivedNotes) {
-             updatedReceivedNotes = updatedReceivedNotes ? `${updatedReceivedNotes} | ${receivedNotes}` : receivedNotes;
-          }
+          // If full delivery, we just mark the original item as received
+          if (remainingQuantity <= 0) {
+              let updatedReceivedNotes = item.notes || '';
+              if (receivedNotes) {
+                 updatedReceivedNotes = updatedReceivedNotes ? `${updatedReceivedNotes} | ${receivedNotes}` : receivedNotes;
+              }
 
-          db.prepare(`
-              UPDATE order_items 
-              SET quantity = ?, status = 'received', received_at = ?, received_by = ?, notes = ?
-              WHERE id = ?
-          `).run(receivedQuantity, now, 'System', updatedReceivedNotes, itemId); // received_by could be passed from frontend
-          
-          // 3. Create new item for "Remaining" part (only if there is remaining quantity)
-          if (remainingQuantity > 0) {
-            let newNotes = item.notes || ''; // Copy original notes to remaining part too? Usually yes.
-            if (remainingNotes) newNotes += ` | ${remainingNotes}`;
-            if (expectedDate) newNotes += ` | Erwartet: ${expectedDate}`;
-            
-            db.prepare(`
-                INSERT INTO order_items (
-                    id, order_id, supplier_id, item_name, item_number, manual_order_number, 
-                    color, size, quantity, notes, price, status, ordered_by, ordered_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ordered', ?, ?)
-            `).run(
-                newItemId, orderId, item.supplier_id, item.item_name, item.item_number, item.manual_order_number,
-                item.color, item.size, remainingQuantity, newNotes, item.price, 
-                item.ordered_by, item.ordered_at // Preserve original ordering info
-            );
+              db.prepare(`
+                  UPDATE order_items 
+                  SET quantity = ?, status = 'received', received_at = ?, received_by = ?, notes = ?
+                  WHERE id = ?
+              `).run(receivedQuantity, now, 'System', updatedReceivedNotes, itemId);
+          } else {
+              // If partial delivery, we want the "Remaining" part to stay as the original item (to preserve ID/context)
+              // And the "Received" part to be split off as a new item (which goes to history)
+              
+              // 1. Update original item (Remaining)
+              let updatedRemainingNotes = item.notes || '';
+              if (remainingNotes) updatedRemainingNotes += ` | ${remainingNotes}`;
+              if (expectedDate) updatedRemainingNotes += ` | Erwartet: ${expectedDate}`;
+              
+              db.prepare(`
+                  UPDATE order_items 
+                  SET quantity = ?, status = 'ordered', notes = ?
+                  WHERE id = ?
+              `).run(remainingQuantity, updatedRemainingNotes, itemId);
+              
+              // 2. Create new item (Received)
+              let newReceivedNotes = item.notes || '';
+              if (receivedNotes) {
+                  newReceivedNotes = newReceivedNotes ? `${newReceivedNotes} | ${receivedNotes}` : receivedNotes;
+              }
+              
+              db.prepare(`
+                  INSERT INTO order_items (
+                      id, order_id, supplier_id, item_name, item_number, manual_order_number, 
+                      color, size, quantity, notes, price, status, received_by, received_at, ordered_by, ordered_at
+                  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'received', ?, ?, ?, ?)
+              `).run(
+                  newItemId, orderId, item.supplier_id, item.item_name, item.item_number, item.manual_order_number,
+                  item.color, item.size, receivedQuantity, newReceivedNotes, item.price, 
+                  'System', now, item.ordered_by, item.ordered_at
+              );
           }
       });
       

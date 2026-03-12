@@ -319,12 +319,6 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
           // It's a partial delivery
           // Try to parse received quantity from text
           const parsedQty = parseQuantity(splitReceivedNotes);
-          // If parsing returns 1 (default) but text doesn't look like "1x", maybe we should be careful?
-          // But parseQuantity returns 1 if no "x" pattern found.
-          
-          // If the user entered explicit number via hidden logic (we removed input), we rely on parsing.
-          // Since we removed the input, splitReceivedQuantity is stuck at initial value (1).
-          // So we MUST use the parsed value.
           
           finalReceivedQuantity = parsedQty;
           
@@ -343,8 +337,21 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
               }
           }
       } else {
-          // Full delivery
-          finalReceivedQuantity = splitItem.quantity;
+          // No "Remaining" info provided.
+          // BUT check if the user entered a quantity that looks like partial (e.g. "1x S" when total is 10)
+          const parsedReceivedQty = parseQuantity(splitReceivedNotes);
+          
+          // If we parsed a valid quantity (from explicit "x" notation) AND it's less than total
+          // AND the text contains explicit "x" pattern (to avoid "S, M, L" -> 1 -> Partial)
+          const hasExplicitQuantity = /(\d+)\s*[xX]/.test(splitReceivedNotes);
+          
+          if (hasExplicitQuantity && parsedReceivedQty < splitItem.quantity) {
+              // Assume partial delivery because the numbers don't add up to total
+              finalReceivedQuantity = parsedReceivedQty;
+          } else {
+              // Assume Full delivery
+              finalReceivedQuantity = splitItem.quantity;
+          }
       }
 
       await splitOrderItem(splitItem.orderId, splitItem.id, finalReceivedQuantity, splitRemainingNotes, splitRemainingDate, splitReceivedNotes);
