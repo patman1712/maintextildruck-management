@@ -230,6 +230,7 @@ interface AppState {
   
   addOrderItem: (orderId: string, item: Omit<OrderItem, 'id' | 'orderId' | 'status'>) => Promise<void>;
   updateOrderItem: (orderId: string, itemId: string, updates: Partial<OrderItem>) => Promise<void>;
+  splitOrderItem: (orderId: string, itemId: string, receivedQuantity: number, remainingNotes?: string, expectedDate?: string) => Promise<void>;
   deleteOrderItem: (orderId: string, itemId: string) => Promise<void>;
   ensureManualOrder: () => Promise<string>;
   
@@ -763,6 +764,65 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('Error updating order item:', error);
     }
+  },
+
+  splitOrderItem: async (orderId, itemId, receivedQuantity, remainingNotes, expectedDate) => {
+      try {
+          const res = await fetch(`/api/orders/${orderId}/items/${itemId}/split`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ receivedQuantity, remainingNotes, expectedDate })
+          });
+          const data = await res.json();
+          
+          if (data.success) {
+              const state = get();
+              // Update local state with returned items
+              set((state) => ({
+                  orders: state.orders.map(o => {
+                      if (o.id === orderId && o.orderItems) {
+                          // Remove original item (it will be replaced by updatedItem)
+                          // Actually, updatedItem IS the original item but with new values
+                          // newItem is the new split part
+                          
+                          // Map backend response to frontend interface
+                          const mapItem = (i: any): OrderItem => ({
+                              id: i.id,
+                              orderId: i.order_id,
+                              supplierId: i.supplier_id,
+                              supplierName: state.suppliers.find(s => s.id === i.supplier_id)?.name,
+                              itemName: i.item_name,
+                              itemNumber: i.item_number,
+                              manualOrderNumber: i.manual_order_number,
+                              color: i.color,
+                              size: i.size,
+                              quantity: i.quantity,
+                              notes: i.notes,
+                              price: i.price,
+                              status: i.status,
+                              orderedBy: i.ordered_by,
+                              orderedAt: i.ordered_at,
+                              receivedBy: i.received_by,
+                              receivedAt: i.received_at
+                          });
+
+                          const updatedItem = mapItem(data.updatedItem);
+                          const newItem = mapItem(data.newItem);
+
+                          return {
+                              ...o,
+                              orderItems: o.orderItems
+                                  .map(i => i.id === itemId ? updatedItem : i) // Update original
+                                  .concat(newItem) // Add new
+                          };
+                      }
+                      return o;
+                  })
+              }));
+          }
+      } catch (error) {
+          console.error('Error splitting order item:', error);
+      }
   },
 
   deleteOrderItem: async (orderId, itemId) => {

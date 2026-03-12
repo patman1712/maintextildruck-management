@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useAppStore, Supplier, OrderItem } from '@/store';
-import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, RotateCcw, Search, User, Package, ChevronDown, ChevronRight, Save, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Globe, Hash, FileText, ShoppingCart, Truck, ExternalLink, CheckCircle, Clock, Mail, RotateCcw, Search, User, Package, ChevronDown, ChevronRight, Save, X, Scissors } from 'lucide-react';
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState<'orders' | 'completed' | 'suppliers'>('orders');
@@ -285,7 +285,31 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const updateOrder = useAppStore((state) => state.updateOrder);
   const currentUser = useAppStore((state) => state.currentUser);
   const addOrderItem = useAppStore((state) => state.addOrderItem);
+  const updateOrderItem = useAppStore((state) => state.updateOrderItem);
+  const splitOrderItem = useAppStore((state) => state.splitOrderItem);
   const ensureManualOrder = useAppStore((state) => state.ensureManualOrder);
+
+  // Split Item State
+  const [showSplitModal, setShowSplitModal] = useState(false);
+  const [splitItem, setSplitItem] = useState<OrderItem | null>(null);
+  const [splitReceivedQuantity, setSplitReceivedQuantity] = useState(1);
+  const [splitRemainingDate, setSplitRemainingDate] = useState('');
+  const [splitRemainingNotes, setSplitRemainingNotes] = useState('');
+
+  const handleSplitClick = (item: OrderItem) => {
+      setSplitItem(item);
+      setSplitReceivedQuantity(1); // Default to 1 received
+      setSplitRemainingDate('');
+      setSplitRemainingNotes('');
+      setShowSplitModal(true);
+  };
+
+  const handleSplitSubmit = async () => {
+      if (!splitItem) return;
+      await splitOrderItem(splitItem.orderId, splitItem.id, splitReceivedQuantity, splitRemainingNotes, splitRemainingDate);
+      setShowSplitModal(false);
+      setSplitItem(null);
+  };
 
   // Manual Add Item State
   const [showAddItemModal, setShowAddItemModal] = useState(false);
@@ -918,6 +942,15 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                                         
                                                         {((!showCompleted && item.status === 'ordered') || (showCompleted && currentUser?.role === 'admin')) && (
                                                             <div className="flex space-x-1">
+                                                                {!showCompleted && item.quantity > 1 && (
+                                                                    <button
+                                                                        onClick={() => handleSplitClick(item)}
+                                                                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded border border-transparent hover:border-blue-200"
+                                                                        title="Teillieferung erfassen"
+                                                                    >
+                                                                        <Scissors size={18} />
+                                                                    </button>
+                                                                )}
                                                                 {!showCompleted && (
                                                                     <button 
                                                                         onClick={() => updateStatus(item.orderId, item.id, 'received')}
@@ -1195,6 +1228,86 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
             </div>
         )}
         
+        {/* SPLIT ORDER ITEM MODAL */}
+        {showSplitModal && splitItem && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200">
+                    <div className="flex items-center text-blue-600 mb-4">
+                        <div className="bg-blue-100 p-2 rounded-full mr-3">
+                            <Scissors size={24} />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-800">Teillieferung erfassen</h3>
+                    </div>
+                    
+                    <div className="mb-6 bg-gray-50 p-3 rounded border border-gray-200 text-sm">
+                        <div className="font-bold text-gray-900 mb-1">{splitItem.itemName}</div>
+                        <div className="text-gray-600">Gesamtmenge: <span className="font-mono font-bold">{splitItem.quantity} Stück</span></div>
+                    </div>
+
+                    <div className="space-y-4 mb-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Wie viele Stück sind <span className="text-green-600 font-bold">jetzt erhalten</span> worden?
+                            </label>
+                            <input 
+                                type="number" 
+                                min="1" 
+                                max={splitItem.quantity - 1}
+                                className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500 font-bold text-lg"
+                                value={splitReceivedQuantity}
+                                onChange={(e) => setSplitReceivedQuantity(Math.min(splitItem.quantity - 1, Math.max(1, parseInt(e.target.value) || 1)))}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                                Diese {splitReceivedQuantity} Stück werden als "Erledigt" markiert. 
+                                Die restlichen {splitItem.quantity - splitReceivedQuantity} Stück bleiben offen.
+                            </p>
+                        </div>
+
+                        <div className="pt-4 border-t border-gray-100">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Wann wird der <span className="text-yellow-600 font-bold">Rest</span> erwartet?
+                            </label>
+                            <input 
+                                type="date" 
+                                className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                value={splitRemainingDate}
+                                onChange={(e) => setSplitRemainingDate(e.target.value)}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Notiz zur Restlieferung (Optional)
+                            </label>
+                            <input 
+                                type="text" 
+                                className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="z.B. Kommt mit nächster Lieferung"
+                                value={splitRemainingNotes}
+                                onChange={(e) => setSplitRemainingNotes(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="flex justify-end space-x-3 pt-2 border-t border-gray-100">
+                        <button 
+                            onClick={() => setShowSplitModal(false)}
+                            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors font-medium"
+                        >
+                            Abbrechen
+                        </button>
+                        <button 
+                            onClick={handleSplitSubmit}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors flex items-center font-medium"
+                        >
+                            <Scissors size={16} className="mr-2" />
+                            Teillieferung speichern
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* DELETE CONFIRMATION MODAL */}
         {deleteConfirmOrder && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">

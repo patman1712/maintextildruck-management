@@ -415,6 +415,78 @@ router.post('/:orderId/items', (req: Request, res: Response) => {
   }
 });
 
+// POST split order item (Partial Delivery)
+router.post('/:orderId/items/:itemId/split', (req: Request, res: Response) => {
+  const { orderId, itemId } = req.params;
+  const { receivedQuantity, remainingNotes, expectedDate } = req.body;
+  
+  if (!receivedQuantity) {
+      return res.status(400).json({ success: false, error: 'Received quantity required' });
+  }
+
+  try {
+      // 1. Get original item
+      const item = db.prepare('SELECT * FROM order_items WHERE id = ? AND order_id = ?').get(itemId, orderId) as any;
+      
+      if (!item) {
+          return res.status(404).json({ success: false, error: 'Item not found' });
+      }
+      
+      if (receivedQuantity >= item.quantity) {
+          return res.status(400).json({ success: false, error: 'Received quantity must be less than total quantity for partial delivery' });
+      }
+      
+      const remainingQuantity = item.quantity - receivedQuantity;
+      const newItemId = Math.random().toString(36).substr(2, 9);
+      const now = new Date().toISOString();
+      
+      // Transaction to ensure atomicity
+      const transaction = db.transaction(() => {
+          // 2. Update original item to be the "Received" part
+          // We keep the original ID for the received part so it moves to "Completed" history naturally
+          // Or should we keep original ID for the "Remaining" part?
+          // User said: "die teillieferung soll dann stehen bleiben das was erhalten wurde soll dann zu den erledigten sachen"
+          // Usually, "Received" moves to completed. "Remaining" stays in open.
+          // If we change the original item to "Received", it moves to completed.
+          // The new item will be "Ordered" (Remaining) and appear in the open list.
+          
+          db.prepare(`
+              UPDATE order_items 
+              SET quantity = ?, status = 'received', received_at = ?, received_by = ?
+              WHERE id = ?
+          `).run(receivedQuantity, now, 'System', itemId); // received_by could be passed from frontend
+          
+          // 3. Create new item for "Remaining" part
+          let newNotes = item.notes || '';
+          if (remainingNotes) newNotes += ` | ${remainingNotes}`;
+          if (expectedDate) newNotes += ` | Erwartet: ${expectedDate}`;
+          
+          db.prepare(`
+              INSERT INTO order_items (
+                  id, order_id, supplier_id, item_name, item_number, manual_order_number, 
+                  color, size, quantity, notes, price, status, ordered_by, ordered_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ordered', ?, ?)
+          `).run(
+              newItemId, orderId, item.supplier_id, item.item_name, item.item_number, item.manual_order_number,
+              item.color, item.size, remainingQuantity, newNotes, item.price, 
+              item.ordered_by, item.ordered_at // Preserve original ordering info
+          );
+      });
+      
+      transaction();
+      
+      // Fetch updated/new items to return
+      const updatedItem = db.prepare('SELECT * FROM order_items WHERE id = ?').get(itemId);
+      const newItem = db.prepare('SELECT * FROM order_items WHERE id = ?').get(newItemId);
+      
+      res.json({ success: true, updatedItem, newItem });
+      
+  } catch (error) {
+      console.error('Error splitting order item:', error);
+      res.status(500).json({ success: false, error: 'Failed to split item' });
+  }
+});
+
 // PUT update order item
 router.put('/:orderId/items/:itemId', (req: Request, res: Response) => {
   const { itemId } = req.params;
