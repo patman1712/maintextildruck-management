@@ -546,8 +546,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
       }
       
       // Reset current item
-      setCurrentItem(prev => ({
-          ...prev,
+      setCurrentItem({
+          supplierId: '',
           itemName: '',
           itemNumber: '',
           color: '',
@@ -555,7 +555,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
           quantity: 1,
           notes: '',
           files: []
-      }));
+      });
   };
 
   const editPendingItem = (item: any) => {
