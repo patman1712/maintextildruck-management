@@ -512,6 +512,12 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
   const addCurrentItemToPending = () => {
       if (!currentItem.itemName) return;
+
+      const resolvedSupplierId = currentItem.supplierId || manualOrderSettings.defaultSupplierId;
+      if (!resolvedSupplierId) {
+          alert('Bitte wählen Sie einen Lieferanten aus.');
+          return;
+      }
       
       if (editingTempId) {
           // Update existing pending item
@@ -519,7 +525,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
               if (item._tempId === editingTempId) {
                   return {
                       ...item,
-                      supplierId: currentItem.supplierId || manualOrderSettings.defaultSupplierId,
+                      supplierId: resolvedSupplierId,
                       itemName: currentItem.itemName,
                       itemNumber: currentItem.itemNumber,
                       manualOrderNumber: manualOrderSettings.manualOrderNumber,
@@ -538,7 +544,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
           setPendingItems(prev => [...prev, {
               ...currentItem,
               _tempId: Math.random().toString(),
-              supplierId: currentItem.supplierId || manualOrderSettings.defaultSupplierId,
+              supplierId: resolvedSupplierId,
               manualOrderNumber: manualOrderSettings.manualOrderNumber,
               quantity: currentItem.quantity, // Use the calculated/manual quantity
               size: currentItem.size
@@ -584,8 +590,14 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     for (const item of pendingItems) {
         const finalOrderNumber = manualOrderSettings.manualOrderNumber || item.manualOrderNumber;
         
+        const resolvedSupplierId = item.supplierId || manualOrderSettings.defaultSupplierId;
+        if (!resolvedSupplierId) {
+            alert('Bitte wählen Sie einen Lieferanten aus.');
+            return;
+        }
+
         const itemPayload = {
-            supplierId: item.supplierId || manualOrderSettings.defaultSupplierId,
+            supplierId: resolvedSupplierId,
             itemName: item.itemName,
             itemNumber: item.itemNumber,
             manualOrderNumber: finalOrderNumber,
@@ -596,7 +608,12 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
             files: item.files
         };
         
-        await addOrderItem(manualOrderId, itemPayload);
+        try {
+            await addOrderItem(manualOrderId, itemPayload);
+        } catch (e: any) {
+            alert(e?.message || 'Speichern fehlgeschlagen.');
+            return;
+        }
 
          if (itemPayload.files && itemPayload.files.length > 0) {
               const latestOrders = useAppStore.getState().orders;
@@ -1228,6 +1245,20 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                         autoFocus
                                     />
                                 </div>
+
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-medium text-gray-700 mb-1">Lieferant</label>
+                                    <select
+                                        className="w-full border-gray-300 rounded-md shadow-sm text-sm p-2"
+                                        value={currentItem.supplierId || manualOrderSettings.defaultSupplierId}
+                                        onChange={(e) => setCurrentItem({ ...currentItem, supplierId: e.target.value })}
+                                    >
+                                        <option value="">Bitte wählen...</option>
+                                        {suppliers.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
                                 
                                 <div className="md:col-span-2">
                                     <label className="block text-xs font-medium text-gray-700 mb-1">Größe / Beschr.</label>
@@ -1265,7 +1296,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                                 <div className="md:col-span-2 flex items-end space-x-2">
                                     <button
                                         onClick={addCurrentItemToPending}
-                                        disabled={!currentItem.itemName}
+                                        disabled={!currentItem.itemName || !(currentItem.supplierId || manualOrderSettings.defaultSupplierId)}
                                         className={`w-full ${editingTempId ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-800 hover:bg-slate-900'} text-white px-4 py-2 rounded-md disabled:opacity-50 text-sm flex items-center justify-center h-[38px]`}
                                     >
                                         {editingTempId ? <Save size={16} className="mr-2" /> : <Plus size={16} className="mr-2" />}

@@ -702,7 +702,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         })
       });
       const data = await res.json();
-      
+
+      if (!res.ok || !data.success) {
+        throw new Error(data?.error || `Failed to add order item (HTTP ${res.status})`);
+      }
+
       if (data.success) {
         set((state) => ({
             orders: state.orders.map(o => {
@@ -722,6 +726,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     } catch (error) {
       console.error('Error adding order item:', error);
+      throw error;
     }
   },
 

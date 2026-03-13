@@ -395,8 +395,12 @@ router.post('/:orderId/items', (req: Request, res: Response) => {
   const { orderId } = req.params;
   const { supplier_id, item_name, item_number, manual_order_number, color, size, quantity, notes, price } = req.body;
   
-  if (!supplier_id || !item_name) {
-    res.status(400).json({ success: false, error: 'Missing required fields' });
+  if (!supplier_id) {
+    res.status(400).json({ success: false, error: 'Lieferant fehlt' });
+    return;
+  }
+  if (!item_name) {
+    res.status(400).json({ success: false, error: 'Artikelname fehlt' });
     return;
   }
 
