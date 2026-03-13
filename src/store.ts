@@ -668,7 +668,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   ensureManualOrder: async () => {
     const manualOrderId = 'inventory-manual';
     const state = get();
-    if (!state.orders.find(o => o.id === manualOrderId)) {
+    const existingOrder = state.orders.find(o => o.id === manualOrderId);
+
+    if (!existingOrder) {
         await state.addOrder({
             id: manualOrderId,
             title: 'Manuelle Lagerbestellung',
@@ -680,6 +682,10 @@ export const useAppStore = create<AppState>((set, get) => ({
             files: [],
             deadline: new Date().toISOString().split('T')[0] // Dummy deadline for type safety
         });
+    } else if (existingOrder.status !== 'active') {
+        // If order exists but is archived/completed (e.g. accidentally deleted), reactivate it
+        // so that new manual items are visible in the "Current" tab.
+        await state.updateOrderStatus(manualOrderId, 'active');
     }
     return manualOrderId;
   },

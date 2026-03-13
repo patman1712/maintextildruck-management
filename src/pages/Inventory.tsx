@@ -653,10 +653,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     
     orders.forEach(order => {
         // Skip archived orders from "Current" tab
-        // If showCompleted is true (History tab), we might want to show archived orders? 
-        // Or should archived be completely hidden?
-        // Usually 'archived' means hidden from active view.
-        if (order.status === 'archived' && !showCompleted) return;
+        // Exception: manual inventory order might be archived but contain active items, so we check it
+        if (order.status === 'archived' && !showCompleted && order.id !== 'inventory-manual') return;
 
         if (order.orderItems) {
             order.orderItems.forEach(item => {
