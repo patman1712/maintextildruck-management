@@ -834,9 +834,10 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
             // Remove trailing pipes or separators if any
             cleanColor = cleanColor.replace(/^[|\s]+|[|\s]+$/g, '');
 
-            const sizeDisplay = item.quantity > 1 
-                ? `${item.quantity}x ${cleanSize}` 
-                : (cleanSize && !/^\d+x/.test(cleanSize) ? `1x ${cleanSize}` : cleanSize);
+            const hasExplicitQuantityInSize = !!cleanSize && /(\d+)\s*[xX]/.test(cleanSize);
+            const sizeDisplay = hasExplicitQuantityInSize
+                ? cleanSize
+                : `${item.quantity || 1}x ${cleanSize || ''}`.trim();
             
              // Use cleanItemNumber if available, otherwise fallback to cleaned itemName
              const identifier = cleanItemNumber ? cleanItemNumber : cleanItemName;
