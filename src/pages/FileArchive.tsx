@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
-import { Archive, Download, Trash2, FileText, Search, User, Printer, Image as ImageIcon } from "lucide-react";
+import { useAppStore } from "@/store";
+import { Archive, Download, Trash2, FileText, Search, User, Printer, Image as ImageIcon, RotateCcw } from "lucide-react";
 
 export default function FileArchive() {
+  const currentUser = useAppStore((state) => state.currentUser);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<'all' | 'print' | 'preview'>('all');
   const [loading, setLoading] = useState(false);
   const [files, setFiles] = useState<any[]>([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   const pageSize = 25;
 
@@ -59,6 +62,34 @@ export default function FileArchive() {
     }
   };
 
+  const handleRegenerateThumbnails = async () => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      alert('Nur Admins können Thumbnails regenerieren.');
+      return;
+    }
+    if (!confirm('Thumbnails neu generieren? Das kann je nach Datenmenge etwas dauern.')) return;
+
+    setRegenerating(true);
+    try {
+      const res = await fetch('/api/upload/regenerate-thumbnails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: true })
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) {
+        alert(data?.error || 'Regeneration fehlgeschlagen.');
+      } else {
+        alert(`Fertig.\nOrders: ${data.updated || 0}\nProdukte: ${data.productsUpdated || 0}`);
+        setPage(1);
+      }
+    } catch {
+      alert('Regeneration fehlgeschlagen.');
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
@@ -70,6 +101,17 @@ export default function FileArchive() {
         </div>
         
         <div className="flex items-center space-x-2">
+            {currentUser?.role === 'admin' && (
+              <button
+                onClick={handleRegenerateThumbnails}
+                disabled={regenerating}
+                className="bg-white border border-gray-200 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 flex items-center"
+                title="Thumbnails neu generieren"
+              >
+                <RotateCcw size={16} className="mr-2" />
+                {regenerating ? 'Regeneriere…' : 'Thumbnails neu'}
+              </button>
+            )}
             <div className="flex bg-gray-100 p-1 rounded-lg mr-2">
                 <button 
                     onClick={() => setFilterType('all')}
