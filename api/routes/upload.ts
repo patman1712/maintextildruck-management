@@ -446,5 +446,210 @@ router.get('/list-pdfs', async (req: Request, res: Response) => {
     }
 });
 
+// GET /api/upload/archive-files?limit=25&offset=0&type=all|print|preview&search=
+router.get('/archive-files', async (req: Request, res: Response) => {
+    try {
+        const limitRaw = Number.parseInt(String(req.query.limit || '25'), 10);
+        const offsetRaw = Number.parseInt(String(req.query.offset || '0'), 10);
+        const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 25;
+        const offset = Number.isFinite(offsetRaw) ? Math.max(offsetRaw, 0) : 0;
+        const type = String(req.query.type || 'all');
+        const search = String(req.query.search || '').trim().toLowerCase();
+
+        const isTypeFilter = type === 'print' || type === 'preview';
+
+        const archivedOrders = db.prepare(`
+            SELECT id, title, customer_name, created_at, files
+            FROM orders
+            WHERE status = 'archived'
+            ORDER BY created_at DESC
+        `).all() as any[];
+
+        const productPreviewFiles = db.prepare(`
+            SELECT 
+                p.id as product_id,
+                p.name as product_name,
+                p.created_at as created_at,
+                c.name as customer_name,
+                f.file_url as file_url,
+                f.file_name as file_name,
+                f.thumbnail_url as thumbnail_url
+            FROM customer_product_files f
+            JOIN customer_products p ON p.id = f.product_id
+            LEFT JOIN customers c ON c.id = p.customer_id
+            WHERE f.type = 'preview'
+            ORDER BY p.created_at DESC
+        `).all() as any[];
+
+        const parseOrderFiles = (filesStr: string) => {
+            try {
+                const parsed = JSON.parse(filesStr || '[]');
+                return Array.isArray(parsed) ? parsed : [];
+            } catch {
+                return [];
+            }
+        };
+
+        let orderIdx = 0;
+        let orderFiles: any[] = [];
+        let orderFileIdx = 0;
+        let currentOrder: any = null;
+
+        const nextOrderEntry = () => {
+            while (true) {
+                if (!currentOrder || orderFileIdx >= orderFiles.length) {
+                    if (orderIdx >= archivedOrders.length) return null;
+                    currentOrder = archivedOrders[orderIdx++];
+                    orderFiles = parseOrderFiles(currentOrder.files);
+                    orderFileIdx = 0;
+                }
+
+                const f = orderFiles[orderFileIdx++];
+                if (!f || !f.url) continue;
+
+                return {
+                    name: f.name,
+                    type: f.type,
+                    url: f.url,
+                    thumbnail: f.thumbnail,
+                    customName: f.customName,
+                    orderId: currentOrder.id,
+                    orderTitle: currentOrder.title,
+                    customerName: currentOrder.customer_name,
+                    createdAt: currentOrder.created_at
+                };
+            }
+        };
+
+        let prodIdx = 0;
+        const nextProductEntry = () => {
+            while (true) {
+                if (prodIdx >= productPreviewFiles.length) return null;
+                const p = productPreviewFiles[prodIdx++];
+                if (!p.file_url) continue;
+
+                return {
+                    name: p.file_name,
+                    type: 'preview',
+                    url: p.file_url,
+                    thumbnail: p.thumbnail_url,
+                    customName: p.file_name,
+                    orderId: `prod-${p.product_id}`,
+                    orderTitle: `Produkt: ${p.product_name}`,
+                    customerName: p.customer_name || 'Unbekannt',
+                    createdAt: p.created_at
+                };
+            }
+        };
+
+        let orderEntry = nextOrderEntry();
+        let productEntry = nextProductEntry();
+
+        const results: any[] = [];
+        const seenUrls = new Set<string>();
+        let skipped = 0;
+        let hasMore = false;
+
+        const matchesFilters = (entry: any) => {
+            if (isTypeFilter && entry.type !== type) return false;
+            if (!search) return true;
+            const hay = `${entry.name || ''} ${entry.customName || ''} ${entry.customerName || ''} ${entry.orderTitle || ''}`.toLowerCase();
+            return hay.includes(search);
+        };
+
+        while (orderEntry || productEntry) {
+            let pick: any;
+            if (orderEntry && productEntry) {
+                const orderTime = new Date(orderEntry.createdAt).getTime();
+                const prodTime = new Date(productEntry.createdAt).getTime();
+                if (orderTime >= prodTime) {
+                    pick = orderEntry;
+                    orderEntry = nextOrderEntry();
+                } else {
+                    pick = productEntry;
+                    productEntry = nextProductEntry();
+                }
+            } else if (orderEntry) {
+                pick = orderEntry;
+                orderEntry = nextOrderEntry();
+            } else {
+                pick = productEntry;
+                productEntry = nextProductEntry();
+            }
+
+            if (!pick?.url) continue;
+            if (seenUrls.has(pick.url)) continue;
+            if (!matchesFilters(pick)) continue;
+
+            seenUrls.add(pick.url);
+
+            if (skipped < offset) {
+                skipped++;
+                continue;
+            }
+
+            if (results.length < limit) {
+                results.push(pick);
+                continue;
+            }
+
+            hasMore = true;
+            break;
+        }
+
+        res.json({ success: true, data: results, hasMore });
+    } catch (error: any) {
+        console.error('Error listing archive files:', error);
+        res.status(500).json({ success: false, error: error.message || 'List failed' });
+    }
+});
+
+// POST /api/upload/archive-delete
+// Expects JSON body: { url: string }
+router.post('/archive-delete', async (req: Request, res: Response) => {
+    try {
+        const { url } = req.body as { url?: string };
+        if (!url) {
+            res.status(400).json({ success: false, error: 'No url provided' });
+            return;
+        }
+
+        const orders = db.prepare('SELECT id, files FROM orders WHERE files LIKE ?').all(`%${url}%`) as any[];
+        const updateStmt = db.prepare('UPDATE orders SET files = ? WHERE id = ?');
+
+        for (const order of orders) {
+            let files: any[] = [];
+            try {
+                files = JSON.parse(order.files || '[]');
+            } catch {
+                files = [];
+            }
+            const updated = files.filter((f: any) => f?.url !== url);
+            updateStmt.run(JSON.stringify(updated), order.id);
+        }
+
+        db.prepare('DELETE FROM files WHERE path = ?').run(url);
+        db.prepare('DELETE FROM customer_product_files WHERE file_url = ? OR thumbnail_url = ?').run(url, url);
+
+        if (url.startsWith('/uploads/')) {
+            const relative = url.replace(/^\/uploads\//, '');
+            const fullPath = path.join(UPLOAD_DIR, relative);
+            if (fullPath.startsWith(UPLOAD_DIR) && await fs.pathExists(fullPath)) {
+                await fs.remove(fullPath);
+            }
+
+            const thumbPath = path.join(UPLOAD_DIR, `${relative}_thumb.png`);
+            if (thumbPath.startsWith(UPLOAD_DIR) && await fs.pathExists(thumbPath)) {
+                await fs.remove(thumbPath);
+            }
+        }
+
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('Error deleting archive file:', error);
+        res.status(500).json({ success: false, error: error.message || 'Delete failed' });
+    }
+});
+
 export default router;
 export { UPLOAD_DIR };

@@ -1,103 +1,62 @@
 import { useEffect, useState } from "react";
-import { useAppStore } from "@/store";
 import { Archive, Download, Trash2, FileText, Search, User, Printer, Image as ImageIcon } from "lucide-react";
 
 export default function FileArchive() {
-  const orders = useAppStore((state) => state.orders);
-  const products = useAppStore((state) => state.products) || [];
-  const loading = useAppStore((state) => state.loading);
-  const fetchData = useAppStore((state) => state.fetchData);
-  const updateOrder = useAppStore((state) => state.updateOrder);
-
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<'all' | 'print' | 'preview'>('all');
+  const [loading, setLoading] = useState(false);
+  const [files, setFiles] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+
+  const pageSize = 25;
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    setPage(1);
+  }, [search, filterType]);
 
-  // Filter for archived orders (which contain the files)
-  // Or active orders too? The user asked for "Archived files".
-  // But typically "Archived" means "Direct Uploads" in our system context (status='archived').
-  // Let's show ALL files from orders with status 'archived' (which includes One-Time and Direct Uploads).
-  
-  const archivedOrders = orders.filter(o => o.status === 'archived');
-  
-  const allOrderFiles = archivedOrders.flatMap(order => 
-    (order.files || []).map(f => ({
-        ...f,
-        orderId: order.id,
-        orderTitle: order.title,
-        customerName: order.customerName,
-        createdAt: order.createdAt
-    }))
-  ).filter(f => f.url);
+  useEffect(() => {
+    const controller = new AbortController();
+    const run = async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams();
+        params.set('limit', String(pageSize));
+        params.set('offset', String((page - 1) * pageSize));
+        params.set('type', filterType);
+        if (search.trim()) params.set('search', search.trim());
 
-  // Get preview files from Products (Freisteller)
-  const freistellerProducts = products.filter(p => p.product_number === 'FREISTELLER' || (p.files && p.files.some(f => f.type === 'preview')));
-  const productFiles = freistellerProducts.flatMap(p => 
-      (p.files || []).filter(f => f.type === 'preview').map(f => ({
-          name: f.file_name,
-          type: 'preview' as const,
-          url: f.file_url,
-          thumbnail: f.thumbnail_url,
-          customName: f.file_name, // Map to same structure
-          orderId: `prod-${p.id}`,
-          orderTitle: `Produkt: ${p.name}`,
-          customerName: useAppStore.getState().customers.find(c => c.id === p.supplier_id)?.name || "Unbekannt", // supplier_id is used as customer_id for products
-          createdAt: p.created_at || new Date().toISOString()
-      }))
-  );
-
-  const allFilesRaw = [...allOrderFiles, ...productFiles];
-
-  // Deduplicate files by URL
-  // Keep the most recent one (since sorted later by createdAt, let's sort first)
-  allFilesRaw.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  
-  const allFiles: typeof allFilesRaw = [];
-  const seenUrls = new Set<string>();
-
-  for (const file of allFilesRaw) {
-      if (!seenUrls.has(file.url)) {
-          seenUrls.add(file.url);
-          allFiles.push(file);
+        const res = await fetch(`/api/upload/archive-files?${params.toString()}`, { signal: controller.signal });
+        const data = await res.json();
+        if (data.success) {
+          setFiles(data.data || []);
+          setHasMore(!!data.hasMore);
+        } else {
+          setFiles([]);
+          setHasMore(false);
+        }
+      } catch {
+        setFiles([]);
+        setHasMore(false);
+      } finally {
+        setLoading(false);
       }
-  }
-
-  const filteredFiles = allFiles.filter(f => 
-    ((f.name && f.name.toLowerCase().includes(search.toLowerCase())) ||
-    (f.customName && f.customName.toLowerCase().includes(search.toLowerCase())) ||
-    (f.customerName && f.customerName.toLowerCase().includes(search.toLowerCase()))) &&
-    (filterType === 'all' || f.type === filterType)
-  );
+    };
+    run();
+    return () => controller.abort();
+  }, [page, pageSize, filterType, search]);
 
   const handleDeleteFile = async (fileToDelete: any) => {
     if (!confirm(`Möchten Sie die Datei "${fileToDelete.customName || fileToDelete.name}" wirklich entgültig löschen?`)) return;
-
-    // Find ALL orders that use this file URL
-    const ordersWithFile = orders.filter(o => 
-        (o.files || []).some(f => f.url === fileToDelete.url)
-    );
-
-    // Remove file from ALL these orders
-    for (const order of ordersWithFile) {
-        const updatedFiles = (order.files || []).filter(f => f.url !== fileToDelete.url);
-        await updateOrder(order.id, { files: updatedFiles });
-    }
-    
-    // Delete file from disk
     try {
-        await fetch('/api/upload/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ filePath: fileToDelete.url })
-        });
-    } catch (e) {
-        console.error("Failed to delete physical file", e);
+      await fetch('/api/upload/archive-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: fileToDelete.url })
+      });
+      setPage(1);
+    } catch {
     }
-    
-    fetchData();
   };
 
   return (
@@ -150,14 +109,15 @@ export default function FileArchive() {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         {loading ? (
             <div className="p-8 text-center text-gray-500">Lade Archiv...</div>
-        ) : filteredFiles.length === 0 ? (
+        ) : files.length === 0 ? (
             <div className="p-12 text-center text-gray-500 flex flex-col items-center">
                 <Archive size={48} className="text-gray-300 mb-4" />
                 <p>Keine archivierten Dateien gefunden.</p>
             </div>
         ) : (
+            <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 p-6">
-                {filteredFiles.map((file, idx) => (
+                {files.map((file, idx) => (
                     <div key={`${file.url}-${idx}`} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all group relative">
                         <div className="aspect-square bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden border border-gray-100 relative">
                             {/* Type Indicator */}
@@ -172,6 +132,8 @@ export default function FileArchive() {
                                     src={file.thumbnail || file.url} 
                                     alt={file.name} 
                                     className="w-full h-full object-contain"
+                                    loading="lazy"
+                                    decoding="async"
                                     onError={(e) => {
                                         e.currentTarget.style.display = 'none';
                                         e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
@@ -218,6 +180,24 @@ export default function FileArchive() {
                     </div>
                 ))}
             </div>
+            <div className="flex items-center justify-between px-6 pb-6">
+                <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="px-4 py-2 border border-gray-200 rounded-md text-sm disabled:opacity-50"
+                >
+                    Zurück
+                </button>
+                <div className="text-sm text-gray-500">Seite {page}</div>
+                <button
+                    onClick={() => setPage(p => p + 1)}
+                    disabled={!hasMore}
+                    className="px-4 py-2 border border-gray-200 rounded-md text-sm disabled:opacity-50"
+                >
+                    Weiter
+                </button>
+            </div>
+            </>
         )}
       </div>
     </div>
