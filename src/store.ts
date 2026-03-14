@@ -280,35 +280,30 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchData: async () => {
     set({ loading: true });
     try {
-      const customersRes = await fetch('/api/customers');
-      const customersData = await customersRes.json();
-      
-      const ordersRes = await fetch('/api/orders');
-      const ordersData = await ordersRes.json();
-      
-      const orderItemsRes = await fetch('/api/orders/items/all');
-      const orderItemsData = await orderItemsRes.json();
-      
-      const suppliersRes = await fetch('/api/suppliers');
-      const suppliersData = await suppliersRes.json();
+      const [customersRes, ordersRes, orderItemsRes, suppliersRes, shopsRes] = await Promise.all([
+        fetch('/api/customers'),
+        fetch('/api/orders'),
+        fetch('/api/orders/items/all'),
+        fetch('/api/suppliers'),
+        fetch('/api/shops'),
+      ]);
 
-      const shopsRes = await fetch('/api/shops');
-      const shopsData = await shopsRes.json();
+      const [customersData, ordersData, orderItemsData, suppliersData, shopsData] = await Promise.all([
+        customersRes.json(),
+        ordersRes.json(),
+        orderItemsRes.json(),
+        suppliersRes.json(),
+        shopsRes.json(),
+      ]);
 
-      // Fetch ALL products for preview generator
-      const productsRes = await fetch('/api/products'); // Need to implement this endpoint or fetch per customer?
-      // Actually /api/products returns ALL products if no customer ID is provided? Let's check backend.
-      // If not, we might need a new endpoint or loop customers (bad).
-      // Assuming for now we need to add a way to fetch all products or just fetch them on demand.
-      // Let's try to fetch all products if the endpoint supports it.
-      let allProducts: Product[] = [];
-      try {
-          const prodRes = await fetch('/api/products/all'); // New endpoint suggestion
-          const prodData = await prodRes.json();
-          if (prodData.success) {
-             allProducts = prodData.data;
-          }
-      } catch (e) { console.log('Could not fetch all products', e); }
+      const rawItems = orderItemsData.data || [];
+      const itemsByOrderId: Record<string, any[]> = {};
+      for (const i of rawItems) {
+        const oid = i.order_id;
+        if (!oid) continue;
+        if (!itemsByOrderId[oid]) itemsByOrderId[oid] = [];
+        itemsByOrderId[oid].push(i);
+      }
 
       // Map Customers
       const mappedCustomers: Customer[] = (customersData.data || []).map((c: any) => ({
@@ -358,9 +353,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         trackingNumber: o.tracking_number,
         labelUrl: o.label_url,
         shippedAt: o.shipped_at,
-        orderItems: (orderItemsData.data || [])
-            .filter((i: any) => i.order_id === o.id)
-            .map((i: any) => ({
+        orderItems: (itemsByOrderId[o.id] || []).map((i: any) => ({
                 id: i.id,
                 orderId: i.order_id,
                 supplierId: i.supplier_id,
@@ -398,9 +391,21 @@ export const useAppStore = create<AppState>((set, get) => ({
           orders: mappedOrders,
           suppliers: mappedSuppliers,
           shops: mappedShops,
-          products: allProducts
+          products: get().products
         });
       }
+
+      (async () => {
+        try {
+          const prodRes = await fetch('/api/products/all');
+          const prodData = await prodRes.json();
+          if (prodData.success) {
+            set({ products: prodData.data });
+          }
+        } catch (e) {
+          console.log('Could not fetch all products', e);
+        }
+      })();
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
