@@ -228,7 +228,7 @@ const ShopLayout: React.FC = () => {
                                             {cat.image_url && (
                                                 <div className="w-64 p-6 bg-white/5 border-r border-white/10 flex-shrink-0 hidden md:block">
                                                     <div className="aspect-[3/4] rounded-lg overflow-hidden relative mb-4 shadow-sm bg-white/5">
-                                                        <img src={cat.image_url} alt={cat.name} className="absolute inset-0 w-full h-full object-cover" />
+                                                        <img src={cat.image_url} alt={cat.name} className="absolute inset-0 w-full h-full object-cover" loading="lazy" decoding="async" />
                                                     </div>
                                                     <h3 className="font-black uppercase text-lg mb-2 leading-tight" style={{ color: secondaryColor }}>{cat.name}</h3>
                                                     {cat.description && (
@@ -251,7 +251,7 @@ const ShopLayout: React.FC = () => {
                                                     <div key={sub.id} className="space-y-2">
                                                         {sub.image_url ? (
                                                             <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="block aspect-video bg-white/10 rounded-lg overflow-hidden mb-3 border border-white/20 hover:opacity-90 transition-opacity">
-                                                                <img src={sub.image_url} alt={sub.name} className="w-full h-full object-cover" />
+                                                                <img src={sub.image_url} alt={sub.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                                                             </Link>
                                                         ) : null}
                                                         <Link to={`${shopBaseUrl}/category/${sub.slug}`} className="font-bold block hover:opacity-80 transition-opacity text-base" style={{ color: secondaryColor }}>
@@ -276,7 +276,7 @@ const ShopLayout: React.FC = () => {
                                         <div className="w-full relative group/card">
                                             <div className="aspect-[4/3] w-full relative overflow-hidden">
                                                 {cat.image_url ? (
-                                                    <img src={cat.image_url} alt={cat.name} className="w-full h-full object-cover transition-transform duration-700 group-hover/card:scale-110" />
+                                                    <img src={cat.image_url} alt={cat.name} className="w-full h-full object-cover transition-transform duration-700 group-hover/card:scale-110" loading="lazy" decoding="async" />
                                                 ) : (
                                                     <div className="w-full h-full bg-white/10" />
                                                 )}
@@ -392,7 +392,7 @@ const ShopLayout: React.FC = () => {
                                 >
                                     <div className="w-16 h-20 bg-slate-50 flex-shrink-0 overflow-hidden rounded border border-slate-100">
                                         {product.files && product.files[0] ? (
-                                            <img src={product.files[0].thumbnail_url || product.files[0].file_url} className="w-full h-full object-contain group-hover:scale-105 transition-transform" />
+                                            <img src={product.files[0].thumbnail_url || product.files[0].file_url} className="w-full h-full object-contain group-hover:scale-105 transition-transform" loading="lazy" decoding="async" />
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center text-slate-300">
                                                 <BagIcon size={16} />
@@ -455,7 +455,7 @@ const ShopLayout: React.FC = () => {
                     <div key={item.id} className="flex space-x-4 group">
                       <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-slate-100 bg-slate-50">
                         {item.image ? (
-                          <img src={item.image} alt={item.name} className="h-full w-full object-contain" />
+                          <img src={item.image} alt={item.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
                         ) : (
                           <div className="h-full w-full flex items-center justify-center text-slate-200">
                             <BagIcon size={24} />

@@ -116,7 +116,7 @@ export default function OrderDetails() {
         return (
           <div className="flex items-center space-x-3">
             <div className="h-10 w-10 bg-gray-100 rounded overflow-hidden flex-shrink-0 border border-gray-200">
-              <img src={file.thumbnail} alt={file.name} className="h-full w-full object-cover" />
+              <img src={file.thumbnail} alt={file.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
             </div>
             <div className="flex items-center">
                 <span className="truncate max-w-[120px]">{file.name}</span>
@@ -133,7 +133,7 @@ export default function OrderDetails() {
       return (
         <div className="flex items-center space-x-3">
           <div className="h-10 w-10 bg-gray-100 rounded overflow-hidden flex-shrink-0 border border-gray-200">
-            <img src={file.url} alt={file.name} className="h-full w-full object-cover" />
+            <img src={file.url} alt={file.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
           </div>
           <div className="flex items-center">
             <span className="truncate max-w-[120px]">{file.name}</span>

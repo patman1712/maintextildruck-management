@@ -683,7 +683,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                        {activeTab === 'view' && (
                            <div className="w-full bg-slate-50 aspect-[3/4] rounded-lg border border-slate-200 flex items-center justify-center text-slate-300 relative group overflow-hidden mb-2">
                                 {mainImage ? (
-                                    <img src={mainImage} className="w-full h-full object-cover" />
+                                    <img src={mainImage} className="w-full h-full object-cover" decoding="async" />
                                 ) : (
                                     <div className="flex flex-col items-center">
                                         <ImageIcon size={48} className="mb-2 opacity-50" />
@@ -712,7 +712,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                   {filteredCurrentFiles.map((img: any, idx: number) => (
                                       <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded hover:z-[100] hover:shadow-lg transition-shadow">
                                           <div className="w-full h-full rounded overflow-hidden">
-                                              <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
+                                              <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                                           </div>
                                           
                                           {/* Personalization & Variant Badges */}
@@ -845,7 +845,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
                     <div className="h-10 w-10 bg-slate-100 rounded flex items-center justify-center text-slate-500 flex-shrink-0 overflow-hidden border border-slate-200">
                         {file.thumbnail_url ? (
-                            <img src={file.thumbnail_url} className="h-full w-full object-cover" />
+                            <img src={file.thumbnail_url} className="h-full w-full object-cover" loading="lazy" decoding="async" />
                         ) : (
                             <FileText size={20} />
                         )}
@@ -1024,7 +1024,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                    <div className="grid grid-cols-4 gap-2 opacity-60 hover:opacity-100 transition-opacity">
                                       {filteredAvailableFiles.map((img: any, idx: number) => (
                                           <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded overflow-hidden cursor-pointer" onClick={() => handleAddFile(img.id)} title={img.file_name}>
-                                              <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" />
+                                              <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                                               <div className="absolute inset-0 bg-blue-600/20 opacity-0 group-hover:opacity-100 flex items-center justify-center">
                                                   <Plus size={20} className="text-white drop-shadow-md" />
                                               </div>
@@ -1038,7 +1038,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                <div className="flex items-center space-x-3 overflow-hidden">
                                                    <div className="h-8 w-8 bg-white rounded flex items-center justify-center text-slate-400 border border-slate-200 flex-shrink-0 overflow-hidden">
                                                        {file.thumbnail_url ? (
-                                                           <img src={file.thumbnail_url} className="h-full w-full object-cover" />
+                                                           <img src={file.thumbnail_url} className="h-full w-full object-cover" loading="lazy" decoding="async" />
                                                        ) : (
                                                            <FileText size={14} />
                                                        )}

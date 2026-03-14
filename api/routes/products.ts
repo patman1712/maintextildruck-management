@@ -4,6 +4,10 @@ import fs from 'fs-extra';
 import path from 'path';
 import multer from 'multer';
 import sharp from 'sharp';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 const router = Router();
 
@@ -349,22 +353,36 @@ router.post('/:productId/upload', upload.single('file'), async (req: Request, re
         const fileUrl = `/uploads/${file.filename}`;
         let thumbnailUrl = null;
 
-        // Generate thumbnail if image
-        if (file.mimetype.startsWith('image/')) {
-             const thumbName = `${file.filename}_thumb`;
-             const thumbOutputPath = path.join(UPLOAD_DIR, `${thumbName}.png`);
-             
-             try {
-                 await sharp(file.path)
+        const thumbName = `${file.filename}_thumb`;
+        const thumbOutputPathNoExt = path.join(UPLOAD_DIR, thumbName);
+        const thumbOutputPathPng = path.join(UPLOAD_DIR, `${thumbName}.png`);
+
+        if (file.mimetype === 'application/pdf' || originalName.toLowerCase().endsWith('.pdf')) {
+            try {
+                await execFileAsync('pdftoppm', [
+                    '-png',
+                    '-singlefile',
+                    '-transp',
+                    '-scale-to', '300',
+                    file.path,
+                    thumbOutputPathNoExt
+                ]);
+                thumbnailUrl = `/uploads/${thumbName}.png`;
+            } catch (e) {
+                console.error('Thumbnail generation failed', e);
+            }
+        } else if (file.mimetype.startsWith('image/')) {
+            try {
+                await sharp(file.path)
                     .resize(300, 300, {
                         fit: 'contain',
                         background: { r: 255, g: 255, b: 255, alpha: 0 }
                     })
-                    .toFile(thumbOutputPath);
-                 thumbnailUrl = `/uploads/${thumbName}.png`;
-             } catch (e) {
-                 console.error('Thumbnail generation failed', e);
-             }
+                    .toFile(thumbOutputPathPng);
+                thumbnailUrl = `/uploads/${thumbName}.png`;
+            } catch (e) {
+                console.error('Thumbnail generation failed', e);
+            }
         }
 
         const id = Math.random().toString(36).substr(2, 9);

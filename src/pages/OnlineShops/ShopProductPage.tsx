@@ -574,7 +574,7 @@ const ShopProductPage: React.FC = () => {
                         onClick={() => setActiveImage(img.file_url)}
                         className={`w-20 h-20 border-2 flex-shrink-0 bg-slate-50 relative ${activeImage === img.file_url ? 'border-slate-800' : 'border-transparent hover:border-slate-300'}`}
                     >
-                        <img src={img.thumbnail_url || img.file_url} alt="" className="w-full h-full object-cover" />
+                        <img src={img.thumbnail_url || img.file_url} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                         {img.personalization_option_id && (
                              <div className="absolute bottom-0 right-0 bg-blue-600 text-white p-0.5 rounded-tl text-[8px] font-bold">
                                  ★
@@ -591,7 +591,7 @@ const ShopProductPage: React.FC = () => {
             {/* Main Image */}
             <div className="flex-1 bg-slate-50 aspect-[3/4] relative">
                 {mainImage ? (
-                    <img src={mainImage} alt={product.name} className="w-full h-full object-cover" />
+                    <img src={mainImage} alt={product.name} className="w-full h-full object-cover" decoding="async" />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center text-slate-300 text-2xl font-bold">NO IMAGE</div>
                 )}

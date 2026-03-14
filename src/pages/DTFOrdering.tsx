@@ -1201,7 +1201,7 @@ export default function DTFOrdering() {
                                                 <img src={displayThumb} alt="" className="w-full h-full object-contain" onError={(e) => {
                                                     e.currentTarget.style.display = 'none';
                                                     e.currentTarget.parentElement?.querySelector('.fallback-icon')?.classList.remove('hidden');
-                                                }} />
+                                                }} loading="lazy" decoding="async" />
                                             ) : null}
                                             
                                             <div className={`fallback-icon ${displayThumb ? 'hidden' : ''} flex items-center justify-center w-full h-full absolute inset-0`}>

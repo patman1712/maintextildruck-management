@@ -883,7 +883,7 @@ const ShopDashboard: React.FC = () => {
                         
                         {shop.logo_url ? (
                             <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex justify-center relative group">
-                                <img src={shop.logo_url} alt="Logo Preview" className="h-16 object-contain" />
+                                <img src={shop.logo_url} alt="Logo Preview" className="h-16 object-contain" loading="lazy" decoding="async" />
                             </div>
                         ) : (
                              <div className="mt-2">
@@ -947,7 +947,7 @@ const ShopDashboard: React.FC = () => {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                             {shop.hero_images && shop.hero_images.map((img, idx) => (
                                 <div key={idx} className="relative group aspect-video bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
-                                    <img src={img} alt={`Hero ${idx + 1}`} className="w-full h-full object-cover" />
+                                    <img src={img} alt={`Hero ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                                     <button 
                                         onClick={() => {
                                             const newImages = [...(shop.hero_images || [])];
@@ -1119,7 +1119,7 @@ const ShopDashboard: React.FC = () => {
                                              <div key={sub.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100 shadow-sm">
                                                 <div className="flex items-center gap-2">
                                                     {sub.image_url ? (
-                                                        <img src={sub.image_url} alt="" className="w-8 h-8 rounded object-cover border border-slate-100" />
+                                                        <img src={sub.image_url} alt="" className="w-8 h-8 rounded object-cover border border-slate-100" loading="lazy" decoding="async" />
                                                     ) : <div className="w-8 h-8 bg-slate-50 rounded border border-slate-100" />}
                                                     <span className="font-medium text-slate-600">{sub.name}</span>
                                                 </div>
@@ -2089,7 +2089,7 @@ const ShopDashboard: React.FC = () => {
                             <div className="flex items-center space-x-3">
                                 <div className="h-10 w-10 bg-slate-100 rounded flex items-center justify-center">
                                     {p.files && p.files[0] && (p.files[0].thumbnail_url || p.files[0].file_url) ? (
-                                        <img src={p.files[0].thumbnail_url || p.files[0].file_url} className="h-full w-full object-contain" />
+                                        <img src={p.files[0].thumbnail_url || p.files[0].file_url} className="h-full w-full object-contain" loading="lazy" decoding="async" />
                                     ) : <ImageIcon size={16} className="text-slate-400" />}
                                 </div>
                                 <div>
@@ -2211,7 +2211,7 @@ const ShopDashboard: React.FC = () => {
                                         <div className="flex items-center space-x-4">
                                             <div className="h-12 w-12 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-100">
                                                 {p.files && p.files[0] ? (
-                                                    <img src={p.files[0].thumbnail_url || p.files[0].file_url} className="h-full w-full object-cover" />
+                                                    <img src={p.files[0].thumbnail_url || p.files[0].file_url} className="h-full w-full object-cover" loading="lazy" decoding="async" />
                                                 ) : <ImageIcon size={20} className="text-slate-300" />}
                                             </div>
                                             <div>

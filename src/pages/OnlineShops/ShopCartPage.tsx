@@ -67,7 +67,7 @@ const ShopCartPage: React.FC = () => {
                     <td className="px-6 py-6">
                       <div className="flex items-center space-x-4">
                         <div className="h-20 w-20 flex-shrink-0 bg-slate-50 rounded-lg border border-slate-100 overflow-hidden">
-                          {item.image && <img src={item.image} alt={item.name} className="w-full h-full object-contain" />}
+                          {item.image && <img src={item.image} alt={item.name} className="w-full h-full object-contain" loading="lazy" decoding="async" />}
                         </div>
                         <div>
                           <h3 className="font-bold text-slate-800 leading-tight">{item.name}</h3>
@@ -120,7 +120,7 @@ const ShopCartPage: React.FC = () => {
                 <div key={item.id} className="p-4 space-y-4">
                   <div className="flex space-x-4">
                     <div className="h-20 w-20 flex-shrink-0 bg-slate-50 rounded-lg border border-slate-100 overflow-hidden">
-                      {item.image && <img src={item.image} alt={item.name} className="w-full h-full object-contain" />}
+                      {item.image && <img src={item.image} alt={item.name} className="w-full h-full object-contain" loading="lazy" decoding="async" />}
                     </div>
                     <div className="flex-1">
                       <h3 className="font-bold text-slate-800 text-sm">{item.name}</h3>
