@@ -213,6 +213,11 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                                 
                                 // Also update legacy thumbnail_url if present
                                 if (file.thumbnail_url !== undefined) file.thumbnail_url = thumbUrl;
+
+                                try {
+                                    db.prepare('UPDATE files SET thumbnail = COALESCE(?, thumbnail) WHERE path = ?').run(thumbUrl, fileUrl);
+                                } catch {
+                                }
                                 
                                 orderUpdated = true;
                                 totalUpdated++;

@@ -127,9 +127,9 @@ export default function FileArchive() {
                                 {file.type === 'print' ? 'DRUCK' : 'VORSCHAU'}
                             </div>
 
-                            {(file.thumbnail || file.url) ? (
+                            {file.thumbnail ? (
                                 <img 
-                                    src={file.thumbnail || file.url} 
+                                    src={file.thumbnail} 
                                     alt={file.name} 
                                     className="w-full h-full object-contain"
                                     loading="lazy"
@@ -141,7 +141,7 @@ export default function FileArchive() {
                                 />
                             ) : null}
                             
-                            <div className={`fallback-icon ${(file.thumbnail || file.url) ? 'hidden' : ''} flex items-center justify-center absolute inset-0`}>
+                            <div className={`fallback-icon ${file.thumbnail ? 'hidden' : ''} flex items-center justify-center absolute inset-0`}>
                                 <FileText className="text-gray-300 h-16 w-16" />
                             </div>
 

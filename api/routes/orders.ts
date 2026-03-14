@@ -71,8 +71,8 @@ router.post('/', async (req: Request, res: Response) => {
     if (files && Array.isArray(files)) {
       const checkFile = db.prepare('SELECT id FROM files WHERE path = ?');
       const insertFile = db.prepare(`
-        INSERT INTO files (id, customer_id, order_id, name, original_name, path, type, quantity)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO files (id, customer_id, order_id, name, original_name, path, type, thumbnail, quantity)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       files.forEach((file: any) => {
@@ -80,6 +80,7 @@ router.post('/', async (req: Request, res: Response) => {
           const existing = checkFile.get(file.url);
           if (!existing) {
             const fileId = Math.random().toString(36).substr(2, 9);
+            const thumb = file.thumbnail || file.thumbnail_url || file.thumbnailUrl || null;
             insertFile.run(
               fileId, 
               customer_id, 
@@ -88,6 +89,7 @@ router.post('/', async (req: Request, res: Response) => {
               file.name, 
               file.url, 
               file.type,
+              thumb,
               file.quantity || 1
             );
           }
@@ -212,13 +214,14 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (updates.files && Array.isArray(updates.files)) {
     const checkFile = db.prepare('SELECT id FROM files WHERE path = ?');
     const insertFile = db.prepare(`
-      INSERT INTO files (id, customer_id, order_id, name, original_name, path, type, quantity)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO files (id, customer_id, order_id, name, original_name, path, type, thumbnail, quantity)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     updates.files.forEach((file: any) => {
       if (file.url) {
         const existingFile = checkFile.get(file.url) as any;
+        const thumb = file.thumbnail || file.thumbnail_url || file.thumbnailUrl || null;
         if (!existingFile) {
           const fileId = Math.random().toString(36).substr(2, 9);
           // Use outer 'existing' (order) for customer_id fallback
@@ -232,11 +235,12 @@ router.put('/:id', async (req: Request, res: Response) => {
             file.name, 
             file.url, 
             file.type,
+            thumb,
             file.quantity || 1
           );
         } else {
               // Update quantity for existing file
-              db.prepare('UPDATE files SET quantity = ? WHERE id = ?').run(file.quantity || 1, existingFile.id);
+              db.prepare('UPDATE files SET quantity = ?, thumbnail = COALESCE(?, thumbnail) WHERE id = ?').run(file.quantity || 1, thumb, existingFile.id);
         }
       }
     });
