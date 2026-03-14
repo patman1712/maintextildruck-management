@@ -455,149 +455,92 @@ router.get('/archive-files', async (req: Request, res: Response) => {
         const offset = Number.isFinite(offsetRaw) ? Math.max(offsetRaw, 0) : 0;
         const type = String(req.query.type || 'all');
         const search = String(req.query.search || '').trim().toLowerCase();
-
         const isTypeFilter = type === 'print' || type === 'preview';
 
-        const archivedOrders = db.prepare(`
-            SELECT id, title, customer_name, created_at, files
-            FROM orders
-            WHERE status = 'archived'
-            ORDER BY created_at DESC
-        `).all() as any[];
+        const searchLike = `%${search}%`;
+        const queries: string[] = [];
+        const params: any[] = [];
 
-        const productPreviewFiles = db.prepare(`
-            SELECT 
-                p.id as product_id,
-                p.name as product_name,
-                p.created_at as created_at,
-                c.name as customer_name,
-                f.file_url as file_url,
-                f.file_name as file_name,
-                f.thumbnail_url as thumbnail_url
-            FROM customer_product_files f
-            JOIN customer_products p ON p.id = f.product_id
-            LEFT JOIN customers c ON c.id = p.customer_id
-            WHERE f.type = 'preview'
-            ORDER BY p.created_at DESC
-        `).all() as any[];
+        let orderSql = `
+            SELECT
+                f.name as name,
+                f.type as type,
+                f.path as url,
+                f.thumbnail as thumbnail,
+                f.name as customName,
+                o.id as orderId,
+                o.title as orderTitle,
+                o.customer_name as customerName,
+                COALESCE(f.created_at, o.created_at) as createdAt
+            FROM files f
+            JOIN orders o ON o.id = f.order_id
+            WHERE o.status = 'archived'
+              AND f.path IS NOT NULL
+              AND f.path <> ''
+        `;
 
-        const parseOrderFiles = (filesStr: string) => {
-            try {
-                const parsed = JSON.parse(filesStr || '[]');
-                return Array.isArray(parsed) ? parsed : [];
-            } catch {
-                return [];
+        if (isTypeFilter) {
+            orderSql += ` AND f.type = ? `;
+            params.push(type);
+        }
+        if (search) {
+            orderSql += ` AND (
+                lower(COALESCE(f.name,'')) LIKE ?
+                OR lower(COALESCE(f.original_name,'')) LIKE ?
+                OR lower(COALESCE(o.customer_name,'')) LIKE ?
+                OR lower(COALESCE(o.title,'')) LIKE ?
+            ) `;
+            params.push(searchLike, searchLike, searchLike, searchLike);
+        }
+        queries.push(orderSql);
+
+        if (type !== 'print') {
+            let productSql = `
+                SELECT
+                    cpf.file_name as name,
+                    'preview' as type,
+                    cpf.file_url as url,
+                    cpf.thumbnail_url as thumbnail,
+                    cpf.file_name as customName,
+                    ('prod-' || cp.id) as orderId,
+                    ('Produkt: ' || cp.name) as orderTitle,
+                    COALESCE(c.name, 'Unbekannt') as customerName,
+                    COALESCE(cpf.created_at, cp.created_at) as createdAt
+                FROM customer_product_files cpf
+                JOIN customer_products cp ON cp.id = cpf.product_id
+                LEFT JOIN customers c ON c.id = cp.customer_id
+                WHERE cpf.type = 'preview'
+                  AND cpf.file_url IS NOT NULL
+                  AND cpf.file_url <> ''
+            `;
+
+            if (search) {
+                productSql += ` AND (
+                    lower(COALESCE(cpf.file_name,'')) LIKE ?
+                    OR lower(COALESCE(cp.name,'')) LIKE ?
+                    OR lower(COALESCE(cp.product_number,'')) LIKE ?
+                    OR lower(COALESCE(c.name,'')) LIKE ?
+                ) `;
+                params.push(searchLike, searchLike, searchLike, searchLike);
             }
-        };
-
-        let orderIdx = 0;
-        let orderFiles: any[] = [];
-        let orderFileIdx = 0;
-        let currentOrder: any = null;
-
-        const nextOrderEntry = () => {
-            while (true) {
-                if (!currentOrder || orderFileIdx >= orderFiles.length) {
-                    if (orderIdx >= archivedOrders.length) return null;
-                    currentOrder = archivedOrders[orderIdx++];
-                    orderFiles = parseOrderFiles(currentOrder.files);
-                    orderFileIdx = 0;
-                }
-
-                const f = orderFiles[orderFileIdx++];
-                if (!f || !f.url) continue;
-
-                return {
-                    name: f.name,
-                    type: f.type,
-                    url: f.url,
-                    thumbnail: f.thumbnail,
-                    customName: f.customName,
-                    orderId: currentOrder.id,
-                    orderTitle: currentOrder.title,
-                    customerName: currentOrder.customer_name,
-                    createdAt: currentOrder.created_at
-                };
-            }
-        };
-
-        let prodIdx = 0;
-        const nextProductEntry = () => {
-            while (true) {
-                if (prodIdx >= productPreviewFiles.length) return null;
-                const p = productPreviewFiles[prodIdx++];
-                if (!p.file_url) continue;
-
-                return {
-                    name: p.file_name,
-                    type: 'preview',
-                    url: p.file_url,
-                    thumbnail: p.thumbnail_url,
-                    customName: p.file_name,
-                    orderId: `prod-${p.product_id}`,
-                    orderTitle: `Produkt: ${p.product_name}`,
-                    customerName: p.customer_name || 'Unbekannt',
-                    createdAt: p.created_at
-                };
-            }
-        };
-
-        let orderEntry = nextOrderEntry();
-        let productEntry = nextProductEntry();
-
-        const results: any[] = [];
-        const seenUrls = new Set<string>();
-        let skipped = 0;
-        let hasMore = false;
-
-        const matchesFilters = (entry: any) => {
-            if (isTypeFilter && entry.type !== type) return false;
-            if (!search) return true;
-            const hay = `${entry.name || ''} ${entry.customName || ''} ${entry.customerName || ''} ${entry.orderTitle || ''}`.toLowerCase();
-            return hay.includes(search);
-        };
-
-        while (orderEntry || productEntry) {
-            let pick: any;
-            if (orderEntry && productEntry) {
-                const orderTime = new Date(orderEntry.createdAt).getTime();
-                const prodTime = new Date(productEntry.createdAt).getTime();
-                if (orderTime >= prodTime) {
-                    pick = orderEntry;
-                    orderEntry = nextOrderEntry();
-                } else {
-                    pick = productEntry;
-                    productEntry = nextProductEntry();
-                }
-            } else if (orderEntry) {
-                pick = orderEntry;
-                orderEntry = nextOrderEntry();
-            } else {
-                pick = productEntry;
-                productEntry = nextProductEntry();
-            }
-
-            if (!pick?.url) continue;
-            if (seenUrls.has(pick.url)) continue;
-            if (!matchesFilters(pick)) continue;
-
-            seenUrls.add(pick.url);
-
-            if (skipped < offset) {
-                skipped++;
-                continue;
-            }
-
-            if (results.length < limit) {
-                results.push(pick);
-                continue;
-            }
-
-            hasMore = true;
-            break;
+            queries.push(productSql);
         }
 
-        res.json({ success: true, data: results, hasMore });
+        const sql = `
+            SELECT *
+            FROM (
+                ${queries.join(' UNION ALL ')}
+            )
+            ORDER BY createdAt DESC
+            LIMIT ?
+            OFFSET ?
+        `;
+
+        const rows = db.prepare(sql).all(...params, limit + 1, offset) as any[];
+        const hasMore = rows.length > limit;
+        const data = hasMore ? rows.slice(0, limit) : rows;
+
+        res.json({ success: true, data, hasMore });
     } catch (error: any) {
         console.error('Error listing archive files:', error);
         res.status(500).json({ success: false, error: error.message || 'List failed' });
