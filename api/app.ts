@@ -312,6 +312,29 @@ app.get(['/favicon.ico', '/favicon.png', '/apple-touch-icon.png', '/logo.png'], 
 });
 
 // Serve static files from the dist directory
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.method !== 'GET') return next()
+  if (req.path !== '/') return next()
+
+  const forwardedHost = req.headers['x-forwarded-host']
+  const hostHeader = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost) || req.headers.host || ''
+  const host = String(hostHeader).split(',')[0].trim().toLowerCase().replace(/:\d+$/, '')
+
+  if (!host) return next()
+
+  const parts = host.split('.')
+  if (parts.length < 3) return next()
+
+  const sub = parts[0]
+  const base = parts.slice(1).join('.')
+
+  if (base !== 'team-shop.org') return next()
+  if (!sub || sub === 'www') return next()
+
+  const qs = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : ''
+  res.redirect(302, `/shop/${encodeURIComponent(sub)}${qs}`)
+})
+
 app.use(express.static(path.join(__dirname, '../dist')))
 
 // Handle client-side routing by serving index.html for all non-API routes
