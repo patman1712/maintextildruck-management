@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "python3", "gcc"]
+nixPkgs = ["nodejs_20", "python3", "gcc", "poppler_utils"]
 
 [phases.install]
 cmds = ["npm ci --include=dev"]
