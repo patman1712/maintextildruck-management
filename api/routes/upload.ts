@@ -43,7 +43,6 @@ const generateThumbnail = async (file: Express.Multer.File) => {
             await execFileAsync('pdftoppm', [
                 '-png',
                 '-singlefile',
-                '-transp',
                 '-scale-to', '300',
                 inputPath,
                 thumbOutputPath
@@ -193,7 +192,6 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                                         await execFileAsync('pdftoppm', [
                                             '-png',
                                             '-singlefile',
-                                            '-transp',
                                             '-scale-to', '300',
                                             inputPath,
                                             thumbOutputPath
@@ -292,7 +290,6 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                                 await execFileAsync('pdftoppm', [
                                     '-png',
                                     '-singlefile',
-                                    '-transp',
                                     '-scale-to', '300',
                                     inputPath,
                                     thumbOutputPath
@@ -525,7 +522,6 @@ router.get('/list-pdfs', async (req: Request, res: Response) => {
                         await execFileAsync('pdftoppm', [
                             '-png',
                             '-singlefile',
-                            '-transp',
                             '-scale-to', '300',
                             inputPath,
                             thumbRoot
@@ -602,7 +598,6 @@ router.get('/thumb', async (req: Request, res: Response) => {
                     await execFileAsync('pdftoppm', [
                         '-png',
                         '-singlefile',
-                        '-transp',
                         '-scale-to', '300',
                         inputPath,
                         thumbRoot

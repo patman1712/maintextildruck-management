@@ -362,7 +362,6 @@ router.post('/:productId/upload', upload.single('file'), async (req: Request, re
                 await execFileAsync('pdftoppm', [
                     '-png',
                     '-singlefile',
-                    '-transp',
                     '-scale-to', '300',
                     file.path,
                     thumbOutputPathNoExt
