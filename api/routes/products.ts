@@ -359,16 +359,28 @@ router.post('/:productId/upload', upload.single('file'), async (req: Request, re
 
         if (file.mimetype === 'application/pdf' || originalName.toLowerCase().endsWith('.pdf')) {
             try {
-                await execFileAsync('pdftoppm', [
+                await execFileAsync('pdftocairo', [
                     '-png',
                     '-singlefile',
+                    '-transp',
                     '-scale-to', '300',
                     file.path,
                     thumbOutputPathNoExt
                 ]);
                 thumbnailUrl = `/uploads/${thumbName}.png`;
             } catch (e) {
-                console.error('Thumbnail generation failed', e);
+                try {
+                    await execFileAsync('pdftoppm', [
+                        '-png',
+                        '-singlefile',
+                        '-scale-to', '300',
+                        file.path,
+                        thumbOutputPathNoExt
+                    ]);
+                    thumbnailUrl = `/uploads/${thumbName}.png`;
+                } catch (e2) {
+                    console.error('Thumbnail generation failed', e2);
+                }
             }
         } else if (file.mimetype.startsWith('image/')) {
             try {

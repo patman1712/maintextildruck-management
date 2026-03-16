@@ -38,15 +38,26 @@ const generateThumbnail = async (file: Express.Multer.File) => {
     
     try {
         if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
-            const thumbOutputPath = path.join(UPLOAD_DIR, thumbName); // pdftoppm adds extension automatically if we don't be careful, but with -singlefile it uses the root name
+            const thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
             
-            await execFileAsync('pdftoppm', [
-                '-png',
-                '-singlefile',
-                '-scale-to', '300',
-                inputPath,
-                thumbOutputPath
-            ]);
+            try {
+                await execFileAsync('pdftocairo', [
+                    '-png',
+                    '-singlefile',
+                    '-transp',
+                    '-scale-to', '300',
+                    inputPath,
+                    thumbOutputPath
+                ]);
+            } catch {
+                await execFileAsync('pdftoppm', [
+                    '-png',
+                    '-singlefile',
+                    '-scale-to', '300',
+                    inputPath,
+                    thumbOutputPath
+                ]);
+            }
             
             thumbnail = `/uploads/${thumbName}.png`;
         } else if (file.mimetype.startsWith('image/')) {
@@ -187,8 +198,16 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                                 
                                 if (isPdf) {
                                     thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
-                                    // Generate thumbnail for PDF
                                     try {
+                                        await execFileAsync('pdftocairo', [
+                                            '-png',
+                                            '-singlefile',
+                                            '-transp',
+                                            '-scale-to', '300',
+                                            inputPath,
+                                            thumbOutputPath
+                                        ]);
+                                    } catch {
                                         await execFileAsync('pdftoppm', [
                                             '-png',
                                             '-singlefile',
@@ -196,15 +215,6 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                                             inputPath,
                                             thumbOutputPath
                                         ]);
-                                    } catch {
-                                        const pngOut = path.join(UPLOAD_DIR, `${thumbName}.png`);
-                                        await sharp(inputPath, { density: 150 })
-                                            .resize(300, 300, {
-                                                fit: 'contain',
-                                                background: { r: 255, g: 255, b: 255, alpha: 0 }
-                                            })
-                                            .png()
-                                            .toFile(pngOut);
                                     }
                                 } else {
                                     // Generate thumbnail for Image
@@ -287,6 +297,15 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                         if (isPdf) {
                             thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
                             try {
+                                await execFileAsync('pdftocairo', [
+                                    '-png',
+                                    '-singlefile',
+                                    '-transp',
+                                    '-scale-to', '300',
+                                    inputPath,
+                                    thumbOutputPath
+                                ]);
+                            } catch {
                                 await execFileAsync('pdftoppm', [
                                     '-png',
                                     '-singlefile',
@@ -294,15 +313,6 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                                     inputPath,
                                     thumbOutputPath
                                 ]);
-                            } catch {
-                                const pngOut = path.join(UPLOAD_DIR, `${thumbName}.png`);
-                                await sharp(inputPath, { density: 150 })
-                                    .resize(300, 300, {
-                                        fit: 'contain',
-                                        background: { r: 255, g: 255, b: 255, alpha: 0 }
-                                    })
-                                    .png()
-                                    .toFile(pngOut);
                             }
                         } else {
                             thumbOutputPath = path.join(UPLOAD_DIR, `${thumbName}.png`);
@@ -595,6 +605,16 @@ router.get('/thumb', async (req: Request, res: Response) => {
         try {
             if (isPdf) {
                 try {
+                    await execFileAsync('pdftocairo', [
+                        '-png',
+                        '-singlefile',
+                        '-transp',
+                        '-scale-to', '300',
+                        inputPath,
+                        thumbRoot
+                    ]);
+                } catch (e: any) {
+                    pdftoppmError = e?.message || String(e);
                     await execFileAsync('pdftoppm', [
                         '-png',
                         '-singlefile',
@@ -602,15 +622,6 @@ router.get('/thumb', async (req: Request, res: Response) => {
                         inputPath,
                         thumbRoot
                     ]);
-                } catch (e: any) {
-                    pdftoppmError = e?.message || String(e);
-                    await sharp(inputPath, { density: 150 })
-                        .resize(300, 300, {
-                            fit: 'contain',
-                            background: { r: 255, g: 255, b: 255, alpha: 0 }
-                        })
-                        .png()
-                        .toFile(thumbPath);
                 }
             } else {
                 await sharp(inputPath)
