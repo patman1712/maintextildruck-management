@@ -189,14 +189,25 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                                 if (isPdf) {
                                     thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
                                     // Generate thumbnail for PDF
-                                    await execFileAsync('pdftoppm', [
-                                        '-png',
-                                        '-singlefile',
-                                        '-transp',
-                                        '-scale-to', '300',
-                                        inputPath,
-                                        thumbOutputPath
-                                    ]);
+                                    try {
+                                        await execFileAsync('pdftoppm', [
+                                            '-png',
+                                            '-singlefile',
+                                            '-transp',
+                                            '-scale-to', '300',
+                                            inputPath,
+                                            thumbOutputPath
+                                        ]);
+                                    } catch {
+                                        const pngOut = path.join(UPLOAD_DIR, `${thumbName}.png`);
+                                        await sharp(inputPath, { density: 150 })
+                                            .resize(300, 300, {
+                                                fit: 'contain',
+                                                background: { r: 255, g: 255, b: 255, alpha: 0 }
+                                            })
+                                            .png()
+                                            .toFile(pngOut);
+                                    }
                                 } else {
                                     // Generate thumbnail for Image
                                     thumbOutputPath = path.join(UPLOAD_DIR, `${thumbName}.png`);
@@ -277,14 +288,25 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                         
                         if (isPdf) {
                             thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
-                            await execFileAsync('pdftoppm', [
-                                '-png',
-                                '-singlefile',
-                                '-transp',
-                                '-scale-to', '300',
-                                inputPath,
-                                thumbOutputPath
-                            ]);
+                            try {
+                                await execFileAsync('pdftoppm', [
+                                    '-png',
+                                    '-singlefile',
+                                    '-transp',
+                                    '-scale-to', '300',
+                                    inputPath,
+                                    thumbOutputPath
+                                ]);
+                            } catch {
+                                const pngOut = path.join(UPLOAD_DIR, `${thumbName}.png`);
+                                await sharp(inputPath, { density: 150 })
+                                    .resize(300, 300, {
+                                        fit: 'contain',
+                                        background: { r: 255, g: 255, b: 255, alpha: 0 }
+                                    })
+                                    .png()
+                                    .toFile(pngOut);
+                            }
                         } else {
                             thumbOutputPath = path.join(UPLOAD_DIR, `${thumbName}.png`);
                             await sharp(inputPath)
@@ -349,14 +371,25 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
 
                     if (isPdf) {
                         thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
-                        await execFileAsync('pdftoppm', [
-                            '-png',
-                            '-singlefile',
-                            '-transp',
-                            '-scale-to', '300',
-                            inputPath,
-                            thumbOutputPath
-                        ]);
+                        try {
+                            await execFileAsync('pdftoppm', [
+                                '-png',
+                                '-singlefile',
+                                '-transp',
+                                '-scale-to', '300',
+                                inputPath,
+                                thumbOutputPath
+                            ]);
+                        } catch {
+                            const pngOut = path.join(UPLOAD_DIR, `${thumbName}.png`);
+                            await sharp(inputPath, { density: 150 })
+                                .resize(300, 300, {
+                                    fit: 'contain',
+                                    background: { r: 255, g: 255, b: 255, alpha: 0 }
+                                })
+                                .png()
+                                .toFile(pngOut);
+                        }
                     } else {
                         thumbOutputPath = path.join(UPLOAD_DIR, `${thumbName}.png`);
                         await sharp(inputPath)
@@ -562,14 +595,24 @@ router.get('/thumb', async (req: Request, res: Response) => {
 
         try {
             if (isPdf) {
-                await execFileAsync('pdftoppm', [
-                    '-png',
-                    '-singlefile',
-                    '-transp',
-                    '-scale-to', '300',
-                    inputPath,
-                    thumbRoot
-                ]);
+                try {
+                    await execFileAsync('pdftoppm', [
+                        '-png',
+                        '-singlefile',
+                        '-transp',
+                        '-scale-to', '300',
+                        inputPath,
+                        thumbRoot
+                    ]);
+                } catch {
+                    await sharp(inputPath, { density: 150 })
+                        .resize(300, 300, {
+                            fit: 'contain',
+                            background: { r: 255, g: 255, b: 255, alpha: 0 }
+                        })
+                        .png()
+                        .toFile(thumbPath);
+                }
             } else {
                 await sharp(inputPath)
                     .resize(300, 300, {
