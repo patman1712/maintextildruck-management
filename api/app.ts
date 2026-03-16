@@ -262,6 +262,38 @@ app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '30d', immutable: true 
 app.use('/downloads', express.static(DOWNLOADS_DIR))
 app.use('/labels', express.static(path.join(path.dirname(UPLOAD_DIR), 'shipping_labels')))
 
+app.get(['/media/*', '/media'], (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const forwardedHost = req.headers['x-forwarded-host']
+    const hostHeader = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost) || req.headers.host || ''
+    const host = String(hostHeader).split(',')[0].trim().toLowerCase().replace(/:\d+$/, '')
+    if (!host) return next()
+
+    const shop = db.prepare('SELECT * FROM shops WHERE custom_domain = ?').get(host) as any
+      || (() => {
+        if (!host.endsWith('.team-shop.org')) return null
+        const sub = host.split('.')[0]
+        if (!sub || sub === 'www' || sub === 'app') return null
+        return db.prepare('SELECT * FROM shops WHERE domain_slug = ?').get(sub) as any
+      })()
+
+    if (!shop) return next()
+
+    const customer = db.prepare('SELECT shopware_url FROM customers WHERE id = ?').get(shop.customer_id) as any
+    const shopwareUrlRaw = customer?.shopware_url ? String(customer.shopware_url) : ''
+    if (!shopwareUrlRaw) return next()
+
+    let shopwareBase = shopwareUrlRaw.trim().replace(/\/$/, '')
+    shopwareBase = shopwareBase.replace(/\/api$/, '').replace(/\/admin$/, '')
+
+    if (!/^https?:\/\//i.test(shopwareBase)) return next()
+
+    res.redirect(302, `${shopwareBase}${req.originalUrl}`)
+  } catch {
+    next()
+  }
+})
+
 const START_TIME = Date.now();
 
 /**
