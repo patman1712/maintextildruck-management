@@ -1381,6 +1381,12 @@ router.post('/cache-product-images/:customerId', async (req: Request, res: Respo
         } catch {
             return res.status(400).json({ success: false, error: 'Ungültige Shopware URL' });
         }
+        if (allowedHost === 'manager.main-textildruck.com' || allowedHost === 'www.manager.main-textildruck.com' || allowedHost.endsWith('.team-shop.org')) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Shopware URL ist falsch. Bitte die echte Shopware Shop-Domain eintragen (wo /api und /media liegen), nicht die team-shop.org/manager Domain.' 
+            });
+        }
 
         const shopRows = db.prepare('SELECT domain_slug, custom_domain FROM shops WHERE customer_id = ?').all(customerId) as any[];
         const proxyHosts = new Set<string>();
