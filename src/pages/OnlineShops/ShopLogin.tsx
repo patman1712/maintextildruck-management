@@ -1,14 +1,13 @@
 
 import React, { useState } from 'react';
-import { useParams, useNavigate, Link, useOutletContext } from 'react-router-dom';
+import { useNavigate, Link, useOutletContext } from 'react-router-dom';
 import { Mail, Lock, LogIn, ArrowRight } from 'lucide-react';
 import { useShopStore } from '../../shopStore';
 
 const ShopLogin: React.FC = () => {
-  const { shopId } = useParams<{ shopId: string }>();
   const navigate = useNavigate();
   const login = useShopStore(state => state.login);
-  const { primaryColor } = useOutletContext<{ primaryColor: string }>();
+  const { primaryColor, shopKey, shopBaseUrl } = useOutletContext<{ primaryColor: string; shopKey: string; shopBaseUrl: string }>();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -31,7 +30,7 @@ const ShopLogin: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await fetch(`/api/shop-customers/${shopId}/login`, {
+      const res = await fetch(`/api/shop-customers/${shopKey}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -39,7 +38,7 @@ const ShopLogin: React.FC = () => {
       const data = await res.json();
       if (data.success) {
         login(data.data);
-        navigate(`/shop/${shopId}`);
+        navigate(`${shopBaseUrl}`);
       } else {
         setError(data.error || 'Login fehlgeschlagen.');
       }
@@ -123,7 +122,7 @@ const ShopLogin: React.FC = () => {
             </div>
 
             <Link
-              to={`/shop/${shopId}/register`}
+              to={`${shopBaseUrl}/register`}
               className="w-full py-4 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition-all text-center block"
             >
               Neues Konto erstellen

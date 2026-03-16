@@ -10,11 +10,13 @@ interface ShopContext {
   categories: ShopCategory[];
   primaryColor: string;
   secondaryColor: string;
+  shopBaseUrl: string;
+  shopKey: string;
 }
 
 const ShopProductPage: React.FC = () => {
-  const { shopId, productId } = useParams<{ shopId: string; productId: string }>();
-  const { shop, primaryColor } = useOutletContext<ShopContext>();
+  const { productId } = useParams<{ shopId: string; productId: string }>();
+  const { shop, primaryColor, shopBaseUrl } = useOutletContext<ShopContext>();
   const [product, setProduct] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState<string | null>(null);
@@ -237,7 +239,7 @@ const ShopProductPage: React.FC = () => {
   useEffect(() => {
     const fetchProduct = async () => {
       try {
-        const res = await fetch(`/api/shops/${shopId}/products`);
+        const res = await fetch(`/api/shops/${shop.id}/products`);
         const data = await res.json();
         if (data.success) {
           const found = data.data.find((p: any) => p.product_id === productId);
@@ -254,10 +256,10 @@ const ShopProductPage: React.FC = () => {
         setLoading(false);
       }
     };
-    if (shopId && productId) {
+    if (productId) {
       fetchProduct();
     }
-  }, [shopId, productId]);
+  }, [shop.id, productId]);
 
   const images = React.useMemo(() => {
       if (!product || !product.files) return [];
@@ -552,11 +554,11 @@ const ShopProductPage: React.FC = () => {
     <div className="container mx-auto px-4 py-8">
       {/* Breadcrumbs */}
       <div className="flex items-center text-xs uppercase tracking-wider text-slate-500 mb-8">
-        <Link to={`/shop/${shopId}`} className="hover:text-slate-800">Startseite</Link>
+        <Link to={`${shopBaseUrl}`} className="hover:text-slate-800">Startseite</Link>
         <span className="mx-2">/</span>
         {product.category_slug ? (
              <>
-                <Link to={`/shop/${shopId}/category/${product.category_slug}`} className="hover:text-slate-800">{product.category_name}</Link>
+                <Link to={`${shopBaseUrl}/category/${product.category_slug}`} className="hover:text-slate-800">{product.category_name}</Link>
                 <span className="mx-2">/</span>
              </>
         ) : null}

@@ -4,10 +4,10 @@ import { ShoppingCart, ArrowRight } from 'lucide-react';
 
 interface ProductTileProps {
     product: any;
-    shopId: string | undefined;
+    shopBaseUrl: string;
 }
 
-export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId }) => {
+export const ProductTile: React.FC<ProductTileProps> = ({ product, shopBaseUrl }) => {
     
     // Parse variants if available
     let sizes: string[] = [];
@@ -64,7 +64,7 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId }) => 
 
     return (
         <div className="group block relative bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-slate-100">
-            <Link to={`/shop/${shopId}/product/${product.product_id}`} className="block h-full flex flex-col">
+            <Link to={`${shopBaseUrl}/product/${product.product_id}`} className="block h-full flex flex-col">
                 <div className="relative aspect-[3/4] bg-slate-50 overflow-hidden">
                     {product.files && product.files.length > 0 && (product.files[0].thumbnail_url || product.files[0].file_url) ? (
                         <>
@@ -72,6 +72,8 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId }) => 
                                 src={product.files[0].thumbnail_url || product.files[0].file_url} 
                                 alt={product.name}
                                 className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-700"
+                                loading="lazy"
+                                decoding="async"
                             />
                             {/* Overlay gradient on hover */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

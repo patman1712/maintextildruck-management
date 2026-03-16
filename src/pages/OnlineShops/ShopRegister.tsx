@@ -1,12 +1,11 @@
 
 import React, { useState } from 'react';
-import { useParams, useNavigate, Link, useOutletContext } from 'react-router-dom';
+import { useNavigate, Link, useOutletContext } from 'react-router-dom';
 import { User, Mail, Lock, Building, MapPin, Phone, CheckCircle } from 'lucide-react';
 
 const ShopRegister: React.FC = () => {
-  const { shopId } = useParams<{ shopId: string }>();
   const navigate = useNavigate();
-  const { primaryColor } = useOutletContext<{ primaryColor: string }>();
+  const { primaryColor, shopKey, shopBaseUrl } = useOutletContext<{ primaryColor: string; shopKey: string; shopBaseUrl: string }>();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -50,7 +49,7 @@ const ShopRegister: React.FC = () => {
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/shop-customers/${shopId}/register`, {
+      const res = await fetch(`/api/shop-customers/${shopKey}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -58,7 +57,7 @@ const ShopRegister: React.FC = () => {
       const data = await res.json();
       if (data.success) {
         setSuccess(true);
-        setTimeout(() => navigate(`/shop/${shopId}/login`), 3000);
+        setTimeout(() => navigate(`${shopBaseUrl}/login`), 3000);
       } else {
         setError(data.error || 'Registrierung fehlgeschlagen.');
       }
@@ -81,7 +80,7 @@ const ShopRegister: React.FC = () => {
             Vielen Dank für Ihre Anmeldung. Sie werden in Kürze zum Login weitergeleitet.
           </p>
           <Link 
-            to={`/shop/${shopId}/login`}
+            to={`${shopBaseUrl}/login`}
             className="inline-block px-8 py-3 text-white font-bold rounded-lg shadow-lg hover:opacity-90 transition-all"
             style={{ backgroundColor: primaryColor }}
           >
@@ -246,7 +245,7 @@ const ShopRegister: React.FC = () => {
                 onChange={handleChange}
               />
               <label htmlFor="data_privacy_accepted" className="text-sm text-slate-600">
-                Ich habe die <Link to={`/shop/${shopId}/page/datenschutz`} className="underline hover:text-slate-900">Datenschutzerklärung</Link> gelesen und akzeptiere diese. Ich willige ein, dass meine Daten zur Bearbeitung meines Kontos gespeichert werden.
+                Ich habe die <Link to={`${shopBaseUrl}/page/datenschutz`} className="underline hover:text-slate-900">Datenschutzerklärung</Link> gelesen und akzeptiere diese. Ich willige ein, dass meine Daten zur Bearbeitung meines Kontos gespeichert werden.
               </label>
             </div>
 
@@ -260,7 +259,7 @@ const ShopRegister: React.FC = () => {
             </button>
 
             <p className="text-center text-slate-500 mt-6 font-medium">
-              Bereits ein Konto? <Link to={`/shop/${shopId}/login`} className="font-bold underline" style={{ color: primaryColor }}>Hier anmelden</Link>
+              Bereits ein Konto? <Link to={`${shopBaseUrl}/login`} className="font-bold underline" style={{ color: primaryColor }}>Hier anmelden</Link>
             </p>
           </form>
         </div>

@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { useOutletContext, Link, useParams } from 'react-router-dom';
+import { useOutletContext, Link } from 'react-router-dom';
 import { ShoppingCart, ChevronRight, Star, ChevronLeft } from 'lucide-react';
 import { Shop, ShopCategory, Product } from '../../store';
 import { ProductTile } from './components/ProductTile';
@@ -10,11 +10,12 @@ interface ShopContext {
   categories: ShopCategory[];
   primaryColor: string;
   secondaryColor: string;
+  shopBaseUrl: string;
+  shopKey: string;
 }
 
 const ShopHome: React.FC = () => {
-  const { shopId } = useParams<{ shopId: string }>();
-  const { shop } = useOutletContext<ShopContext>();
+  const { shop, shopBaseUrl } = useOutletContext<ShopContext>();
   const [products, setProducts] = useState<any[]>([]); // Using any for extended product interface
   const [loading, setLoading] = useState(true);
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -22,7 +23,7 @@ const ShopHome: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch(`/api/shops/${shopId}/products?limit=8`);
+        const res = await fetch(`/api/shops/${shop.id}/products?limit=8`);
         const data = await res.json();
         if (data.success) {
           // Filter featured or just take first 8 (already limited by API)
@@ -35,7 +36,7 @@ const ShopHome: React.FC = () => {
       }
     };
     fetchProducts();
-  }, [shopId]);
+  }, [shop.id]);
 
   // Auto-advance slider
   useEffect(() => {
@@ -130,7 +131,7 @@ const ShopHome: React.FC = () => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {products.length > 0 ? products.map(product => (
-                <ProductTile key={product.assignment_id} product={product} shopId={shopId} />
+                <ProductTile key={product.assignment_id} product={product} shopBaseUrl={shopBaseUrl} />
             )) : (
                 <div className="col-span-full text-center py-20 text-slate-400">
                     <p>{loading ? 'Lade Produkte...' : 'Keine Produkte gefunden.'}</p>

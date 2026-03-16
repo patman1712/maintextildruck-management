@@ -647,7 +647,7 @@ const ShopLayout: React.FC = () => {
         </div>
       )}
 
-      <Outlet context={{ shop, categories, primaryColor, secondaryColor }} />
+      <Outlet context={{ shop, categories, primaryColor, secondaryColor, shopBaseUrl, shopKey: shop.id }} />
 
       {/* Footer */}
       <footer style={{ backgroundColor: primaryColor }} className="text-white pt-16 pb-8 mt-auto">

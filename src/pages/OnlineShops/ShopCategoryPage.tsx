@@ -10,11 +10,13 @@ interface ShopContext {
   categories: ShopCategory[];
   primaryColor: string;
   secondaryColor: string;
+  shopBaseUrl: string;
+  shopKey: string;
 }
 
 const ShopCategoryPage: React.FC = () => {
-  const { shopId, categorySlug } = useParams<{ shopId: string; categorySlug: string }>();
-  const { shop, categories, primaryColor } = useOutletContext<ShopContext>();
+  const { categorySlug } = useParams<{ shopId: string; categorySlug: string }>();
+  const { shop, categories, primaryColor, shopBaseUrl } = useOutletContext<ShopContext>();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -29,7 +31,7 @@ const ShopCategoryPage: React.FC = () => {
     const fetchProducts = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/shops/${shopId}/products`);
+        const res = await fetch(`/api/shops/${shop.id}/products`);
         const data = await res.json();
         if (data.success) {
           // Filter by category slug
@@ -61,10 +63,10 @@ const ShopCategoryPage: React.FC = () => {
         setLoading(false);
       }
     };
-    if (shopId && categorySlug) {
+    if (categorySlug) {
         fetchProducts();
     }
-  }, [shopId, categorySlug, currentCategory, categories]);
+  }, [shop.id, categorySlug, currentCategory, categories]);
 
   if (!currentCategory && !loading) return <div className="container mx-auto p-8">Kategorie nicht gefunden.</div>;
 
@@ -72,11 +74,11 @@ const ShopCategoryPage: React.FC = () => {
     <div className="container mx-auto px-4 py-8">
       {/* Breadcrumbs */}
       <div className="flex items-center text-xs uppercase tracking-wider text-slate-500 mb-8">
-        <Link to={`/shop/${shopId}`} className="hover:text-slate-800">Startseite</Link>
+        <Link to={`${shopBaseUrl}`} className="hover:text-slate-800">Startseite</Link>
         {parentCategory && (
             <>
                 <span className="mx-2">/</span>
-                <Link to={`/shop/${shopId}/category/${parentCategory.slug}`} className="hover:text-slate-800">{parentCategory.name}</Link>
+                <Link to={`${shopBaseUrl}/category/${parentCategory.slug}`} className="hover:text-slate-800">{parentCategory.name}</Link>
             </>
         )}
         <span className="mx-2">/</span>
@@ -95,7 +97,7 @@ const ShopCategoryPage: React.FC = () => {
                 return (
                     <li key={cat.id}>
                         <Link 
-                            to={`/shop/${shopId}/category/${cat.slug}`}
+                            to={`${shopBaseUrl}/category/${cat.slug}`}
                             className={`block py-1 hover:text-red-600 ${isActive ? 'font-bold text-slate-900' : 'text-slate-600'}`}
                             style={isCurrent ? { color: primaryColor } : {}}
                         >
@@ -107,7 +109,7 @@ const ShopCategoryPage: React.FC = () => {
                                 {categories.filter(sub => sub.parent_id === cat.id).map(sub => (
                                     <li key={sub.id}>
                                         <Link 
-                                            to={`/shop/${shopId}/category/${sub.slug}`}
+                                            to={`${shopBaseUrl}/category/${sub.slug}`}
                                             className={`block py-1 hover:text-red-600 ${sub.slug === categorySlug ? 'font-bold text-red-600' : 'text-slate-500'}`}
                                         >
                                             {sub.name}
@@ -161,7 +163,7 @@ const ShopCategoryPage: React.FC = () => {
                     <div className="col-span-full py-20 text-center text-slate-400">Keine Produkte in dieser Kategorie gefunden.</div>
                 ) : (
                     products.map(product => (
-                        <ProductTile key={product.assignment_id} product={product} shopId={shopId} />
+                        <ProductTile key={product.assignment_id} product={product} shopBaseUrl={shopBaseUrl} />
                     ))
                 )}
             </div>

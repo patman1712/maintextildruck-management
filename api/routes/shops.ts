@@ -88,7 +88,7 @@ router.get('/:id/categories', (req, res) => {
     
     // Resolve slug if needed
     if (!id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
-        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(id) as { id: string } | undefined;
+        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ? OR custom_domain = ?').get(id, id) as { id: string } | undefined;
         if (!shop) return res.status(404).json({ success: false, error: 'Shop not found' });
         shopId = shop.id;
     }
@@ -109,7 +109,7 @@ router.get('/:id/products', (req, res) => {
 
     // Resolve slug if needed
     if (!id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
-        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(id) as { id: string } | undefined;
+        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ? OR custom_domain = ?').get(id, id) as { id: string } | undefined;
         if (!shop) return res.status(404).json({ success: false, error: 'Shop not found' });
         shopId = shop.id;
     }
@@ -275,7 +275,7 @@ router.get('/:id/search', (req, res) => {
 
     // Resolve slug if needed
     if (!id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
-        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(id) as { id: string } | undefined;
+        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ? OR custom_domain = ?').get(id, id) as { id: string } | undefined;
         if (!shop) return res.status(404).json({ success: false, error: 'Shop not found' });
         shopId = shop.id;
     }
@@ -350,7 +350,7 @@ router.get('/:id/shipping-config', (req, res) => {
 
     // Resolve slug if needed
     if (!id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)) {
-        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ?').get(id) as { id: string } | undefined;
+        const shop = db.prepare('SELECT id FROM shops WHERE domain_slug = ? OR custom_domain = ?').get(id, id) as { id: string } | undefined;
         if (!shop) return res.status(404).json({ success: false, error: 'Shop not found' });
         shopId = shop.id;
     }

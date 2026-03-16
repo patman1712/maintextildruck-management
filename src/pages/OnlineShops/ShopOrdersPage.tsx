@@ -1,13 +1,12 @@
 
 import React, { useEffect, useState } from 'react';
-import { useParams, Link, useOutletContext } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { ShoppingBag, ChevronRight, Package, Calendar, Clock, ArrowRight, CheckCircle, X } from 'lucide-react';
 import { useShopStore } from '../../shopStore';
 
 const ShopOrdersPage: React.FC = () => {
-  const { shopId } = useParams<{ shopId: string }>();
   const { currentCustomer } = useShopStore();
-  const { primaryColor } = useOutletContext<{ primaryColor: string }>();
+  const { primaryColor, shopKey, shopBaseUrl } = useOutletContext<{ primaryColor: string; shopKey: string; shopBaseUrl: string }>();
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -15,7 +14,7 @@ const ShopOrdersPage: React.FC = () => {
     const fetchOrders = async () => {
       if (!currentCustomer) return;
       try {
-        const res = await fetch(`/api/shop-customers/${shopId}/orders/${currentCustomer.id}`);
+        const res = await fetch(`/api/shop-customers/${shopKey}/orders/${currentCustomer.id}`);
         const data = await res.json();
         if (data.success) {
           setOrders(data.data);
@@ -28,7 +27,7 @@ const ShopOrdersPage: React.FC = () => {
     };
 
     fetchOrders();
-  }, [shopId, currentCustomer]);
+  }, [shopKey, currentCustomer]);
 
   if (loading) return <div className="container mx-auto p-20 text-center">Lade Bestellungen...</div>;
 
@@ -46,7 +45,7 @@ const ShopOrdersPage: React.FC = () => {
             <h2 className="text-xl font-bold text-slate-800 mb-2">Noch keine Bestellungen</h2>
             <p className="text-slate-500 mb-8 text-sm">Du hast bisher noch keine Bestellungen in diesem Shop getätigt.</p>
             <Link 
-              to={`/shop/${shopId}`}
+              to={`${shopBaseUrl}`}
               className="inline-block px-8 py-3 rounded-xl text-white font-bold transition-all hover:scale-105"
               style={{ backgroundColor: primaryColor }}
             >
@@ -58,7 +57,7 @@ const ShopOrdersPage: React.FC = () => {
             {orders.map((order) => (
               <Link 
                 key={order.id} 
-                to={`/shop/${shopId}/orders/${order.id}`}
+                to={`${shopBaseUrl}/orders/${order.id}`}
                 className="block bg-white rounded-2xl border border-slate-100 p-6 shadow-sm hover:shadow-md hover:border-slate-200 transition-all group"
               >
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

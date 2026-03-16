@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useOutletContext, useParams, Link } from 'react-router-dom';
+import { useOutletContext, Link } from 'react-router-dom';
 import { Trash2, Plus, Minus, ArrowLeft, ArrowRight, ShoppingCart, ShoppingBag } from 'lucide-react';
 import { Shop } from '../../store';
 import { useShopStore } from '../../shopStore';
@@ -8,11 +8,12 @@ import { useShopStore } from '../../shopStore';
 interface ShopContext {
   shop: Shop;
   primaryColor: string;
+  shopBaseUrl: string;
+  shopKey: string;
 }
 
 const ShopCartPage: React.FC = () => {
-  const { shopId } = useParams<{ shopId: string }>();
-  const { shop, primaryColor } = useOutletContext<ShopContext>();
+  const { shop, primaryColor, shopBaseUrl } = useOutletContext<ShopContext>();
   const { cart, removeFromCart, updateQuantity } = useShopStore();
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -29,7 +30,7 @@ const ShopCartPage: React.FC = () => {
           <h1 className="text-3xl font-black uppercase italic tracking-tighter">Dein Warenkorb ist leer</h1>
           <p className="text-slate-500">Du hast noch keine Artikel in deinen Warenkorb gelegt.</p>
           <Link 
-            to={`/shop/${shopId}`}
+            to={`${shopBaseUrl}`}
             className="inline-block px-8 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all"
             style={{ backgroundColor: primaryColor }}
           >
@@ -146,7 +147,7 @@ const ShopCartPage: React.FC = () => {
           </div>
 
           <div className="flex justify-between items-center">
-            <Link to={`/shop/${shopId}`} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-800 group">
+            <Link to={`${shopBaseUrl}`} className="flex items-center text-sm font-bold text-slate-500 hover:text-slate-800 group">
               <ArrowLeft size={16} className="mr-2 group-hover:-translate-x-1 transition-transform" />
               Weiter einkaufen
             </Link>
@@ -184,7 +185,7 @@ const ShopCartPage: React.FC = () => {
             </div>
 
             <Link 
-              to={`/shop/${shopId}/checkout`}
+              to={`${shopBaseUrl}/checkout`}
               className="w-full flex items-center justify-center py-5 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-[1.02] active:scale-98 transition-all group mb-4"
               style={{ backgroundColor: primaryColor }}
             >

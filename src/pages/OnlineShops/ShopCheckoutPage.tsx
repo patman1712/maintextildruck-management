@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useOutletContext, useParams, Link, useNavigate } from 'react-router-dom';
+import { useOutletContext, Link, useNavigate } from 'react-router-dom';
 import { CreditCard, Truck, MapPin, CheckCircle, ArrowLeft, ArrowRight, ShieldCheck, ShoppingBag, ShoppingCart } from 'lucide-react';
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import { Shop } from '../../store';
@@ -9,12 +9,13 @@ import { useShopStore } from '../../shopStore';
 interface ShopContext {
   shop: Shop;
   primaryColor: string;
+  shopBaseUrl: string;
+  shopKey: string;
 }
 
 const ShopCheckoutPage: React.FC = () => {
-  const { shopId } = useParams<{ shopId: string }>();
   const navigate = useNavigate();
-  const { shop, primaryColor } = useOutletContext<ShopContext>();
+  const { shop, primaryColor, shopBaseUrl } = useOutletContext<ShopContext>();
   const { cart, currentCustomer, clearCart } = useShopStore();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [shippingConfig, setShippingConfig] = useState<any>(null);
@@ -34,8 +35,8 @@ const ShopCheckoutPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (shopId) {
-        fetch(`/api/shops/${shopId}/shipping-config`)
+    if (shop?.id) {
+        fetch(`/api/shops/${shop.id}/shipping-config`)
             .then(res => res.json())
             .then(data => {
                 if (data.success && data.data) {
@@ -44,7 +45,7 @@ const ShopCheckoutPage: React.FC = () => {
             })
             .catch(console.error);
     }
-  }, [shopId]);
+  }, [shop?.id]);
 
   useEffect(() => {
     if (shippingConfig && shippingConfig.shipping_tiers && Array.isArray(shippingConfig.shipping_tiers) && shippingConfig.shipping_tiers.length > 0) {
@@ -115,8 +116,8 @@ const ShopCheckoutPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      console.log('Sending order request...', { shopId, customerId: currentCustomer?.id, itemsCount: cart.length });
-      const res = await fetch(`/api/shop-customers/${shopId}/orders`, {
+      console.log('Sending order request...', { shopId: shop.id, customerId: currentCustomer?.id, itemsCount: cart.length });
+      const res = await fetch(`/api/shop-customers/${shop.id}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -155,7 +156,7 @@ const ShopCheckoutPage: React.FC = () => {
       <div className="container mx-auto px-4 py-20 text-center">
         <ShoppingCart size={48} className="mx-auto text-slate-200 mb-6" />
         <h1 className="text-3xl font-black uppercase italic tracking-tighter mb-4">Dein Warenkorb ist leer</h1>
-        <Link to={`/shop/${shopId}`} className="text-blue-600 font-bold hover:underline">Zurück zum Shop</Link>
+        <Link to={`${shopBaseUrl}`} className="text-blue-600 font-bold hover:underline">Zurück zum Shop</Link>
       </div>
     );
   }
@@ -173,7 +174,7 @@ const ShopCheckoutPage: React.FC = () => {
             Vielen Dank für deine Bestellung. Wir haben dir eine Bestätigungs-E-Mail gesendet. Deine Bestellung wird nun individuell für dich angefertigt.
           </p>
           <Link 
-            to={`/shop/${shopId}`}
+            to={`${shopBaseUrl}`}
             className="inline-block px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all"
             style={{ backgroundColor: primaryColor }}
           >
@@ -221,7 +222,7 @@ const ShopCheckoutPage: React.FC = () => {
               {!currentCustomer && (
                 <div className="bg-slate-50 p-6 rounded-xl border border-slate-100 mb-8 flex items-center justify-between">
                   <div className="text-sm text-slate-600 font-medium">Bereits ein Konto? Melde dich an für schnelleren Checkout.</div>
-                  <Link to={`/shop/${shopId}/login`} className="text-blue-600 font-bold text-sm underline hover:text-blue-800">Jetzt einloggen</Link>
+                  <Link to={`${shopBaseUrl}/login`} className="text-blue-600 font-bold text-sm underline hover:text-blue-800">Jetzt einloggen</Link>
                 </div>
               )}
 
@@ -340,7 +341,7 @@ const ShopCheckoutPage: React.FC = () => {
               <div className="bg-slate-50 p-6 rounded-2xl space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Deine Artikel</h3>
-                    <Link to={`/shop/${shopId}/cart`} className="text-xs font-bold underline text-slate-500">Bearbeiten</Link>
+                    <Link to={`${shopBaseUrl}/cart`} className="text-xs font-bold underline text-slate-500">Bearbeiten</Link>
                   </div>
                   <div className="space-y-4">
                     {cart.map(item => (
