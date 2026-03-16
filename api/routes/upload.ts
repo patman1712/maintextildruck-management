@@ -545,7 +545,30 @@ router.get('/archive-files', async (req: Request, res: Response) => {
         const hasMore = rows.length > limit;
         const data = hasMore ? rows.slice(0, limit) : rows;
 
-        res.json({ success: true, data, hasMore });
+        const updateThumbStmt = db.prepare('UPDATE files SET thumbnail = COALESCE(?, thumbnail) WHERE path = ?');
+        const dataWithThumbs = await Promise.all(data.map(async (row: any) => {
+            if (row.thumbnail) return row;
+            if (!row.url || typeof row.url !== 'string') return row;
+            if (!row.url.startsWith('/uploads/')) return row;
+
+            const filename = path.basename(row.url);
+            const thumbFilename = `${filename}_thumb.png`;
+            const thumbPath = path.join(UPLOAD_DIR, thumbFilename);
+
+            if (!(thumbPath.startsWith(UPLOAD_DIR) && await fs.pathExists(thumbPath))) return row;
+
+            const thumbUrl = `/uploads/${thumbFilename}`;
+            row.thumbnail = thumbUrl;
+
+            try {
+                updateThumbStmt.run(thumbUrl, row.url);
+            } catch {
+            }
+
+            return row;
+        }));
+
+        res.json({ success: true, data: dataWithThumbs, hasMore });
     } catch (error: any) {
         console.error('Error listing archive files:', error);
         res.status(500).json({ success: false, error: error.message || 'List failed' });
