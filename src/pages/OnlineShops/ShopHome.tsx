@@ -4,6 +4,7 @@ import { useOutletContext, Link } from 'react-router-dom';
 import { ShoppingCart, ChevronRight, Star, ChevronLeft } from 'lucide-react';
 import { Shop, ShopCategory, Product } from '../../store';
 import { ProductTile } from './components/ProductTile';
+import { toAbsoluteMediaUrl } from './mediaUrl';
 
 interface ShopContext {
   shop: Shop;
@@ -70,9 +71,11 @@ const ShopHome: React.FC = () => {
         {heroImages.length > 0 ? (
              <div className="relative w-full">
                  <img 
-                    src={heroImages[currentSlide].replace('_thumb', '').replace(/_thumb\.[a-z]+$/i, (match) => match.replace('_thumb', ''))} 
+                    src={toAbsoluteMediaUrl(heroImages[currentSlide].replace('_thumb', '').replace(/_thumb\.[a-z]+$/i, (match) => match.replace('_thumb', ''))) || ''} 
                     alt="Hero" 
                     className="w-full h-auto object-cover" 
+                    loading="lazy"
+                    decoding="async"
                  />
                  
                  {heroImages.length > 1 && (

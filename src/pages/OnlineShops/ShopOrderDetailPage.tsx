@@ -5,9 +5,9 @@ import { ArrowLeft, Package, Calendar, CreditCard, MapPin, Truck, CheckCircle, C
 import { useShopStore } from '../../shopStore';
 
 const ShopOrderDetailPage: React.FC = () => {
-  const { shopId, orderId } = useParams<{ shopId: string, orderId: string }>();
+  const { orderId } = useParams<{ shopId: string, orderId: string }>();
   const { currentCustomer } = useShopStore();
-  const { primaryColor } = useOutletContext<{ primaryColor: string }>();
+  const { primaryColor, shopKey, shopBaseUrl } = useOutletContext<{ primaryColor: string; shopKey: string; shopBaseUrl: string }>();
   const [order, setOrder] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
@@ -16,7 +16,7 @@ const ShopOrderDetailPage: React.FC = () => {
     const fetchOrder = async () => {
       if (!currentCustomer || !orderId) return;
       try {
-        const res = await fetch(`/api/shop-customers/${shopId}/orders/${currentCustomer.id}/${orderId}`);
+        const res = await fetch(`/api/shop-customers/${shopKey}/orders/${currentCustomer.id}/${orderId}`);
         const data = await res.json();
         if (data.success) {
           setOrder(data.data);
@@ -38,7 +38,7 @@ const ShopOrderDetailPage: React.FC = () => {
 
     fetchOrder();
     fetchOptions();
-  }, [shopId, orderId, currentCustomer]);
+  }, [shopKey, orderId, currentCustomer]);
 
   const formatPersonalization = (notes: string) => {
     if (!notes) return '';
@@ -61,7 +61,7 @@ const ShopOrderDetailPage: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="max-w-5xl mx-auto">
-        <Link to={`/shop/${shopId}/orders`} className="inline-flex items-center text-sm font-bold text-slate-500 hover:text-slate-800 mb-8 group transition-colors">
+        <Link to={`${shopBaseUrl}/orders`} className="inline-flex items-center text-sm font-bold text-slate-500 hover:text-slate-800 mb-8 group transition-colors">
           <ArrowLeft size={16} className="mr-2 group-hover:-translate-x-1 transition-transform" />
           Zurück zu meinen Bestellungen
         </Link>

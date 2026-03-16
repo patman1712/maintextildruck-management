@@ -1,14 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { User, Mail, Lock, Building, MapPin, Phone, Save, CheckCircle, AlertCircle } from 'lucide-react';
 import { useShopStore } from '../../shopStore';
 
 const ShopProfile: React.FC = () => {
-  const { shopId } = useParams<{ shopId: string }>();
   const navigate = useNavigate();
   const { currentCustomer, login } = useShopStore();
-  const { primaryColor } = useOutletContext<{ primaryColor: string }>();
+  const { primaryColor, shopKey, shopBaseUrl } = useOutletContext<{ primaryColor: string; shopKey: string; shopBaseUrl: string }>();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -28,7 +27,7 @@ const ShopProfile: React.FC = () => {
 
   useEffect(() => {
     if (!currentCustomer) {
-      navigate(`/shop/${shopId}/login`);
+      navigate(`${shopBaseUrl}/login`);
       return;
     }
 
@@ -44,7 +43,7 @@ const ShopProfile: React.FC = () => {
       city: currentCustomer.city || '',
       phone: currentCustomer.phone || ''
     });
-  }, [currentCustomer, shopId, navigate]);
+  }, [currentCustomer, shopBaseUrl, navigate]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
@@ -64,7 +63,7 @@ const ShopProfile: React.FC = () => {
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/shop-customers/${shopId}/profile/${currentCustomer?.id}`, {
+      const res = await fetch(`/api/shop-customers/${shopKey}/profile/${currentCustomer?.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

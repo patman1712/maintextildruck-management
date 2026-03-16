@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingCart, ArrowRight } from 'lucide-react';
+import { toAbsoluteMediaUrl } from '../mediaUrl';
 
 interface ProductTileProps {
     product: any;
@@ -69,7 +70,7 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopBaseUrl }
                     {product.files && product.files.length > 0 && (product.files[0].thumbnail_url || product.files[0].file_url) ? (
                         <>
                             <img 
-                                src={product.files[0].thumbnail_url || product.files[0].file_url} 
+                                src={toAbsoluteMediaUrl(product.files[0].thumbnail_url || product.files[0].file_url) || ''} 
                                 alt={product.name}
                                 className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-700"
                                 loading="lazy"

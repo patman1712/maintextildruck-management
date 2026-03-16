@@ -4,6 +4,7 @@ import { useOutletContext, useParams, Link } from 'react-router-dom';
 import { ShoppingCart, Heart, ChevronRight, Info, Plus, Minus, Check, Shirt, User, Hash, Shield } from 'lucide-react';
 import { Shop, ShopCategory, Product } from '../../store';
 import { useShopStore, CartItem } from '../../shopStore';
+import { toAbsoluteMediaUrl } from './mediaUrl';
 
 interface ShopContext {
   shop: Shop;
@@ -246,7 +247,7 @@ const ShopProductPage: React.FC = () => {
           if (found) {
             setProduct(found);
             if (found.files && found.files.length > 0) {
-                setActiveImage(found.files[0].file_url || found.files[0].thumbnail_url);
+                setActiveImage(toAbsoluteMediaUrl(found.files[0].file_url || found.files[0].thumbnail_url));
             }
           }
         }
@@ -396,17 +397,17 @@ const ShopProductPage: React.FC = () => {
           }
           
           if (bestMatch) {
-              setActiveImage(bestMatch.file_url);
+              setActiveImage(toAbsoluteMediaUrl(bestMatch.file_url));
           } else {
               const activeImgObj = images.find((i: any) => i.file_url === activeImage);
               const activeIsPersonalized = activeImgObj && activeImgObj.personalization_option_ids && activeImgObj.personalization_option_ids.length > 0;
               
               if (activeIsPersonalized) {
                    const standardImage = images.find((img: any) => !img.personalization_option_ids || img.personalization_option_ids.length === 0);
-                   if (standardImage) setActiveImage(standardImage.file_url);
+                   if (standardImage) setActiveImage(toAbsoluteMediaUrl(standardImage.file_url));
               } else if (!activeImage) {
                    const standardImage = images.find((img: any) => !img.personalization_option_ids || img.personalization_option_ids.length === 0);
-                   if (standardImage) setActiveImage(standardImage.file_url);
+                   if (standardImage) setActiveImage(toAbsoluteMediaUrl(standardImage.file_url));
               }
           }
           
@@ -419,7 +420,7 @@ const ShopProductPage: React.FC = () => {
       if (displayedImages.length > 0) {
           const isActiveVisible = displayedImages.some((img: any) => img.file_url === activeImage);
           if (!isActiveVisible) {
-              setActiveImage(displayedImages[0].file_url || displayedImages[0].thumbnail_url);
+              setActiveImage(toAbsoluteMediaUrl(displayedImages[0].file_url || displayedImages[0].thumbnail_url));
           }
       }
   }, [displayedImages, activeImage]);
@@ -449,7 +450,7 @@ const ShopProductPage: React.FC = () => {
   if (loading) return <div className="container mx-auto p-8 text-center">Lade Produkt...</div>;
   if (!product) return <div className="container mx-auto p-8 text-center">Produkt nicht gefunden.</div>;
 
-  const mainImage = activeImage || (displayedImages.length > 0 ? displayedImages[0].file_url : null);
+  const mainImage = activeImage || (displayedImages.length > 0 ? toAbsoluteMediaUrl(displayedImages[0].file_url) : null);
   // Re-declare hasVariants here if needed, or use the one derived from variants object
   const variantsExist = Object.keys(variants).length > 0;
   
@@ -573,10 +574,10 @@ const ShopProductPage: React.FC = () => {
                 {displayedImages.map((img: any, idx: number) => (
                     <button 
                         key={idx} 
-                        onClick={() => setActiveImage(img.file_url)}
+                        onClick={() => setActiveImage(toAbsoluteMediaUrl(img.file_url))}
                         className={`w-20 h-20 border-2 flex-shrink-0 bg-slate-50 relative ${activeImage === img.file_url ? 'border-slate-800' : 'border-transparent hover:border-slate-300'}`}
                     >
-                        <img src={img.thumbnail_url || img.file_url} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                        <img src={toAbsoluteMediaUrl(img.thumbnail_url || img.file_url) || ''} alt="" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                         {img.personalization_option_id && (
                              <div className="absolute bottom-0 right-0 bg-blue-600 text-white p-0.5 rounded-tl text-[8px] font-bold">
                                  ★
@@ -593,7 +594,7 @@ const ShopProductPage: React.FC = () => {
             {/* Main Image */}
             <div className="flex-1 bg-slate-50 aspect-[3/4] relative">
                 {mainImage ? (
-                    <img src={mainImage} alt={product.name} className="w-full h-full object-cover" decoding="async" />
+                    <img src={mainImage} alt={product.name} className="w-full h-full object-cover" decoding="async" loading="lazy" />
                 ) : (
                     <div className="w-full h-full flex items-center justify-center text-slate-300 text-2xl font-bold">NO IMAGE</div>
                 )}
