@@ -1112,6 +1112,17 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
     try {
         let products: any[] = [];
         const baseUrl = customer.shopware_url.replace(/\/$/, '');
+        try {
+            const swHost = new URL(baseUrl).host.toLowerCase();
+            if (swHost === 'manager.main-textildruck.com' || swHost === 'www.manager.main-textildruck.com' || swHost.endsWith('.team-shop.org')) {
+                return res.status(400).json({ 
+                    success: false, 
+                    error: 'Shopware URL ist falsch. Bitte die echte Shopware Shop-Domain eintragen (wo /api und /media liegen), nicht die team-shop.org/manager Domain.' 
+                });
+            }
+        } catch {
+            return res.status(400).json({ success: false, error: 'Ungültige Shopware URL' });
+        }
 
         if (version === '5') {
             // Shopware 5 Logic
