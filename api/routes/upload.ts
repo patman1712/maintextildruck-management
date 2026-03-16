@@ -559,6 +559,7 @@ router.get('/list-pdfs', async (req: Request, res: Response) => {
 router.get('/thumb', async (req: Request, res: Response) => {
     try {
         const fileUrl = String(req.query.url || '');
+        const debug = req.query.debug === '1' || req.query.debug === 'true';
         if (!fileUrl || !fileUrl.startsWith('/uploads/')) {
             res.status(400).json({ success: false, error: 'Invalid url' });
             return;
@@ -592,6 +593,8 @@ router.get('/thumb', async (req: Request, res: Response) => {
         }
 
         const thumbRoot = path.join(UPLOAD_DIR, `${filename}_thumb`);
+        let pdftoppmError: string | null = null;
+        let sharpError: string | null = null;
 
         try {
             if (isPdf) {
@@ -604,7 +607,8 @@ router.get('/thumb', async (req: Request, res: Response) => {
                         inputPath,
                         thumbRoot
                     ]);
-                } catch {
+                } catch (e: any) {
+                    pdftoppmError = e?.message || String(e);
                     await sharp(inputPath, { density: 150 })
                         .resize(300, 300, {
                             fit: 'contain',
@@ -621,7 +625,8 @@ router.get('/thumb', async (req: Request, res: Response) => {
                     })
                     .toFile(thumbPath);
             }
-        } catch (e) {
+        } catch (e: any) {
+            sharpError = e?.message || String(e);
             console.error('Failed to generate thumbnail on-demand:', filename, e);
         }
 
@@ -630,7 +635,11 @@ router.get('/thumb', async (req: Request, res: Response) => {
             return;
         }
 
-        res.status(500).json({ success: false, error: 'Thumbnail generation failed' });
+        res.status(500).json({ 
+            success: false, 
+            error: 'Thumbnail generation failed',
+            details: debug ? { pdftoppmError, sharpError } : undefined
+        });
     } catch (error: any) {
         console.error('Error generating thumbnail:', error);
         res.status(500).json({ success: false, error: error.message || 'Thumbnail failed' });
