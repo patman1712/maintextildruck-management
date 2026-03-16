@@ -55,6 +55,7 @@ export default function CustomerDetails() {
   const [shopwareStatus, setShopwareStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [shopwareMessage, setShopwareMessage] = useState('');
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  const [isCachingShopwareImages, setIsCachingShopwareImages] = useState(false);
 
   // Products State
   const [products, setProducts] = useState<Product[]>([]);
@@ -708,6 +709,29 @@ export default function CustomerDetails() {
           alert('Netzwerkfehler beim Laden der Produkte');
       } finally {
           setIsLoadingProducts(false);
+      }
+  };
+
+  const cacheShopwareImages = async () => {
+      if (!customer) return;
+      setIsCachingShopwareImages(true);
+      try {
+          const res = await fetch(`/api/shopware/cache-product-images/${customer.id}`, { method: 'POST' });
+          const data = await res.json();
+          if (data.success) {
+              const skippedText = Array.isArray(data.skipped) && data.skipped.length > 0
+                  ? ` (Skipped: ${data.skipped.map((s: any) => `${s.reason}:${s.count}`).join(', ')})`
+                  : '';
+              alert(`Bilder lokal gespeichert: ${data.updated}/${data.processed}${skippedText}`);
+              fetchProducts();
+          } else {
+              alert('Fehler beim Speichern der Bilder: ' + (data.error || 'Unbekannt'));
+          }
+      } catch (err) {
+          console.error(err);
+          alert('Netzwerkfehler beim Speichern der Bilder');
+      } finally {
+          setIsCachingShopwareImages(false);
       }
   };
 
@@ -1853,6 +1877,14 @@ export default function CustomerDetails() {
                         >
                             <Download size={16} className="mr-2" />
                             {isLoadingProducts ? 'Lade...' : 'Artikel importieren'}
+                        </button>
+                        <button
+                            onClick={cacheShopwareImages}
+                            disabled={isCachingShopwareImages || !shopwareConfig.url}
+                            className="bg-white text-slate-700 border border-slate-200 px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-50 disabled:opacity-50 flex items-center"
+                        >
+                            <ImageIcon size={16} className="mr-2" />
+                            {isCachingShopwareImages ? 'Speichere...' : 'Bilder lokal speichern'}
                         </button>
                     </div>
                 </div>

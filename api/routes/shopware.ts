@@ -1,5 +1,10 @@
 import { Router, type Request, type Response } from 'express';
 import db from '../db.js';
+import path from 'path';
+import fs from 'fs-extra';
+import crypto from 'crypto';
+import sharp from 'sharp';
+import { UPLOAD_DIR } from './upload.js';
 
 const router = Router();
 
@@ -1356,6 +1361,135 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error('Shopware Product Fetch Error:', error);
         res.status(500).json({ success: false, error: error.message || 'Failed to fetch products' });
+    }
+});
+
+router.post('/cache-product-images/:customerId', async (req: Request, res: Response) => {
+    try {
+        const { customerId } = req.params;
+
+        const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId) as any;
+        if (!customer) return res.status(404).json({ success: false, error: 'Customer not found' });
+        if (!customer.shopware_url) return res.status(400).json({ success: false, error: 'Shopware not configured for this customer' });
+
+        let shopwareBase = String(customer.shopware_url).trim().replace(/\/$/, '');
+        shopwareBase = shopwareBase.replace(/\/api$/, '').replace(/\/admin$/, '');
+
+        let allowedHost = '';
+        try {
+            allowedHost = new URL(shopwareBase).host.toLowerCase();
+        } catch {
+            return res.status(400).json({ success: false, error: 'Ungültige Shopware URL' });
+        }
+
+        const shopRows = db.prepare('SELECT domain_slug, custom_domain FROM shops WHERE customer_id = ?').all(customerId) as any[];
+        const proxyHosts = new Set<string>();
+        shopRows.forEach((s: any) => {
+            if (s?.custom_domain) proxyHosts.add(String(s.custom_domain).toLowerCase());
+            if (s?.domain_slug) proxyHosts.add(`${String(s.domain_slug).toLowerCase()}.team-shop.org`);
+        });
+
+        const cpfColumns = new Set(
+            (db.prepare('PRAGMA table_info(customer_product_files)').all() as any[]).map(c => c.name)
+        );
+        const hasType = cpfColumns.has('type');
+
+        const files = db.prepare(`
+            SELECT 
+                cpf.id,
+                cpf.product_id,
+                cpf.file_url,
+                cpf.thumbnail_url
+            FROM customer_product_files cpf
+            JOIN customer_products cp ON cp.id = cpf.product_id
+            WHERE cp.customer_id = ?
+            ${hasType ? "AND (cpf.type = 'view' OR cpf.type IS NULL)" : ""}
+        `).all(customerId) as any[];
+
+        let processed = 0;
+        let updated = 0;
+        const skipped: { reason: string; count: number }[] = [];
+        const skipCount: Record<string, number> = {};
+        const incSkip = (reason: string) => { skipCount[reason] = (skipCount[reason] || 0) + 1; };
+
+        for (const row of files) {
+            processed += 1;
+            const urlRaw = row.file_url ? String(row.file_url) : '';
+            if (!/^https?:\/\//i.test(urlRaw)) { incSkip('not_external_url'); continue; }
+            if (urlRaw.includes('/uploads/')) { incSkip('already_local'); continue; }
+
+            let url: URL;
+            try { url = new URL(urlRaw); } catch { incSkip('invalid_url'); continue; }
+
+            const isAllowedHost = url.host.toLowerCase() === allowedHost;
+            const isProxyHost = proxyHosts.has(url.host.toLowerCase()) && url.pathname.startsWith('/media/');
+            if (!isAllowedHost && !isProxyHost) { incSkip('host_not_allowed'); continue; }
+
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+
+            let resp: globalThis.Response;
+            try {
+                resp = await fetch(url.toString(), { signal: controller.signal, redirect: 'follow' });
+            } catch {
+                clearTimeout(timeout);
+                incSkip('download_failed');
+                continue;
+            } finally {
+                clearTimeout(timeout);
+            }
+
+            let finalHost = '';
+            try { finalHost = new URL(resp.url).host.toLowerCase(); } catch {}
+            if (finalHost && finalHost !== allowedHost) { incSkip('redirected_to_unexpected_host'); continue; }
+
+            const contentType = resp.headers.get('content-type') || '';
+            if (!contentType.toLowerCase().startsWith('image/')) { incSkip('not_image'); continue; }
+
+            const buf = Buffer.from(await resp.arrayBuffer());
+            if (!buf.length) { incSkip('empty_body'); continue; }
+
+            const ext = contentType.toLowerCase().includes('png') ? 'png'
+                : contentType.toLowerCase().includes('webp') ? 'webp'
+                : contentType.toLowerCase().includes('jpeg') || contentType.toLowerCase().includes('jpg') ? 'jpg'
+                : 'png';
+
+            const key = crypto.createHash('sha1').update(`${row.product_id}:${url.pathname}:${buf.length}`).digest('hex').slice(0, 16);
+            const dir = path.join(UPLOAD_DIR, 'shopware_cache', customerId, row.product_id);
+            await fs.ensureDir(dir);
+
+            const localFilename = `${key}.${ext}`;
+            const localPath = path.join(dir, localFilename);
+            await fs.writeFile(localPath, buf);
+
+            const thumbFilename = `${key}_thumb.png`;
+            const thumbPath = path.join(dir, thumbFilename);
+            await sharp(localPath)
+                .resize(300, 300, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+                .png()
+                .toFile(thumbPath);
+
+            const relDir = path.relative(UPLOAD_DIR, dir).split(path.sep).join('/');
+            const localUrl = `/uploads/${relDir}/${localFilename}`;
+            const thumbUrl = `/uploads/${relDir}/${thumbFilename}`;
+
+            try {
+                db.prepare('UPDATE customer_product_files SET file_url = ?, thumbnail_url = COALESCE(thumbnail_url, ?) WHERE id = ?')
+                    .run(localUrl, thumbUrl, row.id);
+                db.prepare('UPDATE customer_product_files SET thumbnail_url = ? WHERE id = ?').run(thumbUrl, row.id);
+                updated += 1;
+            } catch {
+                incSkip('db_update_failed');
+            }
+        }
+
+        for (const [reason, count] of Object.entries(skipCount)) {
+            skipped.push({ reason, count });
+        }
+
+        res.json({ success: true, processed, updated, skipped });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message || 'Failed to cache images' });
     }
 });
 
