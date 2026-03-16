@@ -287,6 +287,12 @@ app.get(['/media/*', '/media'], (req: Request, res: Response, next: NextFunction
     shopwareBase = shopwareBase.replace(/\/api$/, '').replace(/\/admin$/, '')
 
     if (!/^https?:\/\//i.test(shopwareBase)) return next()
+    try {
+      const swHost = new URL(shopwareBase).host.toLowerCase()
+      if (swHost && swHost === host) return next()
+    } catch {
+      return next()
+    }
 
     res.redirect(302, `${shopwareBase}${req.originalUrl}`)
   } catch {
