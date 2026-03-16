@@ -521,6 +521,79 @@ router.get('/list-pdfs', async (req: Request, res: Response) => {
     }
 });
 
+// GET /api/upload/thumb?url=/uploads/filename.pdf
+// Generates a thumbnail on-demand (cached on disk) and redirects to /uploads/<filename>_thumb.png
+router.get('/thumb', async (req: Request, res: Response) => {
+    try {
+        const fileUrl = String(req.query.url || '');
+        if (!fileUrl || !fileUrl.startsWith('/uploads/')) {
+            res.status(400).json({ success: false, error: 'Invalid url' });
+            return;
+        }
+
+        const filename = path.basename(fileUrl);
+        const inputPath = path.join(UPLOAD_DIR, filename);
+        if (!inputPath.startsWith(UPLOAD_DIR)) {
+            res.status(403).json({ success: false, error: 'Invalid file path' });
+            return;
+        }
+
+        const thumbFilename = `${filename}_thumb.png`;
+        const thumbPath = path.join(UPLOAD_DIR, thumbFilename);
+        if (thumbPath.startsWith(UPLOAD_DIR) && await fs.pathExists(thumbPath)) {
+            res.redirect(302, `/uploads/${thumbFilename}`);
+            return;
+        }
+
+        const exists = await fs.pathExists(inputPath);
+        if (!exists) {
+            res.status(404).json({ success: false, error: 'File not found' });
+            return;
+        }
+
+        const isPdf = filename.toLowerCase().endsWith('.pdf');
+        const isImage = filename.match(/\.(jpg|jpeg|png|webp)$/i);
+        if (!isPdf && !isImage) {
+            res.status(400).json({ success: false, error: 'Unsupported file type' });
+            return;
+        }
+
+        const thumbRoot = path.join(UPLOAD_DIR, `${filename}_thumb`);
+
+        try {
+            if (isPdf) {
+                await execFileAsync('pdftoppm', [
+                    '-png',
+                    '-singlefile',
+                    '-transp',
+                    '-scale-to', '300',
+                    inputPath,
+                    thumbRoot
+                ]);
+            } else {
+                await sharp(inputPath)
+                    .resize(300, 300, {
+                        fit: 'contain',
+                        background: { r: 255, g: 255, b: 255, alpha: 0 }
+                    })
+                    .toFile(thumbPath);
+            }
+        } catch (e) {
+            console.error('Failed to generate thumbnail on-demand:', filename, e);
+        }
+
+        if (thumbPath.startsWith(UPLOAD_DIR) && await fs.pathExists(thumbPath)) {
+            res.redirect(302, `/uploads/${thumbFilename}`);
+            return;
+        }
+
+        res.status(500).json({ success: false, error: 'Thumbnail generation failed' });
+    } catch (error: any) {
+        console.error('Error generating thumbnail:', error);
+        res.status(500).json({ success: false, error: error.message || 'Thumbnail failed' });
+    }
+});
+
 // GET /api/upload/archive-files?limit=25&offset=0&type=all|print|preview&search=
 router.get('/archive-files', async (req: Request, res: Response) => {
     try {
@@ -615,26 +688,11 @@ router.get('/archive-files', async (req: Request, res: Response) => {
         const hasMore = rows.length > limit;
         const data = hasMore ? rows.slice(0, limit) : rows;
 
-        const updateThumbStmt = db.prepare('UPDATE files SET thumbnail = COALESCE(?, thumbnail) WHERE path = ?');
         const dataWithThumbs = await Promise.all(data.map(async (row: any) => {
             if (row.thumbnail) return row;
             if (!row.url || typeof row.url !== 'string') return row;
             if (!row.url.startsWith('/uploads/')) return row;
-
-            const filename = path.basename(row.url);
-            const thumbFilename = `${filename}_thumb.png`;
-            const thumbPath = path.join(UPLOAD_DIR, thumbFilename);
-
-            if (!(thumbPath.startsWith(UPLOAD_DIR) && await fs.pathExists(thumbPath))) return row;
-
-            const thumbUrl = `/uploads/${thumbFilename}`;
-            row.thumbnail = thumbUrl;
-
-            try {
-                updateThumbStmt.run(thumbUrl, row.url);
-            } catch {
-            }
-
+            row.thumbnail = `/api/upload/thumb?url=${encodeURIComponent(row.url)}`;
             return row;
         }));
 
