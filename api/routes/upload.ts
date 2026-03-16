@@ -307,13 +307,83 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                 }
             }
         }
+
+        console.log('Checking files table...');
+        const filesTableRows = db.prepare('SELECT id, path, name, thumbnail FROM files').all() as { id: string, path: string, name: string, thumbnail: string }[];
+        let filesTableUpdated = 0;
+
+        for (const row of filesTableRows) {
+            const fileUrl = row.path;
+            if (!fileUrl) continue;
+
+            const filename = path.basename(fileUrl);
+            const inputPath = path.join(UPLOAD_DIR, filename);
+
+            const isPdf = filename.toLowerCase().endsWith('.pdf') || (row.name && row.name.toLowerCase().endsWith('.pdf'));
+            const isImage = filename.match(/\.(jpg|jpeg|png|webp)$/i) || (row.name && row.name.match(/\.(jpg|jpeg|png|webp)$/i));
+
+            if (!isPdf && !isImage) continue;
+
+            const fileExists = await fs.pathExists(inputPath);
+            const currentThumb = row.thumbnail || '';
+            const hasThumb = currentThumb && currentThumb !== '';
+
+            if (debug) {
+                debugLogs.push({
+                    type: 'files_table',
+                    fileId: row.id,
+                    filename,
+                    inputPath,
+                    exists: fileExists,
+                    currentThumb,
+                    hasThumb,
+                    willRegenerate: (force || !hasThumb) && fileExists
+                });
+            }
+
+            if (fileExists && (force || !hasThumb)) {
+                try {
+                    console.log(`Generating files-table thumbnail for ${filename}...`);
+                    const thumbName = `${filename}_thumb`;
+                    let thumbOutputPath = '';
+
+                    if (isPdf) {
+                        thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
+                        await execFileAsync('pdftoppm', [
+                            '-png',
+                            '-singlefile',
+                            '-transp',
+                            '-scale-to', '300',
+                            inputPath,
+                            thumbOutputPath
+                        ]);
+                    } else {
+                        thumbOutputPath = path.join(UPLOAD_DIR, `${thumbName}.png`);
+                        await sharp(inputPath)
+                            .resize(300, 300, {
+                                fit: 'contain',
+                                background: { r: 255, g: 255, b: 255, alpha: 0 }
+                            })
+                            .toFile(thumbOutputPath);
+                    }
+
+                    const thumbUrl = `/uploads/${thumbName}.png`;
+                    db.prepare('UPDATE files SET thumbnail = ? WHERE id = ?').run(thumbUrl, row.id);
+                    filesTableUpdated++;
+                } catch (e: any) {
+                    console.error(`Failed to regenerate files-table thumbnail for ${filename}:`, e);
+                    if (debug) debugLogs.push({ filename, error: 'Files Table Generation Failed', details: e.message });
+                }
+            }
+        }
         
-        console.log(`Finished. Orders updated: ${totalUpdated}, Products updated: ${productsUpdated}`);
+        console.log(`Finished. Orders updated: ${totalUpdated}, Products updated: ${productsUpdated}, Files table updated: ${filesTableUpdated}`);
         
         res.json({ 
             success: true, 
             updated: totalUpdated, 
             productsUpdated, 
+            filesTableUpdated,
             ordersFound: ordersCount,
             logs: debug ? debugLogs : undefined
         });
