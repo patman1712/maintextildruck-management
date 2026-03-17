@@ -12,7 +12,7 @@ const router = Router();
 
 async function getShopware6Token(baseUrl: string, accessKey: string, secretKey: string) {
     // Clean URL: remove trailing slashes and common API/Admin suffixes to avoid double paths
-    let url = baseUrl.trim().replace(/\/$/, '');
+    let url = baseUrl.trim().replace(/\/+$/, '');
     url = url.replace(/\/api$/, '');
     url = url.replace(/\/admin$/, '');
     
@@ -276,13 +276,10 @@ async function getShopware5ArticleDetails(baseUrl: string, username: string, api
 
 function normalizeShopwareBaseUrl(rawUrl: string) {
     const u = new URL(rawUrl.trim());
-    u.hash = '';
-    u.search = '';
     let p = u.pathname.replace(/\/+$/, '');
     p = p.replace(/\/api$/, '');
     p = p.replace(/\/admin$/, '');
-    u.pathname = p || '';
-    return `${u.origin}${u.pathname}`;
+    return `${u.origin}${p}`;
 }
 
 // --- Routes ---
