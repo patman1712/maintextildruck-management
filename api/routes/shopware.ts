@@ -274,6 +274,17 @@ async function getShopware5ArticleDetails(baseUrl: string, username: string, api
     }
 }
 
+function normalizeShopwareBaseUrl(rawUrl: string) {
+    const u = new URL(rawUrl.trim());
+    u.hash = '';
+    u.search = '';
+    let p = u.pathname.replace(/\/+$/, '');
+    p = p.replace(/\/api$/, '');
+    p = p.replace(/\/admin$/, '');
+    u.pathname = p || '';
+    return `${u.origin}${u.pathname}`;
+}
+
 // --- Routes ---
 
 // Test connection
@@ -288,7 +299,32 @@ router.post('/test-connection', async (req: Request, res: Response) => {
         if (version === '5') {
             await getShopware5Products(url, accessKey, secretKey);
         } else {
-            await getShopware6Token(url, accessKey, secretKey);
+            const base = normalizeShopwareBaseUrl(url);
+            const token = await getShopware6Token(base, accessKey, secretKey);
+            const permRes = await fetch(`${base}/api/search/product`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ limit: 1 })
+            });
+            if (!permRes.ok) {
+                const txt = await permRes.text().catch(() => '');
+                if (permRes.status === 403) {
+                    return res.status(400).json({ 
+                        success: false, 
+                        error: 'Shopware 6: Zugriff verboten (403). Bitte in Shopware bei der Integration Leserechte für Produkte/Medien aktivieren.',
+                        details: txt ? txt.slice(0, 500) : undefined
+                    });
+                }
+                return res.status(400).json({ 
+                    success: false, 
+                    error: `Shopware 6: Produkt-Zugriffstest fehlgeschlagen (${permRes.status} ${permRes.statusText})`,
+                    details: txt ? txt.slice(0, 500) : undefined
+                });
+            }
         }
         res.json({ success: true, message: 'Connection successful' });
     } catch (error: any) {
@@ -1116,7 +1152,7 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
 
     try {
         let products: any[] = [];
-        const baseUrl = customer.shopware_url.replace(/\/$/, '');
+        const baseUrl = normalizeShopwareBaseUrl(customer.shopware_url);
         try {
             const swHost = new URL(baseUrl).host.toLowerCase();
             if (swHost === 'manager.main-textildruck.com' || swHost === 'www.manager.main-textildruck.com') {
@@ -1222,7 +1258,13 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                 })
             });
 
-            if (!response.ok) throw new Error(`Failed to fetch products: ${response.statusText}`);
+            if (!response.ok) {
+                const txt = await response.text().catch(() => '');
+                if (response.status === 403) {
+                    throw new Error('Shopware 6: Zugriff verboten (403). Bitte in Shopware bei der Integration Leserechte für Produkte/Medien aktivieren.');
+                }
+                throw new Error(`Failed to fetch products: ${response.statusText}${txt ? ` (${txt.slice(0, 200)})` : ''}`);
+            }
 
             const data = await response.json();
             
