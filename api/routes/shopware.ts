@@ -1263,6 +1263,12 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
                 if (response.status === 403) {
                     throw new Error('Shopware 6: Zugriff verboten (403). Bitte in Shopware bei der Integration Leserechte für Produkte/Medien aktivieren.');
                 }
+                if (response.status === 404) {
+                    throw new Error(
+                        'Shopware 6: API-Endpunkt nicht gefunden (404). Prüfe: (1) Shopware URL zeigt auf die echte Shopware-Installation (ggf. Unterpfad), ' +
+                        '(2) keine doppelten Slashes am Ende, (3) Version ist wirklich Shopware 6 (sonst auf Shopware 5 umstellen).'
+                    );
+                }
                 throw new Error(`Failed to fetch products: ${response.statusText}${txt ? ` (${txt.slice(0, 200)})` : ''}`);
             }
 
