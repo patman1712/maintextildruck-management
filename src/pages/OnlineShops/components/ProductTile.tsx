@@ -62,6 +62,10 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopBaseUrl }
     // TODO: Connect this to backend "is_new" field later
     // For now we assume if product.is_new is true, or we could add a field in shop_products table
     const isNew = product.is_featured === 1 || product.is_featured === true || product.is_new === true;
+    const tileThumbUrl = toAbsoluteMediaUrl(product?.files?.[0]?.thumbnail_url);
+    const tileFileUrl = toAbsoluteMediaUrl(product?.files?.[0]?.file_url);
+    const tileSrc = tileFileUrl || tileThumbUrl || '';
+    const tileSrcSet = tileThumbUrl && tileFileUrl ? `${tileThumbUrl} 300w, ${tileFileUrl} 1200w` : undefined;
 
     return (
         <div className="group block relative bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-slate-100">
@@ -70,7 +74,9 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopBaseUrl }
                     {product.files && product.files.length > 0 && (product.files[0].thumbnail_url || product.files[0].file_url) ? (
                         <>
                             <img 
-                                src={toAbsoluteMediaUrl(product.files[0].thumbnail_url || product.files[0].file_url) || ''} 
+                                src={tileSrc}
+                                srcSet={tileSrcSet}
+                                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                                 alt={product.name}
                                 className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-700"
                                 loading="lazy"
