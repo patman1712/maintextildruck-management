@@ -1119,10 +1119,10 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
         const baseUrl = customer.shopware_url.replace(/\/$/, '');
         try {
             const swHost = new URL(baseUrl).host.toLowerCase();
-            if (swHost === 'manager.main-textildruck.com' || swHost === 'www.manager.main-textildruck.com' || swHost.endsWith('.team-shop.org')) {
+            if (swHost === 'manager.main-textildruck.com' || swHost === 'www.manager.main-textildruck.com') {
                 return res.status(400).json({ 
                     success: false, 
-                    error: 'Shopware URL ist falsch. Bitte die echte Shopware Shop-Domain eintragen (wo /api und /media liegen), nicht die team-shop.org/manager Domain.' 
+                    error: 'Shopware URL ist falsch. Bitte die echte Shopware Shop-Domain eintragen (wo /api und /media liegen), nicht die Manager-Domain.' 
                 });
             }
         } catch {
@@ -1381,10 +1381,10 @@ router.post('/cache-product-images/:customerId', async (req: Request, res: Respo
         } catch {
             return res.status(400).json({ success: false, error: 'Ungültige Shopware URL' });
         }
-        if (allowedHost === 'manager.main-textildruck.com' || allowedHost === 'www.manager.main-textildruck.com' || allowedHost.endsWith('.team-shop.org')) {
+        if (allowedHost === 'manager.main-textildruck.com' || allowedHost === 'www.manager.main-textildruck.com') {
             return res.status(400).json({ 
                 success: false, 
-                error: 'Shopware URL ist falsch. Bitte die echte Shopware Shop-Domain eintragen (wo /api und /media liegen), nicht die team-shop.org/manager Domain.' 
+                error: 'Shopware URL ist falsch. Bitte die echte Shopware Shop-Domain eintragen (wo /api und /media liegen), nicht die Manager-Domain.' 
             });
         }
 
