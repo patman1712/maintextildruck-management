@@ -61,6 +61,7 @@ const MENU_ITEMS: MenuItem[] = [
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [onlineShopsOpen, setOnlineShopsOpen] = useState(true);
   const currentUser = useAppStore((state) => state.currentUser);
   const logout = useAppStore((state) => state.logout);
   const navigate = useNavigate();
@@ -152,12 +153,6 @@ export default function DashboardLayout() {
                     menuSettings={{}}
                 />
                 <NavItem 
-                    item={{ id: 'donations', label: 'Spenden (Alle)', to: '/dashboard/donations', icon: Heart }} 
-                    isOpen={sidebarOpen || mobileMenuOpen} 
-                    onClick={() => setMobileMenuOpen(false)} 
-                    menuSettings={{}}
-                />
-                <NavItem 
                     item={{ id: 'admin_settings', label: 'Einstellungen', to: '/dashboard/admin', icon: Shield }} 
                     isOpen={sidebarOpen || mobileMenuOpen} 
                     onClick={() => setMobileMenuOpen(false)} 
@@ -169,17 +164,39 @@ export default function DashboardLayout() {
           {/* Onlineshops Section - Controlled via Menu Settings */}
           {(currentUser?.role === 'admin' || (menuSettings['shops_manage'] !== false || menuSettings['shops_list'] !== false)) && (
             <div className="pt-4 mt-2 border-t border-red-800/50">
-                {(sidebarOpen || mobileMenuOpen) && <p className="px-4 text-xs font-bold text-red-300 uppercase mb-2 animate-in fade-in">Onlineshops</p>}
+                <div className={`flex items-center ${sidebarOpen || mobileMenuOpen ? 'justify-between px-4' : 'justify-center'} mb-2`}>
+                    {(sidebarOpen || mobileMenuOpen) && <p className="text-xs font-bold text-red-300 uppercase animate-in fade-in">Onlineshops</p>}
+                    <button
+                        onClick={() => setOnlineShopsOpen(!onlineShopsOpen)}
+                        className="text-red-200 hover:text-white transition-colors p-1 rounded hover:bg-white/10"
+                        title={onlineShopsOpen ? 'Onlineshops einklappen' : 'Onlineshops ausklappen'}
+                    >
+                        {onlineShopsOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    </button>
+                </div>
                 
-                <NavItem 
-                    item={{ id: 'shops_manage', label: 'Verwaltung', to: '/dashboard/shops', icon: ShoppingBag }} 
-                    isOpen={sidebarOpen || mobileMenuOpen} 
-                    onClick={() => setMobileMenuOpen(false)} 
-                    menuSettings={menuSettings}
-                    isAdmin={currentUser?.role === 'admin'}
-                />
+                {onlineShopsOpen && (
+                    <>
+                        <NavItem 
+                            item={{ id: 'shops_manage', label: 'Verwaltung', to: '/dashboard/shops', icon: ShoppingBag }} 
+                            isOpen={sidebarOpen || mobileMenuOpen} 
+                            onClick={() => setMobileMenuOpen(false)} 
+                            menuSettings={menuSettings}
+                            isAdmin={currentUser?.role === 'admin'}
+                        />
+
+                        {currentUser?.role === 'admin' && (
+                            <NavItem 
+                                item={{ id: 'donations', label: 'Spenden (Alle)', to: '/dashboard/donations', icon: Heart }} 
+                                isOpen={sidebarOpen || mobileMenuOpen} 
+                                onClick={() => setMobileMenuOpen(false)} 
+                                menuSettings={{}}
+                            />
+                        )}
+                    </>
+                )}
                 
-                {(currentUser?.role === 'admin' || menuSettings['shops_list'] !== false) && shops.map(shop => (
+                {onlineShopsOpen && (currentUser?.role === 'admin' || menuSettings['shops_list'] !== false) && shops.map(shop => (
                      <Link
                         key={shop.id}
                         to={`/dashboard/shops/${shop.id}`}
