@@ -4,19 +4,23 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
 
 const ShopDashboard: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>();
   const navigate = useNavigate();
-  const { shops, updateShop, products } = useAppStore();
+  const { shops, updateShop, products, currentUser } = useAppStore();
   const [shop, setShop] = useState<Shop | null>(null);
-  const [activeTab, setActiveTab] = useState<'general' | 'design' | 'categories' | 'products' | 'customers' | 'orders' | 'shipping' | 'legal'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'design' | 'categories' | 'products' | 'customers' | 'orders' | 'shipping' | 'legal' | 'donations'>('general');
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [shopProducts, setShopProducts] = useState<(ShopProductAssignment & { product_name?: string, product_number?: string, category_name?: string })[]>([]);
   const [shopCustomers, setShopCustomers] = useState<any[]>([]);
   const [shopOrders, setShopOrders] = useState<any[]>([]);
+  const [shopDonations, setShopDonations] = useState<any[]>([]);
+  const [donationsLoading, setDonationsLoading] = useState(false);
+  const [donationsShowPaid, setDonationsShowPaid] = useState(false);
+  const [donationsSavingId, setDonationsSavingId] = useState<string | null>(null);
   const [shippingConfig, setShippingConfig] = useState<any>({
     dhl_user: '',
     dhl_signature: '',
@@ -72,6 +76,43 @@ const ShopDashboard: React.FC = () => {
       fetchShippingConfig();
     }
   }, [shopId, shops]);
+
+  const fetchShopDonations = async () => {
+    if (!shopId) return;
+    setDonationsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('shopId', shopId);
+      const res = await fetch(`/api/donations?${params.toString()}`);
+      const data = await res.json();
+      if (data.success) setShopDonations(data.data);
+    } catch (e) { console.error(e); }
+    finally { setDonationsLoading(false); }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'donations' && shop?.donations_enabled) {
+      fetchShopDonations();
+    }
+  }, [activeTab, shopId, shop?.donations_enabled]);
+
+  const toggleDonationPaid = async (row: any) => {
+    if (!row?.id) return;
+    setDonationsSavingId(row.id);
+    try {
+      const paid = !(row.paid === 1);
+      const res = await fetch(`/api/donations/${row.id}/paid`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paid, paidBy: currentUser?.name || null })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShopDonations(prev => prev.map(r => r.id === row.id ? { ...r, ...data.data } : r));
+      }
+    } catch (e) { console.error(e); }
+    finally { setDonationsSavingId(null); }
+  };
 
   useEffect(() => {
     if (sourceShopId) {
@@ -575,6 +616,8 @@ const ShopDashboard: React.FC = () => {
   const customerProducts = products.filter(p => p.customer_id === shop.customer_id);
   const availableProducts = customerProducts.filter(p => !shopProducts.some(sp => sp.product_id === p.id))
     .filter(p => p.name.toLowerCase().includes(assignProductSearch.toLowerCase()));
+  const visibleDonations = shopDonations.filter((d: any) => donationsShowPaid ? true : !(d.paid === 1));
+  const visibleDonationsTotal = visibleDonations.reduce((sum: number, d: any) => sum + (Number(d.donation_total) || 0), 0);
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
@@ -636,6 +679,14 @@ const ShopDashboard: React.FC = () => {
             >
                 <ShoppingBag size={16} className="mr-2" /> Bestellungen
             </button>
+            {shop.donations_enabled && (
+                <button 
+                    onClick={() => setActiveTab('donations')}
+                    className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'donations' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+                >
+                    <Heart size={16} className="mr-2" /> Spenden
+                </button>
+            )}
             <button 
                 onClick={() => setActiveTab('shipping')}
                 className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'shipping' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
@@ -1474,6 +1525,88 @@ const ShopDashboard: React.FC = () => {
                         {shopOrders.length === 0 && (
                             <div className="py-20 text-center text-slate-400 italic">
                                 Keine Bestellungen vorhanden.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'donations' && shop.donations_enabled && (
+                <div>
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h3 className="font-bold text-lg">Spenden</h3>
+                            <p className="text-sm text-slate-500">Spendenanteile aus Shop-Bestellungen</p>
+                        </div>
+                        <button onClick={fetchShopDonations} className="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-sm hover:bg-slate-800">
+                            Aktualisieren
+                        </button>
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 flex flex-col md:flex-row md:items-center gap-4">
+                        <div className="flex items-center space-x-3">
+                            <input
+                                id="donationsShowPaid"
+                                type="checkbox"
+                                className="h-4 w-4"
+                                checked={donationsShowPaid}
+                                onChange={(e) => setDonationsShowPaid(e.target.checked)}
+                            />
+                            <label htmlFor="donationsShowPaid" className="text-sm font-medium text-slate-700">
+                                Bezahlte anzeigen
+                            </label>
+                        </div>
+                        <div className="md:ml-auto text-right">
+                            <div className="text-xs font-bold uppercase text-slate-400">Summe (Filter)</div>
+                            <div className="text-xl font-black text-slate-900">€ {visibleDonationsTotal.toFixed(2)}</div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+                        <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400">
+                            <div className="col-span-2">Datum</div>
+                            <div className="col-span-2">Bestellnr.</div>
+                            <div className="col-span-5">Artikel</div>
+                            <div className="col-span-1 text-right">Gesamt</div>
+                            <div className="col-span-2 text-right">Spende</div>
+                        </div>
+
+                        {donationsLoading ? (
+                            <div className="p-10 text-center text-slate-400">Lade Spenden...</div>
+                        ) : visibleDonations.length === 0 ? (
+                            <div className="p-10 text-center text-slate-400">Keine Spenden gefunden.</div>
+                        ) : (
+                            <div className="divide-y divide-slate-100">
+                                {visibleDonations.map((r: any) => {
+                                    const isPaid = r.paid === 1;
+                                    return (
+                                        <div key={r.id} className="grid grid-cols-12 gap-2 px-4 py-3 items-center">
+                                            <div className="col-span-2 text-sm text-slate-700">
+                                                {r.order_date ? new Date(r.order_date).toLocaleDateString('de-DE') : '-'}
+                                            </div>
+                                            <div className="col-span-2 text-sm font-mono text-slate-600">{r.order_number || '-'}</div>
+                                            <div className="col-span-5 text-sm text-slate-800">
+                                                <div className="font-semibold">{r.item_name || '-'}</div>
+                                                <div className="text-xs text-slate-400">Menge: {r.quantity || 0}</div>
+                                            </div>
+                                            <div className="col-span-1 text-sm font-bold text-slate-800 text-right">
+                                                € {(Number(r.order_total_amount) || 0).toFixed(2)}
+                                            </div>
+                                            <div className="col-span-2 text-right">
+                                                <div className="text-sm font-black text-slate-900">€ {(Number(r.donation_total) || 0).toFixed(2)}</div>
+                                                <button
+                                                    onClick={() => toggleDonationPaid(r)}
+                                                    disabled={donationsSavingId === r.id}
+                                                    className={`mt-1 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border ${
+                                                        isPaid ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                                    } ${donationsSavingId === r.id ? 'opacity-60' : ''}`}
+                                                >
+                                                    {isPaid ? 'Bezahlt' : 'Offen'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
                             </div>
                         )}
                     </div>

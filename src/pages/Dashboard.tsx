@@ -152,7 +152,7 @@ export default function DashboardLayout() {
                     menuSettings={{}}
                 />
                 <NavItem 
-                    item={{ id: 'donations', label: 'Spenden', to: '/dashboard/donations', icon: Heart }} 
+                    item={{ id: 'donations', label: 'Spenden (Alle)', to: '/dashboard/donations', icon: Heart }} 
                     isOpen={sidebarOpen || mobileMenuOpen} 
                     onClick={() => setMobileMenuOpen(false)} 
                     menuSettings={{}}

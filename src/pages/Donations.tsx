@@ -76,7 +76,7 @@ export default function Donations() {
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">Spenden</h1>
+          <h1 className="text-2xl font-black tracking-tight text-slate-900">Spenden (Alle Shops)</h1>
           <p className="text-sm text-slate-500">Bestellungen mit Spendenanteil je Artikel</p>
         </div>
         <button
