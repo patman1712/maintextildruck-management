@@ -353,7 +353,8 @@ const ShopDashboard: React.FC = () => {
             weight: updates.weight !== undefined ? updates.weight : payload.weight,
             color: updates.color !== undefined ? updates.color : payload.color,
             variants: updates.variants !== undefined ? updates.variants : payload.variants,
-            personalization_options: updates.personalization_options !== undefined ? updates.personalization_options : payload.personalization_options
+            personalization_options: updates.personalization_options !== undefined ? updates.personalization_options : payload.personalization_options,
+            donation_amount: updates.donation_amount !== undefined ? updates.donation_amount : (payload as any).donation_amount
         })
       });
       setShopProducts(shopProducts.map(p => p.id === id ? { ...p, ...updates } : p));
@@ -686,6 +687,22 @@ const ShopDashboard: React.FC = () => {
                         <p className="text-xs text-slate-500 mt-1">
                             Wenn Sie eine eigene Domain (z.B. Subdomain) verwenden möchten, tragen Sie diese hier ein. 
                             Sie müssen dann einen CNAME-Record bei Ihrem Domain-Provider setzen, der auf diese App zeigt.
+                        </p>
+                    </div>
+
+                    <div className="pt-6 border-t border-slate-200">
+                        <h4 className="font-bold text-slate-700 mb-4">Spenden</h4>
+                        <label className="flex items-center space-x-3">
+                            <input
+                                type="checkbox"
+                                className="h-4 w-4"
+                                checked={!!(shop as any).donations_enabled}
+                                onChange={(e) => setShop({ ...(shop as any), donations_enabled: e.target.checked } as any)}
+                            />
+                            <span className="text-sm text-slate-700 font-medium">Spenden aktivieren</span>
+                        </label>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Wenn aktiv, kann pro Artikel ein Spendenbetrag gepflegt werden und Bestellungen erscheinen im Spendenbereich.
                         </p>
                     </div>
 
@@ -2268,6 +2285,7 @@ const ShopDashboard: React.FC = () => {
             shopId={shopId!}
             categories={categories}
             customerId={shop.customer_id} // Pass customer ID for manual product creation
+            donationEnabled={!!(shop as any).donations_enabled}
             onClose={() => {
                 setEditorAssignment(null);
                 setIsCreateMode(false);

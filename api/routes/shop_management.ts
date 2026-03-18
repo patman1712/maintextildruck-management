@@ -201,7 +201,7 @@ router.post('/:shopId/products', (req, res) => {
 router.put('/:shopId/products/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { category_id, category_ids, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size, variants, personalization_options, weight } = req.body;
+    const { category_id, category_ids, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size, variants, personalization_options, weight, donation_amount } = req.body;
 
     // Use primary category from array if available, or single value
     const primaryCategoryId = (category_ids && category_ids.length > 0) ? category_ids[0] : category_id;
@@ -209,7 +209,7 @@ router.put('/:shopId/products/:id', (req, res) => {
     // Update assignment
     db.prepare(`
       UPDATE shop_product_assignments 
-      SET category_id = ?, price = ?, is_featured = ?, personalization_enabled = ?, sort_order = ?, variants = ?, personalization_options = ?, is_active = ?, supplier_id = ?
+      SET category_id = ?, price = ?, is_featured = ?, personalization_enabled = ?, sort_order = ?, variants = ?, personalization_options = ?, is_active = ?, supplier_id = ?, donation_amount = ?
       WHERE id = ?
     `).run(
         primaryCategoryId, 
@@ -221,6 +221,7 @@ router.put('/:shopId/products/:id', (req, res) => {
         personalization_options ? JSON.stringify(personalization_options) : null,
         req.body.is_active === false || req.body.is_active === 0 ? 0 : 1, // Default to true if undefined
         req.body.supplier_id || null,
+        donation_amount || 0,
         id
     );
 

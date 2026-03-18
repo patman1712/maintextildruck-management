@@ -215,6 +215,16 @@ db.exec(`
   )
 `);
 
+try {
+    const shopCols = db.prepare("PRAGMA table_info(shops)").all() as any[];
+    if (!shopCols.some(col => col.name === 'donations_enabled')) {
+        console.log('Migrating database: Adding donations_enabled to shops table');
+        db.exec('ALTER TABLE shops ADD COLUMN donations_enabled BOOLEAN DEFAULT 0');
+    }
+} catch (error) {
+    console.error('Migration error (donations_enabled):', error);
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS shop_categories (
     id TEXT PRIMARY KEY,
@@ -305,8 +315,45 @@ try {
         console.log('Migrating database: Adding supplier_id to shop_product_assignments table');
         db.exec('ALTER TABLE shop_product_assignments ADD COLUMN supplier_id TEXT');
     }
+
+    const hasDonationAmount = shopProductAssignmentCols.some(col => col.name === 'donation_amount');
+    if (!hasDonationAmount) {
+        console.log('Migrating database: Adding donation_amount to shop_product_assignments table');
+        db.exec('ALTER TABLE shop_product_assignments ADD COLUMN donation_amount DECIMAL(10, 2) DEFAULT 0');
+    }
 } catch (error) {
     console.error('Migration error (is_active/supplier_id):', error);
+}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS shop_donations (
+    id TEXT PRIMARY KEY,
+    shop_id TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    order_item_id TEXT,
+    order_number TEXT,
+    order_date DATETIME,
+    order_total_amount DECIMAL(10, 2),
+    item_name TEXT,
+    item_number TEXT,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    item_total DECIMAL(10, 2) DEFAULT 0,
+    donation_per_item DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    donation_total DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    paid INTEGER DEFAULT 0,
+    paid_at DATETIME,
+    paid_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE,
+    FOREIGN KEY(order_id) REFERENCES orders(id) ON DELETE CASCADE
+  )
+`);
+
+try {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_shop_donations_shop_paid ON shop_donations(shop_id, paid)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_shop_donations_order ON shop_donations(order_id)');
+} catch (e) {
+    console.error('Migration error (shop_donations indexes):', e);
 }
 
 db.exec(`

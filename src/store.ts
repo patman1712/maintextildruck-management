@@ -138,6 +138,7 @@ export interface Shop {
   template: string;
   dhl_config?: any;
   paypal_config?: any;
+  donations_enabled?: boolean;
   order_number_circle?: string;
   next_order_number?: number;
   invoice_number_circle?: string;
@@ -192,6 +193,7 @@ export interface ShopProductAssignment {
   variants?: string; // JSON string storing variant config: { "Size": { "S": { price: 10 }, "M": { price: 10 } }, "Color": ... }
   is_active: boolean | number; // NEW
   supplier_id?: string; // NEW
+  donation_amount?: number;
 }
 
 interface AppState {

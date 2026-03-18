@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle, ChevronDown, ChevronRight, Image as ImageIcon, Shirt, RefreshCw, ShoppingBag, ExternalLink, Palette } from "lucide-react";
+import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle, ChevronDown, ChevronRight, Image as ImageIcon, Shirt, RefreshCw, ShoppingBag, ExternalLink, Palette, Heart } from "lucide-react";
 import { useAppStore } from "@/store";
 
 interface MenuItem {
@@ -147,6 +147,12 @@ export default function DashboardLayout() {
              <>
                 <NavItem 
                     item={{ id: 'employees', label: 'Mitarbeiter', to: '/dashboard/employees', icon: Shield }} 
+                    isOpen={sidebarOpen || mobileMenuOpen} 
+                    onClick={() => setMobileMenuOpen(false)} 
+                    menuSettings={{}}
+                />
+                <NavItem 
+                    item={{ id: 'donations', label: 'Spenden', to: '/dashboard/donations', icon: Heart }} 
                     isOpen={sidebarOpen || mobileMenuOpen} 
                     onClick={() => setMobileMenuOpen(false)} 
                     menuSettings={{}}

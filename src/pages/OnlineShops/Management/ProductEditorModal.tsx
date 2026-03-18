@@ -12,11 +12,12 @@ interface ProductEditorModalProps {
   shopId: string;
   categories?: ShopCategory[];
   customerId?: string; // Required for creating new manual products
+  donationEnabled?: boolean;
   onSave: (id: string, updates: any) => Promise<void>;
   onCreate?: (newAssignment: any) => void; // Callback when a new product is created
 }
 
-const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose, assignment, product, shopId, categories = [], customerId, onSave, onCreate }) => {
+const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose, assignment, product, shopId, categories = [], customerId, donationEnabled = false, onSave, onCreate }) => {
   if (!isOpen) return null;
 
   const isCreateMode = !assignment;
@@ -36,7 +37,8 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     is_active: (assignment as any)?.is_active === 0 || assignment?.is_active === false ? false : true, // Default to true if undefined or 1
     is_featured: assignment?.is_featured || false,
     supplier_id: assignment?.supplier_id || '',
-    category_ids: assignment?.category_ids || (assignment?.category_id ? [assignment.category_id] : [])
+    category_ids: assignment?.category_ids || (assignment?.category_id ? [assignment.category_id] : []),
+    donation_amount: (assignment as any)?.donation_amount || 0
   });
   
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -108,6 +110,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
 
   // Handle Price Input with comma/dot support
   const [priceInput, setPriceInput] = useState((assignment?.price || 0).toFixed(2));
+  const [donationInput, setDonationInput] = useState((((assignment as any)?.donation_amount) || 0).toFixed(2));
 
   const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -120,6 +123,16 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
         setFormData(prev => ({ ...prev, price: num }));
     }
   };
+
+  const handleDonationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setDonationInput(val)
+    const normalized = val.replace(',', '.')
+    const num = parseFloat(normalized)
+    if (!isNaN(num)) {
+        setFormData(prev => ({ ...prev, donation_amount: num }))
+    }
+  }
 
   const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
   const [selectedPersonalizationIds, setSelectedPersonalizationIds] = useState<string[]>([]);
@@ -1241,6 +1254,21 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                         </div>
                     </div>
                 </div>
+
+                {donationEnabled && (
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Spende pro Artikel</label>
+                        <div className="flex items-center">
+                            <span className="text-2xl font-bold mr-2">€</span>
+                            <input 
+                                type="text" 
+                                className="text-2xl font-bold bg-white border border-slate-300 rounded px-3 py-1 w-full focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={donationInput}
+                                onChange={handleDonationChange}
+                            />
+                        </div>
+                    </div>
+                )}
 
                 {/* Sizes */}
                 <div>

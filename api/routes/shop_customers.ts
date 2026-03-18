@@ -326,7 +326,7 @@ router.post('/:shopId/orders', async (req, res) => {
     if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
 
     // Get Shop Owner (Customer ID) and number circle config
-    const shop = db.prepare('SELECT customer_id, order_number_circle, next_order_number FROM shops WHERE id = ?').get(shopId) as { customer_id: string, order_number_circle?: string, next_order_number?: number };
+    const shop = db.prepare('SELECT customer_id, order_number_circle, next_order_number, donations_enabled FROM shops WHERE id = ?').get(shopId) as { customer_id: string, order_number_circle?: string, next_order_number?: number, donations_enabled?: any };
     if (!shop) return res.status(404).json({ success: false, error: 'Shop-Besitzer nicht gefunden.' });
 
     const { 
@@ -415,6 +415,13 @@ router.post('/:shopId/orders', async (req, res) => {
           id, order_id, supplier_id, item_name, quantity, price, color, size, notes, item_number
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
+
+      const insertDonation = db.prepare(`
+        INSERT INTO shop_donations (
+          id, shop_id, order_id, order_item_id, order_number, order_date, order_total_amount,
+          item_name, item_number, quantity, item_total, donation_per_item, donation_total, paid
+        ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, 0)
+      `);
       
       const insertFile = db.prepare(`
         INSERT INTO files (
@@ -444,8 +451,9 @@ router.post('/:shopId/orders', async (req, res) => {
             }
         }
 
+        const orderItemId = crypto.randomUUID();
         insertItem.run(
-          crypto.randomUUID(),
+          orderItemId,
           orderId,
           supplierId,
           item.name,
@@ -456,6 +464,31 @@ router.post('/:shopId/orders', async (req, res) => {
           item.personalization || null,
           item.productNumber || null
         );
+
+        const donationsEnabled = shop.donations_enabled === 1 || shop.donations_enabled === true;
+        if (donationsEnabled && item.productId) {
+            const donationRow = db.prepare('SELECT donation_amount FROM shop_product_assignments WHERE shop_id = ? AND product_id = ?').get(shopId, item.productId) as any;
+            const donationPerItem = donationRow?.donation_amount ? Number(donationRow.donation_amount) : 0;
+            if (donationPerItem > 0) {
+                const qty = Number(item.quantity) || 1;
+                const itemTotal = (Number(item.price) || 0) * qty;
+                const donationTotal = donationPerItem * qty;
+                insertDonation.run(
+                  crypto.randomUUID(),
+                  shopId,
+                  orderId,
+                  orderItemId,
+                  orderNumber,
+                  totalAmount,
+                  item.name,
+                  item.productNumber || null,
+                  qty,
+                  itemTotal,
+                  donationPerItem,
+                  donationTotal,
+                );
+            }
+        }
         
         // 2.1 Copy files from Product to Order (Preview & Print Data)
         if (item.productId) {
