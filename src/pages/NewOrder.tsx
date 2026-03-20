@@ -275,7 +275,7 @@ export default function NewOrder() {
 
   const [showFileSelector, setShowFileSelector] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [availableFiles, setAvailableFiles] = useState<{name: string, url: string, type: 'print' | 'vector', date: string, orderTitle: string}[]>([]);
+  const [availableFiles, setAvailableFiles] = useState<{name: string, url: string, type: 'print' | 'vector', date: string, orderTitle: string, quantity?: number}[]>([]);
   const [selectedExistingFiles, setSelectedExistingFiles] = useState<string[]>([]); // URLs
 
   const loadCustomerFiles = () => {
@@ -288,7 +288,7 @@ export default function NewOrder() {
         .filter(o => o.customerId === selectedCustomerId || o.customerName === customerName)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     
-    const allFiles: {name: string, url: string, type: 'print' | 'vector', date: string, orderTitle: string}[] = [];
+    const allFiles: {name: string, url: string, type: 'print' | 'vector', date: string, orderTitle: string, quantity?: number}[] = [];
     const seenUrls = new Set<string>();
     
     customerOrders.forEach(order => {
@@ -303,7 +303,8 @@ export default function NewOrder() {
                             url: f.url,
                             type: 'print',
                             date: order.createdAt,
-                            orderTitle: order.title
+                            orderTitle: order.title,
+                            quantity: f.quantity || 1
                         });
                     }
                 }
@@ -332,7 +333,8 @@ export default function NewOrder() {
     const newAttachments = filesToAdd.map(f => ({
         name: f.name,
         url: f.url,
-        type: 'print' as const
+        type: 'print' as const,
+        quantity: f.quantity || 1
     }));
     
     setExistingFilesToAttach([...existingFilesToAttach, ...newAttachments]);
@@ -1215,10 +1217,22 @@ export default function NewOrder() {
                     <div className="flex items-center">
                         <span className="bg-red-200 text-red-800 text-[10px] px-1 rounded mr-2">ARCHIV</span>
                         <span className="truncate max-w-[200px] font-medium">{file.name}</span>
-                        {(file.quantity || 1) > 1 && (
-                            <span className="ml-2 bg-gray-100 text-gray-800 text-xs px-2 py-0.5 rounded-full font-bold">
-                                {file.quantity}x
-                            </span>
+                        {file.type === 'print' && (
+                            <div className="ml-2 flex items-center bg-white rounded border border-red-200 overflow-hidden shrink-0 w-16">
+                                <input 
+                                    type="number" 
+                                    min="1"
+                                    className="w-full text-center text-xs p-1 border-none focus:ring-0 appearance-none"
+                                    value={file.quantity || 1}
+                                    onChange={(e) => {
+                                        const newFiles = [...existingFilesToAttach];
+                                        newFiles[idx] = { ...newFiles[idx], quantity: parseInt(e.target.value) || 1 };
+                                        setExistingFilesToAttach(newFiles);
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                                <span className="bg-gray-50 text-gray-500 px-1 border-l border-red-100 text-[10px] h-full flex items-center justify-center">x</span>
+                            </div>
                         )}
                     </div>
                     <button type="button" onClick={() => removeExistingFile(idx)} className="text-red-400 hover:text-red-700">

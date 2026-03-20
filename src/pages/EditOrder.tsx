@@ -444,6 +444,7 @@ export default function EditOrder() {
             newFilesToUpload.forEach(f => {
                 if (f.file) formData.append(f.type, f.file);
             });
+            const newPrintsToUpload = newFilesToUpload.filter(f => f.type === 'print');
 
             try {
                 const res = await fetch('/api/upload', {
@@ -457,7 +458,13 @@ export default function EditOrder() {
                         finalFiles = [...finalFiles, ...data.files.preview.map((f: any) => ({ name: f.originalName, type: 'preview' as const, url: f.path, thumbnail: f.thumbnail }))];
                     }
                     if (data.files.print) {
-                        finalFiles = [...finalFiles, ...data.files.print.map((f: any) => ({ name: f.originalName, type: 'print' as const, url: f.path, thumbnail: f.thumbnail }))];
+                        finalFiles = [...finalFiles, ...data.files.print.map((f: any, i: number) => ({ 
+                            name: f.originalName, 
+                            type: 'print' as const, 
+                            url: f.path, 
+                            thumbnail: f.thumbnail,
+                            quantity: newPrintsToUpload[i]?.quantity || 1
+                        }))];
                     }
                     if (data.files.vector) {
                         finalFiles = [...finalFiles, ...data.files.vector.map((f: any) => ({ name: f.originalName, type: 'vector' as const, url: f.path, thumbnail: f.thumbnail }))];
