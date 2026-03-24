@@ -523,6 +523,8 @@ router.post('/:shopId/orders', async (req, res) => {
             // Determine active variant ID and selected values
             let activeVariantIds: string[] = [];
             let selectedVariantValues: Record<string, string> = {};
+            let sizeVariantIds: string[] = [];
+            let selectedSizeVariantId: string | null = null;
 
             if (assignment && assignment.variants) {
                 try {
@@ -564,12 +566,33 @@ router.post('/:shopId/orders', async (req, res) => {
                         // New Logic: Check if any VALUE of this variant is present in the selection
                         if (varData.values) {
                             const possibleValues = varData.values.split(',').map((s: string) => s.trim());
+                            if (possibleValues.some((v: string) => /^\d{2,3}$/.test(v) || /^\d{2,3}\/\d{2,3}$/.test(v) || /^(XXS|XS|S|M|L|XL|XXL|3XL|4XL|5XL|6XL|7XL|8XL)$/i.test(v))) {
+                                sizeVariantIds.push(varId);
+                            }
                             // Find intersection between possibleValues and colorValues
                             const selectedValue = possibleValues.find((v: string) => colorValues.includes(v));
                             
                             if (selectedValue) {
                                 activeVariantIds.push(varId); // It is active
                                 selectedVariantValues[varId] = selectedValue; // Store specific value
+                            }
+                        }
+                    }
+                    
+                    if (item.size) {
+                        const targetSize = String(item.size).trim();
+                        const fromSelected = Object.entries(selectedVariantValues).find(([, v]) => String(v).trim() === targetSize);
+                        if (fromSelected) {
+                            selectedSizeVariantId = fromSelected[0];
+                        } else {
+                            for (const [varId, varData] of Object.entries(variants) as any) {
+                                if (varData.values) {
+                                    const possibleValues = varData.values.split(',').map((s: string) => s.trim());
+                                    if (possibleValues.includes(targetSize)) {
+                                        selectedSizeVariantId = varId;
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }
@@ -591,11 +614,14 @@ router.post('/:shopId/orders', async (req, res) => {
                                 : file.variant_ids;
                              
                              if (allowedVariants.length > 0) {
-                                 // A file is included if AT LEAST ONE of its assigned variant groups is active.
-                                 // E.g. "Wappen" assigned to "Jako Kindergrößen", "Jako Erwachsen", "Rückendruck"
-                                 // -> User selects "Jako Kindergrößen" -> it's active!
-                                 const match = allowedVariants.some((id: string) => activeVariantIds.includes(id));
-                                 if (!match) isIncluded = false;
+                                 const allowedSizeVariantIds = allowedVariants.filter((id: string) => sizeVariantIds.includes(id));
+                                 if (allowedSizeVariantIds.length > 0 && selectedSizeVariantId) {
+                                     const match = allowedSizeVariantIds.includes(selectedSizeVariantId);
+                                     if (!match) isIncluded = false;
+                                 } else {
+                                     const match = allowedVariants.some((id: string) => activeVariantIds.includes(id));
+                                     if (!match) isIncluded = false;
+                                 }
                              }
                          } catch (e) {}
                      }
