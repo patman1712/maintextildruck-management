@@ -591,8 +591,10 @@ router.post('/:shopId/orders', async (req, res) => {
                                 : file.variant_ids;
                              
                              if (allowedVariants.length > 0) {
-                                 // ALL assigned variant groups for this file must be active in the current selection
-                                 const match = allowedVariants.every((id: string) => activeVariantIds.includes(id));
+                                 // A file is included if AT LEAST ONE of its assigned variant groups is active.
+                                 // E.g. "Wappen" assigned to "Jako Kindergrößen", "Jako Erwachsen", "Rückendruck"
+                                 // -> User selects "Jako Kindergrößen" -> it's active!
+                                 const match = allowedVariants.some((id: string) => activeVariantIds.includes(id));
                                  if (!match) isIncluded = false;
                              }
                          } catch (e) {}
