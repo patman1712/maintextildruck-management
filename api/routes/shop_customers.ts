@@ -603,6 +603,23 @@ router.post('/:shopId/orders', async (req, res) => {
                              
                              if (Object.keys(restrictions).length > 0) {
                                  for (const [varId, allowedValues] of Object.entries(restrictions) as any) {
+                                     // Special handling for standard variants (e.g. Size/Größe without specific Variant IDs)
+                                     if (varId === 'standard') {
+                                         if (item.size) {
+                                             const itemSize = String(item.size).trim();
+                                             // If size is restricted and selected size is NOT in the allowed list
+                                             if (allowedValues && allowedValues.length > 0 && !allowedValues.includes(itemSize)) {
+                                                 isIncluded = false;
+                                                 break;
+                                             }
+                                         } else if (allowedValues && allowedValues.length > 0) {
+                                             // Restriction exists but no size selected
+                                             isIncluded = false;
+                                             break;
+                                         }
+                                         continue;
+                                     }
+
                                      // If restriction exists for this variable
                                      if (allowedValues && allowedValues.length > 0) {
                                          const selectedValue = selectedVariantValues[varId];
@@ -613,9 +630,7 @@ router.post('/:shopId/orders', async (req, res) => {
                                                  break;
                                              }
                                          } else {
-                                             // If user did NOT select a value for this restricted variable -> Exclude?
-                                             // E.g. File requires "Motiv A". User selected nothing for Back Print.
-                                             // Then we shouldn't print Motiv A.
+                                             // If user did NOT select a value for this restricted variable -> Exclude
                                              isIncluded = false;
                                              break;
                                          }
