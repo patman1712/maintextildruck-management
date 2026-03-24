@@ -586,11 +586,13 @@ router.post('/:shopId/orders', async (req, res) => {
                      // Check filtering if using assigned images
                      if (useAssignments && file.variant_ids) {
                          try {
-                             const allowedVariants = typeof file.variant_ids === 'string'
-                                 ? JSON.parse(file.variant_ids)
-                                 : file.variant_ids;
+                             const allowedVariants = typeof file.variant_ids === 'string' 
+                                ? JSON.parse(file.variant_ids) 
+                                : file.variant_ids;
+                             
                              if (allowedVariants.length > 0) {
-                                 const match = activeVariantIds.some(id => allowedVariants.includes(id));
+                                 // ALL assigned variant groups for this file must be active in the current selection
+                                 const match = allowedVariants.every((id: string) => activeVariantIds.includes(id));
                                  if (!match) isIncluded = false;
                              }
                          } catch (e) {}
