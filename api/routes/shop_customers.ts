@@ -662,10 +662,16 @@ router.post('/:shopId/orders', async (req, res) => {
                                      if (!match) {
                                          // If strict match fails, try a relaxed match (contains/ends with) 
                                          // because sometimes sizes are formatted like "Jako Erwachsen L" but restricted to "L"
+                                         // ODER umgekehrt: itemSize ist "140" und allowedSize ist "140"
+                                         // ODER itemSize ist "140" und allowedSize ist "Jako Kindergrößen 140"
                                          const relaxedMatch = allowedSizes.some((s: string) => {
                                              const cleanS = s.trim().toLowerCase();
                                              const cleanItem = itemSize.toLowerCase();
-                                             return cleanItem === cleanS || cleanItem.endsWith(` ${cleanS}`) || cleanItem.endsWith(`-${cleanS}`);
+                                             return cleanItem === cleanS || 
+                                                    cleanItem.endsWith(` ${cleanS}`) || 
+                                                    cleanItem.endsWith(`-${cleanS}`) ||
+                                                    cleanS.endsWith(` ${cleanItem}`) || 
+                                                    cleanS.endsWith(`-${cleanItem}`);
                                          });
                                          if (!relaxedMatch) {
                                              isIncluded = false;
