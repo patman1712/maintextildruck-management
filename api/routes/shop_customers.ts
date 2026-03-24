@@ -586,7 +586,9 @@ router.post('/:shopId/orders', async (req, res) => {
                      // Check filtering if using assigned images
                      if (useAssignments && file.variant_ids) {
                          try {
-                             const allowedVariants = JSON.parse(file.variant_ids);
+                             const allowedVariants = typeof file.variant_ids === 'string'
+                                 ? JSON.parse(file.variant_ids)
+                                 : file.variant_ids;
                              if (allowedVariants.length > 0) {
                                  const match = activeVariantIds.some(id => allowedVariants.includes(id));
                                  if (!match) isIncluded = false;
@@ -645,7 +647,9 @@ router.post('/:shopId/orders', async (req, res) => {
                      // Check Size Restrictions - STRICT MODE
                      if (isIncluded && useAssignments && file.size_restrictions) {
                          try {
-                             const allowedSizes = JSON.parse(file.size_restrictions);
+                             const allowedSizes = typeof file.size_restrictions === 'string'
+                                 ? JSON.parse(file.size_restrictions)
+                                 : file.size_restrictions;
                              if (allowedSizes.length > 0) {
                                  if (item.size) {
                                      const itemSize = String(item.size).trim();
