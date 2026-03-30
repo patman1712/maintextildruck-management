@@ -77,21 +77,25 @@ router.post('/', async (req: Request, res: Response) => {
       
       files.forEach((file: any) => {
         if (file.url) {
-          const existing = checkFile.get(file.url);
-          if (!existing) {
-            const fileId = Math.random().toString(36).substr(2, 9);
-            const thumb = file.thumbnail || file.thumbnail_url || file.thumbnailUrl || null;
-            insertFile.run(
-              fileId, 
-              customer_id, 
-              id, 
-              file.customName || file.name, 
-              file.name, 
-              file.url, 
-              file.type,
-              thumb,
-              file.quantity || 1
-            );
+          try {
+            const existing = checkFile.get(file.url);
+            if (!existing) {
+              const fileId = Math.random().toString(36).substr(2, 9);
+              const thumb = file.thumbnail || file.thumbnail_url || file.thumbnailUrl || null;
+              insertFile.run(
+                fileId, 
+                customer_id || null, 
+                id, 
+                file.customName || file.name || 'Unbenannt', 
+                file.name || 'Unbenannt', 
+                file.url, 
+                file.type || 'print',
+                thumb,
+                file.quantity || 1
+              );
+            }
+          } catch (e) {
+            console.error('Error inserting file in orders POST:', e);
           }
         }
       });
@@ -220,27 +224,31 @@ router.put('/:id', async (req: Request, res: Response) => {
     
     updates.files.forEach((file: any) => {
       if (file.url) {
-        const existingFile = checkFile.get(file.url) as any;
-        const thumb = file.thumbnail || file.thumbnail_url || file.thumbnailUrl || null;
-        if (!existingFile) {
-          const fileId = Math.random().toString(36).substr(2, 9);
-          // Use outer 'existing' (order) for customer_id fallback
-          const customerId = updates.customer_id || existing.customer_id;
-          
-          insertFile.run(
-            fileId, 
-            customerId, 
-            id, 
-            file.customName || file.name, 
-            file.name, 
-            file.url, 
-            file.type,
-            thumb,
-            file.quantity || 1
-          );
-        } else {
-              // Update quantity for existing file
-              db.prepare('UPDATE files SET quantity = ?, thumbnail = COALESCE(?, thumbnail) WHERE id = ?').run(file.quantity || 1, thumb, existingFile.id);
+        try {
+          const existingFile = checkFile.get(file.url) as any;
+          const thumb = file.thumbnail || file.thumbnail_url || file.thumbnailUrl || null;
+          if (!existingFile) {
+            const fileId = Math.random().toString(36).substr(2, 9);
+            // Use outer 'existing' (order) for customer_id fallback
+            const customerId = updates.customer_id || existing.customer_id || null;
+            
+            insertFile.run(
+              fileId, 
+              customerId, 
+              id, 
+              file.customName || file.name || 'Unbenannt', 
+              file.name || 'Unbenannt', 
+              file.url, 
+              file.type || 'print',
+              thumb,
+              file.quantity || 1
+            );
+          } else {
+            // Update quantity for existing file
+            db.prepare('UPDATE files SET quantity = ?, thumbnail = COALESCE(?, thumbnail) WHERE id = ?').run(file.quantity || 1, thumb, existingFile.id);
+          }
+        } catch (e) {
+          console.error('Error inserting/updating file in orders PUT:', e);
         }
       }
     });

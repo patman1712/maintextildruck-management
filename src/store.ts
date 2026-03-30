@@ -283,11 +283,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ loading: true });
     try {
       const [customersRes, ordersRes, orderItemsRes, suppliersRes, shopsRes] = await Promise.all([
-        fetch('/api/customers'),
-        fetch('/api/orders'),
-        fetch('/api/orders/items/all'),
-        fetch('/api/suppliers'),
-        fetch('/api/shops'),
+        fetch('/api/customers', { headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } }),
+        fetch('/api/orders', { headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } }),
+        fetch('/api/orders/items/all', { headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } }),
+        fetch('/api/suppliers', { headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } }),
+        fetch('/api/shops', { headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } }),
       ]);
 
       const [customersData, ordersData, orderItemsData, suppliersData, shopsData] = await Promise.all([

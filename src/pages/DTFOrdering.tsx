@@ -423,7 +423,8 @@ export default function DTFOrdering() {
                     createdAt: new Date().toISOString(),
                     description: "Sammelauftrag für manuelle DTF Uploads",
                     employees: [],
-                    files: [newFileEntry]
+                    files: [newFileEntry],
+                    printStatus: 'pending'
                 };
                 await addOrder(newOrder);
             } else {
