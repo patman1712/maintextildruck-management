@@ -83,11 +83,12 @@ export default function DTFOrdering() {
 
   // Deduplicate files by URL
   const availableFiles: typeof allFilesRaw = [];
-  const seenUrls = new Set<string>();
+  const seenKeys = new Set<string>();
 
   for (const file of allFilesRaw) {
-      if (!seenUrls.has(file.url)) {
-          seenUrls.add(file.url);
+      const key = `${file.orderId}::${file.url}`;
+      if (!seenKeys.has(key)) {
+          seenKeys.add(key);
           availableFiles.push(file);
       }
   }
@@ -580,6 +581,17 @@ export default function DTFOrdering() {
                     }
                 }
 
+            } else if (orderId === 'dtf-manual-queue') {
+                const filesToMark = selectedFiles.filter(f => f.orderId === orderId);
+                const urlsToRemove = new Set(filesToMark.map(f => f.url));
+                const initialLength = dtfQueueFiles.length;
+                dtfQueueFiles = dtfQueueFiles.filter((f: any) => {
+                    if (!urlsToRemove.has(f.url)) return true;
+                    return !(f.type === 'print' || f.type === 'vector');
+                });
+                if (dtfQueueFiles.length !== initialLength) {
+                    dtfQueueChanged = true;
+                }
             } else if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
                 const order = orders.find(o => o.id === orderId);
                 if (order && order.files) {
@@ -619,7 +631,7 @@ export default function DTFOrdering() {
         }
         
         if (updatedCount > 0) {
-            fetchData();
+            await fetchData();
         }
         
         setSelectedFiles([]);
