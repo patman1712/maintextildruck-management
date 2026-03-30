@@ -499,10 +499,15 @@ router.post('/delete-pdf', async (req: Request, res: Response) => {
 
         if (await fs.pathExists(fullPath)) {
             await fs.remove(fullPath);
-            res.json({ success: true });
-        } else {
-            res.status(404).json({ success: false, error: 'File not found' });
         }
+        
+        const thumbName = `${filename}_thumb.png`;
+        const thumbPath = path.join(UPLOAD_DIR, thumbName);
+        if (await fs.pathExists(thumbPath)) {
+            await fs.remove(thumbPath);
+        }
+        
+        res.json({ success: true });
     } catch (error) {
         console.error('Error deleting PDF:', error);
         res.status(500).json({ success: false, error: 'Delete failed' });

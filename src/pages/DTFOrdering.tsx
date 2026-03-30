@@ -529,106 +529,110 @@ export default function DTFOrdering() {
   };
 
     const handleConfirmSuccess = async () => {
-        const orderIds = new Set(selectedFiles.map(f => f.orderId));
-        let updatedCount = 0;
+        try {
+            const orderIds = new Set(selectedFiles.map(f => f.orderId));
+            let updatedCount = 0;
         
-        // Handle Manual Queues
-        const manualOrder = orders.find(o => o.id === 'inventory-manual');
-        const dtfQueueOrder = orders.find(o => o.id === 'dtf-manual-queue');
+            // Handle Manual Queues
+            const manualOrder = orders.find(o => o.id === 'inventory-manual');
+            const dtfQueueOrder = orders.find(o => o.id === 'dtf-manual-queue');
         
-        let manualFilesChanged = false;
-        let dtfQueueChanged = false;
+            let manualFilesChanged = false;
+            let dtfQueueChanged = false;
         
-        let manualFiles = manualOrder?.files ? [...manualOrder.files] : [];
-        let dtfQueueFiles = dtfQueueOrder?.files ? [...dtfQueueOrder.files] : [];
+            let manualFiles = manualOrder?.files ? [...manualOrder.files] : [];
+            let dtfQueueFiles = dtfQueueOrder?.files ? [...dtfQueueOrder.files] : [];
 
-        for (const orderId of Array.from(orderIds)) {
-            if (orderId.includes('-group-')) {
-                // Handle Virtual Groups
-                let originalOrderId = '';
-                let ref = '';
+            for (const orderId of Array.from(orderIds)) {
+                if (orderId.includes('-group-')) {
+                    // Handle Virtual Groups
+                    let originalOrderId = '';
+                    let ref = '';
 
-                if (orderId.startsWith('inventory-manual-group-')) {
-                    originalOrderId = 'inventory-manual';
-                    ref = orderId.replace('inventory-manual-group-', '');
+                    if (orderId.startsWith('inventory-manual-group-')) {
+                        originalOrderId = 'inventory-manual';
+                        ref = orderId.replace('inventory-manual-group-', '');
                     
-                    // Update status for files in this manual group
-                    manualFiles = manualFiles.map((f: any) => {
-                        const fRef = f.reference || 'Unbekannt';
-                        if (fRef === ref && (f.type === 'print' || f.type === 'vector')) {
-                            manualFilesChanged = true;
-                            return { ...f, status: 'ordered' as const };
+                        // Update status for files in this manual group
+                        manualFiles = manualFiles.map((f: any) => {
+                            const fRef = f.reference || 'Unbekannt';
+                            if (fRef === ref && (f.type === 'print' || f.type === 'vector')) {
+                                manualFilesChanged = true;
+                                return { ...f, status: 'ordered' as const };
+                            }
+                            return f;
+                        });
+                    
+                    } else if (orderId.startsWith('dtf-manual-queue-group-')) {
+                        originalOrderId = 'dtf-manual-queue';
+                        ref = orderId.replace('dtf-manual-queue-group-', '');
+                    
+                        // For DTF Queue: DELETE the files entirely after printing, as requested by user
+                        // "erst danach soll die datei da wieder rausgehen" -> Delete
+                        const initialLength = dtfQueueFiles.length;
+                        dtfQueueFiles = dtfQueueFiles.filter((f: any) => {
+                            const fRef = f.reference || 'Manueller Upload';
+                            const isMatch = fRef === ref && (f.type === 'print' || f.type === 'vector');
+                            return !isMatch; 
+                        });
+                    
+                        if (dtfQueueFiles.length !== initialLength) {
+                            dtfQueueChanged = true;
                         }
-                        return f;
-                    });
-                    
-                } else if (orderId.startsWith('dtf-manual-queue-group-')) {
-                    originalOrderId = 'dtf-manual-queue';
-                    ref = orderId.replace('dtf-manual-queue-group-', '');
-                    
-                    // For DTF Queue: DELETE the files entirely after printing, as requested by user
-                    // "erst danach soll die datei da wieder rausgehen" -> Delete
+                    }
+
+                }
+                else if (orderId === 'dtf-manual-queue') {
+                    const filesToMark = selectedFiles.filter(f => f.orderId === orderId);
+                    const urlsToRemove = new Set(filesToMark.map(f => f.url));
                     const initialLength = dtfQueueFiles.length;
                     dtfQueueFiles = dtfQueueFiles.filter((f: any) => {
-                        const fRef = f.reference || 'Manueller Upload';
-                        // Keep files that don't match the printed group
-                        // OR match but are not print/vector type (unlikely here)
-                        const isMatch = fRef === ref && (f.type === 'print' || f.type === 'vector');
-                        return !isMatch; 
+                        if (!urlsToRemove.has(f.url)) return true;
+                        return !(f.type === 'print' || f.type === 'vector');
                     });
-                    
                     if (dtfQueueFiles.length !== initialLength) {
                         dtfQueueChanged = true;
                     }
-                }
-
-            } else if (orderId === 'dtf-manual-queue') {
-                const filesToMark = selectedFiles.filter(f => f.orderId === orderId);
-                const urlsToRemove = new Set(filesToMark.map(f => f.url));
-                const initialLength = dtfQueueFiles.length;
-                dtfQueueFiles = dtfQueueFiles.filter((f: any) => {
-                    if (!urlsToRemove.has(f.url)) return true;
-                    return !(f.type === 'print' || f.type === 'vector');
-                });
-                if (dtfQueueFiles.length !== initialLength) {
-                    dtfQueueChanged = true;
-                }
-            } else if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
-                const order = orders.find(o => o.id === orderId);
-                if (order && order.files) {
-                    const newFiles = order.files.map(f => {
-                        if (f.type === 'print' || f.type === 'vector') {
-                            return { ...f, status: 'ordered' as const };
-                        }
-                        return f;
-                    });
-                    
-                    await updateOrder(orderId, { 
-                        files: newFiles,
-                        printStatus: 'ordered'
-                    });
-                    updatedCount++;
+                } else if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
+                    const order = orders.find(o => o.id === orderId);
+                    if (order && order.files) {
+                        const newFiles = order.files.map(f => {
+                            if (f.type === 'print' || f.type === 'vector') {
+                                return { ...f, status: 'ordered' as const };
+                            }
+                            return f;
+                        });
+                        
+                        await updateOrder(orderId, { 
+                            files: newFiles,
+                            printStatus: 'ordered'
+                        });
+                        updatedCount++;
+                    }
                 }
             }
-        }
 
-        if (manualFilesChanged && manualOrder) {
-            await updateOrder(manualOrder.id, { files: manualFiles });
-            updatedCount++;
-        }
+            if (manualFilesChanged && manualOrder) {
+                await updateOrder(manualOrder.id, { files: manualFiles, printStatus: 'ordered' });
+                updatedCount++;
+            }
 
-        if (dtfQueueChanged && dtfQueueOrder) {
-            await updateOrder(dtfQueueOrder.id, { files: dtfQueueFiles });
-            updatedCount++;
-        }
+            if (dtfQueueChanged && dtfQueueOrder) {
+                await updateOrder(dtfQueueOrder.id, { files: dtfQueueFiles, printStatus: 'ordered' });
+                updatedCount++;
+            }
         
-        if (updatedCount > 0) {
-            await fetchData();
-        }
+            if (updatedCount > 0) {
+                await fetchData();
+            }
         
-        setSelectedFiles([]);
-        setGeneratedPdfUrls([]);
-        setShowSuccessModal(false);
+            setSelectedFiles([]);
+            setGeneratedPdfUrls([]);
+            setShowSuccessModal(false);
+        } catch (e: any) {
+            console.error(e);
+            setGenerationError(`Abschluss fehlgeschlagen: ${e?.message || 'Unbekannter Fehler'}`);
+        }
     };
 
     const handleCancelSuccess = () => {

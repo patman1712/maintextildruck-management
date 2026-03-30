@@ -657,13 +657,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (updatedOrder.steps.invoiced !== undefined) updatePayload.invoiced = updatedOrder.steps.invoiced;
       }
 
-      await fetch(`/api/orders/${id}`, {
+      const res = await fetch(`/api/orders/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatePayload)
       });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || data?.message || `Update failed (${res.status})`);
+      }
+      if (data?.data) {
+        set((state) => ({
+          orders: state.orders.map((o) => (o.id === id ? { ...o, ...data.data } : o))
+        }));
+      }
     } catch (error) {
       console.error('Error updating order:', error);
+      throw error;
     }
   },
 

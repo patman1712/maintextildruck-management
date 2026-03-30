@@ -218,8 +218,8 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (updates.files && Array.isArray(updates.files)) {
     const checkFile = db.prepare('SELECT id FROM files WHERE path = ?');
     const insertFile = db.prepare(`
-      INSERT INTO files (id, customer_id, order_id, name, original_name, path, type, thumbnail, quantity)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO files (id, customer_id, order_id, name, original_name, path, type, thumbnail, status, print_status, quantity)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
     updates.files.forEach((file: any) => {
@@ -231,6 +231,8 @@ router.put('/:id', async (req: Request, res: Response) => {
             const fileId = Math.random().toString(36).substr(2, 9);
             // Use outer 'existing' (order) for customer_id fallback
             const customerId = updates.customer_id || existing.customer_id || null;
+            const status = 'active';
+            const printStatus = file.status === 'ordered' ? 'ordered' : (file.printStatus || file.print_status || 'pending');
             
             insertFile.run(
               fileId, 
@@ -241,11 +243,14 @@ router.put('/:id', async (req: Request, res: Response) => {
               file.url, 
               file.type || 'print',
               thumb,
+              status,
+              printStatus,
               file.quantity || 1
             );
           } else {
             // Update quantity for existing file
-            db.prepare('UPDATE files SET quantity = ?, thumbnail = COALESCE(?, thumbnail) WHERE id = ?').run(file.quantity || 1, thumb, existingFile.id);
+            const printStatus = file.status === 'ordered' ? 'ordered' : (file.printStatus || file.print_status || null);
+            db.prepare('UPDATE files SET quantity = ?, thumbnail = COALESCE(?, thumbnail), print_status = COALESCE(?, print_status) WHERE id = ?').run(file.quantity || 1, thumb, printStatus, existingFile.id);
           }
         } catch (e) {
           console.error('Error inserting/updating file in orders PUT:', e);
@@ -254,7 +259,37 @@ router.put('/:id', async (req: Request, res: Response) => {
     });
   }
 
-  res.json({ success: true, message: 'Order updated' });
+  const updatedRow = db.prepare('SELECT * FROM orders WHERE id = ?').get(id) as any;
+  const mapped = {
+    id: updatedRow.id,
+    title: updatedRow.title,
+    orderNumber: updatedRow.order_number,
+    customerId: updatedRow.customer_id,
+    customer_name: updatedRow.customer_name,
+    customer_email: updatedRow.customer_email,
+    customer_phone: updatedRow.customer_phone,
+    customer_address: updatedRow.customer_address,
+    deadline: updatedRow.deadline,
+    status: updatedRow.status,
+    processing: !!updatedRow.processing,
+    produced: !!updatedRow.produced,
+    invoiced: !!updatedRow.invoiced,
+    printStatus: updatedRow.print_status,
+    description: updatedRow.description,
+    employees: updatedRow.employees ? JSON.parse(updatedRow.employees) : [],
+    files: updatedRow.files ? JSON.parse(updatedRow.files) : [],
+    created_at: updatedRow.created_at,
+    approvalStatus: updatedRow.approval_status,
+    approvedBy: updatedRow.approved_by,
+    approvedAt: updatedRow.approved_at,
+    rejectionReason: updatedRow.rejection_reason,
+    approvalToken: updatedRow.approval_token,
+    approvalComment: updatedRow.approval_comment,
+    shopwareOrderId: updatedRow.shopware_order_id,
+    steps: updatedRow.steps ? JSON.parse(updatedRow.steps) : { processing: !!updatedRow.processing, produced: !!updatedRow.produced, invoiced: !!updatedRow.invoiced }
+  };
+
+  res.json({ success: true, message: 'Order updated', data: mapped });
 });
 
 // DELETE order
