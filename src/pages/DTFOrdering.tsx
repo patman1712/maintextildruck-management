@@ -595,25 +595,16 @@ export default function DTFOrdering() {
             } else if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
                 const order = orders.find(o => o.id === orderId);
                 if (order && order.files) {
-                    // Find which files were selected for this order
-                    const filesToMark = selectedFiles.filter(f => f.orderId === orderId);
-                    
                     const newFiles = order.files.map(f => {
-                        // Check if this file was selected (by URL match)
-                        if (filesToMark.some(sf => sf.url === f.url)) {
+                        if (f.type === 'print' || f.type === 'vector') {
                             return { ...f, status: 'ordered' as const };
                         }
                         return f;
                     });
                     
-                    // Check if all print/vector files are now ordered to update main status
-                    const allOrdered = newFiles
-                        .filter(f => f.type === 'print' || f.type === 'vector')
-                        .every(f => f.status === 'ordered');
-
                     await updateOrder(orderId, { 
                         files: newFiles,
-                        printStatus: allOrdered ? 'ordered' : 'pending' 
+                        printStatus: 'ordered'
                     });
                     updatedCount++;
                 }
