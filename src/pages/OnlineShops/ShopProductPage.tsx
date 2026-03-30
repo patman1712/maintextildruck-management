@@ -22,6 +22,7 @@ const ShopProductPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState<string | null>(null);
   const [selectedSize, setSelectedSize] = useState<string>('');
+  const [selectedColor, setSelectedColor] = useState<string>('');
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
   const [selectedBackPrint, setSelectedBackPrint] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
@@ -68,6 +69,7 @@ const ShopProductPage: React.FC = () => {
               const lowerName = name.toLowerCase();
               if (lowerName.includes('rücken') || lowerName.includes('back')) type = 'back_print';
               else if (lowerName.includes('größe') || lowerName.includes('size')) type = 'size';
+              else if (lowerName.includes('farbe') || lowerName.includes('color')) type = 'color';
               else type = 'other';
           }
           
@@ -85,16 +87,24 @@ const ShopProductPage: React.FC = () => {
       variantDefinitions.find(v => v.type === 'back_print'),
   [variantDefinitions]);
 
-  const mainVariants = React.useMemo(() => 
-      variantDefinitions.filter(v => v.type !== 'back_print'),
+  const sizeVariant = React.useMemo(() => 
+      variantDefinitions.find(v => v.type === 'size'),
+  [variantDefinitions]);
+
+  const colorVariant = React.useMemo(() => 
+      variantDefinitions.find(v => v.type === 'color'),
+  [variantDefinitions]);
+
+  const groupVariants = React.useMemo(() => 
+      variantDefinitions.filter(v => v.type !== 'back_print' && v.type !== 'size' && v.type !== 'color'),
   [variantDefinitions]);
 
   // Auto-select variant if only one exists (e.g. only "Size")
   useEffect(() => {
-      if (mainVariants.length === 1 && !selectedVariantId) {
-          setSelectedVariantId(mainVariants[0].id);
+      if (groupVariants.length === 1 && !selectedVariantId) {
+          setSelectedVariantId(groupVariants[0].id);
       }
-  }, [mainVariants, selectedVariantId]);
+  }, [groupVariants, selectedVariantId]);
 
   // Derived state (needs to be here because product is null initially)
   const availableSizes = React.useMemo(() => {
@@ -112,12 +122,11 @@ const ShopProductPage: React.FC = () => {
       }
       
       // If we have variants but none selected -> Empty sizes to force selection
-      if (mainVariants.length > 0 && !selectedVariantId) {
+      if (groupVariants.length > 0 && !selectedVariantId) {
           return [];
       }
 
       // Fallback: Use product.size string or dedicated 'size' variant if no main variants exist
-      const sizeVariant = variantDefinitions.find(v => v.type === 'size');
       if (sizeVariant && sizeVariant.values.length > 0) return sizeVariant.values;
       
       if (product?.size && product.size.trim().length > 0) {
@@ -125,7 +134,7 @@ const ShopProductPage: React.FC = () => {
       }
       
       return []; 
-  }, [product, variantDefinitions, selectedVariantId, mainVariants]);
+  }, [product, variantDefinitions, selectedVariantId, groupVariants, sizeVariant]);
   
   const availableBackPrints = React.useMemo(() => {
       if (backPrintVariant) return backPrintVariant.values;
@@ -493,6 +502,7 @@ const ShopProductPage: React.FC = () => {
 
   const handleAddToCart = () => {
     if (availableSizes.length > 0 && !selectedSize) return;
+    if (colorVariant && !selectedColor) return;
 
     // Check if back print is mandatory and missing
     if (backPrintVariant && !selectedBackPrint) return;
@@ -506,7 +516,7 @@ const ShopProductPage: React.FC = () => {
       .sort()
       .join('|');
     
-    const cartItemId = `${product.product_id}-${Object.values(selectedVariantValues).join('_')}-${selectedBackPrint}-${selectedSize}-${personalizationString}`;
+    const cartItemId = `${product.product_id}-${Object.values(selectedVariantValues).join('_')}-${selectedBackPrint}-${selectedSize}-${selectedColor}-${personalizationString}`;
 
     const cartItem: CartItem = {
       id: cartItemId,
@@ -517,10 +527,7 @@ const ShopProductPage: React.FC = () => {
       quantity: quantity,
       image: mainImage || undefined,
       size: selectedSize || undefined,
-      // Filter out size from color field to prevent duplicate display
-      color: Object.values(selectedVariantValues)
-          .filter(v => v !== selectedSize)
-          .join(', ') || undefined, 
+      color: selectedColor || undefined,
       personalization: personalizationString || undefined,
       weight: product.weight || 0,
       supplierId: product.supplier_id || undefined,
@@ -616,11 +623,11 @@ const ShopProductPage: React.FC = () => {
             </div>
 
             {/* Variant Group Selection (e.g., Adult vs Kids) */}
-            {Object.keys(variants).length > 0 && mainVariants.length > 1 && (
+            {Object.keys(variants).length > 0 && groupVariants.length > 1 && (
                 <div className="mb-6">
                     <label className="font-bold text-sm uppercase block mb-2">Ausführung / Modell:</label>
                     <div className="flex flex-wrap gap-2">
-                        {mainVariants.map(variant => {
+                        {groupVariants.map(variant => {
                             const isSelected = selectedVariantId === variant.id;
                             return (
                                 <button
@@ -628,7 +635,12 @@ const ShopProductPage: React.FC = () => {
                                     onClick={() => {
                                         setSelectedVariantId(variant.id);
                                         setSelectedSize(''); // Reset size when group changes
-                                        setSelectedVariantValues({}); // Reset previous selection values
+                                        setSelectedVariantValues(prev => {
+                                            const next = { ...prev };
+                                            if (selectedVariantId) delete next[selectedVariantId];
+                                            if (sizeVariant) delete next[sizeVariant.id];
+                                            return next;
+                                        });
                                     }}
                                     className={`px-4 py-2 border rounded text-sm font-medium transition-colors ${
                                         isSelected 
@@ -657,9 +669,19 @@ const ShopProductPage: React.FC = () => {
                     onChange={(e) => {
                         const val = e.target.value;
                         setSelectedSize(val);
-                        // Link the size to the selected variant group for cart/price logic
-                        if (selectedVariantId && val) {
-                            setSelectedVariantValues({ [selectedVariantId]: val });
+                        if (!val) {
+                            setSelectedVariantValues(prev => {
+                                const next = { ...prev };
+                                if (selectedVariantId) delete next[selectedVariantId];
+                                if (sizeVariant) delete next[sizeVariant.id];
+                                return next;
+                            });
+                            return;
+                        }
+                        if (selectedVariantId) {
+                            setSelectedVariantValues(prev => ({ ...prev, [selectedVariantId]: val }));
+                        } else if (sizeVariant) {
+                            setSelectedVariantValues(prev => ({ ...prev, [sizeVariant.id]: val }));
                         }
                     }}
                 >
@@ -683,6 +705,35 @@ const ShopProductPage: React.FC = () => {
                     })}
                 </select>
             </div>
+            )}
+
+            {/* Color Selection */}
+            {colorVariant && colorVariant.values.length > 0 && (
+                <div className="mb-6">
+                    <label className="font-bold text-sm uppercase block mb-2">Farbe:</label>
+                    <select
+                        className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none"
+                        value={selectedColor}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            setSelectedColor(val);
+                            if (!val) {
+                                setSelectedVariantValues(prev => {
+                                    const next = { ...prev };
+                                    delete next[colorVariant.id];
+                                    return next;
+                                });
+                                return;
+                            }
+                            setSelectedVariantValues(prev => ({ ...prev, [colorVariant.id]: val }));
+                        }}
+                    >
+                        <option value="">Farbe auswählen</option>
+                        {colorVariant.values.map((val: string) => (
+                            <option key={val} value={val}>{val}</option>
+                        ))}
+                    </select>
+                </div>
             )}
 
             {/* Back Print Selection (Explicit) */}
@@ -808,9 +859,10 @@ const ShopProductPage: React.FC = () => {
                 className="w-full bg-slate-900 text-white py-4 font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors flex items-center justify-center space-x-2 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={
                     (availableSizes.length > 0 && !selectedSize) || 
+                    (!!colorVariant && !selectedColor) ||
                     (!!backPrintVariant && !selectedBackPrint) ||
                     // Require variant group selection if multiple groups exist
-                    (mainVariants.length > 0 && !selectedVariantId)
+                    (groupVariants.length > 0 && !selectedVariantId)
                 }
             >
                 <ShoppingCart size={20} />
@@ -818,6 +870,7 @@ const ShopProductPage: React.FC = () => {
             </button>
             
             {availableSizes.length > 0 && !selectedSize && <p className="text-red-500 text-xs text-center">Bitte wähle zuerst eine Grösse.</p>}
+            {!!colorVariant && !selectedColor && <p className="text-red-500 text-xs text-center">Bitte wähle zuerst eine Farbe.</p>}
             {!!backPrintVariant && !selectedBackPrint && <p className="text-red-500 text-xs text-center">Bitte wähle einen Rückendruck.</p>}
 
             {/* Additional Info */}
