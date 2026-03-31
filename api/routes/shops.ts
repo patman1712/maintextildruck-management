@@ -454,6 +454,7 @@ router.put('/:id', (req, res) => {
         donations_enabled,
         order_number_circle, next_order_number,
         invoice_number_circle, next_invoice_number,
+        hero_enabled,
         hero_images,
         welcome_text,
         footer_logo_url, contact_phone, contact_email, contact_address, opening_hours,
@@ -469,6 +470,7 @@ router.put('/:id', (req, res) => {
           donations_enabled = ?,
           order_number_circle = ?, next_order_number = ?,
           invoice_number_circle = ?, next_invoice_number = ?,
+          hero_enabled = ?,
           hero_images = ?,
           welcome_text = ?
       WHERE id = ?
@@ -491,6 +493,7 @@ router.put('/:id', (req, res) => {
       next_order_number || 1,
       invoice_number_circle || null,
       next_invoice_number || 1,
+      hero_enabled === false || hero_enabled === 0 ? 0 : 1,
       hero_images ? JSON.stringify(hero_images) : null,
       welcome_text || null,
       id

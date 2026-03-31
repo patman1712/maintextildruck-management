@@ -808,6 +808,13 @@ try {
     db.exec('ALTER TABLE shops ADD COLUMN hero_images TEXT'); // JSON array of image URLs
   }
 
+  const shopColsHeroEnabled = db.prepare("PRAGMA table_info(shops)").all() as any[];
+  const hasHeroEnabled = shopColsHeroEnabled.some(col => col.name === 'hero_enabled');
+  if (!hasHeroEnabled) {
+    console.log('Migrating database: Adding hero_enabled to shops table');
+    db.exec('ALTER TABLE shops ADD COLUMN hero_enabled INTEGER DEFAULT 1');
+  }
+
   // Migration for Welcome Text
   const shopColsWelcome = db.prepare("PRAGMA table_info(shops)").all() as any[];
   const hasWelcomeText = shopColsWelcome.some(col => col.name === 'welcome_text');

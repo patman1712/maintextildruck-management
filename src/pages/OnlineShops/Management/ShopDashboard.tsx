@@ -1011,6 +1011,19 @@ const ShopDashboard: React.FC = () => {
                     <div className="pt-6 border-t border-slate-200">
                         <label className="block text-sm font-medium text-slate-700 mb-2">Hero Bilder (Slider)</label>
                         <p className="text-xs text-slate-500 mb-4">Laden Sie hier Bilder für den Slider auf der Startseite hoch. Drag & Drop zum Sortieren (bald verfügbar).</p>
+
+                        <label className="flex items-center space-x-3 mb-3">
+                            <input
+                                type="checkbox"
+                                className="h-4 w-4"
+                                checked={(shop as any).hero_enabled === undefined || (shop as any).hero_enabled === null ? true : !!(shop as any).hero_enabled}
+                                onChange={(e) => setShop({ ...(shop as any), hero_enabled: e.target.checked } as any)}
+                            />
+                            <span className="text-sm text-slate-700 font-medium">Slider anzeigen</span>
+                        </label>
+                        <p className="text-xs text-slate-500 mb-4">
+                            Wenn deaktiviert, wird auf der Startseite kein Slider angezeigt (auch kein Demo-Bild).
+                        </p>
                         
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                             {shop.hero_images && shop.hero_images.map((img, idx) => (

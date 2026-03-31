@@ -20,6 +20,7 @@ const ShopHome: React.FC = () => {
   const [products, setProducts] = useState<any[]>([]); // Using any for extended product interface
   const [loading, setLoading] = useState(true);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const heroEnabled = (shop as any).hero_enabled === undefined || (shop as any).hero_enabled === null ? true : !!(shop as any).hero_enabled;
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -41,6 +42,7 @@ const ShopHome: React.FC = () => {
 
   // Auto-advance slider
   useEffect(() => {
+    if (!heroEnabled) return;
     if (!shop.hero_images || !Array.isArray(shop.hero_images) || shop.hero_images.length <= 1) return;
     
     const interval = setInterval(() => {
@@ -48,25 +50,30 @@ const ShopHome: React.FC = () => {
     }, 5000);
     
     return () => clearInterval(interval);
-  }, [shop.hero_images]);
+  }, [heroEnabled, shop.hero_images]);
 
   const nextSlide = () => {
+      if (!heroEnabled) return;
       if (!shop.hero_images || !Array.isArray(shop.hero_images)) return;
       setCurrentSlide(prev => (prev + 1) % shop.hero_images!.length);
   };
 
   const prevSlide = () => {
+      if (!heroEnabled) return;
       if (!shop.hero_images || !Array.isArray(shop.hero_images)) return;
       setCurrentSlide(prev => (prev - 1 + shop.hero_images!.length) % shop.hero_images!.length);
   };
 
-  const heroImages = Array.isArray(shop.hero_images) && shop.hero_images.length > 0 
-    ? shop.hero_images 
-    : ['https://images.unsplash.com/photo-1518609878373-06d740f60d8b?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80'];
+  const heroImages = heroEnabled
+    ? (Array.isArray(shop.hero_images) && shop.hero_images.length > 0 
+        ? shop.hero_images 
+        : ['https://images.unsplash.com/photo-1518609878373-06d740f60d8b?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80'])
+    : [];
 
   return (
     <>
       {/* Hero Section */}
+      {heroEnabled && (
       <div className="relative w-full overflow-hidden group">
         {heroImages.length > 0 ? (
              <div className="relative w-full">
@@ -111,6 +118,7 @@ const ShopHome: React.FC = () => {
             </div>
         )}
       </div>
+      )}
 
       {/* Welcome Text Section */}
       {shop.welcome_text && (
