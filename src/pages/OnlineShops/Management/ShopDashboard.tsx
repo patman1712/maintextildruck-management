@@ -758,6 +758,22 @@ const ShopDashboard: React.FC = () => {
                     </div>
 
                     <div className="pt-6 border-t border-slate-200">
+                        <h4 className="font-bold text-slate-700 mb-4">Checkout</h4>
+                        <label className="flex items-center space-x-3">
+                            <input
+                                type="checkbox"
+                                className="h-4 w-4"
+                                checked={(shop as any).guest_checkout_enabled === undefined || (shop as any).guest_checkout_enabled === null ? true : !!(shop as any).guest_checkout_enabled}
+                                onChange={(e) => setShop({ ...(shop as any), guest_checkout_enabled: e.target.checked } as any)}
+                            />
+                            <span className="text-sm text-slate-700 font-medium">Gastbestellungen erlauben</span>
+                        </label>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Wenn deaktiviert, müssen Kunden sich einloggen oder registrieren, um zu bestellen.
+                        </p>
+                    </div>
+
+                    <div className="pt-6 border-t border-slate-200">
                         <h4 className="font-bold text-slate-700 mb-4">Bestellnummern & Rechnungen</h4>
                         <div className="grid grid-cols-2 gap-6">
                             <div>

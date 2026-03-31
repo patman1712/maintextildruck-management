@@ -343,7 +343,7 @@ router.post('/:shopId/orders', async (req, res) => {
     if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
 
     // Get Shop Owner (Customer ID) and number circle config
-    const shop = db.prepare('SELECT customer_id, order_number_circle, next_order_number, donations_enabled FROM shops WHERE id = ?').get(shopId) as { customer_id: string, order_number_circle?: string, next_order_number?: number, donations_enabled?: any };
+    const shop = db.prepare('SELECT customer_id, order_number_circle, next_order_number, donations_enabled, guest_checkout_enabled FROM shops WHERE id = ?').get(shopId) as { customer_id: string, order_number_circle?: string, next_order_number?: number, donations_enabled?: any, guest_checkout_enabled?: any };
     if (!shop) return res.status(404).json({ success: false, error: 'Shop-Besitzer nicht gefunden.' });
 
     const { 
@@ -358,6 +358,10 @@ router.post('/:shopId/orders', async (req, res) => {
     } = req.body;
 
     console.log(`[Order] Data: Customer=${customerId}, Items=${items?.length}, Total=${totalAmount}`);
+
+    if ((shop.guest_checkout_enabled === 0 || shop.guest_checkout_enabled === false) && !customerId) {
+        return res.status(403).json({ success: false, error: 'Gastbestellungen sind in diesem Shop deaktiviert. Bitte einloggen oder registrieren.' });
+    }
 
     if (!address || !address.firstName || !address.lastName) {
         return res.status(400).json({ success: false, error: 'Bitte füllen Sie alle Pflichtfelder der Adresse aus.' });

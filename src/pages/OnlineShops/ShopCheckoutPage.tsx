@@ -18,6 +18,7 @@ const ShopCheckoutPage: React.FC = () => {
   const { shop, primaryColor, shopBaseUrl } = useOutletContext<ShopContext>();
   const { cart, currentCustomer, clearCart } = useShopStore();
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const guestCheckoutEnabled = (shop as any).guest_checkout_enabled === undefined || (shop as any).guest_checkout_enabled === null ? true : !!(shop as any).guest_checkout_enabled;
   const [shippingConfig, setShippingConfig] = useState<any>(null);
   const [shippingCost, setShippingCost] = useState(5.95);
   const [paypalConfig, setPaypalConfig] = useState<{ clientId: string, mode: string } | null>(null);
@@ -112,6 +113,12 @@ const ShopCheckoutPage: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState('PayPal');
 
   const handlePlaceOrder = async (transactionId?: string) => {
+    if (!guestCheckoutEnabled && !currentCustomer) {
+      const msg = 'Gastbestellungen sind in diesem Shop deaktiviert. Bitte einloggen oder registrieren.';
+      setError(msg);
+      alert(msg);
+      return;
+    }
     console.log('Place order clicked');
     setLoading(true);
     setError(null);
@@ -160,6 +167,12 @@ const ShopCheckoutPage: React.FC = () => {
       </div>
     );
   }
+
+  useEffect(() => {
+    if (!guestCheckoutEnabled && !currentCustomer && step !== 1) {
+      setStep(1);
+    }
+  }, [guestCheckoutEnabled, currentCustomer, step]);
 
   if (orderComplete) {
     return (
@@ -219,6 +232,17 @@ const ShopCheckoutPage: React.FC = () => {
                 <h2 className="text-xl font-black uppercase italic tracking-tight">Lieferadresse</h2>
               </div>
               
+              {!guestCheckoutEnabled && !currentCustomer && (
+                <div className="bg-red-50 p-6 rounded-xl border border-red-100 mb-8 space-y-3">
+                  <div className="text-sm text-red-700 font-black uppercase tracking-widest">Gastbestellung deaktiviert</div>
+                  <div className="text-sm text-red-700 font-medium">Bitte logge dich ein oder registriere dich, um zu bestellen.</div>
+                  <div className="flex gap-3 pt-2">
+                    <Link to={`${shopBaseUrl}/login`} className="px-4 py-2 bg-white border border-red-200 rounded-lg text-red-700 font-bold text-sm hover:bg-red-50">Einloggen</Link>
+                    <Link to={`${shopBaseUrl}/register`} className="px-4 py-2 bg-red-600 rounded-lg text-white font-bold text-sm hover:bg-red-700">Registrieren</Link>
+                  </div>
+                </div>
+              )}
+
               {!currentCustomer && (
                 <div className="bg-slate-50 p-6 rounded-xl border border-slate-100 mb-8 flex items-center justify-between">
                   <div className="text-sm text-slate-600 font-medium">Bereits ein Konto? Melde dich an für schnelleren Checkout.</div>
@@ -259,7 +283,8 @@ const ShopCheckoutPage: React.FC = () => {
                     console.log('Moving to step 2');
                     setStep(2);
                   }}
-                  className="px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all flex items-center group"
+                  disabled={!guestCheckoutEnabled && !currentCustomer}
+                  className="px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all flex items-center group disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ backgroundColor: primaryColor }}
                 >
                   <span>Weiter zur Zahlung</span>
@@ -375,6 +400,7 @@ const ShopCheckoutPage: React.FC = () => {
                         }}>
                             <PayPalButtons 
                                 style={{ layout: "vertical", shape: "rect", label: "pay" }}
+                                disabled={!guestCheckoutEnabled && !currentCustomer}
                                 createOrder={async (data, actions) => {
                                     try {
                                         const res = await fetch('/api/paypal/create-order', {
@@ -419,7 +445,7 @@ const ShopCheckoutPage: React.FC = () => {
                 ) : (
                     <button 
                     onClick={() => handlePlaceOrder()}
-                    disabled={loading}
+                    disabled={loading || (!guestCheckoutEnabled && !currentCustomer)}
                     className="px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all flex items-center group disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ backgroundColor: primaryColor }}
                     >

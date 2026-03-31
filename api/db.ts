@@ -815,6 +815,13 @@ try {
     db.exec('ALTER TABLE shops ADD COLUMN hero_enabled INTEGER DEFAULT 1');
   }
 
+  const shopColsGuestCheckout = db.prepare("PRAGMA table_info(shops)").all() as any[];
+  const hasGuestCheckoutEnabled = shopColsGuestCheckout.some(col => col.name === 'guest_checkout_enabled');
+  if (!hasGuestCheckoutEnabled) {
+    console.log('Migrating database: Adding guest_checkout_enabled to shops table');
+    db.exec('ALTER TABLE shops ADD COLUMN guest_checkout_enabled INTEGER DEFAULT 1');
+  }
+
   // Migration for Welcome Text
   const shopColsWelcome = db.prepare("PRAGMA table_info(shops)").all() as any[];
   const hasWelcomeText = shopColsWelcome.some(col => col.name === 'welcome_text');
