@@ -492,116 +492,127 @@ export default function NewOrder() {
     }
   };
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    // 1. Upload files first
-    const formData = new FormData();
-    files.forEach(f => formData.append('preview', f));
-    printFiles.forEach(f => formData.append('print', f.file));
-    vectorFiles.forEach(f => formData.append('vector', f));
-    internalFiles.forEach(f => formData.append('internal', f));
-    photoshopFiles.forEach(f => formData.append('photoshop', f));
-
-    let uploadedFiles: { name: string; type: 'preview' | 'print' | 'vector' | 'internal' | 'photoshop'; url?: string; customName?: string }[] = [];
-    
-    // Add existing attached files first
-    uploadedFiles = [...uploadedFiles, ...existingFilesToAttach, ...existingPreviewFiles];
+    if (isSubmitting) return; // Prevent double submission
+    setIsSubmitting(true);
 
     try {
-      // Only fetch if there are files
-      if (files.length > 0 || printFiles.length > 0 || vectorFiles.length > 0 || internalFiles.length > 0 || photoshopFiles.length > 0) {
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData
-        });
-        const data = await res.json();
+        // 1. Upload files first
+        const formData = new FormData();
+        files.forEach(f => formData.append('preview', f));
+        printFiles.forEach(f => formData.append('print', f.file));
+        vectorFiles.forEach(f => formData.append('vector', f));
+        internalFiles.forEach(f => formData.append('internal', f));
+        photoshopFiles.forEach(f => formData.append('photoshop', f));
+
+        let uploadedFiles: { name: string; type: 'preview' | 'print' | 'vector' | 'internal' | 'photoshop'; url?: string; customName?: string }[] = [];
         
-        if (data.success && data.files) {
-          if (data.files.preview) {
-            uploadedFiles = [...uploadedFiles, ...data.files.preview.map((f: any) => ({ name: f.originalName, type: 'preview' as const, url: f.path }))];
+        // Add existing attached files first
+        uploadedFiles = [...uploadedFiles, ...existingFilesToAttach, ...existingPreviewFiles];
+
+        try {
+          // Only fetch if there are files
+          if (files.length > 0 || printFiles.length > 0 || vectorFiles.length > 0 || internalFiles.length > 0 || photoshopFiles.length > 0) {
+            const res = await fetch('/api/upload', {
+              method: 'POST',
+              body: formData
+            });
+            const data = await res.json();
+            
+            if (data.success && data.files) {
+              if (data.files.preview) {
+                uploadedFiles = [...uploadedFiles, ...data.files.preview.map((f: any) => ({ name: f.originalName, type: 'preview' as const, url: f.path }))];
+              }
+              if (data.files.print) {
+                // Match uploaded files back to our state to get custom names
+                // The order should be preserved
+                uploadedFiles = [...uploadedFiles, ...data.files.print.map((f: any, i: number) => ({ 
+                    name: f.originalName, 
+                    type: 'print' as const, 
+                    url: f.path,
+                    thumbnail: f.thumbnail,
+                    customName: printFiles[i]?.customName || "",
+                    quantity: printFiles[i]?.quantity || 1
+                }))];
+              }
+              if (data.files.vector) {
+                uploadedFiles = [...uploadedFiles, ...data.files.vector.map((f: any) => ({ name: f.originalName, type: 'vector' as const, url: f.path }))];
+              }
+              if (data.files.internal) {
+                uploadedFiles = [...uploadedFiles, ...data.files.internal.map((f: any) => ({ name: f.originalName, type: 'internal' as const, url: f.path }))];
+              }
+              if (data.files.photoshop) {
+                uploadedFiles = [...uploadedFiles, ...data.files.photoshop.map((f: any) => ({ name: f.originalName, type: 'photoshop' as const, url: f.path, thumbnail: f.thumbnail }))];
+              }
+            }
           }
-          if (data.files.print) {
-            // Match uploaded files back to our state to get custom names
-            // The order should be preserved
-            uploadedFiles = [...uploadedFiles, ...data.files.print.map((f: any, i: number) => ({ 
-                name: f.originalName, 
-                type: 'print' as const, 
-                url: f.path,
-                thumbnail: f.thumbnail,
-                customName: printFiles[i]?.customName || "",
-                quantity: printFiles[i]?.quantity || 1
-            }))];
-          }
-          if (data.files.vector) {
-            uploadedFiles = [...uploadedFiles, ...data.files.vector.map((f: any) => ({ name: f.originalName, type: 'vector' as const, url: f.path }))];
-          }
-          if (data.files.internal) {
-            uploadedFiles = [...uploadedFiles, ...data.files.internal.map((f: any) => ({ name: f.originalName, type: 'internal' as const, url: f.path }))];
-          }
-          if (data.files.photoshop) {
-            uploadedFiles = [...uploadedFiles, ...data.files.photoshop.map((f: any) => ({ name: f.originalName, type: 'photoshop' as const, url: f.path, thumbnail: f.thumbnail }))];
-          }
+        } catch (err) {
+          console.error("Upload failed", err);
+          // Proceed without files or show error? For now proceed but maybe alert user
         }
-      }
-    } catch (err) {
-      console.error("Upload failed", err);
-      // Proceed without files or show error? For now proceed but maybe alert user
-    }
-    
-    let newCustomerId = selectedCustomerId;
+        
+        let newCustomerId = selectedCustomerId;
 
-    if (customerMode === "new" && saveAsNewCustomer && customerName) {
-        newCustomerId = Math.random().toString(36).substr(2, 9);
-        await addCustomer({
-            id: newCustomerId,
-            name: customerName,
-            contact_person: customerContactPerson,
-            email: customerEmail,
-            phone: customerPhone,
-            address: customerAddress,
-            created_at: new Date().toISOString()
-        });
-    }
-
-    const newOrder: Order = {
-      id: Math.random().toString(36).substr(2, 9),
-      title: title || "Neuer Auftrag",
-      orderNumber: orderNumber, // Include generated number
-      customerId: newCustomerId || undefined,
-      customerName: customerName || "Unbekannter Kunde",
-      customerContactPerson,
-      customerEmail,
-      customerPhone,
-      customerAddress,
-      deadline: deadline,
-      status: "active",
-      steps: { processing: false, produced: false, invoiced: false },
-      createdAt: new Date().toISOString().split('T')[0],
-      description: description,
-      employees: selectedEmployees,
-      files: uploadedFiles
-    };
-
-    await addOrder(newOrder);
-
-    // Add order items if any
-    if (orderItems.length > 0) {
-        for (const item of orderItems) {
-            await addOrderItem(newOrder.id, {
-                supplierId: item.supplierId,
-                itemName: item.itemName,
-                itemNumber: item.itemNumber,
-                color: item.color,
-                size: item.size,
-                quantity: item.quantity,
-                notes: item.notes,
-                price: item.price
+        if (customerMode === "new" && saveAsNewCustomer && customerName) {
+            newCustomerId = Math.random().toString(36).substr(2, 9);
+            await addCustomer({
+                id: newCustomerId,
+                name: customerName,
+                contact_person: customerContactPerson,
+                email: customerEmail,
+                phone: customerPhone,
+                address: customerAddress,
+                created_at: new Date().toISOString()
             });
         }
-    }
 
-    navigate("/dashboard/orders");
+        const newOrder: Order = {
+          id: Math.random().toString(36).substr(2, 9),
+          title: title || "Neuer Auftrag",
+          orderNumber: orderNumber, // Include generated number
+          customerId: newCustomerId || undefined,
+          customerName: customerName || "Unbekannter Kunde",
+          customerContactPerson,
+          customerEmail,
+          customerPhone,
+          customerAddress,
+          deadline: deadline,
+          status: "active",
+          steps: { processing: false, produced: false, invoiced: false },
+          createdAt: new Date().toISOString().split('T')[0],
+          description: description,
+          employees: selectedEmployees,
+          files: uploadedFiles
+        };
+
+        await addOrder(newOrder);
+
+        // Add order items if any
+        if (orderItems.length > 0) {
+            for (const item of orderItems) {
+                await addOrderItem(newOrder.id, {
+                    supplierId: item.supplierId,
+                    itemName: item.itemName,
+                    itemNumber: item.itemNumber,
+                    color: item.color,
+                    size: item.size,
+                    quantity: item.quantity,
+                    notes: item.notes,
+                    price: item.price
+                });
+            }
+        }
+
+        navigate("/dashboard/orders");
+    } catch (error) {
+        console.error("Error submitting new order:", error);
+        alert("Fehler beim Erstellen des Auftrags. Bitte versuchen Sie es erneut.");
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
   // --- Customer Product Logic ---
@@ -1728,15 +1739,27 @@ export default function NewOrder() {
           <button
             type="button"
             onClick={() => navigate("/dashboard")}
-            className="mr-4 px-6 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
+            disabled={isSubmitting}
+            className="mr-4 px-6 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none disabled:opacity-50"
           >
             Abbrechen
           </button>
           <button
             type="submit"
-            className="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-red-700 to-red-500 hover:from-red-800 hover:to-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transform transition-all active:scale-95"
+            disabled={isSubmitting}
+            className="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-gradient-to-r from-red-700 to-red-500 hover:from-red-800 hover:to-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transform transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
           >
-            Auftrag anlegen
+            {isSubmitting ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Wird gespeichert...
+              </>
+            ) : (
+              "Auftrag anlegen"
+            )}
           </button>
         </div>
       </form>
