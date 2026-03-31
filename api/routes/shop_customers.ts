@@ -363,8 +363,15 @@ router.post('/:shopId/orders', async (req, res) => {
         return res.status(403).json({ success: false, error: 'Gastbestellungen sind in diesem Shop deaktiviert. Bitte einloggen oder registrieren.' });
     }
 
-    if (!address || !address.firstName || !address.lastName) {
+    if (!address || !address.firstName || !address.lastName || !address.street || !address.zip || !address.city) {
         return res.status(400).json({ success: false, error: 'Bitte füllen Sie alle Pflichtfelder der Adresse aus.' });
+    }
+
+    if (!customerId) {
+        const email = String(address.email || '').trim();
+        if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+            return res.status(400).json({ success: false, error: 'Bitte geben Sie eine gültige E-Mail-Adresse an.' });
+        }
     }
 
     const orderId = crypto.randomUUID();

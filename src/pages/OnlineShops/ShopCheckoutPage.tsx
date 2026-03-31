@@ -111,6 +111,15 @@ const ShopCheckoutPage: React.FC = () => {
     phone: currentCustomer?.phone || ''
   });
   const [paymentMethod, setPaymentMethod] = useState('PayPal');
+  const isGuest = !currentCustomer;
+  const isEmailValid = !isGuest || /^\S+@\S+\.\S+$/.test(address.email);
+  const canProceedFromAddress =
+    !!address.firstName &&
+    !!address.lastName &&
+    !!address.street &&
+    !!address.zip &&
+    !!address.city &&
+    (!isGuest || isEmailValid);
 
   const handlePlaceOrder = async (transactionId?: string) => {
     if (!guestCheckoutEnabled && !currentCustomer) {
@@ -275,6 +284,27 @@ const ShopCheckoutPage: React.FC = () => {
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Stadt*</label>
                   <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.city} onChange={e => setAddress({...address, city: e.target.value})} />
                 </div>
+                <div className="col-span-full space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">E-Mail{isGuest ? '*' : ''}</label>
+                  <input
+                    type="email"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium"
+                    value={address.email}
+                    onChange={e => setAddress({...address, email: e.target.value})}
+                  />
+                  {isGuest && !isEmailValid && (
+                    <div className="text-xs text-red-600 font-bold">Bitte eine gültige E-Mail-Adresse eingeben.</div>
+                  )}
+                </div>
+                <div className="col-span-full space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Telefon (Optional)</label>
+                  <input
+                    type="tel"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium"
+                    value={address.phone}
+                    onChange={e => setAddress({...address, phone: e.target.value})}
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end pt-8">
@@ -283,7 +313,7 @@ const ShopCheckoutPage: React.FC = () => {
                     console.log('Moving to step 2');
                     setStep(2);
                   }}
-                  disabled={!guestCheckoutEnabled && !currentCustomer}
+                  disabled={(!guestCheckoutEnabled && !currentCustomer) || !canProceedFromAddress}
                   className="px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all flex items-center group disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ backgroundColor: primaryColor }}
                 >
