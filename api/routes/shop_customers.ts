@@ -292,6 +292,23 @@ router.get('/:shopId/orders/:customerId/:orderId', async (req, res) => {
   }
 });
 
+// Admin: Get order details (works for guest + registered)
+router.get('/:shopId/admin/orders/:orderId', async (req, res) => {
+  try {
+    const { shopId: rawShopId, orderId } = req.params;
+    const shopId = resolveShopId(rawShopId);
+    if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+
+    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND shop_id = ?').get(orderId, shopId);
+    if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
+
+    const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
+    res.json({ success: true, data: { ...(order as any), items } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Admin: Download Invoice PDF
 router.get('/:shopId/admin/orders/:orderId/invoice', async (req, res) => {
   try {

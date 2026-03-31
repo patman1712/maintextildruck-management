@@ -1486,9 +1486,18 @@ const ShopDashboard: React.FC = () => {
                                             <div className="flex items-center space-x-2">
                                                 <button 
                                                     onClick={async () => {
-                                                        const res = await fetch(`/api/shop-customers/${shopId}/orders/${order.shop_customer_id || 'guest'}/${order.id}`);
-                                                        const data = await res.json();
-                                                        if (data.success) setSelectedOrder(data.data);
+                                                        try {
+                                                            const res = await fetch(`/api/shop-customers/${shopId}/admin/orders/${order.id}`);
+                                                            const data = await res.json();
+                                                            if (data.success) {
+                                                                setSelectedOrder(data.data);
+                                                            } else {
+                                                                alert(data.error || 'Bestellung konnte nicht geladen werden.');
+                                                            }
+                                                        } catch (e) {
+                                                            console.error(e);
+                                                            alert('Bestellung konnte nicht geladen werden.');
+                                                        }
                                                     }}
                                                     className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg text-sm font-bold"
                                                 >
