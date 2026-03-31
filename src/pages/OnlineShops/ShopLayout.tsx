@@ -8,7 +8,7 @@ import { useShopStore } from '../../shopStore';
 const ShopLayout: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>();
   const location = useLocation();
-  const { currentCustomer, logout, cart, removeFromCart, updateQuantity, isCartOpen: cartOpen, setCartOpen } = useShopStore();
+  const { currentCustomer, logout, cart, removeFromCart, updateQuantity, isCartOpen: cartOpen, setCartOpen, setActiveShop } = useShopStore();
   const [shop, setShop] = useState<Shop | null>(null);
   
   // Determine if we are on a custom domain or subdomain route
@@ -69,6 +69,7 @@ const ShopLayout: React.FC = () => {
         const data = await res.json();
         if (data.success) {
           setShop(data.data);
+          setActiveShop(data.data.id);
           
           // Fetch categories
           const catRes = await fetch(`/api/shops/${data.data.id}/categories`);
@@ -89,10 +90,11 @@ const ShopLayout: React.FC = () => {
 
           // SECURITY FIX: Check if current logged-in customer belongs to this shop
           // If not, logout immediately to prevent cross-shop session leakage
-          if (currentCustomer && currentCustomer.shop_id !== data.data.id) {
+          const resolvedCustomer = useShopStore.getState().currentCustomer;
+          if (resolvedCustomer && resolvedCustomer.shop_id !== data.data.id) {
               console.warn('Customer session mismatch - logging out', { 
                   expected: data.data.id, 
-                  actual: currentCustomer.shop_id 
+                  actual: resolvedCustomer.shop_id 
               });
               logout();
               // Also clear cart as products likely belong to the other shop
@@ -112,7 +114,7 @@ const ShopLayout: React.FC = () => {
     if (identifier) {
       fetchShop();
     }
-  }, [identifier]);
+  }, [identifier, logout, setActiveShop]);
 
   useEffect(() => {
     if (shippingConfig && shippingConfig.shipping_tiers && Array.isArray(shippingConfig.shipping_tiers) && shippingConfig.shipping_tiers.length > 0) {

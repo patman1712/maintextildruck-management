@@ -31,9 +31,11 @@ export interface CartItem {
 }
 
 interface ShopState {
+  activeShopId: string | null;
   currentCustomer: ShopCustomer | null;
   cart: CartItem[];
   isCartOpen: boolean;
+  setActiveShop: (shopId: string) => void;
   login: (customer: ShopCustomer) => void;
   logout: () => void;
   addToCart: (item: CartItem) => void;
@@ -43,19 +45,61 @@ interface ShopState {
   setCartOpen: (open: boolean) => void;
 }
 
+const safeJsonParse = <T,>(value: string | null, fallback: T): T => {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const cartKeyForShop = (shopId: string | null) => (shopId ? `shopCart:${shopId}` : 'shopCart');
+const customerKeyForShop = (shopId: string | null) => (shopId ? `shopCustomer:${shopId}` : 'shopCustomer');
+
 export const useShopStore = create<ShopState>((set) => ({
-  currentCustomer: JSON.parse(localStorage.getItem('shopCustomer') || 'null'),
-  cart: JSON.parse(localStorage.getItem('shopCart') || '[]'),
+  activeShopId: null,
+  currentCustomer: safeJsonParse(localStorage.getItem('shopCustomer'), null),
+  cart: safeJsonParse(localStorage.getItem('shopCart'), []),
   isCartOpen: false,
+
+  setActiveShop: (shopId) => {
+    const scopedCartKey = cartKeyForShop(shopId);
+    const scopedCustomerKey = customerKeyForShop(shopId);
+
+    let cart = safeJsonParse<CartItem[]>(localStorage.getItem(scopedCartKey), []);
+    let customer = safeJsonParse<ShopCustomer | null>(localStorage.getItem(scopedCustomerKey), null);
+
+    const legacyCart = safeJsonParse<CartItem[]>(localStorage.getItem('shopCart'), []);
+    if (cart.length === 0 && legacyCart.length > 0 && !localStorage.getItem(scopedCartKey)) {
+      cart = legacyCart;
+      localStorage.setItem(scopedCartKey, JSON.stringify(legacyCart));
+      localStorage.removeItem('shopCart');
+    }
+
+    const legacyCustomer = safeJsonParse<ShopCustomer | null>(localStorage.getItem('shopCustomer'), null);
+    if (!customer && legacyCustomer && legacyCustomer.shop_id === shopId && !localStorage.getItem(scopedCustomerKey)) {
+      customer = legacyCustomer;
+      localStorage.setItem(scopedCustomerKey, JSON.stringify(legacyCustomer));
+      localStorage.removeItem('shopCustomer');
+    }
+
+    set({ activeShopId: shopId, cart, currentCustomer: customer, isCartOpen: false });
+  },
   
   login: (customer) => {
     set({ currentCustomer: customer });
-    localStorage.setItem('shopCustomer', JSON.stringify(customer));
+    const shopId = customer.shop_id;
+    localStorage.setItem(customerKeyForShop(shopId), JSON.stringify(customer));
   },
   
   logout: () => {
     set({ currentCustomer: null });
-    localStorage.removeItem('shopCustomer');
+    set((state) => {
+      localStorage.removeItem(customerKeyForShop(state.activeShopId));
+      localStorage.removeItem('shopCustomer');
+      return { currentCustomer: null };
+    });
   },
 
   setCartOpen: (open) => set({ isCartOpen: open }),
@@ -73,7 +117,7 @@ export const useShopStore = create<ShopState>((set) => ({
         updatedCart = [...state.cart, newItem];
       }
       
-      localStorage.setItem('shopCart', JSON.stringify(updatedCart));
+      localStorage.setItem(cartKeyForShop(state.activeShopId), JSON.stringify(updatedCart));
       return { cart: updatedCart, isCartOpen: true }; // Automatically open cart when adding
     });
   },
@@ -81,7 +125,7 @@ export const useShopStore = create<ShopState>((set) => ({
   removeFromCart: (id) => {
     set((state) => {
       const updatedCart = state.cart.filter(item => item.id !== id);
-      localStorage.setItem('shopCart', JSON.stringify(updatedCart));
+      localStorage.setItem(cartKeyForShop(state.activeShopId), JSON.stringify(updatedCart));
       return { cart: updatedCart };
     });
   },
@@ -91,13 +135,16 @@ export const useShopStore = create<ShopState>((set) => ({
       const updatedCart = state.cart.map(item => 
         item.id === id ? { ...item, quantity: Math.max(1, quantity) } : item
       );
-      localStorage.setItem('shopCart', JSON.stringify(updatedCart));
+      localStorage.setItem(cartKeyForShop(state.activeShopId), JSON.stringify(updatedCart));
       return { cart: updatedCart };
     });
   },
 
   clearCart: () => {
-    set({ cart: [] });
-    localStorage.removeItem('shopCart');
+    set((state) => {
+      localStorage.removeItem(cartKeyForShop(state.activeShopId));
+      localStorage.removeItem('shopCart');
+      return { cart: [] };
+    });
   },
 }));
