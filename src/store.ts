@@ -340,6 +340,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         customerAddress: o.customer_address,
         deadline: o.deadline,
         status: o.status,
+        shopId: o.shopId,
+        paymentMethod: o.paymentMethod,
+        paymentStatus: o.paymentStatus,
         steps: {
           processing: o.processing,
           produced: o.produced,

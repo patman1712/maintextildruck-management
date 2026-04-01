@@ -41,7 +41,11 @@ export default function DashboardHome() {
       .slice(0, 5);
 
   // 6. New Shop Orders
-  const newShopOrders = activeOrders.filter(o => o.shopId && !o.steps?.processing);
+  const newShopOrders = orders
+      .filter(o => o.id !== 'inventory-manual')
+      .filter(o => o.shopId)
+      .filter(o => o.status !== 'archived' && o.status !== 'completed' && o.status !== 'cancelled')
+      .filter(o => !o.steps?.processing);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
