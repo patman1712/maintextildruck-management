@@ -656,6 +656,9 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         // Exception: manual inventory order might be archived but contain active items, so we check it
         if (order.status === 'archived' && !showCompleted && order.id !== 'inventory-manual') return;
 
+        // Skip unpaid "vorkasse" orders
+        if (order.paymentMethod?.toLowerCase() === 'vorkasse' && order.paymentStatus !== 'paid') return;
+
         if (order.orderItems) {
             order.orderItems.forEach(item => {
                 // Filter based on completion status

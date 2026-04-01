@@ -87,6 +87,9 @@ export interface Order {
   approvalToken?: string;
   approvalComment?: string;
   shopwareOrderId?: string; // Shopware order ID for online orders
+  shopId?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
   trackingNumber?: string;
   labelUrl?: string;
   shippedAt?: string;

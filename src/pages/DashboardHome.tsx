@@ -40,11 +40,14 @@ export default function DashboardHome() {
       .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
       .slice(0, 5);
 
+  // 6. New Shop Orders
+  const newShopOrders = activeOrders.filter(o => o.shopId && !o.steps?.processing);
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       
       {/* ALERTS SECTION (Material & DTF) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Material */}
         <div className={`bg-white rounded-lg shadow-sm border p-6 ${pendingSuppliers.length > 0 ? 'border-l-4 border-l-red-500' : 'border-gray-200'}`}>
             <div className="flex items-center justify-between mb-4">
@@ -102,6 +105,37 @@ export default function DashboardHome() {
                 </div>
             ) : (
                 <p className="text-gray-500 text-sm">Alle Druckdaten sind bestellt.</p>
+            )}
+        </div>
+
+        {/* NEW SHOP ORDERS */}
+        <div className={`bg-white rounded-lg shadow-sm border p-6 ${newShopOrders.length > 0 ? 'border-l-4 border-l-blue-500' : 'border-gray-200'}`}>
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-lg text-slate-800 flex items-center">
+                    <ShoppingCart className={`mr-2 ${newShopOrders.length > 0 ? 'text-blue-500' : 'text-gray-400'}`} />
+                    Neue Online Shop Bestellungen
+                </h3>
+                {newShopOrders.length > 0 && <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs font-bold">{newShopOrders.length} Neu</span>}
+            </div>
+            
+            {newShopOrders.length > 0 ? (
+                <div className="space-y-2">
+                    <p className="text-sm text-gray-600 mb-2">Folgende Shop-Bestellungen sind noch nicht in Bearbeitung:</p>
+                    <div className="flex flex-col gap-2">
+                        {newShopOrders.slice(0, 5).map(o => (
+                            <Link key={o.id} to={`/dashboard/orders/${o.id}`} className="bg-blue-50 border border-blue-100 text-blue-800 px-3 py-2 rounded text-sm font-medium hover:bg-blue-100 flex justify-between items-center">
+                                <span>{o.orderNumber}</span>
+                                <span className="text-xs text-blue-600">{new Date(o.deadline).toLocaleDateString('de-DE')}</span>
+                            </Link>
+                        ))}
+                        {newShopOrders.length > 5 && <span className="text-gray-500 text-sm flex items-center">+{newShopOrders.length - 5} weitere</span>}
+                    </div>
+                    <Link to="/dashboard/orders" className="text-sm text-blue-600 font-medium hover:underline mt-3 inline-block">
+                        Zu den Aufträgen &rarr;
+                    </Link>
+                </div>
+            ) : (
+                <p className="text-gray-500 text-sm">Keine neuen Shop-Bestellungen.</p>
             )}
         </div>
       </div>
