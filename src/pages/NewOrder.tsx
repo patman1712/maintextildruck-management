@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Upload, Plus, X, User, Calendar, FileText, ShoppingCart, Trash2, Package, Shield, Layers, Edit } from "lucide-react";
 import { useAppStore, Order } from "@/store";
 import { useNavigate } from "react-router-dom";
@@ -38,6 +38,7 @@ export default function NewOrder() {
   const suppliers = useAppStore((state) => state.suppliers);
   
   const [customerMode, setCustomerMode] = useState<"existing" | "new">("existing");
+  const [customerSearchTerm, setCustomerSearchTerm] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [existingPreviewFiles, setExistingPreviewFiles] = useState<{name: string, url: string, type: 'preview'}[]>([]);
   const [showPreviewSelector, setShowPreviewSelector] = useState(false);
@@ -272,6 +273,16 @@ export default function NewOrder() {
       setCustomerAddress("");
     }
   };
+
+  const filteredCustomers = useMemo(() => {
+    const q = customerSearchTerm.trim().toLowerCase();
+    return [...customers]
+      .sort((a, b) => (a.name || '').localeCompare((b.name || ''), 'de', { sensitivity: 'base' }))
+      .filter(c => {
+        if (!q) return true;
+        return (c.name || '').toLowerCase().includes(q);
+      });
+  }, [customers, customerSearchTerm]);
 
   const [showFileSelector, setShowFileSelector] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -814,6 +825,7 @@ export default function NewOrder() {
                     setCustomerPhone("");
                     setCustomerAddress("");
                     setSaveAsNewCustomer(true);
+                    setCustomerSearchTerm("");
                 }}
                 className={`px-4 py-1 text-sm font-medium rounded-md transition-all ${
                   customerMode === "new" ? "bg-white text-red-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
@@ -827,12 +839,20 @@ export default function NewOrder() {
           {customerMode === "existing" && (
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-1">Kunde suchen</label>
+              <input
+                type="text"
+                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500 border p-2 mb-2"
+                placeholder="Name eingeben zum Filtern…"
+                value={customerSearchTerm}
+                onChange={(e) => setCustomerSearchTerm(e.target.value)}
+              />
               <select 
                 className="w-full border-gray-300 rounded-md shadow-sm focus:ring-red-500 focus:border-red-500 border p-2"
                 onChange={handleCustomerSelect}
+                value={selectedCustomerId}
               >
                 <option value="">Bitte wählen...</option>
-                {customers.map(customer => (
+                {filteredCustomers.map(customer => (
                     <option key={customer.id} value={customer.id}>{customer.name}</option>
                 ))}
               </select>
