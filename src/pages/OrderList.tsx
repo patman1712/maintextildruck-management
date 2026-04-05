@@ -63,15 +63,24 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
   }, [filter, parsedParams, searchTerm, statusFilter]);
 
   useEffect(() => {
+      const canonicalize = (p: URLSearchParams) => {
+          const entries = Array.from(p.entries()).filter(([k]) => k === 'q' || k === 'status');
+          entries.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+          return entries.map(([k, v]) => `${k}=${v}`).join('&');
+      };
+
       const desiredParams = new URLSearchParams();
-      const q = searchTerm.trim();
-      if (q) desiredParams.set('q', q);
+      if (searchTerm !== '') desiredParams.set('q', searchTerm);
       if (!filter) desiredParams.set('status', statusFilter);
 
-      const desired = desiredParams.toString();
-      const current = new URLSearchParams(location.search).toString();
-      if (desired !== current) {
-          navigate({ pathname: location.pathname, search: desired ? `?${desired}` : '' }, { replace: true });
+      const desiredCanonical = canonicalize(desiredParams);
+      const currentCanonical = canonicalize(new URLSearchParams(location.search));
+
+      if (desiredCanonical !== currentCanonical) {
+          navigate(
+              { pathname: location.pathname, search: desiredParams.toString() ? `?${desiredParams.toString()}` : '' },
+              { replace: true }
+          );
       }
   }, [filter, location.pathname, location.search, navigate, searchTerm, statusFilter]);
 
