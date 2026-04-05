@@ -436,7 +436,16 @@ const ShopCheckoutPage: React.FC = () => {
                                         const res = await fetch('/api/paypal/create-order', {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ amount: total.toFixed(2), currency: "EUR" })
+                                            body: JSON.stringify({
+                                                amount: total.toFixed(2),
+                                                currency: "EUR",
+                                                shipping: shipping.toFixed(2),
+                                                items: cart.map(i => ({
+                                                    name: i.name,
+                                                    quantity: i.quantity,
+                                                    unit_amount: i.price
+                                                }))
+                                            })
                                         });
                                         const json = await res.json();
                                         if (!json.success) throw new Error(json.error?.message || 'Unknown error');

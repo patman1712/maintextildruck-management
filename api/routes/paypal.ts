@@ -67,7 +67,7 @@ router.get('/config', (req, res) => {
 // Create Order
 router.post('/create-order', async (req, res) => {
     try {
-        const { amount, currency } = req.body; // Expecting { value: "10.00", currency_code: "EUR" }
+        const { amount, currency, items, shipping } = req.body;
 
         const config = db.prepare("SELECT * FROM global_payment_config WHERE id = 'main'").get() as any;
         if (!config || !config.paypal_client_id || !config.paypal_client_secret) {
@@ -80,15 +80,52 @@ router.post('/create-order', async (req, res) => {
             ? 'https://api-m.paypal.com/v2/checkout/orders'
             : 'https://api-m.sandbox.paypal.com/v2/checkout/orders';
 
+        const currencyCode = currency || 'EUR';
+        const normalizedItems = Array.isArray(items) ? items : [];
+        const parsedShipping = Number.parseFloat(String(shipping ?? '0')) || 0;
+        const parsedAmount = Number.parseFloat(String(amount ?? '0')) || 0;
+
+        const toCents = (v: number) => Math.round(v * 100);
+        const itemTotalCents = normalizedItems.reduce((sum: number, it: any) => {
+            const unit = Number.parseFloat(String(it?.unit_amount ?? it?.price ?? '0')) || 0;
+            const qty = Number.parseInt(String(it?.quantity ?? '1'), 10) || 1;
+            return sum + toCents(unit) * Math.max(1, qty);
+        }, 0);
+        const shippingCents = toCents(parsedShipping);
+        const computedTotalCents = itemTotalCents + shippingCents;
+        const providedTotalCents = toCents(parsedAmount);
+
+        if (normalizedItems.length > 0 && Math.abs(computedTotalCents - providedTotalCents) > 1) {
+            return res.status(400).json({ success: false, error: { message: 'Totals mismatch' } });
+        }
+
         const payload = {
             intent: 'CAPTURE',
             purchase_units: [{
                 amount: {
-                    currency_code: currency || 'EUR',
-                    value: amount
+                    currency_code: currencyCode,
+                    value: (normalizedItems.length > 0 ? (computedTotalCents / 100) : parsedAmount).toFixed(2),
+                    breakdown: normalizedItems.length > 0 ? {
+                        item_total: { currency_code: currencyCode, value: (itemTotalCents / 100).toFixed(2) },
+                        shipping: { currency_code: currencyCode, value: (shippingCents / 100).toFixed(2) }
+                    } : undefined
                 }
-            }]
+            }],
+            application_context: {
+                shipping_preference: 'GET_FROM_FILE'
+            }
         };
+
+        if (normalizedItems.length > 0) {
+            (payload.purchase_units[0] as any).items = normalizedItems.map((it: any) => ({
+                name: String(it?.name || 'Artikel').slice(0, 127),
+                quantity: String(Math.max(1, Number.parseInt(String(it?.quantity ?? '1'), 10) || 1)),
+                unit_amount: {
+                    currency_code: currencyCode,
+                    value: (Number.parseFloat(String(it?.unit_amount ?? it?.price ?? '0')) || 0).toFixed(2)
+                }
+            }));
+        }
 
         const response = await fetch(url, {
             method: 'POST',
