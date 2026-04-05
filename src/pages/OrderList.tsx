@@ -10,11 +10,29 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
   const loading = useAppStore((state) => state.loading);
   const fetchData = useAppStore((state) => state.fetchData);
   const toggleOrderStep = useAppStore((state) => state.toggleOrderStep);
-  const parsedParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const [searchTerm, setSearchTerm] = useState(() => parsedParams.get('q') || "");
+  const listStateKey = useMemo(() => `ordersListState:${location.pathname}`, [location.pathname]);
+  const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const [searchTerm, setSearchTerm] = useState(() => {
+      try {
+          const raw = sessionStorage.getItem(`ordersListState:${window.location.pathname}`);
+          if (raw) {
+              const parsed = JSON.parse(raw);
+              if (typeof parsed?.q === 'string') return parsed.q;
+          }
+      } catch {}
+      return urlParams.get('q') || "";
+  });
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">(() => {
       if (filter) return filter;
-      const s = parsedParams.get('status');
+      try {
+          const raw = sessionStorage.getItem(`ordersListState:${window.location.pathname}`);
+          if (raw) {
+              const parsed = JSON.parse(raw);
+              const s = parsed?.status;
+              if (s === 'all' || s === 'active' || s === 'completed') return s;
+          }
+      } catch {}
+      const s = urlParams.get('status');
       return s === 'all' || s === 'active' || s === 'completed' ? s : 'active';
   });
   const [approvalInfoOrder, setApprovalInfoOrder] = useState<Order | null>(null);
@@ -50,39 +68,38 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
     }
   };
 
-  const scrollKey = useMemo(() => `ordersListScroll:${location.pathname}${location.search}`, [location.pathname, location.search]);
+  const scrollKey = useMemo(() => `ordersListScroll:${location.pathname}`, [location.pathname]);
 
   useEffect(() => {
-      const nextSearchTerm = parsedParams.get('q') || "";
-      if (nextSearchTerm !== searchTerm) setSearchTerm(nextSearchTerm);
+      try {
+          const raw = sessionStorage.getItem(listStateKey);
+          if (raw) {
+              const parsed = JSON.parse(raw);
+              if (typeof parsed?.q === 'string') setSearchTerm(parsed.q);
+              if (!filter) {
+                  const s = parsed?.status;
+                  if (s === 'all' || s === 'active' || s === 'completed') setStatusFilter(s);
+              }
+              return;
+          }
+      } catch {}
+
+      const nextSearchTerm = urlParams.get('q') || "";
+      setSearchTerm(nextSearchTerm);
       if (!filter) {
-          const s = parsedParams.get('status');
+          const s = urlParams.get('status');
           const nextStatus: any = s === 'all' || s === 'active' || s === 'completed' ? s : 'active';
-          if (nextStatus !== statusFilter) setStatusFilter(nextStatus);
+          setStatusFilter(nextStatus);
       }
-  }, [filter, parsedParams, searchTerm, statusFilter]);
+  }, [filter, listStateKey, urlParams]);
 
   useEffect(() => {
-      const canonicalize = (p: URLSearchParams) => {
-          const entries = Array.from(p.entries()).filter(([k]) => k === 'q' || k === 'status');
-          entries.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
-          return entries.map(([k, v]) => `${k}=${v}`).join('&');
-      };
-
-      const desiredParams = new URLSearchParams();
-      if (searchTerm !== '') desiredParams.set('q', searchTerm);
-      if (!filter) desiredParams.set('status', statusFilter);
-
-      const desiredCanonical = canonicalize(desiredParams);
-      const currentCanonical = canonicalize(new URLSearchParams(location.search));
-
-      if (desiredCanonical !== currentCanonical) {
-          navigate(
-              { pathname: location.pathname, search: desiredParams.toString() ? `?${desiredParams.toString()}` : '' },
-              { replace: true }
-          );
-      }
-  }, [filter, location.pathname, location.search, navigate, searchTerm, statusFilter]);
+      const payload: any = { q: searchTerm };
+      if (!filter) payload.status = statusFilter;
+      try {
+          sessionStorage.setItem(listStateKey, JSON.stringify(payload));
+      } catch {}
+  }, [filter, listStateKey, searchTerm, statusFilter]);
 
   useEffect(() => {
       const restoreKey = sessionStorage.getItem('ordersListRestoreKey');
