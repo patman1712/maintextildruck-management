@@ -1,16 +1,22 @@
 import { useAppStore, Order, OrderSteps } from "@/store";
 import { Folder, Search, Filter, Calendar, User, Eye, Printer, MoreHorizontal, Settings, CheckCircle, FileText, Edit, PenTool, Archive, Share2, XCircle, Info, RefreshCw, X, DownloadCloud, ShoppingCart } from "lucide-react";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 export default function OrderList({ filter, source }: { filter?: "active" | "completed", source?: "manual" | "online" }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const orders = useAppStore((state) => state.orders);
   const loading = useAppStore((state) => state.loading);
   const fetchData = useAppStore((state) => state.fetchData);
   const toggleOrderStep = useAppStore((state) => state.toggleOrderStep);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">(filter || "active");
+  const parsedParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const [searchTerm, setSearchTerm] = useState(() => parsedParams.get('q') || "");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "completed">(() => {
+      if (filter) return filter;
+      const s = parsedParams.get('status');
+      return s === 'all' || s === 'active' || s === 'completed' ? s : 'active';
+  });
   const [approvalInfoOrder, setApprovalInfoOrder] = useState<Order | null>(null);
 
   const [statusUpdateModal, setStatusUpdateModal] = useState<{ order: Order, isOpen: boolean } | null>(null);
@@ -42,6 +48,49 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
         alert('Netzwerkfehler beim Synchronisieren');
         console.error(err);
     }
+  };
+
+  const scrollKey = useMemo(() => `ordersListScroll:${location.pathname}${location.search}`, [location.pathname, location.search]);
+
+  useEffect(() => {
+      const nextSearchTerm = parsedParams.get('q') || "";
+      if (nextSearchTerm !== searchTerm) setSearchTerm(nextSearchTerm);
+      if (!filter) {
+          const s = parsedParams.get('status');
+          const nextStatus: any = s === 'all' || s === 'active' || s === 'completed' ? s : 'active';
+          if (nextStatus !== statusFilter) setStatusFilter(nextStatus);
+      }
+  }, [filter, parsedParams, searchTerm, statusFilter]);
+
+  useEffect(() => {
+      const next = new URLSearchParams(location.search);
+      if (searchTerm) next.set('q', searchTerm);
+      else next.delete('q');
+
+      if (!filter) next.set('status', statusFilter);
+      else next.delete('status');
+
+      const nextSearch = next.toString();
+      const desired = nextSearch ? `?${nextSearch}` : '';
+      if (desired !== location.search) {
+          navigate({ pathname: location.pathname, search: desired }, { replace: true });
+      }
+  }, [filter, location.pathname, location.search, navigate, searchTerm, statusFilter]);
+
+  useEffect(() => {
+      const restoreKey = sessionStorage.getItem('ordersListRestoreKey');
+      if (restoreKey !== scrollKey) return;
+      const y = Number(sessionStorage.getItem(scrollKey) || '0');
+      sessionStorage.removeItem('ordersListRestoreKey');
+      requestAnimationFrame(() => {
+          window.scrollTo(0, Math.max(0, y));
+      });
+  }, [scrollKey]);
+
+  const handleOpenOrder = (orderId: string) => {
+      sessionStorage.setItem('ordersListRestoreKey', scrollKey);
+      sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
+      navigate(`/dashboard/orders/${orderId}`);
   };
 
   const handleImportSingle = async () => {
@@ -407,7 +456,7 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                   <tr 
                     key={order.id} 
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/dashboard/orders/${order.id}`)}
+                    onClick={() => handleOpenOrder(order.id)}
                   >
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
