@@ -63,17 +63,15 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
   }, [filter, parsedParams, searchTerm, statusFilter]);
 
   useEffect(() => {
-      const next = new URLSearchParams(location.search);
-      if (searchTerm) next.set('q', searchTerm);
-      else next.delete('q');
+      const desiredParams = new URLSearchParams();
+      const q = searchTerm.trim();
+      if (q) desiredParams.set('q', q);
+      if (!filter) desiredParams.set('status', statusFilter);
 
-      if (!filter) next.set('status', statusFilter);
-      else next.delete('status');
-
-      const nextSearch = next.toString();
-      const desired = nextSearch ? `?${nextSearch}` : '';
-      if (desired !== location.search) {
-          navigate({ pathname: location.pathname, search: desired }, { replace: true });
+      const desired = desiredParams.toString();
+      const current = new URLSearchParams(location.search).toString();
+      if (desired !== current) {
+          navigate({ pathname: location.pathname, search: desired ? `?${desired}` : '' }, { replace: true });
       }
   }, [filter, location.pathname, location.search, navigate, searchTerm, statusFilter]);
 
@@ -302,8 +300,11 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Aufträge...</div>;
 
   const filteredOrders = orders.filter((order) => {
-    const matchesSearch = order.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          order.customerName.toLowerCase().includes(searchTerm.toLowerCase());
+    const q = searchTerm.trim().toLowerCase();
+    const title = String(order.title || '').toLowerCase();
+    const customer = String((order as any).customerName || (order as any).customer_name || '').toLowerCase();
+    const number = String((order as any).orderNumber || (order as any).order_number || '').toLowerCase();
+    const matchesSearch = !q || title.includes(q) || customer.includes(q) || number.includes(q);
     
     // If a prop filter is provided, force it. Otherwise use the dropdown.
     const effectiveStatusFilter = filter || statusFilter;
@@ -343,7 +344,7 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
     // Hide manual invoices from Order List (they appear in Invoice List)
     if (order.status === 'manual_invoice') return false;
 
-    return matchesSearch;
+    return matchesSearch && matchesStatus;
   });
 
   const StepButton = ({ active, onClick, icon: Icon, label, colorClass }: { active: boolean, onClick: () => void, icon: any, label: string, colorClass: string }) => (
