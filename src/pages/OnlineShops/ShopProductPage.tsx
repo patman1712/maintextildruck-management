@@ -87,8 +87,8 @@ const ShopProductPage: React.FC = () => {
       variantDefinitions.find(v => v.type === 'back_print'),
   [variantDefinitions]);
 
-  const sizeVariant = React.useMemo(() => 
-      variantDefinitions.find(v => v.type === 'size'),
+  const sizeVariants = React.useMemo(() => 
+      variantDefinitions.filter(v => v.type === 'size'),
   [variantDefinitions]);
 
   const colorVariant = React.useMemo(() => 
@@ -127,14 +127,26 @@ const ShopProductPage: React.FC = () => {
       }
 
       // Fallback: Use product.size string or dedicated 'size' variant if no main variants exist
-      if (sizeVariant && sizeVariant.values.length > 0) return sizeVariant.values;
+      if (sizeVariants.length > 0) {
+          const seen = new Set<string>();
+          const merged: string[] = [];
+          for (const v of sizeVariants) {
+              for (const val of v.values) {
+                  if (!val) continue;
+                  if (seen.has(val)) continue;
+                  seen.add(val);
+                  merged.push(val);
+              }
+          }
+          if (merged.length > 0) return merged;
+      }
       
       if (product?.size && product.size.trim().length > 0) {
           return product.size.split(',').map((s: any) => s.trim()).filter((s: string) => s !== '');
       }
       
       return []; 
-  }, [product, variantDefinitions, selectedVariantId, groupVariants, sizeVariant]);
+  }, [product, selectedVariantId, groupVariants, sizeVariants, variantDefinitions]);
   
   const availableBackPrints = React.useMemo(() => {
       if (backPrintVariant) return backPrintVariant.values;
@@ -638,7 +650,7 @@ const ShopProductPage: React.FC = () => {
                                         setSelectedVariantValues(prev => {
                                             const next = { ...prev };
                                             if (selectedVariantId) delete next[selectedVariantId];
-                                            if (sizeVariant) delete next[sizeVariant.id];
+                                            for (const v of sizeVariants) delete next[v.id];
                                             return next;
                                         });
                                     }}
@@ -673,15 +685,15 @@ const ShopProductPage: React.FC = () => {
                             setSelectedVariantValues(prev => {
                                 const next = { ...prev };
                                 if (selectedVariantId) delete next[selectedVariantId];
-                                if (sizeVariant) delete next[sizeVariant.id];
+                                for (const v of sizeVariants) delete next[v.id];
                                 return next;
                             });
                             return;
                         }
                         if (selectedVariantId) {
                             setSelectedVariantValues(prev => ({ ...prev, [selectedVariantId]: val }));
-                        } else if (sizeVariant) {
-                            setSelectedVariantValues(prev => ({ ...prev, [sizeVariant.id]: val }));
+                        } else if (sizeVariants.length === 1) {
+                            setSelectedVariantValues(prev => ({ ...prev, [sizeVariants[0].id]: val }));
                         }
                     }}
                 >
