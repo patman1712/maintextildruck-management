@@ -63,7 +63,69 @@ export class DhlClient {
         
         // Fallback: If no number found, put everything in name and '1' in number (bad, but better than crash)
         // Ideally we should try to extract number differently or let user fix it
-        return { name: address, number: '1' };
+        return { name: address.trim(), number: '' };
+    }
+
+    private parseGermanAddress(raw: string) {
+        const cleaned = String(raw || '')
+            .replace(/\r/g, '\n')
+            .replace(/\n+/g, '\n')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (!cleaned) {
+            return { street: '', house: '', zip: '', city: '' };
+        }
+
+        let streetLine = cleaned;
+        let zipCityLine = '';
+
+        if (cleaned.includes(',')) {
+            const parts = cleaned.split(',').map(p => p.trim()).filter(Boolean);
+            if (parts.length >= 2) {
+                streetLine = parts[0];
+                zipCityLine = parts.slice(1).join(' ');
+            }
+        } else if (cleaned.includes('\n')) {
+            const parts = cleaned.split('\n').map(p => p.trim()).filter(Boolean);
+            if (parts.length >= 2) {
+                streetLine = parts[0];
+                zipCityLine = parts.slice(1).join(' ');
+            }
+        } else {
+            const m = cleaned.match(/^(.*)\s+(\d{5})\s+(.+)$/);
+            if (m) {
+                streetLine = m[1].trim();
+                zipCityLine = `${m[2]} ${m[3]}`.trim();
+            }
+        }
+
+        const streetParts = this.splitStreet(streetLine);
+        let zip = '';
+        let city = '';
+
+        if (zipCityLine) {
+            const m = zipCityLine.match(/^\s*(\d{5})\s+(.+?)\s*$/);
+            if (m) {
+                zip = m[1];
+                city = m[2];
+            }
+        }
+
+        if (!zip || !city) {
+            const m = cleaned.match(/(\d{5})\s+([A-Za-zÄÖÜäöüß .'-]+)\s*$/);
+            if (m) {
+                zip = zip || m[1];
+                city = city || m[2].trim();
+            }
+        }
+
+        return {
+            street: streetParts.name || streetLine.trim(),
+            house: streetParts.number || '',
+            zip,
+            city
+        };
     }
 
     public async checkConnection() {
@@ -138,14 +200,21 @@ export class DhlClient {
         tomorrow.setDate(tomorrow.getDate() + 1);
         const shipmentDate = tomorrow.toISOString().split('T')[0];
 
-        // Determine address fields from various possible properties
-        const streetRaw = order.shipping_street || order.billing_street || order.street || order.customer_address || '';
+        const streetRaw = order.shipping_street || order.billing_street || order.street || '';
+        const addressRaw = order.shipping_address || order.billing_address || order.customer_address || '';
         const zipRaw = order.shipping_zip || order.billing_zip || order.zip || '';
         const cityRaw = order.shipping_city || order.billing_city || order.city || '';
         const countryRaw = order.shipping_country || order.billing_country || order.country || 'DEU';
 
-        // Split street and number for receiver
-        const receiverAddress = this.splitStreet(streetRaw);
+        const parsed = this.parseGermanAddress(addressRaw);
+        const receiverStreet = (streetRaw || parsed.street).trim();
+        const receiverHouse = (parsed.house || '').trim();
+        const receiverZip = String(zipRaw || parsed.zip || '').trim();
+        const receiverCity = String(cityRaw || parsed.city || '').trim();
+
+        const receiverAddress = this.splitStreet(receiverStreet);
+        const receiverStreetName = receiverAddress.name || receiverStreet;
+        const receiverStreetNumber = receiverAddress.number || receiverHouse;
 
         // Ensure weights are valid numbers
         let weight = parseFloat(order.weight) || 1.0;
@@ -153,7 +222,23 @@ export class DhlClient {
 
         // Ensure proper types for street numbers
         const shipperStreetNumber = sender.street_number ? String(sender.street_number) : '1';
-        const receiverStreetNumber = receiverAddress.number ? String(receiverAddress.number) : '1';
+        const receiverStreetNumberFinal = receiverStreetNumber ? String(receiverStreetNumber) : '';
+
+        const firstName = typeof order.first_name === 'string' ? order.first_name.trim() : '';
+        const lastName = typeof order.last_name === 'string' ? order.last_name.trim() : '';
+        const customerName = typeof order.customer_name === 'string' ? order.customer_name.trim() : '';
+        const consigneeName = (`${firstName} ${lastName}`.trim() || customerName || 'Kunde').substring(0, 35);
+
+        const missing: string[] = [];
+        if (!receiverStreetName) missing.push('Straße');
+        if (!receiverStreetNumberFinal) missing.push('Hausnummer');
+        if (!receiverZip) missing.push('PLZ');
+        if (!receiverCity) missing.push('Ort');
+        if (missing.length > 0) {
+            const err = new Error(`Empfängeradresse unvollständig: ${missing.join(', ')}. Bitte Adresse im Auftrag/Kundenkonto korrekt pflegen.`);
+            (err as any).payload = { receiverStreetName, receiverStreetNumberFinal, receiverZip, receiverCity, addressRaw, streetRaw };
+            throw err;
+        }
 
         // Prepare REST JSON Payload (Updated based on DHL Support feedback)
         const payload = {
@@ -170,11 +255,11 @@ export class DhlClient {
                     country: 'DEU'
                 },
                 consignee: {
-                    name1: (`${order.first_name} ${order.last_name}`.trim() || order.customer_name || 'Kunde').substring(0, 35),
-                    addressStreet: (receiverAddress.name || '').substring(0, 35),
-                    addressHouse: receiverStreetNumber.substring(0, 5),
-                    postalCode: zipRaw.substring(0, 10),
-                    city: cityRaw.substring(0, 35),
+                    name1: consigneeName,
+                    addressStreet: receiverStreetName.substring(0, 35),
+                    addressHouse: receiverStreetNumberFinal.substring(0, 5),
+                    postalCode: receiverZip.substring(0, 10),
+                    city: receiverCity.substring(0, 35),
                     country: countryRaw
                 },
                 details: {
