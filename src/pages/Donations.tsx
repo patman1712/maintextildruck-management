@@ -26,6 +26,7 @@ export default function Donations() {
   const [shareLinks, setShareLinks] = useState<Record<string, any>>({})
   const [sharePassword, setSharePassword] = useState<string>("")
   const [shareSaving, setShareSaving] = useState<boolean>(false)
+  const [showSharePassword, setShowSharePassword] = useState<boolean>(false)
 
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
@@ -77,7 +78,19 @@ export default function Donations() {
 
   useEffect(() => {
     setSharePassword("")
+    setShowSharePassword(false)
   }, [shopId])
+
+  const generatePassword = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+    let out = ""
+    const bytes = new Uint32Array(16)
+    crypto.getRandomValues(bytes)
+    for (let i = 0; i < bytes.length; i++) {
+      out += chars[bytes[i] % chars.length]
+    }
+    return out
+  }
 
   const updateShareLink = async (payload: any) => {
     if (!shopId) return
@@ -262,13 +275,36 @@ export default function Donations() {
                 <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Passwort (optional)</label>
                 <div className="flex flex-col md:flex-row gap-2">
                   <input
-                    type="password"
+                    type={showSharePassword ? "text" : "password"}
                     className="w-full border border-slate-300 rounded-lg p-2 text-sm"
                     placeholder={shareLinks[shopId]?.has_password ? "Passwort ändern…" : "Passwort setzen…"}
                     value={sharePassword}
                     onChange={(e) => setSharePassword(e.target.value)}
                     disabled={shareSaving}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowSharePassword((v) => !v)}
+                    disabled={shareSaving}
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    {showSharePassword ? "Verbergen" : "Anzeigen"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const pw = generatePassword()
+                      setSharePassword(pw)
+                      setShowSharePassword(true)
+                      try {
+                        navigator.clipboard.writeText(pw)
+                      } catch {}
+                    }}
+                    disabled={shareSaving}
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Generieren
+                  </button>
                   <button
                     onClick={() => updateShareLink({ password: sharePassword })}
                     disabled={shareSaving}
