@@ -53,7 +53,6 @@ export default function Donations() {
   const [loading, setLoading] = useState(true)
   const [shopId, setShopId] = useState<string>("")
   const [showPaid, setShowPaid] = useState<boolean>(false)
-  const [savingId, setSavingId] = useState<string | null>(null)
   const [expandedOrderKey, setExpandedOrderKey] = useState<string | null>(null)
   const [shareLinks, setShareLinks] = useState<Record<string, any>>({})
   const [sharePassword, setSharePassword] = useState<string>("")
@@ -196,6 +195,10 @@ export default function Donations() {
     setExpandedPaymentOrders(null)
   }, [shopId])
 
+  useEffect(() => {
+    if (showPaid) setSelectedOrderIds({})
+  }, [showPaid])
+
   const fetchShareLinkDetail = async () => {
     if (!shopId) return
     try {
@@ -242,27 +245,6 @@ export default function Donations() {
       }
     } finally {
       setShareSaving(false)
-    }
-  }
-
-  const toggleOrderPaid = async (order: DonationOrder) => {
-    if (!order.order_id) return
-    setSavingId(order.key)
-    try {
-      const paid = !order.paid
-      const res = await fetch(`/api/donations/order/${order.order_id}/paid`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paid, paidBy: currentUser?.name || null }),
-      })
-      const data = await res.json()
-      if (data.success && Array.isArray(data.data)) {
-        const updated = new Map<string, any>()
-        for (const r of data.data) updated.set(r.id, r)
-        setRows((prev) => prev.map((r) => (updated.has(r.id) ? { ...r, ...updated.get(r.id) } : r)))
-      }
-    } finally {
-      setSavingId(null)
     }
   }
 
@@ -533,162 +515,127 @@ export default function Donations() {
         <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="text-xs font-bold uppercase text-slate-400">Spenden bezahlen</div>
-              <div className="text-sm text-slate-500">Offene Spenden-Aufträge auswählen und als bezahlt markieren</div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs font-bold uppercase text-slate-400">Auswahl</div>
-              <div className="text-xl font-black text-slate-900">€ {selected.totalDonation.toFixed(2)}</div>
-              <button
-                onClick={createPayment}
-                disabled={paymentsSaving || selected.ids.length === 0}
-                className="mt-2 px-4 py-2 rounded-lg bg-red-600 text-white font-bold text-sm hover:bg-red-700 disabled:opacity-60"
-              >
-                Als bezahlt markieren
-              </button>
+              <div className="text-xs font-bold uppercase text-slate-400">Zahlungen</div>
+              <div className="text-sm text-slate-500">Bezahlte Spenden-Batches inkl. Quittungsstatus</div>
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="border border-slate-200 rounded-xl overflow-hidden">
-              <div className="px-3 py-2 bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400">
-                Offene Aufträge
-              </div>
-              {loading ? (
-                <div className="p-4 text-sm text-slate-500">Lade...</div>
-              ) : openOrders.length === 0 ? (
-                <div className="p-4 text-sm text-slate-500">Keine offenen Spenden-Aufträge.</div>
-              ) : (
-                <div className="divide-y divide-slate-100 max-h-[340px] overflow-auto">
-                  {openOrders.map((o) => (
-                    <label key={o.order_id} className="flex items-center justify-between gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50">
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4"
-                          checked={!!selectedOrderIds[o.order_id as string]}
-                          onChange={(e) => setSelectedOrderIds((prev) => ({ ...prev, [o.order_id as string]: e.target.checked }))}
-                        />
+          <div className="mt-4 border border-slate-200 rounded-xl overflow-hidden">
+            <div className="px-3 py-2 bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400">Zahlungen</div>
+            {paymentsLoading ? (
+              <div className="p-4 text-sm text-slate-500">Lade...</div>
+            ) : payments.length === 0 ? (
+              <div className="p-4 text-sm text-slate-500">Noch keine Zahlungen.</div>
+            ) : (
+              <div className="divide-y divide-slate-100 max-h-[340px] overflow-auto">
+                {payments.map((p) => {
+                  const received = p.receipt_received === 1
+                  return (
+                    <div key={p.id} className="px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
                         <div>
-                          <div className="text-sm font-mono text-slate-700">{o.order_number || "-"}</div>
-                          <div className="text-xs text-slate-500">
-                            {o.order_date ? new Date(o.order_date).toLocaleDateString("de-DE") : "-"} · Artikel: {o.totalQuantity}
+                          <div className="text-sm font-bold text-slate-800">
+                            {p.paid_at ? new Date(p.paid_at).toLocaleDateString("de-DE") : "-"} · {p.total_orders || (p.order_ids || []).length} Aufträge
                           </div>
+                          <div className="text-xs text-slate-500">€ {(Number(p.total_donation) || 0).toFixed(2)}</div>
                         </div>
+                        <button
+                          onClick={() => openPaymentDetails(p.id)}
+                          className="px-2 py-1 rounded border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50"
+                        >
+                          Details
+                        </button>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm font-black text-slate-900">€ {(Number(o.totalDonation) || 0).toFixed(2)}</div>
-                        <div className="text-xs text-slate-500">€ {(Number(o.totalAmount) || 0).toFixed(2)}</div>
+
+                      <div className="mt-2 flex flex-col md:flex-row gap-2">
+                        <select
+                          className="border border-slate-300 rounded-lg p-2 text-xs"
+                          value={received ? "yes" : "no"}
+                          onChange={(e) => toggleReceipt(p, e.target.value === "yes")}
+                          disabled={paymentsSaving}
+                        >
+                          <option value="no">Quittung: keine</option>
+                          <option value="yes">Quittung: erhalten</option>
+                        </select>
+                        <input
+                          className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                          placeholder="Quittungs-Notiz (optional)"
+                          value={receiptRefDraft[p.id] ?? p.receipt_reference ?? ""}
+                          onChange={(e) => setReceiptRefDraft((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                          disabled={paymentsSaving}
+                        />
+                        <button
+                          onClick={() => toggleReceipt(p, received)}
+                          disabled={paymentsSaving}
+                          className="px-3 py-2 rounded-lg bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 disabled:opacity-60"
+                        >
+                          Speichern
+                        </button>
                       </div>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
+                      {received && p.receipt_received_at ? (
+                        <div className="mt-1 text-[11px] text-slate-500">Quittung erhalten am: {new Date(p.receipt_received_at).toLocaleDateString("de-DE")}</div>
+                      ) : null}
 
-            <div className="border border-slate-200 rounded-xl overflow-hidden">
-              <div className="px-3 py-2 bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400">
-                Zahlungen
-              </div>
-              {paymentsLoading ? (
-                <div className="p-4 text-sm text-slate-500">Lade...</div>
-              ) : payments.length === 0 ? (
-                <div className="p-4 text-sm text-slate-500">Noch keine Zahlungen.</div>
-              ) : (
-                <div className="divide-y divide-slate-100 max-h-[340px] overflow-auto">
-                  {payments.map((p) => {
-                    const received = p.receipt_received === 1
-                    return (
-                      <div key={p.id} className="px-3 py-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-bold text-slate-800">
-                              {p.paid_at ? new Date(p.paid_at).toLocaleDateString("de-DE") : "-"} · {p.total_orders || (p.order_ids || []).length} Aufträge
-                            </div>
-                            <div className="text-xs text-slate-500">€ {(Number(p.total_donation) || 0).toFixed(2)}</div>
-                          </div>
-                          <button
-                            onClick={() => openPaymentDetails(p.id)}
-                            className="px-2 py-1 rounded border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50"
-                          >
-                            Details
-                          </button>
-                        </div>
-
-                        <div className="mt-2 flex flex-col md:flex-row gap-2">
-                          <select
-                            className="border border-slate-300 rounded-lg p-2 text-xs"
-                            value={received ? "yes" : "no"}
-                            onChange={(e) => toggleReceipt(p, e.target.value === "yes")}
-                            disabled={paymentsSaving}
-                          >
-                            <option value="no">Quittung: keine</option>
-                            <option value="yes">Quittung: erhalten</option>
-                          </select>
-                          <input
-                            className="w-full border border-slate-300 rounded-lg p-2 text-xs"
-                            placeholder="Quittungs-Notiz (optional)"
-                            value={receiptRefDraft[p.id] ?? p.receipt_reference ?? ""}
-                            onChange={(e) => setReceiptRefDraft((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                            disabled={paymentsSaving}
-                          />
-                          <button
-                            onClick={() => toggleReceipt(p, received)}
-                            disabled={paymentsSaving}
-                            className="px-3 py-2 rounded-lg bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 disabled:opacity-60"
-                          >
-                            Speichern
-                          </button>
-                        </div>
-                        {received && p.receipt_received_at ? (
-                          <div className="mt-1 text-[11px] text-slate-500">Quittung erhalten am: {new Date(p.receipt_received_at).toLocaleDateString("de-DE")}</div>
-                        ) : null}
-
-                        {expandedPaymentId === p.id ? (
-                          <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
-                            {!expandedPaymentOrders ? (
-                              <div className="text-sm text-slate-500">Lade Details…</div>
-                            ) : expandedPaymentOrders.length === 0 ? (
-                              <div className="text-sm text-slate-500">Keine Details.</div>
-                            ) : (
-                              <>
-                                <div className="grid grid-cols-12 gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 pb-2">
-                                  <div className="col-span-4">Datum</div>
-                                  <div className="col-span-4">Bestellnr.</div>
-                                  <div className="col-span-2 text-right">Artikel</div>
-                                  <div className="col-span-2 text-right">Spende</div>
-                                </div>
-                                <div className="divide-y divide-slate-200">
-                                  {expandedPaymentOrders.map((o: any) => (
-                                    <div key={o.order_id} className="grid grid-cols-12 gap-2 py-2 items-center">
-                                      <div className="col-span-4 text-sm text-slate-700">
-                                        {o.order_date ? new Date(o.order_date).toLocaleDateString("de-DE") : "-"}
-                                      </div>
-                                      <div className="col-span-4 text-sm font-mono text-slate-600">{o.order_number || "-"}</div>
-                                      <div className="col-span-2 text-sm text-slate-800 text-right font-bold">{Number(o.total_quantity) || 0}</div>
-                                      <div className="col-span-2 text-sm font-black text-slate-900 text-right">€ {(Number(o.total_donation) || 0).toFixed(2)}</div>
+                      {expandedPaymentId === p.id ? (
+                        <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                          {!expandedPaymentOrders ? (
+                            <div className="text-sm text-slate-500">Lade Details…</div>
+                          ) : expandedPaymentOrders.length === 0 ? (
+                            <div className="text-sm text-slate-500">Keine Details.</div>
+                          ) : (
+                            <>
+                              <div className="grid grid-cols-12 gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 pb-2">
+                                <div className="col-span-4">Datum</div>
+                                <div className="col-span-4">Bestellnr.</div>
+                                <div className="col-span-2 text-right">Artikel</div>
+                                <div className="col-span-2 text-right">Spende</div>
+                              </div>
+                              <div className="divide-y divide-slate-200">
+                                {expandedPaymentOrders.map((o: any) => (
+                                  <div key={o.order_id} className="grid grid-cols-12 gap-2 py-2 items-center">
+                                    <div className="col-span-4 text-sm text-slate-700">
+                                      {o.order_date ? new Date(o.order_date).toLocaleDateString("de-DE") : "-"}
                                     </div>
-                                  ))}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+                                    <div className="col-span-4 text-sm font-mono text-slate-600">{o.order_number || "-"}</div>
+                                    <div className="col-span-2 text-sm text-slate-800 text-right font-bold">{Number(o.total_quantity) || 0}</div>
+                                    <div className="col-span-2 text-sm font-black text-slate-900 text-right">€ {(Number(o.total_donation) || 0).toFixed(2)}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
 
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        {shopId && !showPaid && (
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-4 bg-white">
+            <div className="text-sm font-bold text-slate-800">Offene Spenden</div>
+            <div className="flex items-center gap-3">
+              <div className="text-sm font-black text-slate-900">€ {selected.totalDonation.toFixed(2)}</div>
+              <button
+                onClick={createPayment}
+                disabled={paymentsSaving || selected.ids.length === 0}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold text-sm hover:bg-red-700 disabled:opacity-60"
+              >
+                Als bezahlt markieren
+              </button>
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400">
+          <div className="col-span-1"></div>
           <div className="col-span-2">Datum</div>
           <div className="col-span-2">Bestellnr.</div>
-          <div className="col-span-3">Shop</div>
+          <div className="col-span-2">Shop</div>
           <div className="col-span-2 text-right">Artikel</div>
           <div className="col-span-1 text-right">Summe</div>
           <div className="col-span-2 text-right">Spende</div>
@@ -705,11 +652,21 @@ export default function Donations() {
               return (
                 <div key={o.key}>
                   <div className="grid grid-cols-12 gap-2 px-4 py-3 items-center">
+                    <div className="col-span-1">
+                      {shopId && !showPaid && !o.paid && o.order_id ? (
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={!!selectedOrderIds[o.order_id]}
+                          onChange={(e) => setSelectedOrderIds((prev) => ({ ...prev, [o.order_id as string]: e.target.checked }))}
+                        />
+                      ) : null}
+                    </div>
                     <div className="col-span-2 text-sm text-slate-700">
                       {o.order_date ? new Date(o.order_date).toLocaleDateString("de-DE") : "-"}
                     </div>
                     <div className="col-span-2 text-sm font-mono text-slate-600">{o.order_number || "-"}</div>
-                    <div className="col-span-3 text-sm text-slate-800">{o.shop_name}</div>
+                    <div className="col-span-2 text-sm text-slate-800">{o.shop_name}</div>
                     <div className="col-span-2 text-sm text-slate-800 text-right">
                       <span className="font-bold">{o.totalQuantity}</span>
                     </div>
@@ -725,17 +682,13 @@ export default function Donations() {
                         >
                           {isExpanded ? "Details zu" : "Details"}
                         </button>
-                        {o.order_id ? (
-                          <button
-                            onClick={() => toggleOrderPaid(o)}
-                            disabled={savingId === o.key}
-                            className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border ${
-                              o.paid ? "bg-green-50 text-green-700 border-green-200" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                            } ${savingId === o.key ? "opacity-60" : ""}`}
-                          >
-                            {o.paid ? "Bezahlt" : "Offen"}
-                          </button>
-                        ) : null}
+                        <span
+                          className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border ${
+                            o.paid ? "bg-green-50 text-green-700 border-green-200" : "bg-white text-slate-600 border-slate-200"
+                          }`}
+                        >
+                          {o.paid ? "Bezahlt" : "Offen"}
+                        </span>
                       </div>
                     </div>
                   </div>
