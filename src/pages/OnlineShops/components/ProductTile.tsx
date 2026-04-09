@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ShoppingCart, ArrowRight } from 'lucide-react';
 import { toAbsoluteMediaUrl } from '../mediaUrl';
@@ -8,12 +8,103 @@ interface ProductTileProps {
     shopBaseUrl: string;
 }
 
+type ColorMap = Record<string, string>;
+let colorMapCache: ColorMap | null = null;
+let colorMapPromise: Promise<ColorMap> | null = null;
+
+const normalizeColorKey = (value: string) => value.trim().toLowerCase();
+
+const getColorMap = async (): Promise<ColorMap> => {
+    if (colorMapCache) return colorMapCache;
+    if (colorMapPromise) return colorMapPromise;
+
+    colorMapPromise = (async () => {
+        try {
+            const res = await fetch('/api/colors', {
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+            });
+            const data = await res.json();
+            const rows = data?.success && Array.isArray(data.data) ? data.data : [];
+            const map: ColorMap = {};
+            for (const c of rows) {
+                const title = typeof c?.title === 'string' ? c.title : '';
+                const hex = typeof c?.hex_code === 'string' ? c.hex_code : '';
+                if (!title || !hex) continue;
+                map[normalizeColorKey(title)] = hex;
+            }
+            colorMapCache = map;
+            return map;
+        } catch {
+            colorMapCache = {};
+            return {};
+        } finally {
+            colorMapPromise = null;
+        }
+    })();
+
+    return colorMapPromise;
+};
+
 export const ProductTile: React.FC<ProductTileProps> = ({ product, shopBaseUrl }) => {
     
     // Parse variants if available
     let sizes: string[] = [];
     let displayPrice = product.price > 0 ? product.price : 29.95;
     let showFrom = false;
+
+    const [colorMap, setColorMap] = useState<ColorMap | null>(colorMapCache);
+    useEffect(() => {
+        if (colorMap) return;
+        getColorMap().then(setColorMap);
+    }, [colorMap]);
+
+    const availableColors = useMemo(() => {
+        const collect = (raw: any) => {
+            const out: string[] = [];
+            if (!raw) return out;
+            if (Array.isArray(raw)) return raw.map(String);
+            if (typeof raw === 'string') return raw.split(',').map(s => s.trim()).filter(Boolean);
+            return out;
+        };
+
+        const values: string[] = [];
+        try {
+            if (product?.variants) {
+                const variants = typeof product.variants === 'string' ? JSON.parse(product.variants) : product.variants;
+                const variantValues = Object.values(variants || {}) as any[];
+                for (const v of variantValues) {
+                    const name = typeof v?.name === 'string' ? v.name.toLowerCase() : '';
+                    if (!name) continue;
+                    if (name.includes('farbe') || name.includes('color')) {
+                        values.push(...collect(v?.values));
+                    }
+                }
+            }
+        } catch {}
+
+        if (values.length === 0 && typeof product?.color === 'string' && product.color.trim()) {
+            values.push(...collect(product.color));
+        }
+
+        const seen = new Set<string>();
+        const unique: string[] = [];
+        for (const c of values) {
+            const key = normalizeColorKey(c);
+            if (!key) continue;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            unique.push(c.trim());
+        }
+        return unique;
+    }, [product]);
+
+    const colorsWithHex = useMemo(() => {
+        const map = colorMap || {};
+        return availableColors.map(name => ({ name, hex: map[normalizeColorKey(name)] }));
+    }, [availableColors, colorMap]);
+    const hasAnyHex = colorsWithHex.some(c => !!c.hex);
+    const visibleColors = hasAnyHex ? colorsWithHex.slice(0, 6) : availableColors.slice(0, 6);
 
     try {
         if (product.variants) {
@@ -112,6 +203,35 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopBaseUrl }
                         <h3 className="font-bold text-base leading-snug text-slate-800 group-hover:text-red-600 transition-colors line-clamp-2 min-h-[2.5rem]">
                             {product.name}
                         </h3>
+                        {availableColors.length > 0 && (
+                            <div className="mt-2">
+                                {hasAnyHex ? (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {visibleColors.map((c: any) => (
+                                            c.hex ? (
+                                                <span
+                                                    key={c.name}
+                                                    title={c.name}
+                                                    className="w-3 h-3 rounded-full border border-slate-200"
+                                                    style={{ backgroundColor: c.hex }}
+                                                />
+                                            ) : (
+                                                <span key={c.name} className="text-[10px] font-bold text-slate-500 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded">
+                                                    {c.name}
+                                                </span>
+                                            )
+                                        ))}
+                                        {availableColors.length > 6 && (
+                                            <span className="text-[10px] font-bold text-slate-400">+{availableColors.length - 6}</span>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-slate-500 font-medium line-clamp-1">
+                                        Farben: {availableColors.join(', ')}
+                                    </p>
+                                )}
+                            </div>
+                        )}
                     </div>
                     
                     <div className="mt-auto pt-3 flex items-center justify-between border-t border-slate-50">
