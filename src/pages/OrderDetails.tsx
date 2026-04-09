@@ -106,7 +106,7 @@ export default function OrderDetails() {
 
     if (!file.url) return (
         <div className="flex items-center">
-            <span className="truncate max-w-[150px]">{file.name}</span>
+            <span className="break-all whitespace-normal">{file.name}</span>
             {qtyBadge}
         </div>
     );
@@ -119,7 +119,7 @@ export default function OrderDetails() {
               <img src={file.thumbnail} alt={file.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
             </div>
             <div className="flex items-center">
-                <span className="truncate max-w-[120px]">{file.name}</span>
+                <span className="break-all whitespace-normal">{file.name}</span>
                 {qtyBadge}
             </div>
           </div>
@@ -136,7 +136,7 @@ export default function OrderDetails() {
             <img src={file.url} alt={file.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
           </div>
           <div className="flex items-center">
-            <span className="truncate max-w-[120px]">{file.name}</span>
+            <span className="break-all whitespace-normal">{file.name}</span>
             {qtyBadge}
           </div>
         </div>
@@ -144,7 +144,7 @@ export default function OrderDetails() {
     }
     return (
         <div className="flex items-center">
-            <span className="truncate max-w-[150px]">{file.name}</span>
+            <span className="break-all whitespace-normal">{file.name}</span>
             {qtyBadge}
         </div>
     );

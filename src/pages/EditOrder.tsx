@@ -516,6 +516,7 @@ export default function EditOrder() {
   const [selectedProduct, setSelectedProduct] = useState<CustomerProduct | null>(null);
   const [productSizeInput, setProductSizeInput] = useState("");
   const [productSupplierId, setProductSupplierId] = useState("");
+  const [excludedProductFileIds, setExcludedProductFileIds] = useState<Record<string, boolean>>({});
   const [fileQuantities, setFileQuantities] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -612,7 +613,7 @@ export default function EditOrder() {
       if (selectedProduct.files && selectedProduct.files.length > 0) {
           const quantityToAdd = parseQuantity(productSizeInput);
 
-          const newAttachments = selectedProduct.files.map(f => ({
+          const newAttachments = selectedProduct.files.filter((f: any) => !excludedProductFileIds[f.id]).map(f => ({
               name: f.file_name,
               url: f.file_url,
               type: (f.type === 'view' || f.file_name === 'Shopware Bild' ? 'preview' : 'print') as 'preview' | 'print' | 'vector',
@@ -644,6 +645,7 @@ export default function EditOrder() {
       setSelectedProduct(null);
       setProductSizeInput("");
       setProductSupplierId("");
+      setExcludedProductFileIds({});
   };
 
   return (
@@ -1684,6 +1686,7 @@ export default function EditOrder() {
                                                     : (suppliers.length === 1 ? suppliers[0].id : '');
                                                 setProductSupplierId(nextSupplier);
                                                 setProductSizeInput("");
+                                                setExcludedProductFileIds({});
                                             }}
                                         >
                                             <div>
@@ -1756,27 +1759,45 @@ export default function EditOrder() {
                         {selectedProduct.files && selectedProduct.files.length > 0 && (
                             <div className="mb-4">
                                 <p className="text-sm font-medium text-gray-700 mb-2">Automatisch zugeordnete Druckdaten:</p>
-                                <div className="flex flex-wrap gap-2">
-                                    {selectedProduct.files.map(f => (
-                                        <div key={f.id} className="text-xs bg-red-50 text-red-800 border border-red-100 px-2 py-1 rounded flex items-center">
-                                            <FileText size={12} className="mr-1" />
-                                            <span className="truncate max-w-[150px] mr-2">{f.file_name}</span>
-                                            <div className="flex items-center bg-white rounded border border-red-200 overflow-hidden">
-                                                <input 
-                                                    type="number" 
-                                                    min="1"
-                                                    className="w-12 text-center text-xs p-0.5 border-none focus:ring-0 appearance-none"
-                                                    value={fileQuantities[f.id] || 0}
-                                                    onChange={(e) => {
-                                                        const val = parseInt(e.target.value) || 0;
-                                                        setFileQuantities(prev => ({...prev, [f.id]: val}));
-                                                    }}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                />
-                                                <span className="bg-gray-50 text-gray-500 px-1.5 border-l border-red-100">x</span>
+                                <div className="space-y-2">
+                                    {selectedProduct.files.map(f => {
+                                        const excluded = !!excludedProductFileIds[f.id];
+                                        return (
+                                            <div key={f.id} className={`text-xs border px-3 py-2 rounded flex items-start justify-between gap-3 ${excluded ? 'bg-slate-50 text-slate-500 border-slate-200' : 'bg-red-50 text-red-800 border-red-100'}`}>
+                                                <FileText size={12} className="mr-1 mt-0.5 shrink-0" />
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="text-sm font-semibold break-all">{f.file_name}</div>
+                                                    {excluded && <div className="text-[11px] mt-0.5">Wird nicht übernommen</div>}
+                                                </div>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {!excluded && (
+                                                        <div className="flex items-center bg-white rounded border border-red-200 overflow-hidden">
+                                                            <input 
+                                                                type="number" 
+                                                                min="1"
+                                                                className="w-14 text-center text-xs p-0.5 border-none focus:ring-0 appearance-none"
+                                                                value={fileQuantities[f.id] || 0}
+                                                                onChange={(e) => {
+                                                                    const val = parseInt(e.target.value) || 0;
+                                                                    setFileQuantities(prev => ({...prev, [f.id]: val}));
+                                                                }}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            />
+                                                            <span className="bg-gray-50 text-gray-500 px-1.5 border-l border-red-100">x</span>
+                                                        </div>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        className={`px-2 py-1 rounded border text-xs font-bold ${excluded ? 'border-slate-200 text-slate-600 hover:bg-slate-100' : 'border-red-200 text-red-700 hover:bg-red-100'}`}
+                                                        onClick={() => setExcludedProductFileIds(prev => ({ ...prev, [f.id]: !prev[f.id] }))}
+                                                        title={excluded ? 'Wieder übernehmen' : 'Nicht übernehmen'}
+                                                    >
+                                                        {excluded ? '↺' : '✕'}
+                                                    </button>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                                 <p className="text-[10px] text-gray-500 mt-1 italic">
                                     Hinweis: Die Anzahl basiert auf Ihrer Eingabe "{productSizeInput}" und der Einstellung im Artikel. Sie können die Anzahl hier manuell anpassen.

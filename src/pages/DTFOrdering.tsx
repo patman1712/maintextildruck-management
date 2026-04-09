@@ -826,7 +826,7 @@ export default function DTFOrdering() {
                                                         ) : <FileText size={14} className="text-gray-400" />}
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <p className="truncate font-medium text-gray-700 max-w-[150px]" title={file.name}>{file.name}</p>
+                                                        <p className="font-medium text-gray-700 break-all whitespace-normal">{file.name}</p>
                                                         <p className="text-[10px] text-gray-500 flex items-center">
                                                             <span className="bg-gray-100 px-1 rounded mr-1">{file.quantity || 1}x</span>
                                                             {new Date(file.uploadedAt || order.createdAt).toLocaleDateString()}
