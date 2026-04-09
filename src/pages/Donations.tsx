@@ -32,6 +32,20 @@ type DonationOrder = {
   totalDonation: number
 }
 
+type DonationPayment = {
+  id: string
+  shop_id: string
+  shop_name: string
+  paid_at: string
+  paid_by?: string | null
+  order_ids: string[]
+  total_orders: number
+  total_donation: number
+  receipt_received?: number
+  receipt_received_at?: string | null
+  receipt_reference?: string | null
+}
+
 export default function Donations() {
   const shops = useAppStore((s) => s.shops)
   const currentUser = useAppStore((s) => s.currentUser)
@@ -45,8 +59,15 @@ export default function Donations() {
   const [sharePassword, setSharePassword] = useState<string>("")
   const [shareSaving, setShareSaving] = useState<boolean>(false)
   const [showSharePassword, setShowSharePassword] = useState<boolean>(false)
+  const [payments, setPayments] = useState<DonationPayment[]>([])
+  const [paymentsLoading, setPaymentsLoading] = useState<boolean>(false)
+  const [paymentsSaving, setPaymentsSaving] = useState<boolean>(false)
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Record<string, boolean>>({})
+  const [receiptRefDraft, setReceiptRefDraft] = useState<Record<string, string>>({})
+  const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(null)
+  const [expandedPaymentOrders, setExpandedPaymentOrders] = useState<any[] | null>(null)
 
-  const orders = useMemo<DonationOrder[]>(() => {
+  const ordersAll = useMemo<DonationOrder[]>(() => {
     const byKey = new Map<string, DonationOrder>()
 
     for (const r of rows) {
@@ -80,7 +101,7 @@ export default function Donations() {
       }
     }
 
-    const list = Array.from(byKey.values())
+    return Array.from(byKey.values())
       .map((o) => ({
         ...o,
         totalAmount:
@@ -88,15 +109,26 @@ export default function Donations() {
             ? o.totalAmount
             : o.rows.reduce((sum, rr) => sum + (Number(rr.item_total) || 0), 0),
       }))
-      .filter((o) => (showPaid ? true : !o.paid))
       .sort((a, b) => {
         const ad = a.order_date ? new Date(a.order_date).getTime() : 0
         const bd = b.order_date ? new Date(b.order_date).getTime() : 0
         return bd - ad
       })
+  }, [rows, shopId])
 
-    return list
-  }, [rows, shopId, showPaid])
+  const orders = useMemo(() => {
+    return showPaid ? ordersAll : ordersAll.filter((o) => !o.paid)
+  }, [ordersAll, showPaid])
+
+  const openOrders = useMemo(() => ordersAll.filter((o) => !o.paid && !!o.order_id), [ordersAll])
+
+  const selected = useMemo(() => {
+    const ids = Object.entries(selectedOrderIds)
+      .filter(([, v]) => v)
+      .map(([k]) => k)
+    const totalDonation = openOrders.reduce((sum, o) => (selectedOrderIds[o.order_id as string] ? sum + (Number(o.totalDonation) || 0) : sum), 0)
+    return { ids, totalDonation }
+  }, [selectedOrderIds, openOrders])
 
   const totals = useMemo(() => {
     const total = orders.reduce((sum, o) => sum + (Number(o.totalDonation) || 0), 0)
@@ -118,7 +150,26 @@ export default function Donations() {
 
   useEffect(() => {
     fetchDonations()
+    if (shopId) {
+      fetchPayments()
+    } else {
+      setPayments([])
+    }
   }, [shopId])
+
+  const fetchPayments = async () => {
+    if (!shopId) return
+    setPaymentsLoading(true)
+    try {
+      const params = new URLSearchParams()
+      params.set("shopId", shopId)
+      const res = await fetch(`/api/donations/payments?${params.toString()}`)
+      const data = await res.json()
+      if (data.success) setPayments(data.data || [])
+    } finally {
+      setPaymentsLoading(false)
+    }
+  }
 
   const fetchShareLinks = async () => {
     try {
@@ -142,6 +193,9 @@ export default function Donations() {
     setSharePassword("")
     setShowSharePassword(false)
     setExpandedOrderKey(null)
+    setSelectedOrderIds({})
+    setExpandedPaymentId(null)
+    setExpandedPaymentOrders(null)
   }, [shopId])
 
   const generatePassword = () => {
@@ -194,6 +248,70 @@ export default function Donations() {
       }
     } finally {
       setSavingId(null)
+    }
+  }
+
+  const createPayment = async () => {
+    if (!shopId) return alert("Bitte Shop auswählen.")
+    if (selected.ids.length === 0) return alert("Bitte mindestens einen Auftrag auswählen.")
+    if (!confirm(`Spenden für ${selected.ids.length} Aufträge als bezahlt markieren?`)) return
+
+    setPaymentsSaving(true)
+    try {
+      const res = await fetch("/api/donations/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shopId, orderIds: selected.ids, paidBy: currentUser?.name || null }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(data.error || "Fehler")
+        return
+      }
+      await fetchDonations()
+      await fetchPayments()
+      setSelectedOrderIds({})
+    } finally {
+      setPaymentsSaving(false)
+    }
+  }
+
+  const toggleReceipt = async (payment: DonationPayment, received: boolean) => {
+    setPaymentsSaving(true)
+    try {
+      const reference = receiptRefDraft[payment.id] ?? payment.receipt_reference ?? ""
+      const res = await fetch(`/api/donations/payments/${payment.id}/receipt`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ received, reference }),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(data.error || "Fehler")
+        return
+      }
+      await fetchPayments()
+    } finally {
+      setPaymentsSaving(false)
+    }
+  }
+
+  const openPaymentDetails = async (id: string) => {
+    if (expandedPaymentId === id) {
+      setExpandedPaymentId(null)
+      setExpandedPaymentOrders(null)
+      return
+    }
+
+    setExpandedPaymentId(id)
+    setExpandedPaymentOrders(null)
+    try {
+      const res = await fetch(`/api/donations/payments/${id}`)
+      const data = await res.json()
+      if (data.success) setExpandedPaymentOrders(data.data.orders || [])
+      else alert(data.error || "Fehler")
+    } catch (e: any) {
+      alert(e?.message || "Fehler")
     }
   }
 
@@ -394,6 +512,161 @@ export default function Donations() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {shopId && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-bold uppercase text-slate-400">Spenden bezahlen</div>
+              <div className="text-sm text-slate-500">Offene Spenden-Aufträge auswählen und als bezahlt markieren</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs font-bold uppercase text-slate-400">Auswahl</div>
+              <div className="text-xl font-black text-slate-900">€ {selected.totalDonation.toFixed(2)}</div>
+              <button
+                onClick={createPayment}
+                disabled={paymentsSaving || selected.ids.length === 0}
+                className="mt-2 px-4 py-2 rounded-lg bg-red-600 text-white font-bold text-sm hover:bg-red-700 disabled:opacity-60"
+              >
+                Als bezahlt markieren
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-3 py-2 bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400">
+                Offene Aufträge
+              </div>
+              {loading ? (
+                <div className="p-4 text-sm text-slate-500">Lade...</div>
+              ) : openOrders.length === 0 ? (
+                <div className="p-4 text-sm text-slate-500">Keine offenen Spenden-Aufträge.</div>
+              ) : (
+                <div className="divide-y divide-slate-100 max-h-[340px] overflow-auto">
+                  {openOrders.map((o) => (
+                    <label key={o.order_id} className="flex items-center justify-between gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={!!selectedOrderIds[o.order_id as string]}
+                          onChange={(e) => setSelectedOrderIds((prev) => ({ ...prev, [o.order_id as string]: e.target.checked }))}
+                        />
+                        <div>
+                          <div className="text-sm font-mono text-slate-700">{o.order_number || "-"}</div>
+                          <div className="text-xs text-slate-500">
+                            {o.order_date ? new Date(o.order_date).toLocaleDateString("de-DE") : "-"} · Artikel: {o.totalQuantity}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-black text-slate-900">€ {(Number(o.totalDonation) || 0).toFixed(2)}</div>
+                        <div className="text-xs text-slate-500">€ {(Number(o.totalAmount) || 0).toFixed(2)}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <div className="px-3 py-2 bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400">
+                Zahlungen
+              </div>
+              {paymentsLoading ? (
+                <div className="p-4 text-sm text-slate-500">Lade...</div>
+              ) : payments.length === 0 ? (
+                <div className="p-4 text-sm text-slate-500">Noch keine Zahlungen.</div>
+              ) : (
+                <div className="divide-y divide-slate-100 max-h-[340px] overflow-auto">
+                  {payments.map((p) => {
+                    const received = p.receipt_received === 1
+                    return (
+                      <div key={p.id} className="px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-bold text-slate-800">
+                              {p.paid_at ? new Date(p.paid_at).toLocaleDateString("de-DE") : "-"} · {p.total_orders || (p.order_ids || []).length} Aufträge
+                            </div>
+                            <div className="text-xs text-slate-500">€ {(Number(p.total_donation) || 0).toFixed(2)}</div>
+                          </div>
+                          <button
+                            onClick={() => openPaymentDetails(p.id)}
+                            className="px-2 py-1 rounded border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50"
+                          >
+                            Details
+                          </button>
+                        </div>
+
+                        <div className="mt-2 flex flex-col md:flex-row gap-2">
+                          <select
+                            className="border border-slate-300 rounded-lg p-2 text-xs"
+                            value={received ? "yes" : "no"}
+                            onChange={(e) => toggleReceipt(p, e.target.value === "yes")}
+                            disabled={paymentsSaving}
+                          >
+                            <option value="no">Quittung: keine</option>
+                            <option value="yes">Quittung: erhalten</option>
+                          </select>
+                          <input
+                            className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                            placeholder="Quittungs-Notiz (optional)"
+                            value={receiptRefDraft[p.id] ?? p.receipt_reference ?? ""}
+                            onChange={(e) => setReceiptRefDraft((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                            disabled={paymentsSaving}
+                          />
+                          <button
+                            onClick={() => toggleReceipt(p, received)}
+                            disabled={paymentsSaving}
+                            className="px-3 py-2 rounded-lg bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 disabled:opacity-60"
+                          >
+                            Speichern
+                          </button>
+                        </div>
+                        {received && p.receipt_received_at ? (
+                          <div className="mt-1 text-[11px] text-slate-500">Quittung erhalten am: {new Date(p.receipt_received_at).toLocaleDateString("de-DE")}</div>
+                        ) : null}
+
+                        {expandedPaymentId === p.id ? (
+                          <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                            {!expandedPaymentOrders ? (
+                              <div className="text-sm text-slate-500">Lade Details…</div>
+                            ) : expandedPaymentOrders.length === 0 ? (
+                              <div className="text-sm text-slate-500">Keine Details.</div>
+                            ) : (
+                              <>
+                                <div className="grid grid-cols-12 gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 pb-2">
+                                  <div className="col-span-4">Datum</div>
+                                  <div className="col-span-4">Bestellnr.</div>
+                                  <div className="col-span-2 text-right">Artikel</div>
+                                  <div className="col-span-2 text-right">Spende</div>
+                                </div>
+                                <div className="divide-y divide-slate-200">
+                                  {expandedPaymentOrders.map((o: any) => (
+                                    <div key={o.order_id} className="grid grid-cols-12 gap-2 py-2 items-center">
+                                      <div className="col-span-4 text-sm text-slate-700">
+                                        {o.order_date ? new Date(o.order_date).toLocaleDateString("de-DE") : "-"}
+                                      </div>
+                                      <div className="col-span-4 text-sm font-mono text-slate-600">{o.order_number || "-"}</div>
+                                      <div className="col-span-2 text-sm text-slate-800 text-right font-bold">{Number(o.total_quantity) || 0}</div>
+                                      <div className="col-span-2 text-sm font-black text-slate-900 text-right">€ {(Number(o.total_donation) || 0).toFixed(2)}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

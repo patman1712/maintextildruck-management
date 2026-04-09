@@ -40,7 +40,6 @@ import ShopOrderDetailPage from "@/pages/OnlineShops/ShopOrderDetailPage";
 import ShopContentPage from "@/pages/OnlineShops/ShopContentPage";
 import Donations from "@/pages/Donations";
 import PublicDonations from "@/pages/PublicDonations";
-import DonationsPayments from "@/pages/DonationsPayments";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
 import { useEffect, useRef, useState } from "react";
@@ -192,7 +191,7 @@ export default function App() {
           <Route path="profile" element={<Profile />} />
           <Route path="faq" element={<FAQ />} />
           <Route path="donations" element={<Donations />} />
-          <Route path="donations/payments" element={<DonationsPayments />} />
+          <Route path="donations/payments" element={<Navigate to="/dashboard/donations" replace />} />
           <Route path="*" element={<div className="p-8 text-center text-gray-500">Diese Seite ist noch in Arbeit...</div>} />
         </Route>
       </Routes>
