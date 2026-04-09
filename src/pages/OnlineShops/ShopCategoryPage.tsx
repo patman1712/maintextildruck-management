@@ -171,7 +171,7 @@ const ShopCategoryPage: React.FC = () => {
                     <div className="col-span-full py-20 text-center text-slate-400">Keine Produkte in dieser Kategorie gefunden.</div>
                 ) : (
                     products.map(product => (
-                        <ProductTile key={product.assignment_id} product={product} shopBaseUrl={shopBaseUrl} />
+                        <ProductTile key={product.assignment_id} product={product} shopId={shop.id} shopBaseUrl={shopBaseUrl} />
                     ))
                 )}
             </div>

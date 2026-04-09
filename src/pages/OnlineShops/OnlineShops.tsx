@@ -204,13 +204,31 @@ const OnlineShops: React.FC = () => {
       if (!editingVariable || !editingVariable.name || !editingVariable.values) return;
 
       try {
+          const parsedValues = String(editingVariable.values || '')
+              .split(',')
+              .map((s: string) => s.trim())
+              .filter(Boolean);
+
+          let variable_colors = editingVariable.variable_colors || {};
+          if (editingVariable.type !== 'color') variable_colors = {};
+          const cleanedColors: any = {};
+          for (const v of parsedValues) {
+              const raw = variable_colors?.[v];
+              if (typeof raw !== 'string') continue;
+              const hex = raw.trim();
+              if (!hex) continue;
+              cleanedColors[v] = hex;
+          }
+
+          const payload = { ...editingVariable, variable_colors: cleanedColors };
+
           const url = editingVariable.id ? `/api/variables/${editingVariable.id}` : '/api/variables';
           const method = editingVariable.id ? 'PUT' : 'POST';
           
           const res = await fetch(url, {
               method,
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(editingVariable)
+              body: JSON.stringify(payload)
           });
           const data = await res.json();
           
@@ -348,7 +366,7 @@ const OnlineShops: React.FC = () => {
                     Globale Shop-Attribute (Größen, Farben)
                 </div>
                 <button 
-                    onClick={() => setEditingVariable({ name: '', type: 'size', values: '', shop_ids: [], price_per_value: false, variable_prices: {} })}
+                    onClick={() => setEditingVariable({ name: '', type: 'size', values: '', shop_ids: [], price_per_value: false, variable_prices: {}, variable_colors: {} })}
                     className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 flex items-center"
                 >
                     <Plus size={16} className="mr-1" /> Neu
@@ -398,6 +416,71 @@ const OnlineShops: React.FC = () => {
                                 onChange={e => setEditingVariable({...editingVariable, values: e.target.value})}
                             />
                             <p className="text-xs text-gray-400 mt-1">Geben Sie die verfügbaren Optionen getrennt durch Kommas ein.</p>
+
+                            {editingVariable.type === 'color' && (
+                                <div className="mt-4 border-t pt-4">
+                                    <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Farbcode (HEX) pro Wert</label>
+                                    <p className="text-xs text-gray-500 mb-2">
+                                        Optional: Wenn hier HEX-Codes gepflegt sind, werden die Farben in den Shop-Kacheln als Kreise angezeigt.
+                                    </p>
+                                    <div className="bg-white border border-slate-200 rounded p-3 max-h-60 overflow-y-auto shadow-inner">
+                                        <div className="grid grid-cols-3 gap-2 text-xs font-bold text-slate-400 uppercase mb-2 border-b pb-1">
+                                            <div className="col-span-1">Farbe</div>
+                                            <div className="col-span-2">Farbcode</div>
+                                        </div>
+                                        {editingVariable.values ? (
+                                            editingVariable.values.split(',').map((val: string, idx: number) => {
+                                                const v = val.trim();
+                                                if (!v) return null;
+                                                const current = editingVariable.variable_colors?.[v] || '';
+                                                return (
+                                                    <div key={idx} className="grid grid-cols-3 gap-2 items-center py-1 border-b border-slate-50 last:border-0">
+                                                        <span className="text-sm text-slate-700 font-medium truncate" title={v}>{v}</span>
+                                                        <div className="col-span-2 flex items-center gap-2">
+                                                            <input
+                                                                type="color"
+                                                                className="h-8 w-10 border border-slate-200 rounded bg-white"
+                                                                value={/^#([0-9a-fA-F]{6})$/.test(current) ? current : '#000000'}
+                                                                onChange={e => {
+                                                                    const next = { ...(editingVariable.variable_colors || {}) };
+                                                                    next[v] = e.target.value;
+                                                                    setEditingVariable({ ...editingVariable, variable_colors: next });
+                                                                }}
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                placeholder="#RRGGBB"
+                                                                className="w-full border border-slate-200 p-1.5 rounded text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none font-mono"
+                                                                value={current}
+                                                                onChange={e => {
+                                                                    const next = { ...(editingVariable.variable_colors || {}) };
+                                                                    next[v] = e.target.value.trim();
+                                                                    setEditingVariable({ ...editingVariable, variable_colors: next });
+                                                                }}
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                className="text-xs text-slate-400 hover:text-red-600"
+                                                                onClick={() => {
+                                                                    const next = { ...(editingVariable.variable_colors || {}) };
+                                                                    delete next[v];
+                                                                    setEditingVariable({ ...editingVariable, variable_colors: next });
+                                                                }}
+                                                            >
+                                                                Entfernen
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        ) : (
+                                            <div className="text-center text-gray-400 text-sm py-2">
+                                                Bitte geben Sie zuerst Werte oben ein.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                             
                             <div className="mt-4 border-t pt-4">
                                 <label className="flex items-center space-x-2 mb-2 cursor-pointer">

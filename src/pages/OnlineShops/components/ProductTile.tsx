@@ -5,59 +5,67 @@ import { toAbsoluteMediaUrl } from '../mediaUrl';
 
 interface ProductTileProps {
     product: any;
+    shopId: string;
     shopBaseUrl: string;
 }
 
 type ColorMap = Record<string, string>;
-let colorMapCache: ColorMap | null = null;
-let colorMapPromise: Promise<ColorMap> | null = null;
+const colorMapCacheByShop: Record<string, ColorMap> = {};
+const colorMapPromiseByShop: Record<string, Promise<ColorMap> | null> = {};
 
 const normalizeColorKey = (value: string) => value.trim().toLowerCase();
 
-const getColorMap = async (): Promise<ColorMap> => {
-    if (colorMapCache) return colorMapCache;
-    if (colorMapPromise) return colorMapPromise;
+const getColorMapForShop = async (shopId: string): Promise<ColorMap> => {
+    if (colorMapCacheByShop[shopId]) return colorMapCacheByShop[shopId];
+    if (colorMapPromiseByShop[shopId]) return colorMapPromiseByShop[shopId] as Promise<ColorMap>;
 
-    colorMapPromise = (async () => {
+    colorMapPromiseByShop[shopId] = (async () => {
         try {
-            const res = await fetch('/api/colors', {
+            const res = await fetch(`/api/variables/shop/${shopId}`, {
                 cache: 'no-store',
                 headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
             });
             const data = await res.json();
             const rows = data?.success && Array.isArray(data.data) ? data.data : [];
             const map: ColorMap = {};
-            for (const c of rows) {
-                const title = typeof c?.title === 'string' ? c.title : '';
-                const hex = typeof c?.hex_code === 'string' ? c.hex_code : '';
-                if (!title || !hex) continue;
-                map[normalizeColorKey(title)] = hex;
+            for (const v of rows) {
+                if (v?.type !== 'color') continue;
+                const colors = v?.variable_colors && typeof v.variable_colors === 'object' ? v.variable_colors : {};
+                for (const [name, hex] of Object.entries(colors)) {
+                    if (typeof name !== 'string' || typeof hex !== 'string') continue;
+                    const normalized = normalizeColorKey(name);
+                    const trimmed = hex.trim();
+                    if (!normalized) continue;
+                    if (!/^#([0-9a-fA-F]{6})$/.test(trimmed)) continue;
+                    map[normalized] = trimmed;
+                }
             }
-            colorMapCache = map;
+            colorMapCacheByShop[shopId] = map;
             return map;
         } catch {
-            colorMapCache = {};
+            colorMapCacheByShop[shopId] = {};
             return {};
         } finally {
-            colorMapPromise = null;
+            colorMapPromiseByShop[shopId] = null;
         }
     })();
 
-    return colorMapPromise;
+    return colorMapPromiseByShop[shopId] as Promise<ColorMap>;
 };
 
-export const ProductTile: React.FC<ProductTileProps> = ({ product, shopBaseUrl }) => {
+export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId, shopBaseUrl }) => {
     
     // Parse variants if available
     let sizes: string[] = [];
     let displayPrice = product.price > 0 ? product.price : 29.95;
     let showFrom = false;
 
-    const [colorMap, setColorMap] = useState<ColorMap | null>(colorMapCache);
+    const [colorMap, setColorMap] = useState<ColorMap | null>(colorMapCacheByShop[shopId] || null);
     useEffect(() => {
         if (colorMap) return;
-        getColorMap().then(setColorMap);
-    }, [colorMap]);
+        if (!shopId) return;
+        getColorMapForShop(shopId).then(setColorMap);
+    }, [colorMap, shopId]);
 
     const availableColors = useMemo(() => {
         const collect = (raw: any) => {

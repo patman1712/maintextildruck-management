@@ -149,7 +149,7 @@ const ShopHome: React.FC = () => {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {products.length > 0 ? products.map(product => (
-                <ProductTile key={product.assignment_id} product={product} shopBaseUrl={shopBaseUrl} />
+                <ProductTile key={product.assignment_id} product={product} shopId={shop.id} shopBaseUrl={shopBaseUrl} />
             )) : (
                 <div className="col-span-full text-center py-20 text-slate-400">
                     <p>{loading ? 'Lade Produkte...' : 'Keine Produkte gefunden.'}</p>

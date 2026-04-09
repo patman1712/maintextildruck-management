@@ -1126,6 +1126,18 @@ try {
       console.error('Migration error (product_variables prices):', e);
   }
 
+  // Migration: Add variable_colors to product_variables
+  try {
+      const variableCols = db.prepare("PRAGMA table_info(product_variables)").all() as any[];
+      const hasVariableColors = variableCols.some(col => col.name === 'variable_colors');
+      if (!hasVariableColors) {
+          console.log('Migrating database: Adding variable_colors to product_variables table');
+          db.exec('ALTER TABLE product_variables ADD COLUMN variable_colors TEXT'); // JSON object { "Value": "#RRGGBB" }
+      }
+  } catch (e) {
+      console.error('Migration error (product_variables colors):', e);
+  }
+
   // Ensure default row for global content
   try {
       const row = db.prepare("SELECT id FROM global_shop_content WHERE id = 'main'").get();
