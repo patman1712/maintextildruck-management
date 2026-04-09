@@ -23,6 +23,9 @@ export default function Donations() {
   const [shopId, setShopId] = useState<string>("")
   const [showPaid, setShowPaid] = useState<boolean>(false)
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [shareLinks, setShareLinks] = useState<Record<string, any>>({})
+  const [sharePassword, setSharePassword] = useState<string>("")
+  const [shareSaving, setShareSaving] = useState<boolean>(false)
 
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
@@ -53,6 +56,49 @@ export default function Donations() {
   useEffect(() => {
     fetchDonations()
   }, [shopId])
+
+  const fetchShareLinks = async () => {
+    try {
+      const res = await fetch("/api/donations/share-links")
+      const data = await res.json()
+      if (data.success) {
+        const map: Record<string, any> = {}
+        for (const row of data.data || []) {
+          map[row.shop_id] = row
+        }
+        setShareLinks(map)
+      }
+    } catch {}
+  }
+
+  useEffect(() => {
+    fetchShareLinks()
+  }, [])
+
+  useEffect(() => {
+    setSharePassword("")
+  }, [shopId])
+
+  const updateShareLink = async (payload: any) => {
+    if (!shopId) return
+    setShareSaving(true)
+    try {
+      const res = await fetch(`/api/donations/share-links/${shopId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (data.success) {
+        await fetchShareLinks()
+        if (payload.password !== undefined) setSharePassword("")
+      } else {
+        alert(data.error || "Fehler")
+      }
+    } finally {
+      setShareSaving(false)
+    }
+  }
 
   const togglePaid = async (row: DonationRow) => {
     setSavingId(row.id)
@@ -122,6 +168,132 @@ export default function Donations() {
           <div className="text-xl font-black text-slate-900">€ {totals.total.toFixed(2)}</div>
         </div>
       </div>
+
+      {shopId && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-bold uppercase text-slate-400">Externer Zugriff</div>
+              <div className="text-lg font-black text-slate-900">{shops.find((s) => s.id === shopId)?.name || "Shop"}</div>
+              <div className="text-sm text-slate-500">Link für den Shopbetreiber (nur Übersicht, keine Bearbeitung)</div>
+            </div>
+            <div className="flex items-center gap-2">
+              {!shareLinks[shopId]?.token ? (
+                <button
+                  onClick={() => updateShareLink({ enabled: true, regenerate: true })}
+                  disabled={shareSaving}
+                  className="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 disabled:opacity-60"
+                >
+                  Link erstellen
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => updateShareLink({ regenerate: true })}
+                    disabled={shareSaving}
+                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Link neu
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!confirm("Link wirklich löschen?")) return
+                      setShareSaving(true)
+                      try {
+                        const res = await fetch(`/api/donations/share-links/${shopId}`, { method: "DELETE" })
+                        const data = await res.json()
+                        if (data.success) await fetchShareLinks()
+                        else alert(data.error || "Fehler")
+                      } finally {
+                        setShareSaving(false)
+                      }
+                    }}
+                    disabled={shareSaving}
+                    className="px-4 py-2 rounded-lg border border-red-200 text-red-600 font-bold text-sm hover:bg-red-50 disabled:opacity-60"
+                  >
+                    Löschen
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {shareLinks[shopId]?.token && (
+            <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2">
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Link</label>
+                <div className="flex gap-2">
+                  <input
+                    className="w-full border border-slate-300 rounded-lg p-2 text-sm font-mono"
+                    readOnly
+                    value={`${window.location.origin}/donations/${shareLinks[shopId].token}`}
+                  />
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(`${window.location.origin}/donations/${shareLinks[shopId].token}`)
+                      } catch {
+                        alert("Kopieren nicht möglich.")
+                      }
+                    }}
+                    className="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-sm hover:bg-slate-800"
+                  >
+                    Kopieren
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Status</label>
+                <div className="flex items-center gap-2">
+                  <select
+                    className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                    value={shareLinks[shopId]?.enabled === 0 ? "off" : "on"}
+                    onChange={(e) => updateShareLink({ enabled: e.target.value === "on" })}
+                    disabled={shareSaving}
+                  >
+                    <option value="on">Aktiv</option>
+                    <option value="off">Deaktiviert</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="lg:col-span-3">
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Passwort (optional)</label>
+                <div className="flex flex-col md:flex-row gap-2">
+                  <input
+                    type="password"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                    placeholder={shareLinks[shopId]?.has_password ? "Passwort ändern…" : "Passwort setzen…"}
+                    value={sharePassword}
+                    onChange={(e) => setSharePassword(e.target.value)}
+                    disabled={shareSaving}
+                  />
+                  <button
+                    onClick={() => updateShareLink({ password: sharePassword })}
+                    disabled={shareSaving}
+                    className="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 disabled:opacity-60"
+                  >
+                    Speichern
+                  </button>
+                  {shareLinks[shopId]?.has_password ? (
+                    <button
+                      onClick={() => updateShareLink({ password: "" })}
+                      disabled={shareSaving}
+                      className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      Entfernen
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {shareLinks[shopId]?.has_password ? "Passwortschutz aktiv." : "Kein Passwortschutz."}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
         <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400">

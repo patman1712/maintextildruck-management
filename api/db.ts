@@ -370,6 +370,19 @@ try {
 }
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS shop_donation_share_links (
+    id TEXT PRIMARY KEY,
+    shop_id TEXT NOT NULL UNIQUE,
+    token TEXT NOT NULL UNIQUE,
+    enabled INTEGER DEFAULT 1,
+    password_hash TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE
+  )
+`);
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS shop_product_images (
     id TEXT PRIMARY KEY,
     shop_product_assignment_id TEXT NOT NULL,

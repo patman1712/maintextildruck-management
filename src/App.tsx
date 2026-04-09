@@ -39,6 +39,7 @@ import ShopOrdersPage from "@/pages/OnlineShops/ShopOrdersPage";
 import ShopOrderDetailPage from "@/pages/OnlineShops/ShopOrderDetailPage";
 import ShopContentPage from "@/pages/OnlineShops/ShopContentPage";
 import Donations from "@/pages/Donations";
+import PublicDonations from "@/pages/PublicDonations";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useAppStore } from "@/store";
 import { useEffect, useRef, useState } from "react";
@@ -143,6 +144,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/proof/:token" element={<PublicOrderProof />} />
+        <Route path="/donations/:token" element={<PublicDonations />} />
         <Route path="/shop/:shopId" element={<ShopLayout />}>
           <Route index element={<ShopHome />} />
           <Route path="category/:categorySlug" element={<ShopCategoryPage />} />
