@@ -17,6 +17,7 @@ export interface ShopCustomer {
 
 export interface CartItem {
   id: string;
+  assignmentId?: string;
   productId: string;
   productNumber?: string;
   name: string;

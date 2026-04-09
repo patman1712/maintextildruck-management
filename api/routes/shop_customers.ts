@@ -520,7 +520,11 @@ router.post('/:shopId/orders', async (req, res) => {
         
         // 2.1 Copy files from Product to Order (Preview & Print Data)
         if (item.productId) {
-            const assignment = db.prepare('SELECT id, variants FROM shop_product_assignments WHERE shop_id = ? AND product_id = ?').get(shopId, item.productId) as any;
+            const assignment = item.assignmentId
+                ? db.prepare('SELECT id, product_id, variants FROM shop_product_assignments WHERE shop_id = ? AND id = ?').get(shopId, item.assignmentId) as any
+                : db.prepare('SELECT id, product_id, variants FROM shop_product_assignments WHERE shop_id = ? AND product_id = ?').get(shopId, item.productId) as any;
+            
+            const effectiveProductId = assignment?.product_id || item.productId;
             
             let filesToProcess: any[] = [];
             let useAssignments = false;
@@ -540,12 +544,12 @@ router.post('/:shopId/orders', async (req, res) => {
                 } else {
                     filesToProcess = db.prepare(`
                         SELECT * FROM customer_product_files WHERE product_id = ?
-                    `).all(item.productId) as any[];
+                    `).all(effectiveProductId) as any[];
                 }
             } else {
                 filesToProcess = db.prepare(`
                     SELECT * FROM customer_product_files WHERE product_id = ?
-                `).all(item.productId) as any[];
+                `).all(effectiveProductId) as any[];
             }
             
             // Determine active variant ID and selected values

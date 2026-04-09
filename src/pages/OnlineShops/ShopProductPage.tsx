@@ -587,10 +587,11 @@ const ShopProductPage: React.FC = () => {
       .sort()
       .join('|');
     
-    const cartItemId = `${product.product_id}-${Object.values(selectedVariantValues).join('_')}-${selectedBackPrint}-${selectedSize}-${selectedColor}-${personalizationString}`;
+    const cartItemId = `${product.assignment_id || 'na'}-${product.product_id}-${Object.values(selectedVariantValues).join('_')}-${selectedBackPrint}-${selectedSize}-${selectedColor}-${personalizationString}`;
 
     const cartItem: CartItem = {
       id: cartItemId,
+      assignmentId: product.assignment_id,
       productId: product.product_id,
       productNumber: product.product_number,
       name: product.name,
