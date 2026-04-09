@@ -120,7 +120,7 @@ router.post('/public/:token', (req, res) => {
     const link = db
       .prepare(
         `
-        SELECT l.shop_id, l.enabled, l.password_hash, s.name as shop_name
+        SELECT l.shop_id, l.enabled, l.password_hash, s.name as shop_name, s.logo_url as shop_logo_url
         FROM shop_donation_share_links l
         JOIN shops s ON s.id = l.shop_id
         WHERE l.token = ?
@@ -137,25 +137,18 @@ router.post('/public/:token', (req, res) => {
       if (!ok) return res.json({ success: false, requiresPassword: true })
     }
 
-    const showPaid = req.query?.showPaid === 'true'
-    const where: string[] = ['sd.shop_id = ?']
-    const params: any[] = [link.shop_id]
-    if (!showPaid) {
-      where.push('sd.paid = 0')
-    }
-
     const sql = `
       SELECT
         sd.*,
         s.name as shop_name
       FROM shop_donations sd
       JOIN shops s ON s.id = sd.shop_id
-      WHERE ${where.join(' AND ')}
+      WHERE sd.shop_id = ?
       ORDER BY sd.order_date DESC, sd.created_at DESC
     `
 
-    const rows = db.prepare(sql).all(...params)
-    res.json({ success: true, data: { shopId: link.shop_id, shopName: link.shop_name, rows } })
+    const rows = db.prepare(sql).all(link.shop_id)
+    res.json({ success: true, data: { shopId: link.shop_id, shopName: link.shop_name, shopLogoUrl: link.shop_logo_url, rows } })
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message })
   }
