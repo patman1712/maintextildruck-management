@@ -5,6 +5,206 @@ import crypto from 'crypto'
 
 const router = Router()
 
+router.get('/payments', (req, res) => {
+  try {
+    const shopId = typeof req.query.shopId === 'string' ? req.query.shopId : null
+
+    const where: string[] = []
+    const params: any[] = []
+    if (shopId) {
+      where.push('p.shop_id = ?')
+      params.push(shopId)
+    }
+
+    const rows = db
+      .prepare(
+        `
+        SELECT p.*, s.name as shop_name
+        FROM donation_payments p
+        JOIN shops s ON s.id = p.shop_id
+        ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+        ORDER BY datetime(p.paid_at) DESC, datetime(p.created_at) DESC
+      `
+      )
+      .all(...params) as any[]
+
+    const data = rows.map((r) => ({
+      ...r,
+      order_ids: r.order_ids_json ? JSON.parse(r.order_ids_json) : [],
+    }))
+
+    res.json({ success: true, data })
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
+router.get('/payments/:id', (req, res) => {
+  try {
+    const { id } = req.params
+    const payment = db
+      .prepare(
+        `
+        SELECT p.*, s.name as shop_name
+        FROM donation_payments p
+        JOIN shops s ON s.id = p.shop_id
+        WHERE p.id = ?
+      `
+      )
+      .get(id) as any
+
+    if (!payment) return res.status(404).json({ success: false, error: 'Nicht gefunden.' })
+
+    const orders = db
+      .prepare(
+        `
+        SELECT
+          sd.order_id,
+          MAX(sd.order_number) as order_number,
+          MAX(sd.order_date) as order_date,
+          SUM(sd.quantity) as total_quantity,
+          SUM(sd.item_total) as total_amount,
+          SUM(sd.donation_total) as total_donation,
+          MIN(sd.paid) as paid
+        FROM shop_donations sd
+        WHERE sd.payment_id = ?
+        GROUP BY sd.order_id
+        ORDER BY datetime(order_date) DESC
+      `
+      )
+      .all(id)
+
+    res.json({
+      success: true,
+      data: {
+        ...payment,
+        order_ids: payment.order_ids_json ? JSON.parse(payment.order_ids_json) : [],
+        orders,
+      },
+    })
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
+router.post('/payments', (req, res) => {
+  try {
+    const shopId = typeof req.body?.shopId === 'string' ? req.body.shopId : ''
+    const orderIds = Array.isArray(req.body?.orderIds) ? req.body.orderIds.filter((x: any) => typeof x === 'string') : []
+    const paidBy = typeof req.body?.paidBy === 'string' ? req.body.paidBy : null
+
+    if (!shopId) return res.status(400).json({ success: false, error: 'Shop fehlt.' })
+    if (!orderIds || orderIds.length === 0) return res.status(400).json({ success: false, error: 'Keine Aufträge ausgewählt.' })
+
+    const shop = db.prepare('SELECT id FROM shops WHERE id = ?').get(shopId) as any
+    if (!shop) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' })
+
+    const placeholders = orderIds.map(() => '?').join(',')
+    const checkRows = db
+      .prepare(
+        `
+        SELECT order_id, shop_id, paid
+        FROM shop_donations
+        WHERE shop_id = ?
+          AND order_id IN (${placeholders})
+        GROUP BY order_id
+      `
+      )
+      .all(shopId, ...orderIds) as any[]
+
+    const found = new Set(checkRows.map((r) => r.order_id))
+    const missing = orderIds.filter((id: string) => !found.has(id))
+    if (missing.length > 0) return res.status(400).json({ success: false, error: 'Aufträge nicht gefunden.', missing })
+
+    const alreadyPaid = checkRows.filter((r) => r.paid === 1).map((r) => r.order_id)
+    if (alreadyPaid.length > 0) return res.status(400).json({ success: false, error: 'Einige Aufträge sind bereits bezahlt.', alreadyPaid })
+
+    const totals = db
+      .prepare(
+        `
+        SELECT
+          COUNT(DISTINCT order_id) as total_orders,
+          SUM(donation_total) as total_donation
+        FROM shop_donations
+        WHERE shop_id = ?
+          AND order_id IN (${placeholders})
+      `
+      )
+      .get(shopId, ...orderIds) as any
+
+    const paymentId = crypto.randomUUID()
+    const now = new Date().toISOString()
+
+    const tx = db.transaction(() => {
+      db.prepare(
+        `
+        INSERT INTO donation_payments (id, shop_id, paid_at, paid_by, order_ids_json, total_orders, total_donation, receipt_received, receipt_received_at, receipt_reference, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?)
+      `
+      ).run(
+        paymentId,
+        shopId,
+        now,
+        paidBy,
+        JSON.stringify(orderIds),
+        Number(totals?.total_orders) || orderIds.length,
+        Number(totals?.total_donation) || 0,
+        now
+      )
+
+      db.prepare(
+        `
+        UPDATE shop_donations
+        SET paid = 1, paid_at = CURRENT_TIMESTAMP, paid_by = ?, payment_id = ?
+        WHERE shop_id = ?
+          AND order_id IN (${placeholders})
+      `
+      ).run(paidBy, paymentId, shopId, ...orderIds)
+    })
+
+    tx()
+
+    const payment = db.prepare('SELECT * FROM donation_payments WHERE id = ?').get(paymentId) as any
+    res.json({ success: true, data: { ...(payment || {}), order_ids: orderIds } })
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
+router.put('/payments/:id/receipt', (req, res) => {
+  try {
+    const { id } = req.params
+    const received = !!req.body?.received
+    const reference = typeof req.body?.reference === 'string' ? req.body.reference : null
+
+    const existing = db.prepare('SELECT id FROM donation_payments WHERE id = ?').get(id) as any
+    if (!existing) return res.status(404).json({ success: false, error: 'Nicht gefunden.' })
+
+    if (received) {
+      db.prepare(
+        `
+        UPDATE donation_payments
+        SET receipt_received = 1, receipt_received_at = CURRENT_TIMESTAMP, receipt_reference = ?
+        WHERE id = ?
+      `
+      ).run(reference, id)
+    } else {
+      db.prepare(
+        `
+        UPDATE donation_payments
+        SET receipt_received = 0, receipt_received_at = NULL, receipt_reference = ?
+        WHERE id = ?
+      `
+      ).run(reference, id)
+    }
+
+    const row = db.prepare('SELECT * FROM donation_payments WHERE id = ?').get(id)
+    res.json({ success: true, data: row })
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
 router.get('/share-links', (req, res) => {
   try {
     const rows = db

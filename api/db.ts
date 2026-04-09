@@ -238,6 +238,16 @@ try {
     console.error('Migration error (donations_enabled):', error);
 }
 
+try {
+  const donationCols = db.prepare("PRAGMA table_info(shop_donations)").all() as any[];
+  if (!donationCols.some(col => col.name === 'payment_id')) {
+    console.log('Migrating database: Adding payment_id to shop_donations table');
+    db.exec("ALTER TABLE shop_donations ADD COLUMN payment_id TEXT");
+  }
+} catch (error) {
+  console.error('Migration error (shop_donations payment_id):', error);
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS shop_categories (
     id TEXT PRIMARY KEY,
@@ -381,6 +391,30 @@ db.exec(`
     FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE
   )
 `);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS donation_payments (
+    id TEXT PRIMARY KEY,
+    shop_id TEXT NOT NULL,
+    paid_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    paid_by TEXT,
+    order_ids_json TEXT NOT NULL,
+    total_orders INTEGER NOT NULL DEFAULT 0,
+    total_donation DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    receipt_received INTEGER DEFAULT 0,
+    receipt_received_at DATETIME,
+    receipt_reference TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE
+  )
+`);
+
+try {
+  db.exec('CREATE INDEX IF NOT EXISTS idx_donation_payments_shop ON donation_payments(shop_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_donation_payments_paid_at ON donation_payments(paid_at)');
+} catch (e) {
+  console.error('Migration error (donation_payments indexes):', e);
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS shop_product_images (

@@ -193,6 +193,15 @@ export default function DashboardLayout() {
                                 menuSettings={{}}
                             />
                         )}
+
+                        {currentUser?.role === 'admin' && (
+                            <NavItem 
+                                item={{ id: 'donations_payments', label: 'Spenden bezahlen', to: '/dashboard/donations/payments', icon: Heart }} 
+                                isOpen={sidebarOpen || mobileMenuOpen} 
+                                onClick={() => setMobileMenuOpen(false)} 
+                                menuSettings={{}}
+                            />
+                        )}
                     </>
                 )}
                 
