@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Download, FileText, Printer, Search, Eye } from "lucide-react";
+import { Download, FileText, Printer, Search, Eye, Trash2 } from "lucide-react";
 
 export default function DTFPdfs() {
   const [jobs, setJobs] = useState<any[]>([]);
@@ -7,6 +7,7 @@ export default function DTFPdfs() {
   const [search, setSearch] = useState("");
   const [selectedJob, setSelectedJob] = useState<any | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [purgeLoading, setPurgeLoading] = useState(false);
 
   const fetchJobs = async () => {
     try {
@@ -41,6 +42,40 @@ export default function DTFPdfs() {
     }
   };
 
+  const deleteJob = async (jobId: string) => {
+    if (!confirm('DTF Job wirklich löschen? Dabei werden auch die PDFs/Thumbnails entfernt.')) return;
+    try {
+      const res = await fetch(`/api/dtf/jobs/${jobId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || 'Löschen fehlgeschlagen');
+        return;
+      }
+      setSelectedJob(null);
+      await fetchJobs();
+    } catch (e: any) {
+      alert(e?.message || 'Löschen fehlgeschlagen');
+    }
+  };
+
+  const purgeOrphans = async () => {
+    if (!confirm('Alte DTF PDFs ohne Job-Referenz jetzt löschen?')) return;
+    setPurgeLoading(true);
+    try {
+      const res = await fetch('/api/dtf/purge-orphan-pdfs', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Gelöscht: ${data.deletedCount}`);
+      } else {
+        alert(data.error || 'Cleanup fehlgeschlagen');
+      }
+    } catch (e: any) {
+      alert(e?.message || 'Cleanup fehlgeschlagen');
+    } finally {
+      setPurgeLoading(false);
+    }
+  };
+
   const filteredJobs = jobs.filter(job => {
     const q = search.toLowerCase().trim();
     if (!q) return true;
@@ -56,7 +91,16 @@ export default function DTFPdfs() {
           <FileText className="mr-3 text-red-600" />
           Fertige DTF Jobs
         </h1>
-        <div className="relative">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={purgeOrphans}
+            disabled={purgeLoading}
+            className="text-xs font-bold px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            title="Löscht dtf-output PDFs im Uploads-Ordner, die zu keinem gespeicherten DTF Job gehören"
+          >
+            {purgeLoading ? 'Aufräumen…' : 'Alte PDFs aufräumen'}
+          </button>
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
             <input 
                 type="text" 
@@ -65,6 +109,7 @@ export default function DTFPdfs() {
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
             />
+          </div>
         </div>
       </div>
 
@@ -152,7 +197,17 @@ export default function DTFPdfs() {
                 <div className="text-sm text-slate-500">DTF Job</div>
                 <div className="font-mono text-sm">{selectedJob.id}</div>
               </div>
-              <button onClick={() => setSelectedJob(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => deleteJob(selectedJob.id)}
+                  className="text-sm font-bold text-red-600 hover:text-red-700 flex items-center"
+                  title="Job löschen (inkl. PDFs)"
+                >
+                  <Trash2 size={16} className="mr-2" />
+                  Löschen
+                </button>
+                <button onClick={() => setSelectedJob(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+              </div>
             </div>
             <div className="p-4 overflow-y-auto max-h-[70vh]">
               {detailsLoading ? (

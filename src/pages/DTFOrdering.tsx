@@ -640,12 +640,6 @@ export default function DTFOrdering() {
                 await fetchData();
             }
 
-            if (generatedJobId) {
-                try {
-                    await fetch(`/api/dtf/jobs/${generatedJobId}/purge-pdfs`, { method: 'POST' });
-                } catch {}
-            }
-        
             setSelectedFiles([]);
             setGeneratedPdfUrls([]);
             setGeneratedJobId(null);

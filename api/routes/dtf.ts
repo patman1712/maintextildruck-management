@@ -48,6 +48,32 @@ type JobFileMeta = {
 
 const pointsToMm = (pt: number) => pt / 2.83465;
 
+const deleteJobPdfs = async (urls: string[]) => {
+    const deleted: string[] = [];
+    const skipped: string[] = [];
+
+    for (const u of urls) {
+        const filename = path.basename(String(u || ''));
+        if (!filename.startsWith('dtf-output-') || !filename.toLowerCase().endsWith('.pdf')) {
+            if (filename) skipped.push(filename);
+            continue;
+        }
+
+        const pdfPath = path.join(UPLOAD_DIR, filename);
+        const thumbPath = path.join(UPLOAD_DIR, `${filename}_thumb.png`);
+
+        try {
+            if (await fs.pathExists(pdfPath)) await fs.remove(pdfPath);
+            if (await fs.pathExists(thumbPath)) await fs.remove(thumbPath);
+            deleted.push(filename);
+        } catch {
+            skipped.push(filename);
+        }
+    }
+
+    return { deleted, skipped };
+};
+
 router.get('/jobs', (req: Request, res: Response) => {
     try {
         const rows = db.prepare(`
@@ -108,31 +134,62 @@ router.post('/jobs/:id/purge-pdfs', async (req: Request, res: Response) => {
         if (!row) return res.status(404).json({ success: false, error: 'Job not found' });
 
         const urls: string[] = row.pdf_urls ? JSON.parse(row.pdf_urls) : [];
-        const deleted: string[] = [];
-        const skipped: string[] = [];
-
-        for (const u of urls) {
-            const filename = path.basename(String(u || ''));
-            if (!filename.startsWith('dtf-output-') || !filename.toLowerCase().endsWith('.pdf')) {
-                skipped.push(filename);
-                continue;
-            }
-
-            const pdfPath = path.join(UPLOAD_DIR, filename);
-            const thumbPath = path.join(UPLOAD_DIR, `${filename}_thumb.png`);
-
-            try {
-                if (await fs.pathExists(pdfPath)) await fs.remove(pdfPath);
-                if (await fs.pathExists(thumbPath)) await fs.remove(thumbPath);
-                deleted.push(filename);
-            } catch {
-                skipped.push(filename);
-            }
-        }
+        const { deleted, skipped } = await deleteJobPdfs(urls);
 
         db.prepare(`UPDATE dtf_jobs SET pdf_urls = ? WHERE id = ?`).run(JSON.stringify([]), id);
 
         res.json({ success: true, deleted, skipped });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.delete('/jobs/:id', async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const row = db.prepare(`SELECT id, pdf_urls FROM dtf_jobs WHERE id = ?`).get(id) as any;
+        if (!row) return res.status(404).json({ success: false, error: 'Job not found' });
+
+        const urls: string[] = row.pdf_urls ? JSON.parse(row.pdf_urls) : [];
+        const { deleted, skipped } = await deleteJobPdfs(urls);
+
+        db.prepare(`DELETE FROM dtf_jobs WHERE id = ?`).run(id);
+        res.json({ success: true, deleted, skipped });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/purge-orphan-pdfs', async (req: Request, res: Response) => {
+    try {
+        const rows = db.prepare(`SELECT pdf_urls FROM dtf_jobs`).all() as any[];
+        const referenced = new Set<string>();
+        for (const r of rows) {
+            const urls: string[] = r.pdf_urls ? JSON.parse(r.pdf_urls) : [];
+            for (const u of urls) {
+                const filename = path.basename(String(u || ''));
+                if (filename) referenced.add(filename);
+                if (filename) referenced.add(`${filename}_thumb.png`);
+            }
+        }
+
+        const entries = await fs.readdir(UPLOAD_DIR);
+        const deleted: string[] = [];
+
+        for (const name of entries) {
+            if (!name.startsWith('dtf-output-')) continue;
+            const lower = name.toLowerCase();
+            const isDtfPdf = lower.endsWith('.pdf');
+            const isDtfThumb = lower.endsWith('.pdf_thumb.png');
+            if (!isDtfPdf && !isDtfThumb) continue;
+            if (referenced.has(name)) continue;
+            try {
+                await fs.remove(path.join(UPLOAD_DIR, name));
+                deleted.push(name);
+            } catch {}
+        }
+
+        res.json({ success: true, deletedCount: deleted.length, deleted });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }
