@@ -177,7 +177,9 @@ router.post('/purge-orphan-pdfs', async (req: Request, res: Response) => {
         const deleted: string[] = [];
 
         for (const name of entries) {
-            if (!name.startsWith('dtf-output-')) continue;
+            const isLegacy = name.startsWith('DTF_Job_');
+            const isNew = name.startsWith('dtf-output-');
+            if (!isNew && !isLegacy) continue;
             const lower = name.toLowerCase();
             const isDtfPdf = lower.endsWith('.pdf');
             const isDtfThumb = lower.endsWith('.pdf_thumb.png');
