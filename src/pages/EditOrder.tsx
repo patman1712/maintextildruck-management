@@ -1053,8 +1053,8 @@ export default function EditOrder() {
               <ul className="mt-4 space-y-2">
                 {printFiles.map((file, idx) => (
                   <li key={idx} className="flex justify-between items-center text-sm bg-red-50 p-2 rounded border border-red-100 text-red-800">
-                    <div className="flex items-center">
-                        <span className="truncate max-w-[200px] font-medium">{file.name}</span>
+                    <div className="flex items-center min-w-0">
+                        <span className="break-all whitespace-normal font-medium">{file.name}</span>
                         {/* Quantity Input for Print Files */}
                         {file.type === 'print' && (
                             <div className="ml-2 flex items-center bg-white rounded border border-red-200 overflow-hidden shrink-0 h-6">
