@@ -111,6 +111,34 @@ const ShopProductPage: React.FC = () => {
       variantDefinitions.find(v => v.type === 'color'),
   [variantDefinitions]);
 
+  const colorHexMap = React.useMemo(() => {
+      const map: Record<string, string> = {};
+      for (const v of shopVariables || []) {
+          if (v?.type !== 'color') continue;
+          const colors = v?.variable_colors;
+          if (!colors || typeof colors !== 'object') continue;
+          for (const [name, hex] of Object.entries(colors)) {
+              if (typeof name !== 'string' || typeof hex !== 'string') continue;
+              const key = name.trim().toLowerCase();
+              const value = hex.trim();
+              if (!key) continue;
+              if (!/^#([0-9a-fA-F]{6})$/.test(value)) continue;
+              map[key] = value;
+          }
+      }
+      return map;
+  }, [shopVariables]);
+
+  const colorChoices = React.useMemo(() => {
+      const values = colorVariant?.values || [];
+      return values.map((name: string) => {
+          const key = String(name || '').trim().toLowerCase();
+          return { name, hex: key ? colorHexMap[key] : undefined };
+      });
+  }, [colorHexMap, colorVariant]);
+
+  const showColorSwatches = React.useMemo(() => colorChoices.some(c => !!c.hex), [colorChoices]);
+
   const groupVariants = React.useMemo(() => 
       variantDefinitions.filter(v => v.type !== 'back_print' && v.type !== 'size' && v.type !== 'color'),
   [variantDefinitions]);
@@ -754,28 +782,61 @@ const ShopProductPage: React.FC = () => {
             {colorVariant && colorVariant.values.length > 0 && (
                 <div className="mb-6">
                     <label className="font-bold text-sm uppercase block mb-2">Farbe:</label>
-                    <select
-                        className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none"
-                        value={selectedColor}
-                        onChange={(e) => {
-                            const val = e.target.value;
-                            setSelectedColor(val);
-                            if (!val) {
-                                setSelectedVariantValues(prev => {
-                                    const next = { ...prev };
-                                    delete next[colorVariant.id];
-                                    return next;
-                                });
-                                return;
-                            }
-                            setSelectedVariantValues(prev => ({ ...prev, [colorVariant.id]: val }));
-                        }}
-                    >
-                        <option value="">Farbe auswählen</option>
-                        {colorVariant.values.map((val: string) => (
-                            <option key={val} value={val}>{val}</option>
-                        ))}
-                    </select>
+                    {showColorSwatches ? (
+                        <div className="flex flex-wrap gap-2">
+                            {colorChoices.map((c: any) => {
+                                const isSelected = selectedColor === c.name;
+                                return (
+                                    <button
+                                        key={c.name}
+                                        type="button"
+                                        title={c.name}
+                                        aria-pressed={isSelected}
+                                        onClick={() => {
+                                            const val = c.name;
+                                            setSelectedColor(val);
+                                            setSelectedVariantValues(prev => ({ ...prev, [colorVariant.id]: val }));
+                                        }}
+                                        className={`h-10 px-3 rounded border transition-all flex items-center justify-center ${
+                                            isSelected
+                                                ? 'border-slate-800 ring-2 ring-slate-800 ring-offset-2 bg-white'
+                                                : 'border-slate-200 bg-white hover:border-slate-400'
+                                        }`}
+                                    >
+                                        {c.hex ? (
+                                            <span className="w-5 h-5 rounded-full border border-slate-200" style={{ backgroundColor: c.hex }} />
+                                        ) : (
+                                            <span className="text-xs font-bold text-slate-600">{c.name}</span>
+                                        )}
+                                        <span className="sr-only">{c.name}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <select
+                            className="w-full border border-slate-300 rounded p-3 text-sm focus:ring-2 focus:ring-slate-500 outline-none"
+                            value={selectedColor}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setSelectedColor(val);
+                                if (!val) {
+                                    setSelectedVariantValues(prev => {
+                                        const next = { ...prev };
+                                        delete next[colorVariant.id];
+                                        return next;
+                                    });
+                                    return;
+                                }
+                                setSelectedVariantValues(prev => ({ ...prev, [colorVariant.id]: val }));
+                            }}
+                        >
+                            <option value="">Farbe auswählen</option>
+                            {colorVariant.values.map((val: string) => (
+                                <option key={val} value={val}>{val}</option>
+                            ))}
+                        </select>
+                    )}
                 </div>
             )}
 
