@@ -31,7 +31,10 @@ const ShopCategoryPage: React.FC = () => {
     const fetchProducts = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/shops/${shop.id}/products`);
+        const res = await fetch(`/api/shops/${shop.id}/products`, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        });
         const data = await res.json();
         if (data.success) {
           // Filter by category slug
@@ -66,6 +69,11 @@ const ShopCategoryPage: React.FC = () => {
     if (categorySlug) {
         fetchProducts();
     }
+    const onFocus = () => {
+        if (categorySlug) fetchProducts();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, [shop.id, categorySlug, currentCategory, categories]);
 
   if (!currentCategory && !loading) return <div className="container mx-auto p-8">Kategorie nicht gefunden.</div>;

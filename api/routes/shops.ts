@@ -103,6 +103,8 @@ router.get('/:id/categories', (req, res) => {
 // Get public products for a shop
 router.get('/:id/products', (req, res) => {
   try {
+    res.set('Cache-Control', 'no-store');
+    res.set('Pragma', 'no-cache');
     const { id } = req.params;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : null;
     let shopId = id;

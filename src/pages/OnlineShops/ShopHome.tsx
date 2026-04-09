@@ -25,7 +25,10 @@ const ShopHome: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch(`/api/shops/${shop.id}/products?limit=8`);
+        const res = await fetch(`/api/shops/${shop.id}/products?limit=8`, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        });
         const data = await res.json();
         if (data.success) {
           // Filter featured or just take first 8 (already limited by API)
@@ -38,6 +41,10 @@ const ShopHome: React.FC = () => {
       }
     };
     fetchProducts();
+
+    const onFocus = () => fetchProducts();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, [shop.id]);
 
   // Auto-advance slider

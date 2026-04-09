@@ -33,16 +33,32 @@ const ShopProductPage: React.FC = () => {
   const [shopVariables, setShopVariables] = useState<any[]>([]);
 
   useEffect(() => {
-    if (shop?.id) {
-      fetch(`/api/variables/shop/${shop.id}`)
-        .then(res => res.json())
-        .then(data => { 
-            if (data.success) {
-                setShopVariables(data.data); 
-            }
-        })
-        .catch(err => console.error("Error fetching variables", err));
-    }
+    if (!shop?.id) return;
+
+    const fetchVariables = async () => {
+        try {
+            const res = await fetch(`/api/variables/shop/${shop.id}`, {
+                cache: 'no-store',
+                headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+            });
+            const data = await res.json();
+            if (data.success) setShopVariables(data.data);
+        } catch (err) {
+            console.error("Error fetching variables", err);
+        }
+    };
+
+    fetchVariables();
+    const onFocus = () => fetchVariables();
+    window.addEventListener('focus', onFocus);
+    const interval = window.setInterval(() => {
+        if (document.visibilityState === 'visible') fetchVariables();
+    }, 60000);
+
+    return () => {
+        window.removeEventListener('focus', onFocus);
+        window.clearInterval(interval);
+    };
   }, [shop?.id]);
 
   // Parse Variants - Safe default
@@ -259,9 +275,15 @@ const ShopProductPage: React.FC = () => {
   }, [variants, selectedVariantValues]);
 
   useEffect(() => {
+    if (!productId) return;
+
+    let initial = true;
     const fetchProduct = async () => {
       try {
-        const res = await fetch(`/api/shops/${shop.id}/products`);
+        const res = await fetch(`/api/shops/${shop.id}/products`, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+        });
         const data = await res.json();
         if (data.success) {
           const found = data.data.find((p: any) => p.product_id === productId);
@@ -275,12 +297,21 @@ const ShopProductPage: React.FC = () => {
       } catch (err) {
         console.error(err);
       } finally {
-        setLoading(false);
+        if (initial) setLoading(false);
       }
     };
-    if (productId) {
-      fetchProduct();
-    }
+    fetchProduct().finally(() => { initial = false; });
+
+    const onFocus = () => fetchProduct();
+    window.addEventListener('focus', onFocus);
+    const interval = window.setInterval(() => {
+        if (document.visibilityState === 'visible') fetchProduct();
+    }, 60000);
+
+    return () => {
+        window.removeEventListener('focus', onFocus);
+        window.clearInterval(interval);
+    };
   }, [shop.id, productId]);
 
   const images = React.useMemo(() => {
