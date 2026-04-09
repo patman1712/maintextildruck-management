@@ -386,11 +386,22 @@ db.exec(`
     token TEXT NOT NULL UNIQUE,
     enabled INTEGER DEFAULT 1,
     password_hash TEXT,
+    password_plain TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE
   )
 `);
+
+try {
+  const cols = db.prepare("PRAGMA table_info(shop_donation_share_links)").all() as any[];
+  if (!cols.some(col => col.name === 'password_plain')) {
+    console.log('Migrating database: Adding password_plain to shop_donation_share_links table');
+    db.exec("ALTER TABLE shop_donation_share_links ADD COLUMN password_plain TEXT");
+  }
+} catch (error) {
+  console.error('Migration error (shop_donation_share_links password_plain):', error);
+}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS donation_payments (

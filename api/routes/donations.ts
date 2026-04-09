@@ -225,6 +225,28 @@ router.get('/share-links', (req, res) => {
   }
 })
 
+router.get('/share-links/:shopId', (req, res) => {
+  try {
+    const { shopId } = req.params
+    const row = db
+      .prepare(
+        `
+        SELECT shop_id, token, enabled, created_at, updated_at,
+               CASE WHEN password_hash IS NOT NULL AND password_hash != '' THEN 1 ELSE 0 END as has_password,
+               password_plain
+        FROM shop_donation_share_links
+        WHERE shop_id = ?
+      `
+      )
+      .get(shopId)
+
+    if (!row) return res.status(404).json({ success: false, error: 'Nicht gefunden.' })
+    res.json({ success: true, data: row })
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
 router.post('/share-links/:shopId', (req, res) => {
   try {
     const { shopId } = req.params
@@ -245,9 +267,11 @@ router.post('/share-links/:shopId', (req, res) => {
     if (!existing || regenerate) nextToken = crypto.randomBytes(24).toString('hex')
 
     let nextPasswordHash: string | null | undefined = undefined
+    let nextPasswordPlain: string | null | undefined = undefined
     if (password !== undefined) {
       const trimmed = password.trim()
       nextPasswordHash = trimmed ? bcrypt.hashSync(trimmed, 10) : null
+      nextPasswordPlain = trimmed ? trimmed : null
     }
 
     if (!existing) {
@@ -255,13 +279,14 @@ router.post('/share-links/:shopId', (req, res) => {
       const token = nextToken || crypto.randomBytes(24).toString('hex')
       const enabled = nextEnabled !== undefined ? nextEnabled : 1
       const passwordHashToStore = nextPasswordHash === undefined ? null : nextPasswordHash
+      const passwordPlainToStore = nextPasswordPlain === undefined ? null : nextPasswordPlain
 
       db.prepare(
         `
-        INSERT INTO shop_donation_share_links (id, shop_id, token, enabled, password_hash, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO shop_donation_share_links (id, shop_id, token, enabled, password_hash, password_plain, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `
-      ).run(id, shopId, token, enabled, passwordHashToStore, now, now)
+      ).run(id, shopId, token, enabled, passwordHashToStore, passwordPlainToStore, now, now)
     } else {
       const fields: string[] = []
       const params: any[] = []
@@ -277,6 +302,10 @@ router.post('/share-links/:shopId', (req, res) => {
         fields.push('password_hash = ?')
         params.push(nextPasswordHash)
       }
+      if (nextPasswordPlain !== undefined) {
+        fields.push('password_plain = ?')
+        params.push(nextPasswordPlain)
+      }
 
       fields.push('updated_at = ?')
       params.push(now)
@@ -289,7 +318,8 @@ router.post('/share-links/:shopId', (req, res) => {
       .prepare(
         `
         SELECT shop_id, token, enabled, created_at, updated_at,
-               CASE WHEN password_hash IS NOT NULL AND password_hash != '' THEN 1 ELSE 0 END as has_password
+               CASE WHEN password_hash IS NOT NULL AND password_hash != '' THEN 1 ELSE 0 END as has_password,
+               password_plain
         FROM shop_donation_share_links
         WHERE shop_id = ?
       `

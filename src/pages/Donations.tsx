@@ -58,7 +58,6 @@ export default function Donations() {
   const [shareLinks, setShareLinks] = useState<Record<string, any>>({})
   const [sharePassword, setSharePassword] = useState<string>("")
   const [shareSaving, setShareSaving] = useState<boolean>(false)
-  const [showSharePassword, setShowSharePassword] = useState<boolean>(false)
   const [payments, setPayments] = useState<DonationPayment[]>([])
   const [paymentsLoading, setPaymentsLoading] = useState<boolean>(false)
   const [paymentsSaving, setPaymentsSaving] = useState<boolean>(false)
@@ -191,12 +190,28 @@ export default function Donations() {
 
   useEffect(() => {
     setSharePassword("")
-    setShowSharePassword(false)
     setExpandedOrderKey(null)
     setSelectedOrderIds({})
     setExpandedPaymentId(null)
     setExpandedPaymentOrders(null)
   }, [shopId])
+
+  const fetchShareLinkDetail = async () => {
+    if (!shopId) return
+    try {
+      const res = await fetch(`/api/donations/share-links/${shopId}`)
+      const data = await res.json()
+      if (data.success) {
+        setSharePassword(data.data?.password_plain || "")
+      }
+    } catch {}
+  }
+
+  useEffect(() => {
+    if (!shopId) return
+    if (!shareLinks[shopId]?.token) return
+    fetchShareLinkDetail()
+  }, [shopId, shareLinks])
 
   const generatePassword = () => {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
@@ -221,7 +236,7 @@ export default function Donations() {
       const data = await res.json()
       if (data.success) {
         await fetchShareLinks()
-        if (payload.password !== undefined) setSharePassword("")
+        if (payload.password !== undefined) setSharePassword(data.data?.password_plain || "")
       } else {
         alert(data.error || "Fehler")
       }
@@ -459,42 +474,40 @@ export default function Donations() {
                 <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Passwort (optional)</label>
                 <div className="flex flex-col md:flex-row gap-2">
                   <input
-                    type={showSharePassword ? "text" : "password"}
+                    type="text"
                     className="w-full border border-slate-300 rounded-lg p-2 text-sm"
-                    placeholder={shareLinks[shopId]?.has_password ? "Passwort ändern…" : "Passwort setzen…"}
+                    placeholder={shareLinks[shopId]?.has_password ? "Passwort ist gesetzt" : "Kein Passwort gesetzt"}
                     value={sharePassword}
-                    onChange={(e) => setSharePassword(e.target.value)}
-                    disabled={shareSaving}
+                    readOnly
                   />
                   <button
                     type="button"
-                    onClick={() => setShowSharePassword((v) => !v)}
-                    disabled={shareSaving}
-                    className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-50 disabled:opacity-60"
+                    onClick={async () => {
+                      if (!sharePassword) return
+                      try {
+                        await navigator.clipboard.writeText(sharePassword)
+                      } catch {
+                        alert("Kopieren nicht möglich.")
+                      }
+                    }}
+                    disabled={shareSaving || !sharePassword}
+                    className="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 disabled:opacity-60"
                   >
-                    {showSharePassword ? "Verbergen" : "Anzeigen"}
+                    PW kopieren
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       const pw = generatePassword()
-                      setSharePassword(pw)
-                      setShowSharePassword(true)
                       try {
-                        navigator.clipboard.writeText(pw)
+                        await navigator.clipboard.writeText(pw)
                       } catch {}
+                      await updateShareLink({ password: pw })
                     }}
                     disabled={shareSaving}
                     className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-bold text-sm hover:bg-slate-50 disabled:opacity-60"
                   >
-                    Generieren
-                  </button>
-                  <button
-                    onClick={() => updateShareLink({ password: sharePassword })}
-                    disabled={shareSaving}
-                    className="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 disabled:opacity-60"
-                  >
-                    Speichern
+                    Neu generieren
                   </button>
                   {shareLinks[shopId]?.has_password ? (
                     <button
@@ -508,6 +521,7 @@ export default function Donations() {
                 </div>
                 <div className="mt-1 text-xs text-slate-500">
                   {shareLinks[shopId]?.has_password ? "Passwortschutz aktiv." : "Kein Passwortschutz."}
+                  {shareLinks[shopId]?.has_password && !sharePassword ? " (Passwort nicht mehr verfügbar – bitte einmal neu generieren.)" : ""}
                 </div>
               </div>
             </div>
