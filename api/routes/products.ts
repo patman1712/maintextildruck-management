@@ -169,6 +169,21 @@ router.get('/:customerId', (req: Request, res: Response) => {
             (SELECT price FROM shop_product_assignments spa WHERE spa.product_id = p.id ORDER BY spa.created_at DESC LIMIT 1) as price,
             (SELECT count(*) FROM shop_product_assignments spa WHERE spa.product_id = p.id) as assignment_count,
             (SELECT json_group_array(json_object(
+                'id', t.id,
+                'file_url', t.file_url,
+                'file_name', t.file_name,
+                'thumbnail_url', t.thumbnail_url,
+                'type', t.type,
+                'quantity', t.quantity
+            )) FROM (
+                SELECT DISTINCT cpf.id, cpf.file_url, cpf.file_name, cpf.thumbnail_url, cpf.type, cpf.quantity
+                FROM shop_product_assignments spa
+                JOIN shops s ON s.id = spa.shop_id
+                JOIN shop_product_images spi ON spi.shop_product_assignment_id = spa.id
+                JOIN customer_product_files cpf ON cpf.id = spi.customer_product_file_id
+                WHERE spa.product_id = p.id AND s.customer_id = p.customer_id
+            ) t) as shop_files,
+            (SELECT json_group_array(json_object(
                 'id', f.id, 
                 'file_url', f.file_url, 
                 'file_name', f.file_name, 
@@ -184,7 +199,8 @@ router.get('/:customerId', (req: Request, res: Response) => {
         // Parse JSON files field
         const parsedProducts = products.map((p: any) => ({
             ...p,
-            files: JSON.parse(p.files || '[]')
+            files: JSON.parse(p.files || '[]'),
+            shop_files: JSON.parse(p.shop_files || '[]')
         }));
 
         res.json({ success: true, data: parsedProducts });

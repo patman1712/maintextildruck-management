@@ -664,7 +664,27 @@ export default function NewOrder() {
           const res = await fetch(`/api/products/${selectedCustomerId}`);
           const data = await res.json();
           if (data.success) {
-              setCustomerProducts(data.data);
+              const merged = (data.data || []).map((p: any) => {
+                  const all = [...(p.files || []), ...(p.shop_files || [])];
+                  const byUrl = new Map<string, any>();
+                  for (const f of all) {
+                      const url = String(f?.file_url || '').trim();
+                      if (!url) continue;
+                      const existing = byUrl.get(url);
+                      if (existing) {
+                          const a = Number(existing.quantity) || 1;
+                          const b = Number(f.quantity) || 1;
+                          existing.quantity = Math.max(a, b);
+                          if (!existing.type && f.type) existing.type = f.type;
+                          if (!existing.thumbnail_url && f.thumbnail_url) existing.thumbnail_url = f.thumbnail_url;
+                          if (!existing.file_name && f.file_name) existing.file_name = f.file_name;
+                          continue;
+                      }
+                      byUrl.set(url, { ...f, quantity: Number(f.quantity) || 1 });
+                  }
+                  return { ...p, files: Array.from(byUrl.values()) };
+              });
+              setCustomerProducts(merged);
               setShowProductSelector(true);
           }
       } catch (err) {
