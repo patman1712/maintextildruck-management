@@ -77,6 +77,19 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS dtf_jobs (
+    id TEXT PRIMARY KEY,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    pdf_urls TEXT,
+    roll_width_mm INTEGER,
+    roll_length_mm INTEGER,
+    padding_mm INTEGER,
+    files_json TEXT,
+    pages_json TEXT,
+    order_ids_json TEXT,
+    stats_json TEXT
+  );
+
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,

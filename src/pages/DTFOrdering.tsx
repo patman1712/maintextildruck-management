@@ -57,6 +57,8 @@ export default function DTFOrdering() {
   // Processing State
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedPdfUrls, setGeneratedPdfUrls] = useState<string[]>([]);
+  const [generatedJobId, setGeneratedJobId] = useState<string | null>(null);
+  const [generatedStats, setGeneratedStats] = useState<any | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
 
   // Extract all available print files
@@ -74,7 +76,7 @@ export default function DTFOrdering() {
         date: order.createdAt,
         status: order.status,
         reference: f.reference,
-        quantity: f.quantity || 1 // Here we read the quantity from the file object
+        quantity: Number(f.quantity) || 1
       }))
   ).filter(f => f.url);
 
@@ -180,7 +182,7 @@ export default function DTFOrdering() {
                 orderId: orderId, // Use Virtual Group ID for tracking status update
                 customerName: originalOrderId === 'dtf-manual-queue' ? (f.reference || 'Manueller Upload') : 'Lager / Manuell',
                 date: sourceOrder.createdAt,
-                quantity: f.quantity || 1, // Ensure quantity is passed here too
+                quantity: Number(f.quantity) || 1,
                 width: 0,
                 height: 0,
                 reference: f.reference,
@@ -208,7 +210,7 @@ export default function DTFOrdering() {
             orderId: order.id,
             customerName: order.customerName,
             date: order.createdAt,
-            quantity: f.quantity || 1, // Correctly read quantity from file object
+            quantity: Number((f as any).quantity) || 1,
             width: 0,
             height: 0,
             status: 'pending' as const // Add status
@@ -319,7 +321,7 @@ export default function DTFOrdering() {
           await updateOrder(originalOrderId, { files: newFiles });
           
           // Also remove from selection if selected
-          setSelectedFiles(prev => prev.filter(f => f.url !== fileUrl));
+          setSelectedFiles(prev => prev.filter(f => !(f.url === fileUrl && (f.orderId === virtualOrderId || f.orderId === originalOrderId))));
           
           await fetchData();
       }
@@ -334,13 +336,13 @@ export default function DTFOrdering() {
         // But if user clicks "Add" multiple times from a list...
         // If the incoming file has a specific quantity (from order), we should probably add that.
         // Let's just add the incoming quantity to existing.
-        setSelectedFiles(prev => prev.map((f, idx) => idx === existingIndex ? { ...f, quantity: f.quantity + (file.quantity || 1) } : f));
+        setSelectedFiles(prev => prev.map((f, idx) => idx === existingIndex ? { ...f, quantity: (Number(f.quantity) || 1) + (Number(file.quantity) || 1) } : f));
     } else {
         // Add new with unique ID for selection tracking
         setSelectedFiles(prev => [...prev, {
             ...file,
             id: Math.random().toString(36).substr(2, 9), // Overwrite ID with unique selection ID
-            quantity: file.quantity || 1,
+            quantity: Number(file.quantity) || 1,
             width: 0,
             height: 0,
             status: file.status || 'pending', // Use status if available
@@ -356,7 +358,8 @@ export default function DTFOrdering() {
   const updateQuantity = (id: string, delta: number) => {
     setSelectedFiles(prev => prev.map(f => {
         if (f.id === id) {
-            const newQty = Math.max(1, f.quantity + delta);
+            const currentQty = Number(f.quantity) || 1;
+            const newQty = Math.max(1, currentQty + delta);
             return { ...f, quantity: newQty };
         }
         return f;
@@ -479,7 +482,7 @@ export default function DTFOrdering() {
       await updateOrder(orderId, { files: newFiles });
       
       // Also remove from selection if selected
-      setSelectedFiles(prev => prev.filter(f => f.url !== fileUrl));
+      setSelectedFiles(prev => prev.filter(f => !(f.url === fileUrl && f.orderId === orderId)));
       
       await fetchData();
   };
@@ -487,6 +490,8 @@ export default function DTFOrdering() {
   const handleGenerate = async () => {
     setIsGenerating(true);
     setGeneratedPdfUrls([]);
+    setGeneratedJobId(null);
+    setGeneratedStats(null);
     setGenerationError(null);
 
     try {
@@ -496,7 +501,10 @@ export default function DTFOrdering() {
             paddingMm: padding,
             files: selectedFiles.map(f => ({
                 url: f.url,
-                quantity: f.quantity
+                quantity: f.quantity,
+                orderId: f.orderId,
+                name: f.name,
+                reference: f.reference
             }))
         };
 
@@ -514,6 +522,8 @@ export default function DTFOrdering() {
             } else if (data.url) {
                 setGeneratedPdfUrls([data.url]);
             }
+            if (data.jobId) setGeneratedJobId(data.jobId);
+            if (data.stats) setGeneratedStats(data.stats);
             
             setShowSuccessModal(true);
 
@@ -554,9 +564,10 @@ export default function DTFOrdering() {
                         ref = orderId.replace('inventory-manual-group-', '');
                     
                         // Update status for files in this manual group
+                    const urlsToMark = new Set(selectedFiles.filter(f => f.orderId === orderId).map(f => f.url));
                         manualFiles = manualFiles.map((f: any) => {
                             const fRef = f.reference || 'Unbekannt';
-                            if (fRef === ref && (f.type === 'print' || f.type === 'vector')) {
+                        if (fRef === ref && urlsToMark.has(f.url) && (f.type === 'print' || f.type === 'vector')) {
                                 manualFilesChanged = true;
                                 return { ...f, status: 'ordered' as const };
                             }
@@ -569,10 +580,11 @@ export default function DTFOrdering() {
                     
                         // For DTF Queue: DELETE the files entirely after printing, as requested by user
                         // "erst danach soll die datei da wieder rausgehen" -> Delete
+                    const urlsToRemove = new Set(selectedFiles.filter(f => f.orderId === orderId).map(f => f.url));
                         const initialLength = dtfQueueFiles.length;
                         dtfQueueFiles = dtfQueueFiles.filter((f: any) => {
                             const fRef = f.reference || 'Manueller Upload';
-                            const isMatch = fRef === ref && (f.type === 'print' || f.type === 'vector');
+                        const isMatch = fRef === ref && urlsToRemove.has(f.url) && (f.type === 'print' || f.type === 'vector');
                             return !isMatch; 
                         });
                     
@@ -596,16 +608,18 @@ export default function DTFOrdering() {
                 } else if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
                     const order = orders.find(o => o.id === orderId);
                     if (order && order.files) {
+                        const urlsToMark = new Set(selectedFiles.filter(f => f.orderId === orderId).map(f => f.url));
                         const newFiles = order.files.map(f => {
-                            if (f.type === 'print' || f.type === 'vector') {
+                            if ((f.type === 'print' || f.type === 'vector') && urlsToMark.has(f.url)) {
                                 return { ...f, status: 'ordered' as const };
                             }
                             return f;
                         });
+                        const hasPending = newFiles.some(f => (f.type === 'print' || f.type === 'vector') && f.status !== 'ordered');
                         
                         await updateOrder(orderId, { 
                             files: newFiles,
-                            printStatus: 'ordered'
+                            printStatus: hasPending ? 'pending' : 'ordered'
                         });
                         updatedCount++;
                     }
@@ -628,6 +642,8 @@ export default function DTFOrdering() {
         
             setSelectedFiles([]);
             setGeneratedPdfUrls([]);
+            setGeneratedJobId(null);
+            setGeneratedStats(null);
             setShowSuccessModal(false);
         } catch (e: any) {
             console.error(e);
@@ -638,6 +654,8 @@ export default function DTFOrdering() {
     const handleCancelSuccess = () => {
         setSelectedFiles([]);
         setGeneratedPdfUrls([]);
+        setGeneratedJobId(null);
+        setGeneratedStats(null);
         setShowSuccessModal(false);
     };
 
@@ -1192,7 +1210,7 @@ export default function DTFOrdering() {
                     <div className="flex-1 overflow-y-auto p-4">
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                             {filteredAvailableFiles.map((file, idx) => {
-                                const isSelected = selectedFiles.some(f => f.url === file.url);
+                                const isSelected = selectedFiles.some(f => f.url === file.url && f.orderId === file.orderId);
                                 const displayThumb = file.thumbnail || file.url;
                                 
                                 return (
@@ -1234,7 +1252,7 @@ export default function DTFOrdering() {
                                         
                                         {isSelected && (
                                             <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow">
-                                                {selectedFiles.find(f => f.url === file.url)?.quantity}x
+                                                {selectedFiles.find(f => f.url === file.url && f.orderId === file.orderId)?.quantity}x
                                             </div>
                                         )}
                                     </div>
@@ -1276,6 +1294,33 @@ export default function DTFOrdering() {
               <h3 className="text-xl font-bold text-gray-900 mb-2">PDF erfolgreich generiert</h3>
               <p className="text-sm text-gray-500">Bitte laden Sie die PDF herunter und prüfen Sie diese.</p>
             </div>
+
+            {(generatedJobId || generatedStats) && (
+              <div className="mb-6 bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700">
+                {generatedJobId && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">DTF Job:</span>
+                    <span className="font-mono">{generatedJobId}</span>
+                  </div>
+                )}
+                {generatedStats && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Bögen:</span>
+                      <span className="font-medium">{generatedStats.pages}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Motive:</span>
+                      <span className="font-medium">{generatedStats.uniqueFiles}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Gesamtstücke:</span>
+                      <span className="font-medium">{generatedStats.totalPieces}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-col gap-3 mb-8">
               {generatedPdfUrls.map((url, idx) => (

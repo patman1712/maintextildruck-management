@@ -4,9 +4,10 @@ import fs from 'fs-extra';
 import { PDFDocument, PDFPage, degrees, PDFOperator } from 'pdf-lib';
 import potpack from 'potpack'; 
 import { UPLOAD_DIR } from './upload.js';
-import { DATA_DIR } from '../db.js';
+import db from '../db.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import crypto from 'crypto';
 
 const execFileAsync = promisify(execFile);
 
@@ -15,6 +16,9 @@ const router = Router();
 interface DTFFileRequest {
     url: string;
     quantity: number;
+    orderId?: string;
+    name?: string;
+    reference?: string;
 }
 
 interface DTFGenerateRequest {
@@ -33,6 +37,69 @@ interface Item {
     pageIndex?: number;
     rotated?: boolean; // New: Track if item was rotated
 }
+
+type JobFileMeta = {
+    url: string;
+    quantity: number;
+    orderId?: string;
+    name?: string;
+    reference?: string;
+};
+
+const pointsToMm = (pt: number) => pt / 2.83465;
+
+router.get('/jobs', (req: Request, res: Response) => {
+    try {
+        const rows = db.prepare(`
+            SELECT id, created_at, pdf_urls, order_ids_json, stats_json
+            FROM dtf_jobs
+            ORDER BY datetime(created_at) DESC
+            LIMIT 500
+        `).all() as any[];
+
+        const data = rows.map(r => ({
+            id: r.id,
+            created_at: r.created_at,
+            pdf_urls: r.pdf_urls ? JSON.parse(r.pdf_urls) : [],
+            order_ids: r.order_ids_json ? JSON.parse(r.order_ids_json) : [],
+            stats: r.stats_json ? JSON.parse(r.stats_json) : {}
+        }));
+
+        res.json({ success: true, data });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/jobs/:id', (req: Request, res: Response) => {
+    try {
+        const row = db.prepare(`
+            SELECT id, created_at, pdf_urls, roll_width_mm, roll_length_mm, padding_mm, files_json, pages_json, order_ids_json, stats_json
+            FROM dtf_jobs
+            WHERE id = ?
+        `).get(req.params.id) as any;
+
+        if (!row) return res.status(404).json({ success: false, error: 'Job not found' });
+
+        res.json({
+            success: true,
+            data: {
+                id: row.id,
+                created_at: row.created_at,
+                pdf_urls: row.pdf_urls ? JSON.parse(row.pdf_urls) : [],
+                roll_width_mm: row.roll_width_mm,
+                roll_length_mm: row.roll_length_mm,
+                padding_mm: row.padding_mm,
+                files: row.files_json ? JSON.parse(row.files_json) : [],
+                pages: row.pages_json ? JSON.parse(row.pages_json) : [],
+                order_ids: row.order_ids_json ? JSON.parse(row.order_ids_json) : [],
+                stats: row.stats_json ? JSON.parse(row.stats_json) : {}
+            }
+        });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 // Simple Guillotine Bin Packing
 // We maintain a list of free rectangles.
@@ -156,6 +223,41 @@ router.post('/generate', async (req: Request, res: Response) => {
             return;
         }
 
+        const normalizedRequests = new Map<string, JobFileMeta>();
+        const invalid: any[] = [];
+        for (const f of files) {
+            const url = typeof f?.url === 'string' ? f.url.trim() : '';
+            const qty = Number.parseInt(String((f as any)?.quantity ?? '0'), 10);
+            if (!url) continue;
+            if (!Number.isFinite(qty) || qty < 1) {
+                invalid.push({ url, quantity: (f as any)?.quantity });
+                continue;
+            }
+            const existing = normalizedRequests.get(url);
+            if (existing) {
+                existing.quantity += qty;
+            } else {
+                normalizedRequests.set(url, {
+                    url,
+                    quantity: qty,
+                    orderId: typeof (f as any)?.orderId === 'string' ? (f as any).orderId : undefined,
+                    name: typeof (f as any)?.name === 'string' ? (f as any).name : undefined,
+                    reference: typeof (f as any)?.reference === 'string' ? (f as any).reference : undefined
+                });
+            }
+        }
+
+        if (invalid.length > 0) {
+            res.status(400).json({ success: false, error: 'Ungültige Menge in Auswahl.', invalid });
+            return;
+        }
+
+        const requestedFiles = Array.from(normalizedRequests.values());
+        if (requestedFiles.length === 0) {
+            res.status(400).json({ success: false, error: 'Keine gültigen Dateien ausgewählt.' });
+            return;
+        }
+
         // 1. Load all source PDFs and measure dimensions
         const sourceDocs: { 
             pdf: PDFDocument, 
@@ -181,14 +283,16 @@ router.post('/generate', async (req: Request, res: Response) => {
         const PACKER_WIDTH = pdfMaxWidthPoints === Number.MAX_VALUE ? 100000 : pdfMaxWidthPoints;
 
         const itemsToPack: Item[] = [];
+        const missingFiles: any[] = [];
+        const unsupportedFiles: any[] = [];
 
-        for (const file of files) {
+        for (const file of requestedFiles) {
             // ... (file loading same)
             const filename = path.basename(file.url);
             const filePath = path.join(UPLOAD_DIR, filename);
 
             if (!fs.existsSync(filePath)) {
-                console.warn(`File not found: ${filePath}`);
+                missingFiles.push({ url: file.url, filename });
                 continue;
             }
 
@@ -212,7 +316,7 @@ router.post('/generate', async (req: Request, res: Response) => {
                     const page = pdfDoc.addPage([width, height]);
                     page.drawImage(image, { x: 0, y: 0, width, height });
                 } else {
-                    console.warn(`Unsupported file type: ${filename}`);
+                    unsupportedFiles.push({ url: file.url, filename });
                     continue;
                 }
 
@@ -235,7 +339,18 @@ router.post('/generate', async (req: Request, res: Response) => {
                 }
             } catch (err) {
                 console.error(`Error processing file ${filename}:`, err);
+                unsupportedFiles.push({ url: file.url, filename });
             }
+        }
+
+        if (missingFiles.length > 0 || unsupportedFiles.length > 0) {
+            res.status(400).json({
+                success: false,
+                error: 'Mindestens eine Datei konnte nicht verarbeitet werden. Bitte prüfen und erneut generieren.',
+                missingFiles,
+                unsupportedFiles
+            });
+            return;
         }
 
         if (itemsToPack.length === 0) {
@@ -398,6 +513,9 @@ router.post('/generate', async (req: Request, res: Response) => {
         // 3. Create Output PDFs (One per page)
         const generatedUrls: string[] = [];
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const jobId = crypto.randomUUID();
+        const jobPages: any[] = [];
+        const countsPlaced: Record<string, number> = {};
         
         for (let pIdx = 0; pIdx < pages.length; pIdx++) {
             const pageItems = pages[pIdx];
@@ -419,6 +537,7 @@ router.post('/generate', async (req: Request, res: Response) => {
             const pageHeight = pdfHeightFixedPoints;
 
             const page = outputPdf.addPage([pageWidth, pageHeight]);
+            const placements: any[] = [];
             
             for (const item of pageItems) {
                 if (item.sourceIndex === undefined || item.x === undefined || item.y === undefined) continue;
@@ -454,6 +573,19 @@ router.post('/generate', async (req: Request, res: Response) => {
                         height: source.height
                     });
                 }
+
+                countsPlaced[source.originalUrl] = (countsPlaced[source.originalUrl] || 0) + 1;
+                const reqMeta = normalizedRequests.get(source.originalUrl);
+                placements.push({
+                    url: source.originalUrl,
+                    name: reqMeta?.name,
+                    orderId: reqMeta?.orderId,
+                    reference: reqMeta?.reference,
+                    x_mm: pointsToMm(drawX),
+                    y_mm: pointsToMm(drawY),
+                    w_mm: pointsToMm(source.width),
+                    h_mm: pointsToMm(source.height)
+                });
             }
             
             const pdfBytes = await outputPdf.save();
@@ -486,13 +618,60 @@ router.post('/generate', async (req: Request, res: Response) => {
                     console.error('Failed to generate thumbnail for output PDF:', e);
                 }
             }
+
+            const usedArea = pageItems.reduce((sum, i) => sum + (i.w * i.h), 0);
+            const sheetArea = pageWidth * pageHeight;
+            jobPages.push({
+                index: pIdx,
+                pdf_url: `/uploads/${outputFilename}`,
+                width_mm: pointsToMm(pageWidth),
+                height_mm: pointsToMm(pageHeight),
+                utilization: sheetArea > 0 ? (usedArea / sheetArea) : 0,
+                placements
+            });
         }
+
+        const mismatch: any[] = [];
+        for (const req of requestedFiles) {
+            const placed = countsPlaced[req.url] || 0;
+            if (placed !== req.quantity) mismatch.push({ url: req.url, requested: req.quantity, placed });
+        }
+        if (mismatch.length > 0) {
+            res.status(500).json({ success: false, error: 'Interner Prüf-Fehler: Mengen stimmen nicht mit Layout überein.', mismatch });
+            return;
+        }
+
+        const orderIds = Array.from(new Set(requestedFiles.map(f => f.orderId).filter(Boolean)));
+        const totalPieces = requestedFiles.reduce((sum, f) => sum + f.quantity, 0);
+        const stats = {
+            pages: jobPages.length,
+            uniqueFiles: requestedFiles.length,
+            totalPieces,
+            utilization: jobPages.length > 0 ? jobPages.reduce((sum, p) => sum + (p.utilization || 0), 0) / jobPages.length : 0
+        };
+
+        db.prepare(`
+            INSERT INTO dtf_jobs (id, pdf_urls, roll_width_mm, roll_length_mm, padding_mm, files_json, pages_json, order_ids_json, stats_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            jobId,
+            JSON.stringify(generatedUrls),
+            rollWidthMm,
+            rollLengthMm,
+            paddingMm,
+            JSON.stringify(requestedFiles),
+            JSON.stringify(jobPages),
+            JSON.stringify(orderIds),
+            JSON.stringify(stats)
+        );
 
         res.json({
             success: true,
             url: generatedUrls[0], // Backward compatibility
             urls: generatedUrls,   // New field for multiple files
-            pages: pages.length
+            pages: pages.length,
+            jobId,
+            stats
         });
 
     } catch (error) {
