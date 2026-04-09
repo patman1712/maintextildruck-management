@@ -208,4 +208,23 @@ router.put('/:id/paid', (req, res) => {
   }
 })
 
+router.put('/order/:orderId/paid', (req, res) => {
+  try {
+    const { orderId } = req.params
+    const paid = !!req.body?.paid
+    const paidBy = typeof req.body?.paidBy === 'string' ? req.body.paidBy : null
+
+    if (paid) {
+      db.prepare('UPDATE shop_donations SET paid = 1, paid_at = CURRENT_TIMESTAMP, paid_by = ? WHERE order_id = ?').run(paidBy, orderId)
+    } else {
+      db.prepare('UPDATE shop_donations SET paid = 0, paid_at = NULL, paid_by = NULL WHERE order_id = ?').run(orderId)
+    }
+
+    const rows = db.prepare('SELECT * FROM shop_donations WHERE order_id = ?').all(orderId)
+    res.json({ success: true, data: rows })
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
 export default router
