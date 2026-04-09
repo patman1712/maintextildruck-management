@@ -585,43 +585,64 @@ router.post('/:shopId/orders', async (req, res) => {
                         });
                     }
 
+                    const parsedVariants: Array<{ id: string, name: string, values: string[] }> = [];
                     for (const [varId, varData] of Object.entries(variants) as any) {
-                        // Old Logic: Check if Variant Name matches item.color (legacy)
-                        if (varData.name === item.color) {
-                            activeVariantIds.push(varId);
-                        }
-                        
-                        // New Logic: Check if any VALUE of this variant is present in the selection
-                        if (varData.values) {
-                            const possibleValues = varData.values.split(',').map((s: string) => s.trim());
-                            if (possibleValues.some((v: string) => /^\d{2,3}$/.test(v) || /^\d{2,3}\/\d{2,3}$/.test(v) || /^(XXS|XS|S|M|L|XL|XXL|3XL|4XL|5XL|6XL|7XL|8XL)$/i.test(v))) {
-                                sizeVariantIds.push(varId);
-                            }
-                            // Find intersection between possibleValues and colorValues
-                            const selectedValue = possibleValues.find((v: string) => colorValues.includes(v));
-                            
-                            if (selectedValue) {
-                                activeVariantIds.push(varId); // It is active
-                                selectedVariantValues[varId] = selectedValue; // Store specific value
+                        const name = typeof varData?.name === 'string' ? varData.name : '';
+                        const values = typeof varData?.values === 'string'
+                            ? varData.values.split(',').map((s: string) => s.trim()).filter(Boolean)
+                            : [];
+                        parsedVariants.push({ id: String(varId), name, values });
+                    }
+
+                    const isLikelySizeValue = (v: string) =>
+                        /^\d{2,3}$/.test(v) ||
+                        /^\d{2,3}\/\d{2,3}$/.test(v) ||
+                        /^(XXS|XS|S|M|L|XL|XXL|3XL|4XL|5XL|6XL|7XL|8XL)$/i.test(v);
+
+                    for (const v of parsedVariants) {
+                        if (v.values.some(isLikelySizeValue)) sizeVariantIds.push(v.id);
+                    }
+
+                    if (item.size) {
+                        const targetSize = String(item.size).trim();
+                        const candidates = parsedVariants
+                            .filter(v => sizeVariantIds.includes(v.id))
+                            .filter(v => v.values.includes(targetSize));
+
+                        if (candidates.length === 1) {
+                            selectedSizeVariantId = candidates[0].id;
+                        } else if (candidates.length > 1) {
+                            const sizeLooksKids = /^\d{2,3}\/\d{2,3}$/.test(targetSize);
+                            const sizeNum = /^\d{2,3}$/.test(targetSize) ? Number.parseInt(targetSize, 10) : NaN;
+
+                            const prefer = (needle: string) => candidates.find(c => c.name.toLowerCase().includes(needle))?.id || null;
+
+                            if (sizeLooksKids) {
+                                selectedSizeVariantId = prefer('kinder') || prefer('kid') || prefer('youth') || prefer('junior') || prefer('erwachsen') || prefer('adult') || candidates[0].id;
+                            } else if (!Number.isNaN(sizeNum) && sizeNum <= 176) {
+                                selectedSizeVariantId = prefer('kinder') || prefer('kid') || prefer('youth') || prefer('junior') || prefer('erwachsen') || prefer('adult') || candidates[0].id;
+                            } else {
+                                selectedSizeVariantId = prefer('erwachsen') || prefer('adult') || prefer('kinder') || prefer('kid') || candidates[0].id;
                             }
                         }
                     }
-                    
-                    if (item.size) {
-                        const targetSize = String(item.size).trim();
-                        const fromSelected = Object.entries(selectedVariantValues).find(([, v]) => String(v).trim() === targetSize);
-                        if (fromSelected) {
-                            selectedSizeVariantId = fromSelected[0];
-                        } else {
-                            for (const [varId, varData] of Object.entries(variants) as any) {
-                                if (varData.values) {
-                                    const possibleValues = varData.values.split(',').map((s: string) => s.trim());
-                                    if (possibleValues.includes(targetSize)) {
-                                        selectedSizeVariantId = varId;
-                                        break;
-                                    }
-                                }
+
+                    for (const v of parsedVariants) {
+                        if (v.name === item.color) activeVariantIds.push(v.id);
+
+                        const isSizeVariant = sizeVariantIds.includes(v.id);
+                        if (isSizeVariant) {
+                            if (selectedSizeVariantId && v.id === selectedSizeVariantId && item.size) {
+                                activeVariantIds.push(v.id);
+                                selectedVariantValues[v.id] = String(item.size).trim();
                             }
+                            continue;
+                        }
+
+                        const selectedValue = v.values.find(val => colorValues.includes(val));
+                        if (selectedValue) {
+                            activeVariantIds.push(v.id);
+                            selectedVariantValues[v.id] = selectedValue;
                         }
                     }
                 } catch (e) {
