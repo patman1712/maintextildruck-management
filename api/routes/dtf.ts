@@ -101,6 +101,43 @@ router.get('/jobs/:id', (req: Request, res: Response) => {
     }
 });
 
+router.post('/jobs/:id/purge-pdfs', async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const row = db.prepare(`SELECT id, pdf_urls FROM dtf_jobs WHERE id = ?`).get(id) as any;
+        if (!row) return res.status(404).json({ success: false, error: 'Job not found' });
+
+        const urls: string[] = row.pdf_urls ? JSON.parse(row.pdf_urls) : [];
+        const deleted: string[] = [];
+        const skipped: string[] = [];
+
+        for (const u of urls) {
+            const filename = path.basename(String(u || ''));
+            if (!filename.startsWith('dtf-output-') || !filename.toLowerCase().endsWith('.pdf')) {
+                skipped.push(filename);
+                continue;
+            }
+
+            const pdfPath = path.join(UPLOAD_DIR, filename);
+            const thumbPath = path.join(UPLOAD_DIR, `${filename}_thumb.png`);
+
+            try {
+                if (await fs.pathExists(pdfPath)) await fs.remove(pdfPath);
+                if (await fs.pathExists(thumbPath)) await fs.remove(thumbPath);
+                deleted.push(filename);
+            } catch {
+                skipped.push(filename);
+            }
+        }
+
+        db.prepare(`UPDATE dtf_jobs SET pdf_urls = ? WHERE id = ?`).run(JSON.stringify([]), id);
+
+        res.json({ success: true, deleted, skipped });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Simple Guillotine Bin Packing
 // We maintain a list of free rectangles.
 interface Rect {
