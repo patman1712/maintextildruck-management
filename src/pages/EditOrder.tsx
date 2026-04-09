@@ -515,6 +515,7 @@ export default function EditOrder() {
   const [productSearchTerm, setProductSearchTerm] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<CustomerProduct | null>(null);
   const [productSizeInput, setProductSizeInput] = useState("");
+  const [productSupplierId, setProductSupplierId] = useState("");
   const [fileQuantities, setFileQuantities] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -562,10 +563,15 @@ export default function EditOrder() {
 
   const handleAddProduct = async () => {
       if (!selectedProduct || !id) return;
+      const supplierId = productSupplierId || selectedProduct.supplier_id || "";
+      if (!supplierId) {
+          alert("Bitte wählen Sie einen Lieferanten aus.");
+          return;
+      }
       
       // Add Item (Directly to store/backend)
       const newItemEntry = {
-          supplierId: selectedProduct.supplier_id || "",
+          supplierId,
           itemName: selectedProduct.name,
           itemNumber: selectedProduct.product_number,
           color: "",
@@ -575,7 +581,12 @@ export default function EditOrder() {
           notes: "Aus Kundenartikel"
       };
       
-      await addOrderItem(id, newItemEntry);
+      try {
+          await addOrderItem(id, newItemEntry);
+      } catch (e: any) {
+          alert(e?.message || "Fehler beim Hinzufügen des Artikels.");
+          return;
+      }
 
       // Add Files (Local state, will be saved on "Save")
       if (selectedProduct.files && selectedProduct.files.length > 0) {
@@ -612,6 +623,7 @@ export default function EditOrder() {
       setShowProductSelector(false);
       setSelectedProduct(null);
       setProductSizeInput("");
+      setProductSupplierId("");
   };
 
   return (
@@ -1645,7 +1657,14 @@ export default function EditOrder() {
                                         <div 
                                             key={product.id} 
                                             className="border rounded p-3 cursor-pointer hover:bg-gray-50 hover:border-red-300 transition-all flex justify-between items-center group"
-                                            onClick={() => setSelectedProduct(product)}
+                                            onClick={() => {
+                                                setSelectedProduct(product);
+                                                const nextSupplier = product.supplier_id && suppliers.some(s => s.id === product.supplier_id)
+                                                    ? product.supplier_id
+                                                    : (suppliers.length === 1 ? suppliers[0].id : '');
+                                                setProductSupplierId(nextSupplier);
+                                                setProductSizeInput("");
+                                            }}
                                         >
                                             <div>
                                                 <p className="font-medium text-gray-800">{product.name}</p>
@@ -1700,6 +1719,20 @@ export default function EditOrder() {
                             <p className="text-xs text-gray-500 mt-1">Bitte geben Sie die benötigten Größen und Mengen an.</p>
                         </div>
 
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Lieferant</label>
+                            <select
+                                className="w-full border p-2 rounded focus:ring-red-500 focus:border-red-500"
+                                value={productSupplierId}
+                                onChange={(e) => setProductSupplierId(e.target.value)}
+                            >
+                                <option value="">Bitte wählen…</option>
+                                {suppliers.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
                         {selectedProduct.files && selectedProduct.files.length > 0 && (
                             <div className="mb-4">
                                 <p className="text-sm font-medium text-gray-700 mb-2">Automatisch zugeordnete Druckdaten:</p>
@@ -1733,14 +1766,16 @@ export default function EditOrder() {
 
                         <div className="flex justify-end space-x-3 mt-6">
                             <button 
+                                type="button"
                                 onClick={() => setSelectedProduct(null)}
                                 className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
                             >
                                 Zurück
                             </button>
                             <button 
+                                type="button"
                                 onClick={handleAddProduct}
-                                disabled={!productSizeInput}
+                                disabled={!productSizeInput || !productSupplierId}
                                 className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
                             >
                                 Zum Auftrag hinzufügen

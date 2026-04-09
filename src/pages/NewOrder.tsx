@@ -632,6 +632,7 @@ export default function NewOrder() {
   const [productSearchTerm, setProductSearchTerm] = useState("");
   const [selectedProduct, setSelectedProduct] = useState<CustomerProduct | null>(null);
   const [productSizeInput, setProductSizeInput] = useState("");
+  const [productSupplierId, setProductSupplierId] = useState("");
   const [fileQuantities, setFileQuantities] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -673,12 +674,17 @@ export default function NewOrder() {
 
   const handleAddProduct = () => {
       if (!selectedProduct) return;
+      const supplierId = productSupplierId || selectedProduct.supplier_id || "";
+      if (!supplierId) {
+          alert("Bitte wählen Sie einen Lieferanten aus.");
+          return;
+      }
       
       const quantityToAdd = parseQuantity(productSizeInput);
 
       // Add Item
       const newItemEntry = {
-          supplierId: selectedProduct.supplier_id || "",
+          supplierId,
           itemName: selectedProduct.name,
           itemNumber: selectedProduct.product_number,
           color: "",
@@ -747,6 +753,7 @@ export default function NewOrder() {
       setShowProductSelector(false);
       setSelectedProduct(null);
       setProductSizeInput("");
+      setProductSupplierId("");
   };
 
   return (
@@ -1831,7 +1838,14 @@ export default function NewOrder() {
                                     <div 
                                         key={product.id} 
                                         className="border rounded p-3 cursor-pointer hover:bg-gray-50 hover:border-red-300 transition-all flex justify-between items-center group"
-                                        onClick={() => setSelectedProduct(product)}
+                                        onClick={() => {
+                                            setSelectedProduct(product);
+                                            const nextSupplier = product.supplier_id && suppliers.some(s => s.id === product.supplier_id)
+                                                ? product.supplier_id
+                                                : (suppliers.length === 1 ? suppliers[0].id : '');
+                                            setProductSupplierId(nextSupplier);
+                                            setProductSizeInput("");
+                                        }}
                                     >
                                         <div>
                                             <p className="font-medium text-gray-800">{product.name}</p>
@@ -1885,6 +1899,20 @@ export default function NewOrder() {
                             <p className="text-xs text-gray-500 mt-1">Bitte geben Sie die benötigten Größen und Mengen an.</p>
                         </div>
 
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Lieferant</label>
+                            <select
+                                className="w-full border p-2 rounded focus:ring-red-500 focus:border-red-500"
+                                value={productSupplierId}
+                                onChange={(e) => setProductSupplierId(e.target.value)}
+                            >
+                                <option value="">Bitte wählen…</option>
+                                {suppliers.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
                         {selectedProduct.files && selectedProduct.files.length > 0 && (
                             <div className="mb-4">
                                 <p className="text-sm font-medium text-gray-700 mb-2">Automatisch zugeordnete Druckdaten:</p>
@@ -1918,14 +1946,16 @@ export default function NewOrder() {
 
                         <div className="flex justify-end space-x-3 mt-6">
                             <button 
+                                type="button"
                                 onClick={() => setSelectedProduct(null)}
                                 className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
                             >
                                 Zurück
                             </button>
                             <button 
+                                type="button"
                                 onClick={handleAddProduct}
-                                disabled={!productSizeInput}
+                                disabled={!productSizeInput || !productSupplierId}
                                 className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
                             >
                                 Zum Auftrag hinzufügen
