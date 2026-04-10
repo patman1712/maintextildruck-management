@@ -185,14 +185,12 @@ export default function DashboardLayout() {
                             isAdmin={currentUser?.role === 'admin'}
                         />
 
-                        {currentUser?.role === 'admin' && (
-                            <NavItem 
-                                item={{ id: 'donations', label: 'Spenden (Alle)', to: '/dashboard/donations', icon: Heart }} 
-                                isOpen={sidebarOpen || mobileMenuOpen} 
-                                onClick={() => setMobileMenuOpen(false)} 
-                                menuSettings={{}}
-                            />
-                        )}
+                        <NavItem 
+                            item={{ id: 'donations', label: 'Spenden (Alle)', to: '/dashboard/donations', icon: Heart }} 
+                            isOpen={sidebarOpen || mobileMenuOpen} 
+                            onClick={() => setMobileMenuOpen(false)} 
+                            menuSettings={{}}
+                        />
                     </>
                 )}
                 
