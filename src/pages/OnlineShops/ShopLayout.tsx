@@ -615,10 +615,12 @@ const ShopLayout: React.FC = () => {
                         )}
                     </nav>
 
-                    <div className="mt-6 px-4 pt-6 border-t border-slate-100 space-y-2">
-                        <Link to={`${shopBaseUrl}/new`} onClick={() => setMobileMenuOpen(false)} className="block px-4 py-3 font-bold text-slate-700 hover:bg-slate-50 rounded-lg">Neuheiten</Link>
-                        <Link to={`${shopBaseUrl}/sale`} onClick={() => setMobileMenuOpen(false)} className="block px-4 py-3 font-bold text-red-600 hover:bg-red-50 rounded-lg">Sale</Link>
-                    </div>
+                    {!topLevelCategories.length && (
+                        <div className="mt-6 px-4 pt-6 border-t border-slate-100 space-y-2">
+                            <Link to={`${shopBaseUrl}/new`} onClick={() => setMobileMenuOpen(false)} className="block px-4 py-3 font-bold text-slate-700 hover:bg-slate-50 rounded-lg">Neuheiten</Link>
+                            <Link to={`${shopBaseUrl}/sale`} onClick={() => setMobileMenuOpen(false)} className="block px-4 py-3 font-bold text-red-600 hover:bg-red-50 rounded-lg">Sale</Link>
+                        </div>
+                    )}
                 </div>
 
                 <div className="p-4 border-t border-slate-100 bg-slate-50">
