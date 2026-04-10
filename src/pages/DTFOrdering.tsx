@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAppStore } from "@/store";
 import { Printer, Upload, Download, Trash2, FileText, Check, AlertCircle, Package, ChevronDown, ChevronRight, Search, User } from "lucide-react";
 
@@ -63,6 +63,8 @@ export default function DTFOrdering() {
   const [generatedJobDetails, setGeneratedJobDetails] = useState<any | null>(null);
   const [generatedJobDetailsLoading, setGeneratedJobDetailsLoading] = useState(false);
   const [hoverPageThumb, setHoverPageThumb] = useState<string | null>(null);
+  const [protocolScrolled, setProtocolScrolled] = useState(false);
+  const protocolScrollRef = useRef<HTMLDivElement | null>(null);
 
   const checkerStyle = {
     backgroundImage:
@@ -70,6 +72,24 @@ export default function DTFOrdering() {
     backgroundSize: "18px 18px",
     backgroundPosition: "0 0, 0 9px, 9px -9px, -9px 0px",
   } as const;
+
+  const handleProtocolScroll = () => {
+    const el = protocolScrollRef.current;
+    if (!el) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4) setProtocolScrolled(true);
+  };
+
+  useEffect(() => {
+    if (!showSuccessModal) return;
+    setProtocolScrolled(false);
+  }, [showSuccessModal]);
+
+  useEffect(() => {
+    if (!showSuccessModal) return;
+    const el = protocolScrollRef.current;
+    if (!el) return;
+    if (el.scrollHeight <= el.clientHeight + 4) setProtocolScrolled(true);
+  }, [showSuccessModal, generatedJobDetails, generatedJobDetailsLoading]);
 
   // Extract all available print files
   // Extract all available print files from ALL orders
@@ -1308,7 +1328,7 @@ export default function DTFOrdering() {
               </button>
             </div>
 
-            <div className="p-4 overflow-y-auto">
+            <div ref={protocolScrollRef} onScroll={handleProtocolScroll} className="p-4 overflow-y-auto">
               {(generatedJobId || generatedStats) && (
                 <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700">
                   {generatedJobId && (
@@ -1376,13 +1396,15 @@ export default function DTFOrdering() {
                         counts[key] = (counts[key] || 0) + 1;
                       }
                       const pageThumb = p.pdf_url ? `${p.pdf_url}_thumb.png` : '';
+                      const utilPct = Math.round(((p.utilization || 0) * 100));
+                      const utilClass = utilPct < 70 ? 'text-red-600' : utilPct < 90 ? 'text-yellow-600' : 'text-slate-500';
 
                       return (
                         <div key={p.index} className="border border-slate-200 rounded-lg p-3">
                           <div className="flex items-center justify-between gap-4 mb-2">
                             <div className="font-bold text-slate-800">Bogen {Number(p.index) + 1}</div>
                             <div className="text-xs text-slate-500">
-                              {Math.round((p.width_mm || 0))}×{Math.round((p.height_mm || 0))} mm · {Math.round(((p.utilization || 0) * 100))}%
+                              {Math.round((p.width_mm || 0))}×{Math.round((p.height_mm || 0))} mm · <span className={`${utilClass} font-bold`}>{utilPct}%</span>
                             </div>
                           </div>
                           <div className="flex gap-3">
@@ -1423,20 +1445,26 @@ export default function DTFOrdering() {
 
             <div className="p-4 border-t border-slate-200 bg-white">
               <div className="text-sm font-bold text-slate-800 mb-2 text-center">Aufträge für DTF entfernen?</div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                  onClick={handleCancelSuccess}
-                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50 text-sm font-bold transition-colors"
-                >
-                  Nein, da ist was falsch (drin lassen)
-                </button>
-                <button
-                  onClick={handleConfirmSuccess}
-                  className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 text-sm font-bold transition-colors"
-                >
-                  Perfekt – entfernen
-                </button>
-              </div>
+              {!protocolScrolled ? (
+                <div className="text-center text-sm text-slate-500">
+                  Bitte bis ganz nach unten scrollen, um die Bestätigung freizuschalten.
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={handleCancelSuccess}
+                    className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50 text-sm font-bold transition-colors"
+                  >
+                    Nein, da ist was falsch (drin lassen)
+                  </button>
+                  <button
+                    onClick={handleConfirmSuccess}
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-bold transition-colors"
+                  >
+                    Perfekt – entfernen
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
