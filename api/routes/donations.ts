@@ -342,6 +342,105 @@ router.delete('/share-links/:shopId', (req, res) => {
   }
 })
 
+router.post('/public/:token/payments', (req, res) => {
+  try {
+    const { token } = req.params
+    const password = typeof req.body?.password === 'string' ? req.body.password : ''
+
+    const link = db
+      .prepare(
+        `
+        SELECT l.shop_id, l.enabled, l.password_hash
+        FROM shop_donation_share_links l
+        WHERE l.token = ?
+      `
+      )
+      .get(token) as any
+
+    if (!link) return res.status(404).json({ success: false, error: 'Link ungültig.' })
+    if (!link.enabled) return res.status(403).json({ success: false, error: 'Link deaktiviert.' })
+
+    const hasPassword = !!(link.password_hash && String(link.password_hash).trim())
+    if (hasPassword) {
+      const ok = bcrypt.compareSync(password || '', link.password_hash)
+      if (!ok) return res.json({ success: false, requiresPassword: true })
+    }
+
+    const rows = db
+      .prepare(
+        `
+        SELECT p.*, s.name as shop_name
+        FROM donation_payments p
+        JOIN shops s ON s.id = p.shop_id
+        WHERE p.shop_id = ?
+        ORDER BY datetime(p.paid_at) DESC, datetime(p.created_at) DESC
+      `
+      )
+      .all(link.shop_id) as any[]
+
+    const data = rows.map((r) => ({
+      ...r,
+      order_ids: r.order_ids_json ? JSON.parse(r.order_ids_json) : [],
+    }))
+
+    res.json({ success: true, data })
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
+router.post('/public/:token/payments/:paymentId', (req, res) => {
+  try {
+    const { token, paymentId } = req.params
+    const password = typeof req.body?.password === 'string' ? req.body.password : ''
+
+    const link = db
+      .prepare(
+        `
+        SELECT l.shop_id, l.enabled, l.password_hash
+        FROM shop_donation_share_links l
+        WHERE l.token = ?
+      `
+      )
+      .get(token) as any
+
+    if (!link) return res.status(404).json({ success: false, error: 'Link ungültig.' })
+    if (!link.enabled) return res.status(403).json({ success: false, error: 'Link deaktiviert.' })
+
+    const hasPassword = !!(link.password_hash && String(link.password_hash).trim())
+    if (hasPassword) {
+      const ok = bcrypt.compareSync(password || '', link.password_hash)
+      if (!ok) return res.json({ success: false, requiresPassword: true })
+    }
+
+    const payment = db.prepare('SELECT * FROM donation_payments WHERE id = ? AND shop_id = ?').get(paymentId, link.shop_id) as any
+    if (!payment) return res.status(404).json({ success: false, error: 'Nicht gefunden.' })
+
+    const orders = db
+      .prepare(
+        `
+        SELECT
+          sd.order_id,
+          MAX(sd.order_number) as order_number,
+          MAX(sd.order_date) as order_date,
+          SUM(sd.quantity) as total_quantity,
+          SUM(sd.item_total) as total_amount,
+          SUM(sd.donation_total) as total_donation,
+          MIN(sd.paid) as paid
+        FROM shop_donations sd
+        WHERE sd.payment_id = ?
+        GROUP BY sd.order_id
+        ORDER BY datetime(order_date) DESC
+      `
+      )
+      .all(paymentId)
+
+    res.json({ success: true, data: { ...payment, order_ids: payment.order_ids_json ? JSON.parse(payment.order_ids_json) : [], orders } })
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
 router.post('/public/:token', (req, res) => {
   try {
     const { token } = req.params

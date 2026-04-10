@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useParams } from "react-router-dom"
+import { useParams, useSearchParams } from "react-router-dom"
 
 type DonationRow = {
   id: string
@@ -33,6 +33,7 @@ type DonationOrder = {
 
 export default function PublicDonations() {
   const { token } = useParams<{ token: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [allRows, setAllRows] = useState<DonationRow[]>([])
   const [shopName, setShopName] = useState<string>("")
   const [shopLogoUrl, setShopLogoUrl] = useState<string>("")
@@ -41,8 +42,14 @@ export default function PublicDonations() {
   const [error, setError] = useState<string>("")
   const [password, setPassword] = useState("")
   const [requiresPassword, setRequiresPassword] = useState(false)
-  const [showPaid, setShowPaid] = useState<boolean>(false)
+  const [payments, setPayments] = useState<any[]>([])
+  const [paymentsLoading, setPaymentsLoading] = useState<boolean>(false)
+  const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(null)
+  const [expandedPaymentOrders, setExpandedPaymentOrders] = useState<any[] | null>(null)
+  const [paymentsError, setPaymentsError] = useState<string>("")
   const [expandedOrderKey, setExpandedOrderKey] = useState<string | null>(null)
+
+  const tab = (searchParams.get("tab") || "dashboard").toLowerCase()
 
   const orders = useMemo<DonationOrder[]>(() => {
     const byKey = new Map<string, DonationOrder>()
@@ -81,13 +88,15 @@ export default function PublicDonations() {
             ? o.totalAmount
             : o.rows.reduce((sum, rr) => sum + (Number(rr.item_total) || 0), 0),
       }))
-      .filter((o) => (showPaid ? true : !o.paid))
       .sort((a, b) => {
         const ad = a.order_date ? new Date(a.order_date).getTime() : 0
         const bd = b.order_date ? new Date(b.order_date).getTime() : 0
         return bd - ad
       })
-  }, [allRows, showPaid])
+  }, [allRows])
+
+  const openOrders = useMemo(() => orders.filter((o) => !o.paid), [orders])
+  const paidOrders = useMemo(() => orders.filter((o) => o.paid), [orders])
 
   const counts = useMemo(() => {
     const paid = allRows.filter((r) => r.paid === 1).length
@@ -96,9 +105,10 @@ export default function PublicDonations() {
   }, [allRows])
 
   const totals = useMemo(() => {
-    const total = orders.reduce((sum, o) => sum + (Number(o.totalDonation) || 0), 0)
-    return { total }
-  }, [orders])
+    const totalOpen = openOrders.reduce((sum, o) => sum + (Number(o.totalDonation) || 0), 0)
+    const totalPaid = paidOrders.reduce((sum, o) => sum + (Number(o.totalDonation) || 0), 0)
+    return { totalOpen, totalPaid }
+  }, [openOrders, paidOrders])
 
   const fetchData = async (pw?: string) => {
     if (!token) return
@@ -141,6 +151,60 @@ export default function PublicDonations() {
     fetchData()
   }, [token])
 
+  const fetchPayments = async (pw?: string) => {
+    if (!token) return
+    setPaymentsLoading(true)
+    setPaymentsError("")
+    try {
+      const res = await fetch(`/api/donations/public/${token}/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw ?? password }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setPayments(data.data || [])
+      } else if (data.requiresPassword) {
+        setRequiresPassword(true)
+      } else {
+        setPaymentsError(data.error || "Fehler")
+      }
+    } catch (e: any) {
+      setPaymentsError(e?.message || "Netzwerkfehler")
+    } finally {
+      setPaymentsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (requiresPassword) return
+    fetchPayments()
+  }, [token, requiresPassword])
+
+  const openPaymentDetails = async (paymentId: string) => {
+    if (!token) return
+    if (expandedPaymentId === paymentId) {
+      setExpandedPaymentId(null)
+      setExpandedPaymentOrders(null)
+      return
+    }
+    setExpandedPaymentId(paymentId)
+    setExpandedPaymentOrders(null)
+    try {
+      const res = await fetch(`/api/donations/public/${token}/payments/${paymentId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      })
+      const data = await res.json()
+      if (data.success) setExpandedPaymentOrders(data.data.orders || [])
+      else if (data.requiresPassword) setRequiresPassword(true)
+      else alert(data.error || "Fehler")
+    } catch (e: any) {
+      alert(e?.message || "Fehler")
+    }
+  }
+
   if (requiresPassword) {
     return (
       <div className="min-h-screen bg-gradient-to-r from-red-800 to-red-600 py-10 px-4">
@@ -163,7 +227,10 @@ export default function PublicDonations() {
             autoFocus
           />
           <button
-            onClick={() => fetchData(password)}
+            onClick={async () => {
+              await fetchData(password)
+              await fetchPayments(password)
+            }}
             className="mt-4 w-full px-4 py-3 rounded-lg bg-red-600 text-white font-bold text-sm hover:bg-red-700"
           >
             Öffnen
@@ -197,105 +264,209 @@ export default function PublicDonations() {
         </div>
       </div>
       <div className="max-w-5xl mx-auto">
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6">
-          <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-4">
-            <div className="flex items-center space-x-3">
-              <input
-                id="showPaid"
-                type="checkbox"
-                className="h-4 w-4"
-                checked={showPaid}
-                onChange={(e) => setShowPaid(e.target.checked)}
-              />
-              <label htmlFor="showPaid" className="text-sm font-medium text-slate-700">
-                Bezahlte anzeigen
-              </label>
-            </div>
-            <div className="sm:ml-auto text-right">
-              <div className="text-xs font-bold uppercase text-slate-400">Summe</div>
-              <div className="text-xl font-black text-slate-900">€ {totals.total.toFixed(2)}</div>
-            </div>
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-6 flex items-center justify-between gap-3">
+          <div className="flex gap-2 flex-wrap">
+            {[
+              { id: "dashboard", label: "Dashboard" },
+              { id: "open", label: "Offene Spenden" },
+              { id: "paid", label: "Gezahlte Spenden" },
+              { id: "payments", label: "Zahlungen" },
+            ].map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setSearchParams((prev) => {
+                  const p = new URLSearchParams(prev)
+                  p.set("tab", t.id)
+                  return p
+                })}
+                className={`px-3 py-2 rounded-lg text-sm font-bold border ${
+                  tab === t.id ? "bg-red-600 text-white border-red-600" : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="text-right">
+            <div className="text-xs font-bold uppercase text-slate-400">Offen</div>
+            <div className="text-lg font-black text-slate-900">€ {totals.totalOpen.toFixed(2)}</div>
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-          <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400">
-            <div className="col-span-2">Datum</div>
-            <div className="col-span-3">Bestellnr.</div>
-            <div className="col-span-2 text-right">Artikel</div>
-            <div className="col-span-2 text-right">Summe</div>
-            <div className="col-span-3 text-right">Spende</div>
+        {tab === "dashboard" ? (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6">
+            {loading ? (
+              <div className="p-10 text-center text-slate-400">Lade...</div>
+            ) : error ? (
+              <div className="p-6 text-center text-red-600">{error}</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="border border-slate-200 rounded-xl p-4">
+                  <div className="text-xs font-bold uppercase text-slate-400">Offene Spenden</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">€ {totals.totalOpen.toFixed(2)}</div>
+                  <div className="text-sm text-slate-500 mt-1">{counts.open} Positionen</div>
+                </div>
+                <div className="border border-slate-200 rounded-xl p-4">
+                  <div className="text-xs font-bold uppercase text-slate-400">Gezahlt</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">€ {totals.totalPaid.toFixed(2)}</div>
+                  <div className="text-sm text-slate-500 mt-1">{counts.paid} Positionen</div>
+                </div>
+                <div className="border border-slate-200 rounded-xl p-4">
+                  <div className="text-xs font-bold uppercase text-slate-400">Zahlungen</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">{payments.length}</div>
+                  <div className="text-sm text-slate-500 mt-1">Batches</div>
+                </div>
+              </div>
+            )}
           </div>
-
-          {loading ? (
-            <div className="p-10 text-center text-slate-400">Lade...</div>
-          ) : error ? (
-            <div className="p-10 text-center text-red-600">{error}</div>
-          ) : orders.length === 0 ? (
-            <div className="p-10 text-center text-slate-400">Keine Spenden gefunden.</div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {orders.map((o) => {
-                const isExpanded = expandedOrderKey === o.key
-                return (
-                  <div key={o.key}>
-                    <div className="grid grid-cols-12 gap-2 px-4 py-3 items-center">
-                      <div className="col-span-2 text-sm text-slate-700">
-                        {o.order_date ? new Date(o.order_date).toLocaleDateString("de-DE") : "-"}
-                      </div>
-                      <div className="col-span-3 text-sm font-mono text-slate-600">{o.order_number || "-"}</div>
-                      <div className="col-span-2 text-sm text-slate-800 text-right">
-                        <span className="font-bold">{o.totalQuantity}</span>
-                      </div>
-                      <div className="col-span-2 text-sm font-bold text-slate-800 text-right">
-                        € {(Number(o.totalAmount) || 0).toFixed(2)}
-                      </div>
-                      <div className="col-span-3 text-right">
-                        <div className="text-sm font-black text-slate-900">€ {(Number(o.totalDonation) || 0).toFixed(2)}</div>
-                        <div className="mt-1 flex justify-end gap-2">
+        ) : tab === "payments" ? (
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400 grid grid-cols-12 gap-2">
+              <div className="col-span-3">Bezahlt am</div>
+              <div className="col-span-2 text-right">Aufträge</div>
+              <div className="col-span-2 text-right">Summe</div>
+              <div className="col-span-5">Quittung</div>
+            </div>
+            {paymentsLoading ? (
+              <div className="p-10 text-center text-slate-400">Lade...</div>
+            ) : paymentsError ? (
+              <div className="p-10 text-center text-red-600">{paymentsError}</div>
+            ) : payments.length === 0 ? (
+              <div className="p-10 text-center text-slate-400">Noch keine Zahlungen.</div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {payments.map((p: any) => {
+                  const received = p.receipt_received === 1
+                  return (
+                    <div key={p.id} className="px-4 py-3">
+                      <div className="grid grid-cols-12 gap-2 items-center">
+                        <div className="col-span-3 text-sm text-slate-700">{p.paid_at ? new Date(p.paid_at).toLocaleDateString("de-DE") : "-"}</div>
+                        <div className="col-span-2 text-sm text-slate-800 text-right font-bold">{p.total_orders || (p.order_ids || []).length}</div>
+                        <div className="col-span-2 text-sm font-black text-slate-900 text-right">€ {(Number(p.total_donation) || 0).toFixed(2)}</div>
+                        <div className="col-span-5 flex items-center justify-between gap-3">
+                          <div className="text-sm text-slate-700">{received ? "Quittung erhalten" : "Keine Quittung"}</div>
                           <button
-                            onClick={() => setExpandedOrderKey((prev) => (prev === o.key ? null : o.key))}
-                            className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                            onClick={() => openPaymentDetails(p.id)}
+                            className="px-2 py-1 rounded border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50"
                           >
-                            {isExpanded ? "Details zu" : "Details"}
+                            Details
                           </button>
-                          <span
-                            className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border ${
-                              o.paid ? "bg-green-50 text-green-700 border-green-200" : "bg-white text-slate-600 border-slate-200"
-                            }`}
-                          >
-                            {o.paid ? "Bezahlt" : "Offen"}
-                          </span>
                         </div>
                       </div>
+                      {expandedPaymentId === p.id ? (
+                        <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                          {!expandedPaymentOrders ? (
+                            <div className="text-sm text-slate-500">Lade Details…</div>
+                          ) : expandedPaymentOrders.length === 0 ? (
+                            <div className="text-sm text-slate-500">Keine Details.</div>
+                          ) : (
+                            <>
+                              <div className="grid grid-cols-12 gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 pb-2">
+                                <div className="col-span-4">Datum</div>
+                                <div className="col-span-4">Bestellnr.</div>
+                                <div className="col-span-2 text-right">Artikel</div>
+                                <div className="col-span-2 text-right">Spende</div>
+                              </div>
+                              <div className="divide-y divide-slate-200">
+                                {expandedPaymentOrders.map((o: any) => (
+                                  <div key={o.order_id} className="grid grid-cols-12 gap-2 py-2 items-center">
+                                    <div className="col-span-4 text-sm text-slate-700">
+                                      {o.order_date ? new Date(o.order_date).toLocaleDateString("de-DE") : "-"}
+                                    </div>
+                                    <div className="col-span-4 text-sm font-mono text-slate-600">{o.order_number || "-"}</div>
+                                    <div className="col-span-2 text-sm text-slate-800 text-right font-bold">{Number(o.total_quantity) || 0}</div>
+                                    <div className="col-span-2 text-sm font-black text-slate-900 text-right">€ {(Number(o.total_donation) || 0).toFixed(2)}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
-
-                    {isExpanded ? (
-                      <div className="bg-slate-50 border-t border-slate-100 px-4 py-3">
-                        <div className="grid grid-cols-12 gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 pb-2">
-                          <div className="col-span-6">Artikel</div>
-                          <div className="col-span-2 text-right">Anzahl</div>
-                          <div className="col-span-2 text-right">Artikelpreis</div>
-                          <div className="col-span-2 text-right">Spende</div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="grid grid-cols-12 gap-2 px-4 py-3 bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400">
+              <div className="col-span-2">Datum</div>
+              <div className="col-span-3">Bestellnr.</div>
+              <div className="col-span-2 text-right">Artikel</div>
+              <div className="col-span-2 text-right">Summe</div>
+              <div className="col-span-3 text-right">Spende</div>
+            </div>
+            {loading ? (
+              <div className="p-10 text-center text-slate-400">Lade...</div>
+            ) : error ? (
+              <div className="p-10 text-center text-red-600">{error}</div>
+            ) : (tab === "paid" ? paidOrders : openOrders).length === 0 ? (
+              <div className="p-10 text-center text-slate-400">Keine Einträge.</div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {(tab === "paid" ? paidOrders : openOrders).map((o) => {
+                  const isExpanded = expandedOrderKey === o.key
+                  return (
+                    <div key={o.key}>
+                      <div className="grid grid-cols-12 gap-2 px-4 py-3 items-center">
+                        <div className="col-span-2 text-sm text-slate-700">
+                          {o.order_date ? new Date(o.order_date).toLocaleDateString("de-DE") : "-"}
                         </div>
-                        <div className="divide-y divide-slate-200">
-                          {o.rows.map((r) => (
-                            <div key={r.id} className="grid grid-cols-12 gap-2 py-2 items-center">
-                              <div className="col-span-6 text-sm text-slate-800 font-semibold">{r.item_name || "-"}</div>
-                              <div className="col-span-2 text-sm text-slate-700 text-right">{Number(r.quantity) || 0}</div>
-                              <div className="col-span-2 text-sm text-slate-700 text-right">€ {(Number(r.item_total) || 0).toFixed(2)}</div>
-                              <div className="col-span-2 text-sm font-black text-slate-900 text-right">€ {(Number(r.donation_total) || 0).toFixed(2)}</div>
-                            </div>
-                          ))}
+                        <div className="col-span-3 text-sm font-mono text-slate-600">{o.order_number || "-"}</div>
+                        <div className="col-span-2 text-sm text-slate-800 text-right">
+                          <span className="font-bold">{o.totalQuantity}</span>
+                        </div>
+                        <div className="col-span-2 text-sm font-bold text-slate-800 text-right">
+                          € {(Number(o.totalAmount) || 0).toFixed(2)}
+                        </div>
+                        <div className="col-span-3 text-right">
+                          <div className="text-sm font-black text-slate-900">€ {(Number(o.totalDonation) || 0).toFixed(2)}</div>
+                          <div className="mt-1 flex justify-end gap-2">
+                            <button
+                              onClick={() => setExpandedOrderKey((prev) => (prev === o.key ? null : o.key))}
+                              className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                            >
+                              {isExpanded ? "Details zu" : "Details"}
+                            </button>
+                            <span
+                              className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded border ${
+                                o.paid ? "bg-green-50 text-green-700 border-green-200" : "bg-white text-slate-600 border-slate-200"
+                              }`}
+                            >
+                              {o.paid ? "Bezahlt" : "Offen"}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    ) : null}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+                      {isExpanded ? (
+                        <div className="bg-slate-50 border-t border-slate-100 px-4 py-3">
+                          <div className="grid grid-cols-12 gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 pb-2">
+                            <div className="col-span-6">Artikel</div>
+                            <div className="col-span-2 text-right">Anzahl</div>
+                            <div className="col-span-2 text-right">Artikelpreis</div>
+                            <div className="col-span-2 text-right">Spende</div>
+                          </div>
+                          <div className="divide-y divide-slate-200">
+                            {o.rows.map((r) => (
+                              <div key={r.id} className="grid grid-cols-12 gap-2 py-2 items-center">
+                                <div className="col-span-6 text-sm text-slate-800 font-semibold">{r.item_name || "-"}</div>
+                                <div className="col-span-2 text-sm text-slate-700 text-right">{Number(r.quantity) || 0}</div>
+                                <div className="col-span-2 text-sm text-slate-700 text-right">€ {(Number(r.item_total) || 0).toFixed(2)}</div>
+                                <div className="col-span-2 text-sm font-black text-slate-900 text-right">€ {(Number(r.donation_total) || 0).toFixed(2)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
