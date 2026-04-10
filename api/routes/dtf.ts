@@ -493,10 +493,9 @@ router.post('/generate', async (req: Request, res: Response) => {
         for (const strategy of sortStrategies) {
             const currentItems = [...originalItems].sort(strategy);
             
-            const currentPages: Item[][] = [];
-            let currentPageItems: Item[] = [];
-            let currentPacker = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
-            let pageIdx = 0;
+            const currentPackers: { packer: GuillotinePacker, items: Item[] }[] = [
+                { packer: new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT), items: [] }
+            ];
             
             let allFit = true;
             
@@ -509,22 +508,34 @@ router.post('/generate', async (req: Request, res: Response) => {
                     continue; // Should have been caught before
                 }
                 
-                let pos = currentPacker.fit(item.w, item.h);
+                let pos = null;
+                let placedPackerIndex = -1;
                 
-                if (!pos) {
-                    currentPages.push(currentPageItems);
-                    currentPageItems = [];
-                    pageIdx++;
-                    currentPacker = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
-                    pos = currentPacker.fit(item.w, item.h);
+                // Try to fit in existing pages first (First Fit)
+                for (let i = 0; i < currentPackers.length; i++) {
+                    pos = currentPackers[i].packer.fit(item.w, item.h);
+                    if (pos) {
+                        placedPackerIndex = i;
+                        break;
+                    }
                 }
                 
-                if (pos) {
+                // If it doesn't fit in any existing page, create a new one
+                if (!pos) {
+                    const newPacker = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
+                    pos = newPacker.fit(item.w, item.h);
+                    if (pos) {
+                        currentPackers.push({ packer: newPacker, items: [] });
+                        placedPackerIndex = currentPackers.length - 1;
+                    }
+                }
+                
+                if (pos && placedPackerIndex !== -1) {
                     item.x = pos.x;
                     item.y = pos.y;
                     item.rotated = pos.rotated;
-                    item.pageIndex = pageIdx;
-                    currentPageItems.push(item);
+                    item.pageIndex = placedPackerIndex;
+                    currentPackers[placedPackerIndex].items.push(item);
                 } else {
                     allFit = false;
                     break; 
@@ -532,16 +543,9 @@ router.post('/generate', async (req: Request, res: Response) => {
             }
             
             if (allFit) {
-                if (currentPageItems.length > 0) {
-                    currentPages.push(currentPageItems);
-                }
+                const currentPages = currentPackers.map(p => p.items).filter(items => items.length > 0);
                 
-                // Calculate total width used across all pages (sum of max X on each page? Or just max X of last page if 1 page?)
-                // Actually we want to minimize the max X used on the last page (length of roll).
-                // Assuming we want to fit everything on ONE page (infinite width).
-                // If multiple pages are generated (because PACKER_WIDTH was hit?), we sum widths?
-                // PACKER_WIDTH is effectively infinite. So usually 1 page.
-                
+                // Calculate total width used across all pages
                 let totalWidth = 0;
                 for (const p of currentPages) {
                     const maxX = p.reduce((max, i) => Math.max(max, (i.x || 0) + i.w), 0);
@@ -578,32 +582,44 @@ router.post('/generate', async (req: Request, res: Response) => {
              // But let's just assume one strategy worked.
              // If not, we just run the default height desc.
              
-             pages = [];
-             let currentPageItems: Item[] = [];
-             let packer = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
-             let currentPageIndex = 0;
+             const fallbackPackers: { packer: GuillotinePacker, items: Item[] }[] = [
+                 { packer: new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT), items: [] }
+             ];
              
              for (const item of itemsToPack) {
                  // ... check bounds ...
                  if (item.h > PACKER_HEIGHT || item.w > PACKER_WIDTH) continue;
 
-                 let pos = packer.fit(item.w, item.h);
-                 if (!pos) {
-                     pages.push(currentPageItems);
-                     currentPageItems = [];
-                     currentPageIndex++;
-                     packer = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
-                     pos = packer.fit(item.w, item.h);
+                 let pos = null;
+                 let placedPackerIndex = -1;
+                 
+                 for (let i = 0; i < fallbackPackers.length; i++) {
+                     pos = fallbackPackers[i].packer.fit(item.w, item.h);
+                     if (pos) {
+                         placedPackerIndex = i;
+                         break;
+                     }
                  }
-                 if (pos) {
+                 
+                 if (!pos) {
+                     const newPacker = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
+                     pos = newPacker.fit(item.w, item.h);
+                     if (pos) {
+                         fallbackPackers.push({ packer: newPacker, items: [] });
+                         placedPackerIndex = fallbackPackers.length - 1;
+                     }
+                 }
+                 
+                 if (pos && placedPackerIndex !== -1) {
                      item.x = pos.x;
                      item.y = pos.y;
                      item.rotated = pos.rotated;
-                     item.pageIndex = currentPageIndex;
-                     currentPageItems.push(item);
+                     item.pageIndex = placedPackerIndex;
+                     fallbackPackers[placedPackerIndex].items.push(item);
                  }
              }
-             if (currentPageItems.length > 0) pages.push(currentPageItems);
+             
+             pages = fallbackPackers.map(p => p.items).filter(items => items.length > 0);
         }
 
         // 3. Create Output PDFs (One per page)
