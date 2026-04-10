@@ -45,6 +45,36 @@ router.get('/', (req: Request, res: Response) => {
   res.json({ success: true, data: orders });
 });
 
+router.post('/regenerate-invoice/:orderNumber', async (req: Request, res: Response) => {
+  try {
+    const { orderNumber } = req.params;
+    const order = db.prepare('SELECT id FROM orders WHERE order_number = ?').get(orderNumber) as any;
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+
+    const invoicePath = await generateInvoice(order.id);
+    if (!invoicePath) return res.status(500).json({ success: false, error: 'Invoice generation failed' });
+
+    res.json({ success: true, data: { orderId: order.id } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/:id/regenerate-invoice', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const order = db.prepare('SELECT id FROM orders WHERE id = ?').get(id) as any;
+    if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
+
+    const invoicePath = await generateInvoice(id);
+    if (!invoicePath) return res.status(500).json({ success: false, error: 'Invoice generation failed' });
+
+    res.json({ success: true, data: { orderId: id } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // POST new order
 router.post('/', async (req: Request, res: Response) => {
   const { 

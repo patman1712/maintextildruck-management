@@ -52,6 +52,8 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
 
         // Create PDF
         const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
         
         // Fonts
         doc.setFont('helvetica');
@@ -192,37 +194,70 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
 
         // --- Table ---
         let y = 130;
+
+        const footerY = pageHeight - 27;
+        const bottomLimit = footerY - 8;
+        const col1 = 20;
+        const col2 = 65;
+        const col3 = 110;
+        const col4 = 155;
+
+        const drawTableHeader = (yPos: number) => {
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "bold");
+            doc.text("Pos.", 20, yPos);
+            doc.text("Bezeichnung", 40, yPos);
+            doc.text("Menge", 130, yPos, { align: 'right' });
+            doc.text("Einzelpreis", 160, yPos, { align: 'right' });
+            doc.text("Gesamtpreis", 195, yPos, { align: 'right' });
+            doc.line(20, yPos + 2, 195, yPos + 2);
+            doc.setFont("helvetica", "normal");
+            return yPos + 8;
+        };
+
+        const drawContinuationHeader = () => {
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "bold");
+            doc.text(`Rechnung Nr. ${invoiceNumber}`, 20, 18);
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(8);
+            doc.text(`Bestell-Nr. ${order.order_number}`, 195, 18, { align: 'right' });
+        };
+
+        const addPageForTable = () => {
+            doc.addPage();
+            drawContinuationHeader();
+            y = 28;
+            y = drawTableHeader(y);
+        };
+
+        const ensureSpace = (requiredHeight: number, forTable: boolean) => {
+            if (y + requiredHeight <= bottomLimit) return;
+            if (forTable) {
+                addPageForTable();
+            } else {
+                doc.addPage();
+                drawContinuationHeader();
+                y = 28;
+            }
+        };
         
-        // Headers
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "bold");
-        doc.text("Pos.", 20, y);
-        doc.text("Bezeichnung", 40, y);
-        doc.text("Menge", 130, y, { align: 'right' });
-        doc.text("Einzelpreis", 160, y, { align: 'right' });
-        doc.text("Gesamtpreis", 195, y, { align: 'right' });
-        
-        doc.line(20, y + 2, 195, y + 2);
-        y += 8;
+        y = drawTableHeader(y);
 
         // Items
-        doc.setFont("helvetica", "normal");
         let subtotal = 0;
 
         items.forEach((item, index) => {
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(9);
+            doc.setTextColor(0);
+
             const price = item.price || 0;
             const total = price * item.quantity;
             subtotal += total;
 
-            doc.text((index + 1).toString(), 20, y);
-            
             // Handle long product names
             const splitName = doc.splitTextToSize(item.item_name, 80);
-            doc.text(splitName, 40, y);
-            
-            doc.text(item.quantity.toString(), 130, y, { align: 'right' });
-            doc.text(`${price.toFixed(2).replace('.', ',')} €`, 160, y, { align: 'right' });
-            doc.text(`${total.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
 
             // Extra info (size, color, notes)
             let extraLines = [];
@@ -302,21 +337,26 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
                 }
             }
 
+            const extraHeight = extraLines.reduce((sum, line) => sum + (doc.splitTextToSize(line, 80).length * 3.5), 0);
+            const requiredHeight = (splitName.length * 4) + (extraLines.length > 0 ? (2 + extraHeight) : 0) + 6;
+            ensureSpace(requiredHeight, true);
+
+            doc.text((index + 1).toString(), 20, y);
+            doc.text(splitName, 40, y);
+            doc.text(item.quantity.toString(), 130, y, { align: 'right' });
+            doc.text(`${price.toFixed(2).replace('.', ',')} €`, 160, y, { align: 'right' });
+            doc.text(`${total.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
+
             let extraY = y + (splitName.length * 4);
-            
+
             if (extraLines.length > 0) {
                 doc.setFontSize(8);
                 doc.setTextColor(100);
-                
-                // Print each extra line
                 extraLines.forEach((line) => {
                     const splitLine = doc.splitTextToSize(line, 80);
-                    // Reduced spacing: +2 instead of +4
                     doc.text(splitLine, 40, extraY + 2);
-                    // Reduced line height for extra info block: * 3.5 instead of * 4
                     extraY += (splitLine.length * 3.5);
                 });
-
                 doc.setTextColor(0);
                 doc.setFontSize(9);
             }
@@ -328,6 +368,7 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         const shipping = order.shipping_costs || 0;
         if (shipping > 0) {
             subtotal += shipping;
+            ensureSpace(10, true);
             doc.text((items.length + 1).toString(), 20, y);
             doc.text("Versandkosten", 40, y);
             doc.text("1", 130, y, { align: 'right' });
@@ -336,8 +377,13 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
             y += 8;
         }
 
-        doc.line(20, y, 195, y);
-        y += 8;
+        ensureSpace(70, false);
+        if (y > 40) {
+            doc.line(20, y, 195, y);
+            y += 8;
+        } else {
+            y += 4;
+        }
 
         // Totals
         // Assuming prices are Gross (Brutto) in the system
@@ -361,6 +407,7 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         y += 15;
 
         // Payment Info
+        ensureSpace(30, false);
         doc.text("Bitte bei Zahlung angeben!", 20, y);
         y += 5;
         doc.text(`Verwendungszweck: ${invoiceNumber}`, 20, y);
@@ -373,47 +420,47 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         
         doc.text("Die Ware bleibt bis zur vollständigen Bezahlung unser Eigentum.", 20, y);
 
-        // --- FOOTER ---
-        const footerY = 270;
-        doc.setFontSize(6); // Reduced from 7
-        doc.setTextColor(100, 100, 100);
-        
-        // Helper for columns - Adjusted spacing
-        const col1 = 20;
-        const col2 = 65; // Reduced from 70
-        const col3 = 110; // Reduced from 120
-        const col4 = 155; // Reduced from 160
-        
-        // Col 1: Address
-        doc.setFont("helvetica", "bold");
-        doc.text(globalContent.company_name || shop.name || '', col1, footerY);
-        doc.setFont("helvetica", "normal");
-        doc.text(globalContent.company_address || '', col1, footerY + 3);
-        if (globalContent.ceo_name) doc.text(`GF: ${globalContent.ceo_name}`, col1, footerY + 6);
-        
-        // Col 2: Contact
-        doc.setFont("helvetica", "bold");
-        doc.text('Kontakt', col2, footerY);
-        doc.setFont("helvetica", "normal");
-        doc.text(globalContent.contact_email || '', col2, footerY + 3);
-        doc.text(globalContent.contact_phone || '', col2, footerY + 6);
-        doc.text('www.maintextildruck.com', col2, footerY + 9);
+        const drawFooter = (pageNo: number, totalPages: number) => {
+            doc.setFontSize(6);
+            doc.setTextColor(100, 100, 100);
 
-        // Col 3: Bank
-        doc.setFont("helvetica", "bold");
-        doc.text('Bankverbindung', col3, footerY);
-        doc.setFont("helvetica", "normal");
-        doc.text(globalContent.bank_name || '', col3, footerY + 3);
-        doc.text(`IBAN: ${globalContent.bank_iban || ''}`, col3, footerY + 6);
-        doc.text(`BIC: ${globalContent.bank_bic || ''}`, col3, footerY + 9);
+            doc.setFont("helvetica", "bold");
+            doc.text(globalContent.company_name || shop.name || '', col1, footerY);
+            doc.setFont("helvetica", "normal");
+            doc.text(globalContent.company_address || '', col1, footerY + 3);
+            if (globalContent.ceo_name) doc.text(`GF: ${globalContent.ceo_name}`, col1, footerY + 6);
 
-        // Col 4: Tax
-        doc.setFont("helvetica", "bold");
-        doc.text('Register & Steuer', col4, footerY);
-        doc.setFont("helvetica", "normal");
-        doc.text(`Steuer-Nr: ${globalContent.tax_number || ''}`, col4, footerY + 3);
-        doc.text(`USt-ID: ${globalContent.vat_id || ''}`, col4, footerY + 6);
-        if (globalContent.commercial_register) doc.text(`HRB: ${globalContent.commercial_register}`, col4, footerY + 9);
+            doc.setFont("helvetica", "bold");
+            doc.text('Kontakt', col2, footerY);
+            doc.setFont("helvetica", "normal");
+            doc.text(globalContent.contact_email || '', col2, footerY + 3);
+            doc.text(globalContent.contact_phone || '', col2, footerY + 6);
+            doc.text('www.maintextildruck.com', col2, footerY + 9);
+
+            doc.setFont("helvetica", "bold");
+            doc.text('Bankverbindung', col3, footerY);
+            doc.setFont("helvetica", "normal");
+            doc.text(globalContent.bank_name || '', col3, footerY + 3);
+            doc.text(`IBAN: ${globalContent.bank_iban || ''}`, col3, footerY + 6);
+            doc.text(`BIC: ${globalContent.bank_bic || ''}`, col3, footerY + 9);
+
+            doc.setFont("helvetica", "bold");
+            doc.text('Register & Steuer', col4, footerY);
+            doc.setFont("helvetica", "normal");
+            doc.text(`Steuer-Nr: ${globalContent.tax_number || ''}`, col4, footerY + 3);
+            doc.text(`USt-ID: ${globalContent.vat_id || ''}`, col4, footerY + 6);
+            if (globalContent.commercial_register) doc.text(`HRB: ${globalContent.commercial_register}`, col4, footerY + 9);
+
+            doc.setTextColor(150);
+            doc.text(`Seite ${pageNo} / ${totalPages}`, pageWidth - 20, footerY + 12, { align: 'right' });
+            doc.setTextColor(0);
+        };
+
+        const totalPages = doc.getNumberOfPages();
+        for (let p = 1; p <= totalPages; p++) {
+            doc.setPage(p);
+            drawFooter(p, totalPages);
+        }
 
         // Save PDF
         const fileName = `Rechnung_${invoiceNumber}.pdf`;
