@@ -8,6 +8,12 @@ export default function DTFPdfs() {
   const [selectedJob, setSelectedJob] = useState<any | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [purgeLoading, setPurgeLoading] = useState(false);
+  const checkerStyle = {
+    backgroundImage:
+      "linear-gradient(45deg, rgba(15,23,42,0.08) 25%, transparent 25%), linear-gradient(-45deg, rgba(15,23,42,0.08) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(15,23,42,0.08) 75%), linear-gradient(-45deg, transparent 75%, rgba(15,23,42,0.08) 75%)",
+    backgroundSize: "18px 18px",
+    backgroundPosition: "0 0, 0 9px, 9px -9px, -9px 0px",
+  } as const;
 
   const fetchJobs = async () => {
     try {
@@ -129,7 +135,7 @@ export default function DTFPdfs() {
             const stats = job.stats || {};
             return (
             <div key={job.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all group">
-              <div className="h-48 bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden border border-gray-100 relative group-hover:bg-gray-50 transition-colors">
+              <div style={checkerStyle} className="h-48 bg-white rounded mb-3 flex items-center justify-center overflow-hidden border border-gray-100 relative group-hover:bg-gray-50 transition-colors">
                 {thumb ? (
                     <img src={thumb} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 ) : (
@@ -217,6 +223,7 @@ export default function DTFPdfs() {
                     <div className="space-y-6">
                       {selectedJob.pages.map((p: any) => {
                         const placements = Array.isArray(p.placements) ? p.placements : [];
+                        const pageThumb = p.pdf_url ? `${p.pdf_url}_thumb.png` : '';
                         const counts: Record<string, number> = {};
                         for (const pl of placements) {
                           const key = String(pl.name || pl.url || 'Datei');
@@ -230,6 +237,20 @@ export default function DTFPdfs() {
                                 {Math.round((p.width_mm || 0))}×{Math.round((p.height_mm || 0))} mm · {Math.round(((p.utilization || 0) * 100))}%
                               </div>
                             </div>
+                            <div className="flex gap-3">
+                              <div style={checkerStyle} className="w-28 h-28 border border-slate-200 rounded bg-white overflow-hidden shrink-0 flex items-center justify-center">
+                                {pageThumb ? (
+                                  <img
+                                    src={pageThumb}
+                                    alt=""
+                                    className="w-full h-full object-contain"
+                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                  />
+                                ) : (
+                                  <div className="text-xs text-slate-400">Kein Thumb</div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
                             <div className="text-sm text-slate-700 space-y-1">
                               {Object.entries(counts).map(([k, v]) => (
                                 <div key={k} className="flex justify-between">
@@ -237,6 +258,8 @@ export default function DTFPdfs() {
                                   <span className="font-mono">{v}x</span>
                                 </div>
                               ))}
+                            </div>
+                              </div>
                             </div>
                           </div>
                         );

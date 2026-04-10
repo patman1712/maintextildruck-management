@@ -628,6 +628,33 @@ router.post('/generate', async (req: Request, res: Response) => {
         const jobId = crypto.randomUUID();
         const jobPages: any[] = [];
         const countsPlaced: Record<string, number> = {};
+
+        const generateThumbnail = async (pdfPath: string, outputFilename: string) => {
+            const thumbRoot = path.join(UPLOAD_DIR, `${outputFilename}_thumb`);
+            try {
+                await execFileAsync('pdftocairo', [
+                    '-png',
+                    '-singlefile',
+                    '-scale-to', '300',
+                    '-transp',
+                    pdfPath,
+                    thumbRoot
+                ]);
+                return;
+            } catch {}
+
+            try {
+                await execFileAsync('pdftoppm', [
+                    '-png',
+                    '-singlefile',
+                    '-scale-to', '300',
+                    pdfPath,
+                    thumbRoot
+                ]);
+            } catch (e) {
+                console.error('Failed to generate thumbnail for output PDF:', e);
+            }
+        };
         
         for (let pIdx = 0; pIdx < pages.length; pIdx++) {
             const pageItems = pages[pIdx];
@@ -715,21 +742,7 @@ router.post('/generate', async (req: Request, res: Response) => {
             
             generatedUrls.push(`/uploads/${outputFilename}`);
             
-            // Generate Thumbnail for the first page only (as preview)
-            if (pIdx === 0) {
-                try {
-                    const thumbRoot = path.join(UPLOAD_DIR, `${outputFilename}_thumb`);
-                    await execFileAsync('pdftoppm', [
-                        '-png',
-                        '-singlefile',
-                        '-scale-to', '300',
-                        outputPath,
-                        thumbRoot
-                    ]);
-                } catch (e) {
-                    console.error('Failed to generate thumbnail for output PDF:', e);
-                }
-            }
+            await generateThumbnail(outputPath, outputFilename);
 
             const usedArea = pageItems.reduce((sum, i) => sum + (i.w * i.h), 0);
             const sheetArea = pageWidth * pageHeight;
