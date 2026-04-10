@@ -15,6 +15,9 @@ export default function DTFPdfs() {
     backgroundSize: "18px 18px",
     backgroundPosition: "0 0, 0 9px, 9px -9px, -9px 0px",
   } as const;
+  const thumbFilterStyle = {
+    filter: "drop-shadow(0 0 1px rgba(0,0,0,0.75)) drop-shadow(0 2px 10px rgba(0,0,0,0.25))",
+  } as const;
 
   const fetchJobs = async () => {
     try {
@@ -138,7 +141,7 @@ export default function DTFPdfs() {
             <div key={job.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all group">
               <div style={checkerStyle} className="h-48 bg-white rounded mb-3 flex items-center justify-center overflow-hidden border border-gray-100 relative group-hover:bg-gray-50 transition-colors">
                 {thumb ? (
-                    <img src={thumb} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                    <img src={thumb} alt="" className="w-full h-full object-contain" style={thumbFilterStyle} onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 ) : (
                     <div className="flex flex-col items-center text-gray-400">
                         <FileText size={48} className="mb-2" />
@@ -246,6 +249,7 @@ export default function DTFPdfs() {
                                     src={pageThumb}
                                     alt=""
                                     className="w-full h-full object-contain"
+                                    style={thumbFilterStyle}
                                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                     onMouseEnter={() => setHoverThumb(pageThumbLg || pageThumb)}
                                     onMouseLeave={() => setHoverThumb(null)}

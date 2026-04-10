@@ -72,6 +72,9 @@ export default function DTFOrdering() {
     backgroundSize: "18px 18px",
     backgroundPosition: "0 0, 0 9px, 9px -9px, -9px 0px",
   } as const;
+  const thumbFilterStyle = {
+    filter: "drop-shadow(0 0 1px rgba(0,0,0,0.75)) drop-shadow(0 2px 10px rgba(0,0,0,0.25))",
+  } as const;
 
   const handleProtocolScroll = () => {
     const el = protocolScrollRef.current;
@@ -1415,6 +1418,7 @@ export default function DTFOrdering() {
                                   src={pageThumb}
                                   alt=""
                                   className="w-full h-full object-contain"
+                                  style={thumbFilterStyle}
                                   onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                     onMouseEnter={() => setHoverPageThumb(pageThumbLg || pageThumb)}
                                   onMouseLeave={() => setHoverPageThumb(null)}
