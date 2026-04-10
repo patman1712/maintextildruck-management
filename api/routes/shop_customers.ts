@@ -313,17 +313,20 @@ router.get('/:shopId/admin/orders/:orderId', async (req, res) => {
 router.get('/:shopId/admin/orders/:orderId/invoice', async (req, res) => {
   try {
     const { orderId } = req.params;
-    const order = db.prepare('SELECT invoice_path, invoice_number FROM orders WHERE id = ?').get(orderId) as any;
+    const regenerate = String(req.query?.regenerate || '') === 'true';
+    let order = db.prepare('SELECT invoice_path, invoice_number FROM orders WHERE id = ?').get(orderId) as any;
     
-    if (!order || !order.invoice_path) {
-        // Try to generate it if missing?
-        // For now, return 404
-        return res.status(404).json({ success: false, error: 'Rechnung nicht gefunden.' });
+    if (!order || !order.invoice_path || regenerate) {
+        const invoicePath = await generateInvoice(orderId);
+        if (!invoicePath) return res.status(500).json({ success: false, error: 'Rechnung konnte nicht erstellt werden.' });
+        order = db.prepare('SELECT invoice_path, invoice_number FROM orders WHERE id = ?').get(orderId) as any;
     }
 
     const filePath = path.join(DATA_DIR, 'invoices', order.invoice_path);
     if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ success: false, error: 'Rechnungsdatei nicht gefunden.' });
+        const invoicePath = await generateInvoice(orderId);
+        if (!invoicePath) return res.status(500).json({ success: false, error: 'Rechnung konnte nicht erstellt werden.' });
+        order = db.prepare('SELECT invoice_path, invoice_number FROM orders WHERE id = ?').get(orderId) as any;
     }
 
     res.download(filePath, `Rechnung_${order.invoice_number || orderId}.pdf`);
