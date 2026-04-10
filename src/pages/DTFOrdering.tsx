@@ -60,6 +60,16 @@ export default function DTFOrdering() {
   const [generatedJobId, setGeneratedJobId] = useState<string | null>(null);
   const [generatedStats, setGeneratedStats] = useState<any | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [generatedJobDetails, setGeneratedJobDetails] = useState<any | null>(null);
+  const [generatedJobDetailsLoading, setGeneratedJobDetailsLoading] = useState(false);
+  const [hoverPageThumb, setHoverPageThumb] = useState<string | null>(null);
+
+  const checkerStyle = {
+    backgroundImage:
+      "linear-gradient(45deg, rgba(15,23,42,0.08) 25%, transparent 25%), linear-gradient(-45deg, rgba(15,23,42,0.08) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(15,23,42,0.08) 75%), linear-gradient(-45deg, transparent 75%, rgba(15,23,42,0.08) 75%)",
+    backgroundSize: "18px 18px",
+    backgroundPosition: "0 0, 0 9px, 9px -9px, -9px 0px",
+  } as const;
 
   // Extract all available print files
   // Extract all available print files from ALL orders
@@ -493,6 +503,8 @@ export default function DTFOrdering() {
     setGeneratedJobId(null);
     setGeneratedStats(null);
     setGenerationError(null);
+    setGeneratedJobDetails(null);
+    setHoverPageThumb(null);
 
     try {
         const payload = {
@@ -522,7 +534,17 @@ export default function DTFOrdering() {
             } else if (data.url) {
                 setGeneratedPdfUrls([data.url]);
             }
-            if (data.jobId) setGeneratedJobId(data.jobId);
+            if (data.jobId) {
+                setGeneratedJobId(data.jobId);
+                setGeneratedJobDetailsLoading(true);
+                try {
+                    const detailsRes = await fetch(`/api/dtf/jobs/${data.jobId}`);
+                    const detailsData = await detailsRes.json();
+                    if (detailsData.success) setGeneratedJobDetails(detailsData.data);
+                } catch {} finally {
+                    setGeneratedJobDetailsLoading(false);
+                }
+            }
             if (data.stats) setGeneratedStats(data.stats);
             
             setShowSuccessModal(true);
@@ -652,10 +674,6 @@ export default function DTFOrdering() {
     };
 
     const handleCancelSuccess = () => {
-        setSelectedFiles([]);
-        setGeneratedPdfUrls([]);
-        setGeneratedJobId(null);
-        setGeneratedStats(null);
         setShowSuccessModal(false);
     };
 
@@ -1278,84 +1296,159 @@ export default function DTFOrdering() {
         </div>
       )}
       {showSuccessModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 m-4 relative animate-in zoom-in-95">
-            <button 
-                onClick={handleCancelSuccess}
-                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-            >
-                <Trash2 size={20} />
-            </button>
-            
-            <div className="text-center mb-8">
-              <div className="bg-green-100 text-green-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Check size={32} />
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl m-4 overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-xs text-slate-500">DTF Protokoll</div>
+                <div className="text-lg font-black text-slate-900 truncate">PDF erfolgreich generiert</div>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">PDF erfolgreich generiert</h3>
-              <p className="text-sm text-gray-500">Bitte laden Sie die PDF herunter und prüfen Sie diese.</p>
+              <button onClick={handleCancelSuccess} className="text-slate-400 hover:text-slate-600 px-2 py-1">
+                ✕
+              </button>
             </div>
 
-            {(generatedJobId || generatedStats) && (
-              <div className="mb-6 bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700">
-                {generatedJobId && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">DTF Job:</span>
-                    <span className="font-mono">{generatedJobId}</span>
+            <div className="p-4 overflow-y-auto">
+              {(generatedJobId || generatedStats) && (
+                <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700">
+                  {generatedJobId && (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-slate-500">DTF Job:</span>
+                      <span className="font-mono">{generatedJobId}</span>
+                    </div>
+                  )}
+                  {generatedStats && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Bögen:</span>
+                        <span className="font-medium">{generatedStats.pages}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Motive:</span>
+                        <span className="font-medium">{generatedStats.uniqueFiles}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Gesamtstücke:</span>
+                        <span className="font-medium">{generatedStats.totalPieces}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="border border-slate-200 rounded-xl p-3">
+                  <div className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Downloads</div>
+                  <div className="flex flex-col gap-2">
+                    {generatedPdfUrls.map((url, idx) => (
+                      <a
+                        key={idx}
+                        href={url}
+                        download={`DTF_Print_Job_Part${idx + 1}.pdf`}
+                        className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center justify-center font-bold transition-colors"
+                      >
+                        <Download className="mr-2" size={18} />
+                        {generatedPdfUrls.length > 1 ? `PDF ${idx + 1} herunterladen` : 'PDF herunterladen'}
+                      </a>
+                    ))}
                   </div>
-                )}
-                {generatedStats && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Bögen:</span>
-                      <span className="font-medium">{generatedStats.pages}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Motive:</span>
-                      <span className="font-medium">{generatedStats.uniqueFiles}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Gesamtstücke:</span>
-                      <span className="font-medium">{generatedStats.totalPieces}</span>
-                    </div>
-                  </>
+                </div>
+
+                <div className="border border-slate-200 rounded-xl p-3">
+                  <div className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Hinweis</div>
+                  <div className="text-sm text-slate-700">
+                    Schau dir die Bögen hier direkt an. Wenn alles passt, kannst du unten bestätigen, dass die Aufträge aus der DTF-Liste entfernt werden.
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Bögen</div>
+                {generatedJobDetailsLoading ? (
+                  <div className="p-6 text-center text-slate-500">Lade Protokoll…</div>
+                ) : Array.isArray(generatedJobDetails?.pages) && generatedJobDetails.pages.length > 0 ? (
+                  <div className="space-y-4">
+                    {generatedJobDetails.pages.map((p: any) => {
+                      const placements = Array.isArray(p.placements) ? p.placements : [];
+                      const counts: Record<string, number> = {};
+                      for (const pl of placements) {
+                        const key = String(pl.name || pl.url || 'Datei');
+                        counts[key] = (counts[key] || 0) + 1;
+                      }
+                      const pageThumb = p.pdf_url ? `${p.pdf_url}_thumb.png` : '';
+
+                      return (
+                        <div key={p.index} className="border border-slate-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between gap-4 mb-2">
+                            <div className="font-bold text-slate-800">Bogen {Number(p.index) + 1}</div>
+                            <div className="text-xs text-slate-500">
+                              {Math.round((p.width_mm || 0))}×{Math.round((p.height_mm || 0))} mm · {Math.round(((p.utilization || 0) * 100))}%
+                            </div>
+                          </div>
+                          <div className="flex gap-3">
+                            <div style={checkerStyle} className="w-32 h-32 border border-slate-200 rounded bg-white overflow-hidden shrink-0 flex items-center justify-center">
+                              {pageThumb ? (
+                                <img
+                                  src={pageThumb}
+                                  alt=""
+                                  className="w-full h-full object-contain"
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                  onMouseEnter={() => setHoverPageThumb(pageThumb)}
+                                  onMouseLeave={() => setHoverPageThumb(null)}
+                                />
+                              ) : (
+                                <div className="text-xs text-slate-400">Kein Thumb</div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm text-slate-700 space-y-1">
+                                {Object.entries(counts).map(([k, v]) => (
+                                  <div key={k} className="flex justify-between gap-3">
+                                    <span className="truncate" title={k}>{k}</span>
+                                    <span className="font-mono shrink-0">{v}x</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-slate-500">Keine Detaildaten vorhanden.</div>
                 )}
               </div>
-            )}
-
-            <div className="flex flex-col gap-3 mb-8">
-              {generatedPdfUrls.map((url, idx) => (
-                <a 
-                  key={idx}
-                  href={url} 
-                  download={`DTF_Print_Job_Part${idx + 1}.pdf`}
-                  className="bg-green-600 text-white px-4 py-3 rounded-lg shadow hover:bg-green-700 flex items-center justify-center font-medium transition-colors"
-                >
-                  <Download className="mr-2" size={20} />
-                  {generatedPdfUrls.length > 1 ? `PDF ${idx + 1} herunterladen` : 'PDF herunterladen'}
-                </a>
-              ))}
             </div>
 
-            <div className="border-t border-gray-100 pt-6">
-              <p className="text-sm font-medium text-gray-700 mb-4 text-center">
-                Wurden die Daten geprüft und gedruckt?
-              </p>
-              <div className="flex gap-3">
+            <div className="p-4 border-t border-slate-200 bg-white">
+              <div className="text-sm font-bold text-slate-800 mb-2 text-center">Aufträge für DTF entfernen?</div>
+              <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={handleCancelSuccess}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium transition-colors"
+                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50 text-sm font-bold transition-colors"
                 >
-                  Nein, abbrechen
+                  Nein, da ist was falsch (drin lassen)
                 </button>
                 <button
                   onClick={handleConfirmSuccess}
-                  className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 text-sm font-medium transition-colors"
+                  className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 text-sm font-bold transition-colors"
                 >
-                  Ja, abschließen
+                  Perfekt – entfernen
                 </button>
               </div>
             </div>
           </div>
+
+          {hoverPageThumb && (
+            <div className="fixed inset-0 z-[60] pointer-events-none">
+              <div className="absolute right-6 top-24 w-[520px] max-w-[calc(100vw-48px)]">
+                <div style={checkerStyle} className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden">
+                  <img src={hoverPageThumb} alt="" className="w-full h-auto block" />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
