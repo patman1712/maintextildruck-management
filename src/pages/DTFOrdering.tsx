@@ -381,6 +381,87 @@ export default function DTFOrdering() {
     }
   };
 
+  const enqueueToDtfManualQueue = async (input: {
+    url: string;
+    name: string;
+    thumbnail?: string;
+    quantity?: number;
+    customerName?: string;
+    reference?: string;
+    sourceType?: string;
+    sourceId?: string;
+  }) => {
+    const queueOrderId = 'dtf-manual-queue';
+    const nowIso = new Date().toISOString();
+    const qty = Math.max(1, Number(input.quantity) || 1);
+    const ref = input.reference || input.customerName || 'Manuell';
+
+    const newFileEntry: any = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: input.name,
+      type: 'print',
+      url: input.url,
+      thumbnail: input.thumbnail,
+      customName: input.name,
+      status: 'pending',
+      quantity: qty,
+      reference: ref,
+      uploadedAt: nowIso,
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+    };
+
+    let queueOrder = orders.find(o => o.id === queueOrderId);
+
+    if (!queueOrder) {
+      const newOrder: any = {
+        id: queueOrderId,
+        title: "Manuelle DTF Warteschlange",
+        customerId: 'dtf-queue',
+        customerName: 'Warteschlange',
+        customerEmail: '',
+        deadline: new Date().toISOString().split('T')[0],
+        status: "active",
+        steps: { processing: true, produced: false, invoiced: false },
+        createdAt: nowIso,
+        description: "Sammelauftrag für manuelle DTF Dateien",
+        employees: [],
+        files: [newFileEntry],
+        printStatus: 'pending'
+      };
+      await addOrder(newOrder);
+    } else {
+      const currentFiles = queueOrder.files || [];
+      const existingIndex = currentFiles.findIndex((f: any) => f.url === input.url);
+      if (existingIndex >= 0) {
+        const updated = currentFiles.map((f: any, idx: number) => {
+          if (idx !== existingIndex) return f;
+          const nextQty = (Number(f.quantity) || 1) + qty;
+          return { ...f, quantity: nextQty, status: 'pending', reference: f.reference || ref };
+        });
+        await updateOrder(queueOrderId, { files: updated });
+      } else {
+        await updateOrder(queueOrderId, { files: [...currentFiles, newFileEntry] });
+      }
+    }
+
+    await fetchData();
+
+    addFile({
+      url: input.url,
+      name: input.name,
+      thumbnail: input.thumbnail,
+      orderId: queueOrderId,
+      customerName: input.customerName || ref,
+      date: nowIso,
+      quantity: qty,
+      width: 0,
+      height: 0,
+      reference: ref,
+      status: 'pending',
+    });
+  };
+
   const removeFile = (id: string) => {
     setSelectedFiles(prev => prev.filter(f => f.id !== id));
   };
@@ -1183,17 +1264,15 @@ export default function DTFOrdering() {
                                                                 {printFiles.map((file: any) => (
                                                                     <div 
                                                                         key={file.id}
-                                                                        onClick={() => addFile({
-                                                                            id: file.id,
+                                                                        onClick={() => enqueueToDtfManualQueue({
                                                                             url: file.file_url,
                                                                             name: file.file_name || product.name,
                                                                             thumbnail: file.thumbnail_url,
-                                                                            orderId: `prod-${product.id}`,
-                                                                            customerName: customer.name,
-                                                                            date: product.created_at,
                                                                             quantity: file.quantity || 1,
-                                                                            width: 0,
-                                                                            height: 0
+                                                                            customerName: customer.name,
+                                                                            reference: customer.name,
+                                                                            sourceType: 'product',
+                                                                            sourceId: String(product.id)
                                                                         })}
                                                                         className="bg-white border border-gray-200 rounded p-2 cursor-pointer hover:border-red-400 hover:shadow-sm transition-all"
                                                                     >
@@ -1254,7 +1333,16 @@ export default function DTFOrdering() {
                                 return (
                                     <div 
                                         key={idx} 
-                                        onClick={() => addFile(file)}
+                                        onClick={() => enqueueToDtfManualQueue({
+                                            url: file.url,
+                                            name: file.name,
+                                            thumbnail: file.thumbnail,
+                                            quantity: file.quantity,
+                                            customerName: file.customerName,
+                                            reference: file.reference || file.customerName,
+                                            sourceType: 'order',
+                                            sourceId: String(file.orderId)
+                                        })}
                                         className={`
                                             cursor-pointer rounded-lg border p-3 relative group hover:shadow-md transition-all flex flex-col
                                             ${isSelected ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'border-gray-200 bg-white hover:border-red-300'}
