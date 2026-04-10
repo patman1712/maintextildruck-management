@@ -8,6 +8,7 @@ export default function DTFPdfs() {
   const [selectedJob, setSelectedJob] = useState<any | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [purgeLoading, setPurgeLoading] = useState(false);
+  const [hoverThumb, setHoverThumb] = useState<string | null>(null);
   const checkerStyle = {
     backgroundImage:
       "linear-gradient(45deg, rgba(15,23,42,0.08) 25%, transparent 25%), linear-gradient(-45deg, rgba(15,23,42,0.08) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(15,23,42,0.08) 75%), linear-gradient(-45deg, transparent 75%, rgba(15,23,42,0.08) 75%)",
@@ -245,6 +246,8 @@ export default function DTFPdfs() {
                                     alt=""
                                     className="w-full h-full object-contain"
                                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                    onMouseEnter={() => setHoverThumb(pageThumb)}
+                                    onMouseLeave={() => setHoverThumb(null)}
                                   />
                                 ) : (
                                   <div className="text-xs text-slate-400">Kein Thumb</div>
@@ -270,6 +273,17 @@ export default function DTFPdfs() {
                   )}
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hoverThumb && (
+        <div className="fixed inset-0 z-[60] pointer-events-none">
+          <div className="absolute inset-0 bg-black/10" />
+          <div className="absolute right-6 top-24 w-[520px] max-w-[calc(100vw-48px)]">
+            <div style={checkerStyle} className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden">
+              <img src={hoverThumb} alt="" className="w-full h-auto block" />
             </div>
           </div>
         </div>
