@@ -173,14 +173,13 @@ export default function DTFPdfs() {
                     </div>
                 </div>
                 {pdfs.length > 0 && (
-                    <div className="mt-3 flex flex-col gap-2">
-                        {pdfs.slice(0, 3).map((u: string, idx: number) => (
+                    <div className="mt-3 flex flex-col gap-2 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
+                        {pdfs.map((u: string, idx: number) => (
                             <a key={u} href={u} download className="text-xs font-bold text-red-600 hover:underline flex items-center">
-                                <Download size={14} className="mr-2" />
-                                {pdfs.length > 1 ? `PDF ${idx + 1} herunterladen` : 'PDF herunterladen'}
+                                <Download size={14} className="mr-2 shrink-0" />
+                                <span className="truncate">{pdfs.length > 1 ? `PDF ${idx + 1} herunterladen` : 'PDF herunterladen'}</span>
                             </a>
                         ))}
-                        {pdfs.length > 3 && <div className="text-[11px] text-slate-400">+{pdfs.length - 3} weitere PDFs</div>}
                     </div>
                 )}
               </div>
