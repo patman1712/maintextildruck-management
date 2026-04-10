@@ -742,6 +742,23 @@ const ShopDashboard: React.FC = () => {
                     </div>
 
                     <div className="pt-6 border-t border-slate-200">
+                        <h4 className="font-bold text-slate-700 mb-4">Benachrichtigungen</h4>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Bestell-Benachrichtigung (E-Mail)</label>
+                            <input
+                                type="text"
+                                className="w-full border border-slate-300 rounded-lg p-2"
+                                value={(shop as any).notification_email || ''}
+                                onChange={(e) => setShop({ ...(shop as any), notification_email: e.target.value } as any)}
+                                placeholder="z.B. bestellungen@verein.de (auch mehrere: a@b.de, c@d.de)"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">
+                                An diese Adresse wird bei jeder neuen Shop-Bestellung eine E-Mail mit Details und Rechnung (PDF) gesendet.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="pt-6 border-t border-slate-200">
                         <h4 className="font-bold text-slate-700 mb-4">Spenden</h4>
                         <label className="flex items-center space-x-3">
                             <input

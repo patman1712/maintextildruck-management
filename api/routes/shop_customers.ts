@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs-extra';
 import { generateInvoice } from '../services/invoice.js';
-import { sendOrderConfirmation } from '../services/email.js';
+import { sendOrderConfirmation, sendShopOrderNotification } from '../services/email.js';
 
 const router = Router();
 
@@ -854,6 +854,14 @@ router.post('/:shopId/orders', async (req, res) => {
         if (invoicePath) {
             console.log(`[Order] Invoice generated: ${invoicePath}`);
             await sendOrderConfirmation(orderId, invoicePath);
+            try {
+                const notificationEmail = (shop as any)?.notification_email || '';
+                if (notificationEmail && String(notificationEmail).trim()) {
+                    await sendShopOrderNotification(orderId, invoicePath, String(notificationEmail));
+                }
+            } catch (e) {
+                console.error('[Order] Failed to send internal shop notification:', e);
+            }
         } else {
             console.error('[Order] Failed to generate invoice');
         }

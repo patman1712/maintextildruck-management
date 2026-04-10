@@ -36,6 +36,118 @@ const getEmailConfig = (): EmailConfig | null => {
     }
 };
 
+const normalizeRecipientList = (value: string | string[]) => {
+    const joined = Array.isArray(value) ? value.join(',') : value;
+    return joined
+        .split(/[,\n;\s]+/g)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .filter(s => s.includes('@'));
+};
+
+const sendEmailWithInvoice = async (opts: {
+    to: string[];
+    subject: string;
+    text: string;
+    html: string;
+    invoicePath?: string | null;
+    invoiceFilename?: string;
+}) => {
+    const config = getEmailConfig();
+    if (!config) {
+        console.warn('Email configuration missing. Skipping email sending.');
+        return false;
+    }
+
+    const toList = opts.to.filter(Boolean);
+    if (toList.length === 0) return false;
+
+    try {
+        if (config.resend_api_key && config.resend_api_key.startsWith('re_')) {
+            const resend = new Resend(config.resend_api_key);
+            const attachments: any[] = [];
+            if (opts.invoicePath) {
+                const pdfBuffer = await fs.readFile(opts.invoicePath);
+                attachments.push({
+                    filename: opts.invoiceFilename || 'Rechnung.pdf',
+                    content: pdfBuffer
+                });
+            }
+
+            let fromAddress = `${config.sender_name} <${config.sender_email}>`;
+
+            try {
+                const { data, error } = await resend.emails.send({
+                    from: fromAddress,
+                    to: toList,
+                    subject: opts.subject,
+                    text: opts.text,
+                    html: opts.html,
+                    attachments: attachments.length ? attachments : undefined
+                } as any);
+
+                if (error) {
+                    const { data: fallbackData, error: fallbackError } = await resend.emails.send({
+                        from: 'onboarding@resend.dev',
+                        to: toList,
+                        subject: opts.subject,
+                        text: opts.text,
+                        html: opts.html,
+                        attachments: attachments.length ? attachments : undefined
+                    } as any);
+
+                    if (fallbackError) return false;
+                    console.log('Resend Email sent (Fallback):', fallbackData?.id);
+                    return true;
+                }
+
+                console.log('Resend Email sent:', data?.id);
+                return true;
+            } catch {
+                return false;
+            }
+        }
+
+        if (config.smtp_host) {
+            const transporter = nodemailer.createTransport({
+                host: config.smtp_host,
+                port: config.smtp_port,
+                secure: config.smtp_secure,
+                auth: {
+                    user: config.smtp_user,
+                    pass: config.smtp_pass,
+                },
+                tls: {
+                    rejectUnauthorized: !config.ignore_certs
+                }
+            });
+
+            const attachments: any[] = [];
+            if (opts.invoicePath) {
+                attachments.push({
+                    filename: opts.invoiceFilename || 'Rechnung.pdf',
+                    path: opts.invoicePath
+                });
+            }
+
+            await transporter.sendMail({
+                from: `"${config.sender_name}" <${config.sender_email}>`,
+                to: toList.join(', '),
+                subject: opts.subject,
+                text: opts.text,
+                html: opts.html,
+                attachments: attachments.length ? attachments : undefined
+            });
+            return true;
+        }
+
+        return false;
+    } catch (e) {
+        console.error('Error sending email:', e);
+        return false;
+    }
+};
+
 export const sendOrderConfirmation = async (orderId: string, invoicePath: string) => {
     const config = getEmailConfig();
     if (!config) {
@@ -280,6 +392,103 @@ ${branding.company_name}
 
     } catch (e) {
         console.error('Error sending email:', e);
+        return false;
+    }
+};
+
+export const sendShopOrderNotification = async (orderId: string, invoicePath: string, recipients: string | string[]) => {
+    try {
+        const to = normalizeRecipientList(recipients);
+        if (!to.length) return false;
+
+        const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
+        if (!order) return false;
+
+        const shop = order.shop_id ? (db.prepare('SELECT * FROM shops WHERE id = ?').get(order.shop_id) as any) : null;
+        const customer = order.shop_customer_id ? (db.prepare('SELECT * FROM shop_customers WHERE id = ?').get(order.shop_customer_id) as any) : null;
+        const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+
+        const shopName = shop?.name || 'Onlineshop';
+        const subject = `Neue Bestellung #${order.order_number} (${shopName})`;
+
+        const createdAt = order.created_at ? new Date(order.created_at).toLocaleString('de-DE') : '';
+        const customerLine = customer
+            ? `${customer.first_name || ''} ${customer.last_name || ''}`.trim()
+            : (order.customer_name || '');
+
+        const rowsHtml = items.map((it, idx) => {
+            const qty = Number(it.quantity) || 0;
+            const price = Number(it.price) || 0;
+            const total = qty * price;
+            return `<tr>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee;">${idx + 1}</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee;">${it.item_name || ''}</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${qty}</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${price.toFixed(2).replace('.', ',')} €</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${total.toFixed(2).replace('.', ',')} €</td>
+            </tr>`;
+        }).join('');
+
+        const html = `<!doctype html><html><body style="font-family: Helvetica, Arial, sans-serif; background:#f4f4f4; margin:0; padding:0;">
+            <div style="max-width:720px; margin:20px auto; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+              <div style="padding:18px 20px; border-bottom:4px solid #16a34a;">
+                <div style="font-size:12px; color:#64748b;">Shop-Bestellung</div>
+                <div style="font-size:20px; font-weight:800; color:#0f172a;">#${order.order_number} · ${shopName}</div>
+              </div>
+              <div style="padding:18px 20px;">
+                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 14px; margin-bottom:14px;">
+                  <div style="font-size:14px; color:#0f172a;"><b>Datum:</b> ${createdAt}</div>
+                  <div style="font-size:14px; color:#0f172a;"><b>Kunde:</b> ${customerLine || '-'}</div>
+                  <div style="font-size:14px; color:#0f172a;"><b>E-Mail:</b> ${order.customer_email || customer?.email || '-'}</div>
+                  <div style="font-size:14px; color:#0f172a;"><b>Adresse:</b> ${(order.customer_address || '').replace(/\n/g, '<br>') || '-'}</div>
+                  <div style="font-size:14px; color:#0f172a;"><b>Zahlung:</b> ${order.paymentMethod || order.payment_method || '-'} · ${order.paymentStatus || order.payment_status || '-'}</div>
+                </div>
+                <div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; margin:10px 0;">Positionen</div>
+                <table style="width:100%; border-collapse:collapse; font-size:14px;">
+                  <thead>
+                    <tr style="background:#f1f5f9; color:#334155;">
+                      <th style="padding:8px; text-align:left;">Pos.</th>
+                      <th style="padding:8px; text-align:left;">Artikel</th>
+                      <th style="padding:8px; text-align:right;">Menge</th>
+                      <th style="padding:8px; text-align:right;">Preis</th>
+                      <th style="padding:8px; text-align:right;">Summe</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rowsHtml || ''}</tbody>
+                </table>
+                <p style="margin-top:14px; color:#334155; font-size:14px;">Rechnung als PDF ist im Anhang.</p>
+              </div>
+            </div>
+          </body></html>`;
+
+        const textLines = [
+            `Neue Bestellung #${order.order_number} (${shopName})`,
+            createdAt ? `Datum: ${createdAt}` : '',
+            `Kunde: ${customerLine || '-'}`,
+            `E-Mail: ${order.customer_email || customer?.email || '-'}`,
+            `Adresse: ${order.customer_address || '-'}`,
+            `Zahlung: ${(order.paymentMethod || order.payment_method || '-') } / ${(order.paymentStatus || order.payment_status || '-')}`,
+            '',
+            'Positionen:',
+            ...items.map((it: any, idx: number) => {
+                const qty = Number(it.quantity) || 0;
+                const price = Number(it.price) || 0;
+                return `${idx + 1}. ${it.item_name || ''} | ${qty}x | ${price.toFixed(2).replace('.', ',')} €`;
+            }),
+            '',
+            'Rechnung ist im Anhang.'
+        ].filter(Boolean);
+
+        return await sendEmailWithInvoice({
+            to,
+            subject,
+            text: textLines.join('\n'),
+            html,
+            invoicePath,
+            invoiceFilename: `Rechnung_${order.order_number}.pdf`
+        });
+    } catch (e) {
+        console.error('Error sending shop order notification:', e);
         return false;
     }
 };

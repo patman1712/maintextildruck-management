@@ -1169,6 +1169,18 @@ try {
       console.error('Migration error (custom_domain):', e);
   }
 
+  // Migration: Add notification email to Shops
+  try {
+      const shopCols = db.prepare("PRAGMA table_info(shops)").all() as any[];
+      const hasNotificationEmail = shopCols.some(col => col.name === 'notification_email');
+      if (!hasNotificationEmail) {
+          console.log('Migrating database: Adding notification_email to shops table');
+          db.exec('ALTER TABLE shops ADD COLUMN notification_email TEXT');
+      }
+  } catch (e) {
+      console.error('Migration error (notification_email):', e);
+  }
+
   // Migration: Add tracking columns to order_items
   try {
       const orderItemCols = db.prepare("PRAGMA table_info(order_items)").all() as any[];
