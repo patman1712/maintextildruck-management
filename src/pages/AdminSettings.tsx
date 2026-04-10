@@ -539,6 +539,21 @@ export default function AdminSettings() {
                             onChange={(e) => setGlobalContent({ ...globalContent, ceo_name: e.target.value })}
                         />
                     </div>
+
+                    <div className="pt-4 border-t border-slate-200">
+                        <h4 className="font-bold text-slate-800 mb-2">Benachrichtigungen</h4>
+                        <label className="block text-sm font-medium text-slate-700">Bestell-Benachrichtigung (E-Mail)</label>
+                        <input
+                            type="text"
+                            className="w-full border border-gray-300 rounded p-2 text-sm"
+                            value={globalContent.order_notification_email || ''}
+                            onChange={(e) => setGlobalContent({ ...globalContent, order_notification_email: e.target.value })}
+                            placeholder="z.B. bestellungen@maintextildruck.com (auch mehrere: a@b.de, c@d.de)"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                            An diese Adresse(n) wird bei jeder neuen Online-Shop-Bestellung eine E-Mail mit Details und Rechnung (PDF) gesendet.
+                        </p>
+                    </div>
                     
                     <div className="grid grid-cols-2 gap-3">
                         <div>

@@ -855,7 +855,8 @@ router.post('/:shopId/orders', async (req, res) => {
             console.log(`[Order] Invoice generated: ${invoicePath}`);
             await sendOrderConfirmation(orderId, invoicePath);
             try {
-                const notificationEmail = (shop as any)?.notification_email || '';
+                const global = db.prepare("SELECT order_notification_email FROM global_shop_content WHERE id = 'main'").get() as any;
+                const notificationEmail = global?.order_notification_email || (shop as any)?.notification_email || '';
                 if (notificationEmail && String(notificationEmail).trim()) {
                     await sendShopOrderNotification(orderId, invoicePath, String(notificationEmail));
                 }

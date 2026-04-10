@@ -145,6 +145,7 @@ router.put('/global-content', (req, res) => {
     const updates = req.body;
     const allowedKeys = [
         'footer_logo_url', 'contact_phone', 'contact_email', 'contact_address',
+        'order_notification_email',
         'company_name', 'company_address', 'ceo_name', 'bank_name', 'bank_iban',
         'bank_bic', 'tax_number', 'vat_id', 'commercial_register'
     ]; // Add more as needed

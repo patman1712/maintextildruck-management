@@ -1039,6 +1039,7 @@ try {
       footer_logo_url TEXT,
       contact_phone TEXT,
       contact_email TEXT,
+      order_notification_email TEXT,
       contact_address TEXT,
       opening_hours TEXT,
       social_instagram TEXT,
@@ -1073,6 +1074,18 @@ try {
       }
   } catch (e) {
       console.error('Migration error (global content details):', e);
+  }
+
+  // Migration: Add order_notification_email to Global Content
+  try {
+      const globalContentCols = db.prepare("PRAGMA table_info(global_shop_content)").all() as any[];
+      const hasOrderNotificationEmail = globalContentCols.some(col => col.name === 'order_notification_email');
+      if (!hasOrderNotificationEmail) {
+          console.log('Migrating database: Adding order_notification_email to global_shop_content table');
+          db.exec('ALTER TABLE global_shop_content ADD COLUMN order_notification_email TEXT');
+      }
+  } catch (e) {
+      console.error('Migration error (order_notification_email):', e);
   }
 
   // New table for Email Configuration
