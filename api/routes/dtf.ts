@@ -61,10 +61,12 @@ const deleteJobPdfs = async (urls: string[]) => {
 
         const pdfPath = path.join(UPLOAD_DIR, filename);
         const thumbPath = path.join(UPLOAD_DIR, `${filename}_thumb.png`);
+        const thumbLgPath = path.join(UPLOAD_DIR, `${filename}_thumb_lg.png`);
 
         try {
             if (await fs.pathExists(pdfPath)) await fs.remove(pdfPath);
             if (await fs.pathExists(thumbPath)) await fs.remove(thumbPath);
+            if (await fs.pathExists(thumbLgPath)) await fs.remove(thumbLgPath);
             deleted.push(filename);
         } catch {
             skipped.push(filename);
@@ -170,6 +172,7 @@ router.post('/purge-orphan-pdfs', async (req: Request, res: Response) => {
                 const filename = path.basename(String(u || ''));
                 if (filename) referenced.add(filename);
                 if (filename) referenced.add(`${filename}_thumb.png`);
+                if (filename) referenced.add(`${filename}_thumb_lg.png`);
             }
         }
 
@@ -629,13 +632,13 @@ router.post('/generate', async (req: Request, res: Response) => {
         const jobPages: any[] = [];
         const countsPlaced: Record<string, number> = {};
 
-        const generateThumbnail = async (pdfPath: string, outputFilename: string) => {
-            const thumbRoot = path.join(UPLOAD_DIR, `${outputFilename}_thumb`);
+        const generateThumbnail = async (pdfPath: string, outputFilename: string, scaleTo: number, suffix: string) => {
+            const thumbRoot = path.join(UPLOAD_DIR, `${outputFilename}${suffix}`);
             try {
                 await execFileAsync('pdftocairo', [
                     '-png',
                     '-singlefile',
-                    '-scale-to', '300',
+                    '-scale-to', String(scaleTo),
                     '-transp',
                     pdfPath,
                     thumbRoot
@@ -647,7 +650,7 @@ router.post('/generate', async (req: Request, res: Response) => {
                 await execFileAsync('pdftoppm', [
                     '-png',
                     '-singlefile',
-                    '-scale-to', '300',
+                    '-scale-to', String(scaleTo),
                     pdfPath,
                     thumbRoot
                 ]);
@@ -742,7 +745,8 @@ router.post('/generate', async (req: Request, res: Response) => {
             
             generatedUrls.push(`/uploads/${outputFilename}`);
             
-            await generateThumbnail(outputPath, outputFilename);
+            await generateThumbnail(outputPath, outputFilename, 300, '_thumb');
+            await generateThumbnail(outputPath, outputFilename, 1100, '_thumb_lg');
 
             const usedArea = pageItems.reduce((sum, i) => sum + (i.w * i.h), 0);
             const sheetArea = pageWidth * pageHeight;

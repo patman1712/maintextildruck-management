@@ -225,6 +225,7 @@ export default function DTFPdfs() {
                       {selectedJob.pages.map((p: any) => {
                         const placements = Array.isArray(p.placements) ? p.placements : [];
                         const pageThumb = p.pdf_url ? `${p.pdf_url}_thumb.png` : '';
+                        const pageThumbLg = p.pdf_url ? `${p.pdf_url}_thumb_lg.png` : '';
                         const counts: Record<string, number> = {};
                         for (const pl of placements) {
                           const key = String(pl.name || pl.url || 'Datei');
@@ -246,7 +247,7 @@ export default function DTFPdfs() {
                                     alt=""
                                     className="w-full h-full object-contain"
                                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                    onMouseEnter={() => setHoverThumb(pageThumb)}
+                                    onMouseEnter={() => setHoverThumb(pageThumbLg || pageThumb)}
                                     onMouseLeave={() => setHoverThumb(null)}
                                   />
                                 ) : (
@@ -280,9 +281,9 @@ export default function DTFPdfs() {
 
       {hoverThumb && (
         <div className="fixed inset-0 z-[60] pointer-events-none">
-          <div className="absolute inset-0 bg-black/10" />
-          <div className="absolute right-6 top-24 w-[520px] max-w-[calc(100vw-48px)]">
-            <div style={checkerStyle} className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden">
+          <div className="absolute inset-0 bg-black/20" />
+          <div className="absolute inset-0 flex items-center justify-center p-6">
+            <div style={checkerStyle} className="bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden max-w-[min(1100px,calc(100vw-48px))]">
               <img src={hoverThumb} alt="" className="w-full h-auto block" />
             </div>
           </div>
