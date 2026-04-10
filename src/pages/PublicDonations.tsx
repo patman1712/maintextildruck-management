@@ -46,8 +46,12 @@ export default function PublicDonations() {
   const [paymentsLoading, setPaymentsLoading] = useState<boolean>(false)
   const [expandedPaymentId, setExpandedPaymentId] = useState<string | null>(null)
   const [expandedPaymentOrders, setExpandedPaymentOrders] = useState<any[] | null>(null)
+  const [expandedPaymentItems, setExpandedPaymentItems] = useState<any[] | null>(null)
   const [paymentsError, setPaymentsError] = useState<string>("")
   const [expandedOrderKey, setExpandedOrderKey] = useState<string | null>(null)
+  const [products, setProducts] = useState<any[]>([])
+  const [productsLoading, setProductsLoading] = useState<boolean>(false)
+  const [productsError, setProductsError] = useState<string>("")
 
   const tab = (searchParams.get("tab") || "dashboard").toLowerCase()
 
@@ -181,15 +185,22 @@ export default function PublicDonations() {
     fetchPayments()
   }, [token, requiresPassword])
 
+  useEffect(() => {
+    if (requiresPassword) return
+    fetchProducts()
+  }, [token, requiresPassword])
+
   const openPaymentDetails = async (paymentId: string) => {
     if (!token) return
     if (expandedPaymentId === paymentId) {
       setExpandedPaymentId(null)
       setExpandedPaymentOrders(null)
+      setExpandedPaymentItems(null)
       return
     }
     setExpandedPaymentId(paymentId)
     setExpandedPaymentOrders(null)
+    setExpandedPaymentItems(null)
     try {
       const res = await fetch(`/api/donations/public/${token}/payments/${paymentId}`, {
         method: "POST",
@@ -197,11 +208,39 @@ export default function PublicDonations() {
         body: JSON.stringify({ password }),
       })
       const data = await res.json()
-      if (data.success) setExpandedPaymentOrders(data.data.orders || [])
+      if (data.success) {
+        setExpandedPaymentOrders(data.data.orders || [])
+        setExpandedPaymentItems(data.data.items || [])
+      }
       else if (data.requiresPassword) setRequiresPassword(true)
       else alert(data.error || "Fehler")
     } catch (e: any) {
       alert(e?.message || "Fehler")
+    }
+  }
+
+  const fetchProducts = async (pw?: string) => {
+    if (!token) return
+    setProductsLoading(true)
+    setProductsError("")
+    try {
+      const res = await fetch(`/api/donations/public/${token}/products`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw ?? password }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setProducts(data.data || [])
+      } else if (data.requiresPassword) {
+        setRequiresPassword(true)
+      } else {
+        setProductsError(data.error || "Fehler")
+      }
+    } catch (e: any) {
+      setProductsError(e?.message || "Netzwerkfehler")
+    } finally {
+      setProductsLoading(false)
     }
   }
 
@@ -230,6 +269,7 @@ export default function PublicDonations() {
             onClick={async () => {
               await fetchData(password)
               await fetchPayments(password)
+              await fetchProducts(password)
             }}
             className="mt-4 w-full px-4 py-3 rounded-lg bg-red-600 text-white font-bold text-sm hover:bg-red-700"
           >
@@ -269,8 +309,8 @@ export default function PublicDonations() {
             {[
               { id: "dashboard", label: "Dashboard" },
               { id: "open", label: "Offene Spenden" },
-              { id: "paid", label: "Gezahlte Spenden" },
               { id: "payments", label: "Zahlungen" },
+              { id: "products", label: "Produkte" },
             ].map((t) => (
               <button
                 key={t.id}
@@ -307,14 +347,14 @@ export default function PublicDonations() {
                   <div className="text-sm text-slate-500 mt-1">{counts.open} Positionen</div>
                 </div>
                 <div className="border border-slate-200 rounded-xl p-4">
-                  <div className="text-xs font-bold uppercase text-slate-400">Gezahlt</div>
-                  <div className="text-2xl font-black text-slate-900 mt-1">€ {totals.totalPaid.toFixed(2)}</div>
-                  <div className="text-sm text-slate-500 mt-1">{counts.paid} Positionen</div>
-                </div>
-                <div className="border border-slate-200 rounded-xl p-4">
                   <div className="text-xs font-bold uppercase text-slate-400">Zahlungen</div>
                   <div className="text-2xl font-black text-slate-900 mt-1">{payments.length}</div>
                   <div className="text-sm text-slate-500 mt-1">Batches</div>
+                </div>
+                <div className="border border-slate-200 rounded-xl p-4">
+                  <div className="text-xs font-bold uppercase text-slate-400">Produkte mit Spende</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">{products.filter((p: any) => Number(p.donation_amount) > 0).length}</div>
+                  <div className="text-sm text-slate-500 mt-1">Artikel</div>
                 </div>
               </div>
             )}
@@ -379,6 +419,27 @@ export default function PublicDonations() {
                                   </div>
                                 ))}
                               </div>
+                              {expandedPaymentItems && expandedPaymentItems.length > 0 ? (
+                                <div className="mt-4">
+                                  <div className="text-[11px] font-black uppercase tracking-widest text-slate-400 pb-2">Artikel in dieser Zahlung</div>
+                                  <div className="grid grid-cols-12 gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 pb-2">
+                                    <div className="col-span-5">Artikel</div>
+                                    <div className="col-span-2 text-right">Anzahl</div>
+                                    <div className="col-span-3 text-right">Artikelpreis</div>
+                                    <div className="col-span-2 text-right">Spende</div>
+                                  </div>
+                                  <div className="divide-y divide-slate-200">
+                                    {expandedPaymentItems.map((it: any, idx: number) => (
+                                      <div key={`${it.order_id}-${idx}`} className="grid grid-cols-12 gap-2 py-2 items-center">
+                                        <div className="col-span-5 text-sm text-slate-800 font-semibold">{it.item_name || "-"}</div>
+                                        <div className="col-span-2 text-sm text-slate-700 text-right">{Number(it.quantity) || 0}</div>
+                                        <div className="col-span-3 text-sm text-slate-700 text-right">€ {(Number(it.item_total) || 0).toFixed(2)}</div>
+                                        <div className="col-span-2 text-sm font-black text-slate-900 text-right">€ {(Number(it.donation_total) || 0).toFixed(2)}</div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : null}
                             </>
                           )}
                         </div>
@@ -386,6 +447,33 @@ export default function PublicDonations() {
                     </div>
                   )
                 })}
+              </div>
+            )}
+          </div>
+        ) : tab === "products" ? (
+          <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 text-[11px] font-black uppercase tracking-widest text-slate-400 grid grid-cols-12 gap-2">
+              <div className="col-span-3">Artikel-Nr.</div>
+              <div className="col-span-5">Artikelname</div>
+              <div className="col-span-2 text-right">Verkaufspreis</div>
+              <div className="col-span-2 text-right">Spende</div>
+            </div>
+            {productsLoading ? (
+              <div className="p-10 text-center text-slate-400">Lade...</div>
+            ) : productsError ? (
+              <div className="p-10 text-center text-red-600">{productsError}</div>
+            ) : products.length === 0 ? (
+              <div className="p-10 text-center text-slate-400">Keine Produkte gefunden.</div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {products.map((p: any, idx: number) => (
+                  <div key={`${p.product_number}-${idx}`} className="grid grid-cols-12 gap-2 px-4 py-3 items-center">
+                    <div className="col-span-3 text-sm font-mono text-slate-600">{p.product_number || "-"}</div>
+                    <div className="col-span-5 text-sm text-slate-800 font-semibold">{p.product_name || "-"}</div>
+                    <div className="col-span-2 text-sm text-slate-800 text-right">€ {(Number(p.price) || 0).toFixed(2)}</div>
+                    <div className="col-span-2 text-sm font-black text-slate-900 text-right">€ {(Number(p.donation_amount) || 0).toFixed(2)}</div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -402,11 +490,11 @@ export default function PublicDonations() {
               <div className="p-10 text-center text-slate-400">Lade...</div>
             ) : error ? (
               <div className="p-10 text-center text-red-600">{error}</div>
-            ) : (tab === "paid" ? paidOrders : openOrders).length === 0 ? (
+            ) : openOrders.length === 0 ? (
               <div className="p-10 text-center text-slate-400">Keine Einträge.</div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {(tab === "paid" ? paidOrders : openOrders).map((o) => {
+                {openOrders.map((o) => {
                   const isExpanded = expandedOrderKey === o.key
                   return (
                     <div key={o.key}>

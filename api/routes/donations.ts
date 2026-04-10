@@ -435,7 +435,33 @@ router.post('/public/:token/payments/:paymentId', (req, res) => {
       )
       .all(paymentId)
 
-    res.json({ success: true, data: { ...payment, order_ids: payment.order_ids_json ? JSON.parse(payment.order_ids_json) : [], orders } })
+    const items = db
+      .prepare(
+        `
+        SELECT
+          sd.order_id,
+          sd.item_name,
+          sd.item_number,
+          sd.quantity,
+          sd.item_total,
+          sd.donation_per_item,
+          sd.donation_total
+        FROM shop_donations sd
+        WHERE sd.payment_id = ?
+        ORDER BY datetime(sd.order_date) DESC, sd.created_at DESC
+      `
+      )
+      .all(paymentId)
+
+    res.json({
+      success: true,
+      data: {
+        ...payment,
+        order_ids: payment.order_ids_json ? JSON.parse(payment.order_ids_json) : [],
+        orders,
+        items,
+      },
+    })
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message })
   }
@@ -478,6 +504,53 @@ router.post('/public/:token', (req, res) => {
 
     const rows = db.prepare(sql).all(link.shop_id)
     res.json({ success: true, data: { shopId: link.shop_id, shopName: link.shop_name, shopLogoUrl: link.shop_logo_url, rows } })
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message })
+  }
+})
+
+router.post('/public/:token/products', (req, res) => {
+  try {
+    const { token } = req.params
+    const password = typeof req.body?.password === 'string' ? req.body.password : ''
+
+    const link = db
+      .prepare(
+        `
+        SELECT l.shop_id, l.enabled, l.password_hash
+        FROM shop_donation_share_links l
+        WHERE l.token = ?
+      `
+      )
+      .get(token) as any
+
+    if (!link) return res.status(404).json({ success: false, error: 'Link ungültig.' })
+    if (!link.enabled) return res.status(403).json({ success: false, error: 'Link deaktiviert.' })
+
+    const hasPassword = !!(link.password_hash && String(link.password_hash).trim())
+    if (hasPassword) {
+      const ok = bcrypt.compareSync(password || '', link.password_hash)
+      if (!ok) return res.json({ success: false, requiresPassword: true })
+    }
+
+    const rows = db
+      .prepare(
+        `
+        SELECT
+          cp.product_number,
+          cp.name as product_name,
+          spa.price,
+          COALESCE(spa.donation_amount, 0) as donation_amount
+        FROM shop_product_assignments spa
+        JOIN customer_products cp ON cp.id = spa.product_id
+        WHERE spa.shop_id = ?
+          AND (spa.is_active = 1 OR spa.is_active IS NULL)
+        ORDER BY cp.product_number, cp.name
+      `
+      )
+      .all(link.shop_id)
+
+    res.json({ success: true, data: rows })
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message })
   }
