@@ -67,10 +67,7 @@ export default function DTFOrdering() {
   const protocolScrollRef = useRef<HTMLDivElement | null>(null);
 
   const checkerStyle = {
-    backgroundImage:
-      "linear-gradient(45deg, rgba(15,23,42,0.08) 25%, transparent 25%), linear-gradient(-45deg, rgba(15,23,42,0.08) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(15,23,42,0.08) 75%), linear-gradient(-45deg, transparent 75%, rgba(15,23,42,0.08) 75%)",
-    backgroundSize: "18px 18px",
-    backgroundPosition: "0 0, 0 9px, 9px -9px, -9px 0px",
+    backgroundColor: "#00FF00",
   } as const;
   const thumbFilterStyle = {
     filter: "drop-shadow(0 0 1px rgba(0,0,0,0.75)) drop-shadow(0 2px 10px rgba(0,0,0,0.25))",
