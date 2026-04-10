@@ -1,7 +1,9 @@
 import { Router, type Request, type Response } from 'express';
-import db from '../db.js';
+import db, { DATA_DIR } from '../db.js';
 import { generateInvoice } from '../services/invoice.js';
 import { sendOrderConfirmation } from '../services/email.js';
+import path from 'path';
+import fs from 'fs-extra';
 
 const router = Router();
 
@@ -43,6 +45,38 @@ router.get('/', (req: Request, res: Response) => {
   }));
   
   res.json({ success: true, data: orders });
+});
+
+router.get('/invoice/:orderNumber', async (req: Request, res: Response) => {
+  try {
+    const { orderNumber } = req.params;
+    const regenerate = String(req.query?.regenerate || '') === 'true';
+
+    const row = db.prepare('SELECT id, invoice_path, invoice_number FROM orders WHERE order_number = ?').get(orderNumber) as any;
+    if (!row) return res.status(404).json({ success: false, error: 'Order not found' });
+
+    if (regenerate || !row.invoice_path) {
+      const invoicePath = await generateInvoice(row.id);
+      if (!invoicePath) return res.status(500).json({ success: false, error: 'Invoice generation failed' });
+    }
+
+    const order = db.prepare('SELECT invoice_path, invoice_number FROM orders WHERE id = ?').get(row.id) as any;
+    if (!order?.invoice_path) return res.status(404).json({ success: false, error: 'Rechnung nicht gefunden.' });
+
+    const filePath = path.join(DATA_DIR, 'invoices', order.invoice_path);
+    if (!fs.existsSync(filePath)) {
+      const invoicePath = await generateInvoice(row.id);
+      if (!invoicePath) return res.status(500).json({ success: false, error: 'Invoice generation failed' });
+    }
+
+    const order2 = db.prepare('SELECT invoice_path, invoice_number FROM orders WHERE id = ?').get(row.id) as any;
+    const filePath2 = path.join(DATA_DIR, 'invoices', order2.invoice_path);
+    if (!fs.existsSync(filePath2)) return res.status(404).json({ success: false, error: 'Rechnungsdatei nicht gefunden.' });
+
+    res.download(filePath2, `Rechnung_${order2.invoice_number || orderNumber}.pdf`);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 router.post('/regenerate-invoice/:orderNumber', async (req: Request, res: Response) => {
