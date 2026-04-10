@@ -470,7 +470,15 @@ export default function PublicDonations() {
                   <div key={`${p.product_number}-${idx}`} className="grid grid-cols-12 gap-2 px-4 py-3 items-center">
                     <div className="col-span-3 text-sm font-mono text-slate-600">{p.product_number || "-"}</div>
                     <div className="col-span-5 text-sm text-slate-800 font-semibold">{p.product_name || "-"}</div>
-                    <div className="col-span-2 text-sm text-slate-800 text-right">€ {(Number(p.price) || 0).toFixed(2)}</div>
+                    <div className="col-span-2 text-sm text-slate-800 text-right">
+                      {p.display_price ? (
+                        <span className="font-bold">
+                          {p.show_from ? "ab " : ""}€ {Number(p.display_price).toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </div>
                     <div className="col-span-2 text-sm font-black text-slate-900 text-right">€ {(Number(p.donation_amount) || 0).toFixed(2)}</div>
                   </div>
                 ))}

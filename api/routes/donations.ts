@@ -540,6 +540,7 @@ router.post('/public/:token/products', (req, res) => {
           cp.product_number,
           cp.name as product_name,
           spa.price,
+          spa.variants,
           COALESCE(spa.donation_amount, 0) as donation_amount
         FROM shop_product_assignments spa
         JOIN customer_products cp ON cp.id = spa.product_id
@@ -550,7 +551,44 @@ router.post('/public/:token/products', (req, res) => {
       )
       .all(link.shop_id)
 
-    res.json({ success: true, data: rows })
+    const data = (rows as any[]).map((r) => {
+      const basePrice = Number(r.price) || 0
+      let showFrom = false
+      let minPrice: number | null = null
+      let maxPrice: number | null = null
+
+      try {
+        if (r.variants) {
+          const variants = typeof r.variants === 'string' ? JSON.parse(r.variants) : r.variants
+          const values = Object.values(variants || {}) as any[]
+          if (values.length > 0) {
+            showFrom = true
+            const prices = values
+              .map((v) => Number(v?.price) || 0)
+              .filter((p) => p > 0)
+            if (prices.length > 0) {
+              minPrice = Math.min(...prices)
+              maxPrice = Math.max(...prices)
+            }
+          }
+        }
+      } catch {}
+
+      const displayPrice = basePrice > 0 ? basePrice : minPrice
+
+      return {
+        product_number: r.product_number,
+        product_name: r.product_name,
+        donation_amount: Number(r.donation_amount) || 0,
+        price: basePrice > 0 ? basePrice : null,
+        price_min: minPrice,
+        price_max: maxPrice,
+        show_from: showFrom,
+        display_price: displayPrice && displayPrice > 0 ? displayPrice : null,
+      }
+    })
+
+    res.json({ success: true, data })
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message })
   }
