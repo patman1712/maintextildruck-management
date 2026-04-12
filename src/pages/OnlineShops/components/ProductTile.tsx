@@ -169,7 +169,7 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId, shopB
     return (
         <div className="group block relative bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border border-slate-100">
             <Link to={`${shopBaseUrl}/product/${product.product_id}`} className="block h-full flex flex-col">
-                <div className="relative aspect-[3/4] bg-slate-50 overflow-hidden">
+                <div className="relative aspect-[3/4] bg-white overflow-hidden">
                     {product.files && product.files.length > 0 && (product.files[0].thumbnail_url || product.files[0].file_url) ? (
                         <>
                             <img 
@@ -177,7 +177,7 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId, shopB
                                 srcSet={tileSrcSet}
                                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                                 alt={product.name}
-                                className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-700"
+                                className="w-full h-full object-contain object-center p-4 group-hover:scale-105 transition-transform duration-700"
                                 loading="lazy"
                                 decoding="async"
                             />
