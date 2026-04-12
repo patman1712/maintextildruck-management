@@ -12,6 +12,8 @@ interface ProductTileProps {
 type ColorMap = Record<string, string>;
 const colorMapCacheByShop: Record<string, ColorMap> = {};
 const colorMapPromiseByShop: Record<string, Promise<ColorMap> | null> = {};
+const colorVarIdsCacheByShop: Record<string, Set<string>> = {};
+const colorVarIdsPromiseByShop: Record<string, Promise<Set<string>> | null> = {};
 
 const normalizeColorKey = (value: string) => value.trim().toLowerCase();
 
@@ -28,8 +30,10 @@ const getColorMapForShop = async (shopId: string): Promise<ColorMap> => {
             const data = await res.json();
             const rows = data?.success && Array.isArray(data.data) ? data.data : [];
             const map: ColorMap = {};
+            const colorVarIds = new Set<string>();
             for (const v of rows) {
                 if (v?.type !== 'color') continue;
+                if (v?.id) colorVarIds.add(String(v.id));
                 const colors = v?.variable_colors && typeof v.variable_colors === 'object' ? v.variable_colors : {};
                 for (const [name, hex] of Object.entries(colors)) {
                     if (typeof name !== 'string' || typeof hex !== 'string') continue;
@@ -41,9 +45,11 @@ const getColorMapForShop = async (shopId: string): Promise<ColorMap> => {
                 }
             }
             colorMapCacheByShop[shopId] = map;
+            colorVarIdsCacheByShop[shopId] = colorVarIds;
             return map;
         } catch {
             colorMapCacheByShop[shopId] = {};
+            colorVarIdsCacheByShop[shopId] = new Set<string>();
             return {};
         } finally {
             colorMapPromiseByShop[shopId] = null;
@@ -51,6 +57,18 @@ const getColorMapForShop = async (shopId: string): Promise<ColorMap> => {
     })();
 
     return colorMapPromiseByShop[shopId] as Promise<ColorMap>;
+};
+
+const getColorVarIdsForShop = async (shopId: string): Promise<Set<string>> => {
+    if (colorVarIdsCacheByShop[shopId]) return colorVarIdsCacheByShop[shopId];
+    if (colorVarIdsPromiseByShop[shopId]) return colorVarIdsPromiseByShop[shopId] as Promise<Set<string>>;
+    colorVarIdsPromiseByShop[shopId] = (async () => {
+        await getColorMapForShop(shopId);
+        return colorVarIdsCacheByShop[shopId] || new Set<string>();
+    })().finally(() => {
+        colorVarIdsPromiseByShop[shopId] = null;
+    });
+    return colorVarIdsPromiseByShop[shopId] as Promise<Set<string>>;
 };
 
 export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId, shopBaseUrl }) => {
@@ -61,11 +79,17 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId, shopB
     let showFrom = false;
 
     const [colorMap, setColorMap] = useState<ColorMap | null>(colorMapCacheByShop[shopId] || null);
+    const [colorVarIds, setColorVarIds] = useState<Set<string> | null>(colorVarIdsCacheByShop[shopId] || null);
     useEffect(() => {
         if (colorMap) return;
         if (!shopId) return;
         getColorMapForShop(shopId).then(setColorMap);
     }, [colorMap, shopId]);
+    useEffect(() => {
+        if (colorVarIds) return;
+        if (!shopId) return;
+        getColorVarIdsForShop(shopId).then(setColorVarIds);
+    }, [colorVarIds, shopId]);
 
     const availableColors = useMemo(() => {
         const collect = (raw: any) => {
@@ -80,13 +104,16 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId, shopB
         try {
             if (product?.variants) {
                 const variants = typeof product.variants === 'string' ? JSON.parse(product.variants) : product.variants;
-                const variantValues = Object.values(variants || {}) as any[];
-                for (const v of variantValues) {
+                const entries = Object.entries(variants || {}) as [string, any][];
+                for (const [varId, v] of entries) {
+                    const isColor = !!colorVarIds && colorVarIds.has(String(varId));
+                    if (isColor) {
+                        values.push(...collect(v?.values));
+                        continue;
+                    }
                     const name = typeof v?.name === 'string' ? v.name.toLowerCase() : '';
                     if (!name) continue;
-                    if (name.includes('farbe') || name.includes('color')) {
-                        values.push(...collect(v?.values));
-                    }
+                    if (name.includes('farbe') || name.includes('color')) values.push(...collect(v?.values));
                 }
             }
         } catch {}
@@ -105,7 +132,7 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId, shopB
             unique.push(c.trim());
         }
         return unique;
-    }, [product]);
+    }, [product, colorVarIds]);
 
     const colorsWithHex = useMemo(() => {
         const map = colorMap || {};
