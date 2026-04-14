@@ -188,6 +188,9 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId, shopB
     // TODO: Connect this to backend "is_new" field later
     // For now we assume if product.is_new is true, or we could add a field in shop_products table
     const isNew = product.is_featured === 1 || product.is_featured === true || product.is_new === true;
+    const isSoldOut = (product as any)?.stock_enabled === 1 || (product as any)?.stock_enabled === true
+        ? (Number((product as any)?.stock_quantity) || 0) <= 0
+        : false;
     const tileThumbUrl = toAbsoluteMediaUrl(product?.files?.[0]?.thumbnail_url);
     const tileFileUrl = toAbsoluteMediaUrl(product?.files?.[0]?.file_url);
     const tileSrc = tileFileUrl || tileThumbUrl || '';
@@ -221,6 +224,12 @@ export const ProductTile: React.FC<ProductTileProps> = ({ product, shopId, shopB
                     {isNew && (
                         <div className="absolute top-3 left-3 bg-red-600 text-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded shadow-md z-10">
                             Neu
+                        </div>
+                    )}
+
+                    {isSoldOut && (
+                        <div className="absolute top-3 right-3 bg-slate-900 text-white px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded shadow-md z-10">
+                            Aktuell ausverkauft
                         </div>
                     )}
                     

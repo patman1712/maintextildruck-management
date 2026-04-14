@@ -344,6 +344,18 @@ try {
         console.log('Migrating database: Adding donation_amount to shop_product_assignments table');
         db.exec('ALTER TABLE shop_product_assignments ADD COLUMN donation_amount DECIMAL(10, 2) DEFAULT 0');
     }
+
+    const hasStockEnabled = shopProductAssignmentCols.some(col => col.name === 'stock_enabled');
+    if (!hasStockEnabled) {
+        console.log('Migrating database: Adding stock_enabled to shop_product_assignments table');
+        db.exec('ALTER TABLE shop_product_assignments ADD COLUMN stock_enabled INTEGER DEFAULT 0');
+    }
+
+    const hasStockQuantity = shopProductAssignmentCols.some(col => col.name === 'stock_quantity');
+    if (!hasStockQuantity) {
+        console.log('Migrating database: Adding stock_quantity to shop_product_assignments table');
+        db.exec('ALTER TABLE shop_product_assignments ADD COLUMN stock_quantity INTEGER DEFAULT 0');
+    }
 } catch (error) {
     console.error('Migration error (is_active/supplier_id):', error);
 }

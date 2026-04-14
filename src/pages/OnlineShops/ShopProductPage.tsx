@@ -229,6 +229,10 @@ const ShopProductPage: React.FC = () => {
       return price;
   }, [product, variants, selectedVariantId]);
 
+  const stockEnabled = (product as any)?.stock_enabled === 1 || (product as any)?.stock_enabled === true;
+  const stockQuantity = stockEnabled ? Math.max(0, Number((product as any)?.stock_quantity) || 0) : 0;
+  const isSoldOut = stockEnabled && stockQuantity <= 0;
+
   const variablePriceAdjustment = React.useMemo(() => {
       let adjustment = 0;
       if (!shopVariables.length) return 0;
@@ -932,8 +936,9 @@ const ShopProductPage: React.FC = () => {
                     <span className="font-bold text-sm uppercase mr-4">Menge:</span>
                     <div className="flex items-center bg-white rounded border border-slate-200">
                         <button 
-                            className="p-2 hover:bg-slate-100 text-slate-600"
+                            className="p-2 hover:bg-slate-100 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                            disabled={isSoldOut || quantity <= 1}
                         >
                             <Minus size={16} />
                         </button>
@@ -941,11 +946,16 @@ const ShopProductPage: React.FC = () => {
                             type="number" 
                             className="w-12 text-center border-x border-slate-200 py-2 text-sm font-bold outline-none"
                             value={quantity}
-                            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                            onChange={(e) => {
+                                const v = Math.max(1, parseInt(e.target.value) || 1);
+                                setQuantity(stockEnabled ? Math.min(stockQuantity || 1, v) : v);
+                            }}
+                            disabled={isSoldOut}
                         />
                         <button 
-                            className="p-2 hover:bg-slate-100 text-slate-600"
-                            onClick={() => setQuantity(quantity + 1)}
+                            className="p-2 hover:bg-slate-100 text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={() => setQuantity(stockEnabled ? Math.min(stockQuantity || 1, quantity + 1) : (quantity + 1))}
+                            disabled={isSoldOut || (stockEnabled && quantity >= stockQuantity)}
                         >
                             <Plus size={16} />
                         </button>
@@ -963,6 +973,7 @@ const ShopProductPage: React.FC = () => {
                 onClick={handleAddToCart}
                 className="w-full bg-slate-900 text-white py-4 font-bold uppercase tracking-widest hover:bg-slate-800 transition-colors flex items-center justify-center space-x-2 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={
+                    isSoldOut ||
                     (availableSizes.length > 0 && !selectedSize) || 
                     (!!colorVariant && !selectedColor) ||
                     (!!backPrintVariant && !selectedBackPrint) ||
@@ -973,6 +984,12 @@ const ShopProductPage: React.FC = () => {
                 <ShoppingCart size={20} />
                 <span>In den Warenkorb</span>
             </button>
+
+            {isSoldOut && (
+                <div className="text-center text-sm font-bold text-white bg-slate-900 rounded-md py-2 mb-3">
+                    Aktuell ausverkauft
+                </div>
+            )}
             
             {availableSizes.length > 0 && !selectedSize && <p className="text-red-500 text-xs text-center">Bitte wähle zuerst eine Grösse.</p>}
             {!!colorVariant && !selectedColor && <p className="text-red-500 text-xs text-center">Bitte wähle zuerst eine Farbe.</p>}

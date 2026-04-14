@@ -162,7 +162,7 @@ router.get('/:shopId/products', (req, res) => {
 router.post('/:shopId/products', (req, res) => {
   try {
     const { shopId } = req.params;
-    const { product_id, category_id, category_ids, price, is_featured, sort_order } = req.body;
+    const { product_id, category_id, category_ids, price, is_featured, sort_order, stock_enabled, stock_quantity } = req.body;
     const id = crypto.randomUUID();
 
     // Check if already assigned
@@ -174,9 +174,20 @@ router.post('/:shopId/products', (req, res) => {
     const primaryCategoryId = (category_ids && category_ids.length > 0) ? category_ids[0] : category_id;
 
     db.prepare(`
-      INSERT INTO shop_product_assignments (id, shop_id, product_id, category_id, price, is_featured, personalization_enabled, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, shopId, product_id, primaryCategoryId, price, is_featured ? 1 : 0, 0, sort_order || 0);
+      INSERT INTO shop_product_assignments (id, shop_id, product_id, category_id, price, is_featured, personalization_enabled, sort_order, stock_enabled, stock_quantity)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      shopId,
+      product_id,
+      primaryCategoryId,
+      price,
+      is_featured ? 1 : 0,
+      0,
+      sort_order || 0,
+      stock_enabled ? 1 : 0,
+      Number.isFinite(Number(stock_quantity)) ? Math.max(0, Number(stock_quantity)) : 0
+    );
 
     // Insert into junction table
     if (category_ids && Array.isArray(category_ids)) {
@@ -201,7 +212,7 @@ router.post('/:shopId/products', (req, res) => {
 router.put('/:shopId/products/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { category_id, category_ids, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size, variants, personalization_options, weight, donation_amount } = req.body;
+    const { category_id, category_ids, price, is_featured, personalization_enabled, sort_order, manufacturer_info, description, size, variants, personalization_options, weight, donation_amount, stock_enabled, stock_quantity } = req.body;
 
     // Use primary category from array if available, or single value
     const primaryCategoryId = (category_ids && category_ids.length > 0) ? category_ids[0] : category_id;
@@ -209,7 +220,7 @@ router.put('/:shopId/products/:id', (req, res) => {
     // Update assignment
     db.prepare(`
       UPDATE shop_product_assignments 
-      SET category_id = ?, price = ?, is_featured = ?, personalization_enabled = ?, sort_order = ?, variants = ?, personalization_options = ?, is_active = ?, supplier_id = ?, donation_amount = ?
+      SET category_id = ?, price = ?, is_featured = ?, personalization_enabled = ?, sort_order = ?, variants = ?, personalization_options = ?, is_active = ?, supplier_id = ?, donation_amount = ?, stock_enabled = ?, stock_quantity = ?
       WHERE id = ?
     `).run(
         primaryCategoryId, 
@@ -222,6 +233,8 @@ router.put('/:shopId/products/:id', (req, res) => {
         req.body.is_active === false || req.body.is_active === 0 ? 0 : 1, // Default to true if undefined
         req.body.supplier_id || null,
         donation_amount || 0,
+        stock_enabled ? 1 : 0,
+        Number.isFinite(Number(stock_quantity)) ? Math.max(0, Number(stock_quantity)) : 0,
         id
     );
 

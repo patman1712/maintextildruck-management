@@ -38,7 +38,9 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     is_featured: assignment?.is_featured || false,
     supplier_id: assignment?.supplier_id || '',
     category_ids: assignment?.category_ids || (assignment?.category_id ? [assignment.category_id] : []),
-    donation_amount: (assignment as any)?.donation_amount || 0
+    donation_amount: (assignment as any)?.donation_amount || 0,
+    stock_enabled: (assignment as any)?.stock_enabled === 1 || (assignment as any)?.stock_enabled === true ? true : false,
+    stock_quantity: Number.isFinite(Number((assignment as any)?.stock_quantity)) ? Math.max(0, Number((assignment as any)?.stock_quantity)) : 0
   });
   
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -1154,6 +1156,35 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                     {formData.is_featured ? 'Markiert als NEU' : 'Standard'}
                                 </span>
                             </label>
+                        </div>
+
+                        <div>
+                            <label className="block text-xs font-bold uppercase text-slate-500 mb-2">Lagerbestand (optional)</label>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    className="sr-only peer"
+                                    checked={formData.stock_enabled}
+                                    onChange={(e) => setFormData({ ...formData, stock_enabled: e.target.checked })}
+                                />
+                                <div className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-slate-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all ${formData.stock_enabled ? 'peer-checked:bg-slate-900' : ''}`}></div>
+                                <span className={`ml-3 text-sm font-medium ${formData.stock_enabled ? 'text-slate-900' : 'text-slate-500'}`}>
+                                    {formData.stock_enabled ? 'Aktiv' : 'Aus'}
+                                </span>
+                            </label>
+                            {formData.stock_enabled && (
+                                <div className="mt-3">
+                                    <label className="block text-xs font-bold uppercase text-slate-600 mb-1">Bestand</label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        className="w-full text-sm border border-slate-300 rounded p-2"
+                                        value={formData.stock_quantity}
+                                        onChange={(e) => setFormData({ ...formData, stock_quantity: Math.max(0, Number(e.target.value) || 0) })}
+                                    />
+                                    <div className="text-xs text-slate-500 mt-1">Bei 0 wird der Artikel im Shop als „Aktuell ausverkauft“ angezeigt.</div>
+                                </div>
+                            )}
                         </div>
                     </div>
 

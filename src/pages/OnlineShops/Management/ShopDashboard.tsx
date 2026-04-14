@@ -395,7 +395,9 @@ const ShopDashboard: React.FC = () => {
             color: updates.color !== undefined ? updates.color : payload.color,
             variants: updates.variants !== undefined ? updates.variants : payload.variants,
             personalization_options: updates.personalization_options !== undefined ? updates.personalization_options : payload.personalization_options,
-            donation_amount: updates.donation_amount !== undefined ? updates.donation_amount : (payload as any).donation_amount
+            donation_amount: updates.donation_amount !== undefined ? updates.donation_amount : (payload as any).donation_amount,
+            stock_enabled: updates.stock_enabled !== undefined ? updates.stock_enabled : (payload as any).stock_enabled,
+            stock_quantity: updates.stock_quantity !== undefined ? updates.stock_quantity : (payload as any).stock_quantity
         })
       });
       setShopProducts(shopProducts.map(p => p.id === id ? { ...p, ...updates } : p));
@@ -1281,6 +1283,15 @@ const ShopDashboard: React.FC = () => {
                                             {sp.weight > 0 && (
                                                 <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">
                                                     {sp.weight.toFixed(3)} kg
+                                                </span>
+                                            )}
+                                            {(sp.stock_enabled === 1 || sp.stock_enabled === true) ? (
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${Number(sp.stock_quantity) <= 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                    Bestand: {Math.max(0, Number(sp.stock_quantity) || 0)}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">
+                                                    Bestand: aus
                                                 </span>
                                             )}
                                         </div>

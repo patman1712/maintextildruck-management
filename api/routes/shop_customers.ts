@@ -190,7 +190,12 @@ router.get('/:shopId/admin/list', (req, res) => {
 
     res.json({ success: true, data: cleanedCustomers });
   } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+    const msg = String(error?.message || '');
+    if (msg.startsWith('OUT_OF_STOCK:')) {
+        const name = msg.replace('OUT_OF_STOCK:', '').trim();
+        return res.status(409).json({ success: false, error: `Aktuell ausverkauft: ${name || 'Artikel'}` });
+    }
+    res.status(500).json({ success: false, error: msg });
   }
 });
 
@@ -478,6 +483,25 @@ router.post('/:shopId/orders', async (req, res) => {
                 const product = db.prepare('SELECT supplier_id FROM customer_products WHERE id = ?').get(item.productId) as { supplier_id: string };
                 if (product && product.supplier_id) {
                     supplierId = product.supplier_id;
+                }
+            }
+        }
+
+        if (item.productId) {
+            const qty = Math.max(1, Number(item.quantity) || 1);
+            const assignmentRow = item.assignmentId
+                ? db.prepare('SELECT id, stock_enabled, stock_quantity FROM shop_product_assignments WHERE shop_id = ? AND id = ?').get(shopId, item.assignmentId) as any
+                : db.prepare('SELECT id, stock_enabled, stock_quantity FROM shop_product_assignments WHERE shop_id = ? AND product_id = ?').get(shopId, item.productId) as any;
+
+            if (assignmentRow && (assignmentRow.stock_enabled === 1 || assignmentRow.stock_enabled === true)) {
+                const result = db.prepare(`
+                    UPDATE shop_product_assignments
+                    SET stock_quantity = stock_quantity - ?
+                    WHERE shop_id = ? AND id = ? AND stock_enabled = 1 AND stock_quantity >= ?
+                `).run(qty, shopId, assignmentRow.id, qty);
+
+                if (!result.changes) {
+                    throw new Error(`OUT_OF_STOCK:${item.name || 'Artikel'}`);
                 }
             }
         }

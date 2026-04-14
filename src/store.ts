@@ -199,6 +199,8 @@ export interface ShopProductAssignment {
   is_active: boolean | number; // NEW
   supplier_id?: string; // NEW
   donation_amount?: number;
+  stock_enabled?: boolean | number;
+  stock_quantity?: number;
 }
 
 interface AppState {
