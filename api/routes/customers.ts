@@ -1,7 +1,11 @@
 import { Router, type Request, type Response } from 'express';
-import db from '../db.js';
+import db, { DATA_DIR } from '../db.js';
+import path from 'path';
+import fs from 'fs-extra';
 
 const router = Router();
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+const INVOICE_DIR = path.join(DATA_DIR, 'invoices');
 
 // GET all customers
 router.get('/', (req: Request, res: Response) => {
@@ -77,6 +81,122 @@ router.delete('/:customerId/files/:fileId', (req: Request, res: Response) => {
     }
   } catch (error: any) {
     console.error('Error deleting customer file:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.delete('/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(id) as any;
+    if (!customer) return res.status(404).json({ success: false, error: 'Customer not found' });
+
+    const shopIds = (db.prepare('SELECT id FROM shops WHERE customer_id = ?').all(id) as any[]).map(r => String(r.id));
+    const shopIdPlaceholders = shopIds.map(() => '?').join(',');
+
+    const orderRows = shopIds.length
+      ? (db.prepare(`SELECT id, files, invoice_path FROM orders WHERE customer_id = ? OR shop_id IN (${shopIdPlaceholders})`).all(id, ...shopIds) as any[])
+      : (db.prepare('SELECT id, files, invoice_path FROM orders WHERE customer_id = ?').all(id) as any[]);
+    const orderIds = orderRows.map(r => String(r.id));
+
+    const urlSet = new Set<string>();
+    const invoiceFiles = new Set<string>();
+
+    for (const row of orderRows) {
+      if (row.invoice_path) invoiceFiles.add(String(row.invoice_path));
+      try {
+        const files = JSON.parse(row.files || '[]');
+        if (Array.isArray(files)) {
+          for (const f of files) {
+            if (f?.url && typeof f.url === 'string') urlSet.add(f.url);
+          }
+        }
+      } catch {}
+    }
+
+    const fileRows = orderIds.length
+      ? (db.prepare(`SELECT path, thumbnail FROM files WHERE customer_id = ? OR order_id IN (${orderIds.map(() => '?').join(',')})`).all(id, ...orderIds) as any[])
+      : (db.prepare('SELECT path, thumbnail FROM files WHERE customer_id = ?').all(id) as any[]);
+    for (const r of fileRows) {
+      if (r?.path && typeof r.path === 'string') urlSet.add(r.path);
+      if (r?.thumbnail && typeof r.thumbnail === 'string') urlSet.add(r.thumbnail);
+    }
+
+    const productRows = db.prepare('SELECT id FROM customer_products WHERE customer_id = ?').all(id) as any[];
+    const productIds = productRows.map(r => String(r.id));
+    if (productIds.length) {
+      const cpfRows = db.prepare(`SELECT file_url, thumbnail_url FROM customer_product_files WHERE product_id IN (${productIds.map(() => '?').join(',')})`).all(...productIds) as any[];
+      for (const r of cpfRows) {
+        if (r?.file_url && typeof r.file_url === 'string') urlSet.add(r.file_url);
+        if (r?.thumbnail_url && typeof r.thumbnail_url === 'string') urlSet.add(r.thumbnail_url);
+      }
+    }
+
+    const deleteUploads = async () => {
+      for (const url of Array.from(urlSet)) {
+        if (!url || typeof url !== 'string') continue;
+        if (!url.startsWith('/uploads/')) continue;
+        const relative = url.replace(/^\/uploads\//, '');
+        const fullPath = path.join(UPLOAD_DIR, relative);
+        if (fullPath.startsWith(UPLOAD_DIR) && await fs.pathExists(fullPath)) {
+          try { await fs.remove(fullPath); } catch {}
+        }
+        const thumbPath = path.join(UPLOAD_DIR, `${relative}_thumb.png`);
+        if (thumbPath.startsWith(UPLOAD_DIR) && await fs.pathExists(thumbPath)) {
+          try { await fs.remove(thumbPath); } catch {}
+        }
+        const thumbLgPath = path.join(UPLOAD_DIR, `${relative}_thumb_lg.png`);
+        if (thumbLgPath.startsWith(UPLOAD_DIR) && await fs.pathExists(thumbLgPath)) {
+          try { await fs.remove(thumbLgPath); } catch {}
+        }
+      }
+
+      for (const inv of Array.from(invoiceFiles)) {
+        const p = path.join(INVOICE_DIR, inv);
+        if (p.startsWith(INVOICE_DIR) && await fs.pathExists(p)) {
+          try { await fs.remove(p); } catch {}
+        }
+      }
+
+      const cacheDir = path.join(UPLOAD_DIR, 'shopware_cache', id);
+      if (cacheDir.startsWith(UPLOAD_DIR) && await fs.pathExists(cacheDir)) {
+        try { await fs.remove(cacheDir); } catch {}
+      }
+    };
+
+    const tx = db.transaction(() => {
+      if (orderIds.length) {
+        db.prepare(`DELETE FROM order_items WHERE order_id IN (${orderIds.map(() => '?').join(',')})`).run(...orderIds);
+        db.prepare(`DELETE FROM files WHERE order_id IN (${orderIds.map(() => '?').join(',')})`).run(...orderIds);
+        db.prepare(`DELETE FROM orders WHERE id IN (${orderIds.map(() => '?').join(',')})`).run(...orderIds);
+      }
+
+      db.prepare('DELETE FROM files WHERE customer_id = ?').run(id);
+
+      if (productIds.length) {
+        db.prepare(`DELETE FROM customer_products WHERE id IN (${productIds.map(() => '?').join(',')})`).run(...productIds);
+      }
+
+      if (shopIds.length) {
+        db.prepare(`DELETE FROM shops WHERE id IN (${shopIds.map(() => '?').join(',')})`).run(...shopIds);
+      }
+
+      db.prepare('DELETE FROM customers WHERE id = ?').run(id);
+    });
+
+    tx();
+    await deleteUploads();
+
+    res.json({
+      success: true,
+      data: {
+        deletedOrders: orderIds.length,
+        deletedShops: shopIds.length,
+        deletedProductCount: productIds.length,
+        deletedUrls: urlSet.size,
+      }
+    });
+  } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
 });

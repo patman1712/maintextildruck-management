@@ -1,15 +1,34 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAppStore } from "@/store";
-import { Users, Search, Mail, Phone, MapPin, ArrowRight, Plus, X, Save } from "lucide-react";
+import { Users, Search, Mail, Phone, MapPin, ArrowRight, Plus, X, Save, Trash2 } from "lucide-react";
+import ConfirmationModal from "@/components/ConfirmationModal";
 
 export default function CustomerList() {
   const customers = useAppStore((state) => state.customers);
   const loading = useAppStore((state) => state.loading);
   const fetchData = useAppStore((state) => state.fetchData);
+  const currentUser = useAppStore((state) => state.currentUser);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: '', contact_person: '', email: '', phone: '', address: '' });
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    cancelText: string;
+    type: 'danger' | 'warning' | 'info' | 'success';
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Löschen',
+    cancelText: 'Abbrechen',
+    type: 'danger',
+    onConfirm: () => {}
+  });
 
   useEffect(() => {
     fetchData();
@@ -34,6 +53,20 @@ export default function CustomerList() {
     } catch (err) {
         console.error("Failed to create customer", err);
         alert("Fehler beim Erstellen des Kunden");
+    }
+  };
+
+  const handleDeleteCustomer = async (customerId: string) => {
+    try {
+      const res = await fetch(`/api/customers/${customerId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!data?.success) {
+        alert(data?.error || 'Löschen fehlgeschlagen.');
+        return;
+      }
+      await fetchData();
+    } catch {
+      alert('Löschen fehlgeschlagen.');
     }
   };
 
@@ -157,11 +190,32 @@ export default function CustomerList() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredCustomers.length > 0 ? (
           filteredCustomers.map((customer) => (
-            <Link 
-              key={customer.id} 
-              to={`/dashboard/customers/${customer.id}`}
-              className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow group"
-            >
+            <div key={customer.id} className="relative">
+              {currentUser?.role === 'admin' && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setConfirmModal({
+                      isOpen: true,
+                      title: 'Kunde löschen?',
+                      message: `Möchtest du "${customer.name}" wirklich löschen?\n\nDabei werden auch alle zugehörigen Druckdaten/Uploads, Bestellungen und Rechnungen vom Server entfernt.`,
+                      confirmText: 'Ja, endgültig löschen',
+                      cancelText: 'Abbrechen',
+                      type: 'danger',
+                      onConfirm: () => handleDeleteCustomer(customer.id)
+                    });
+                  }}
+                  className="absolute top-3 right-3 z-10 bg-white/90 hover:bg-white border border-slate-200 rounded-full p-2 shadow-sm text-red-600 hover:text-red-700"
+                  title="Kunde löschen"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
+              <Link
+                to={`/dashboard/customers/${customer.id}`}
+                className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow group block"
+              >
               <div className="flex items-center justify-between mb-4">
                 <div className="h-12 w-12 rounded-full bg-red-50 flex items-center justify-center text-red-700 font-bold text-lg border border-red-100">
                   {customer.name.charAt(0).toUpperCase()}
@@ -199,7 +253,8 @@ export default function CustomerList() {
                   </div>
                 )}
               </div>
-            </Link>
+              </Link>
+            </div>
           ))
         ) : (
           <div className="col-span-full text-center py-12 bg-white rounded-lg border border-dashed border-gray-300 text-gray-500">
@@ -207,6 +262,17 @@ export default function CustomerList() {
           </div>
         )}
       </div>
+
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+        type={confirmModal.type}
+      />
     </div>
   );
 }
