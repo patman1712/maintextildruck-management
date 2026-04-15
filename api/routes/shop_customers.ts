@@ -1019,6 +1019,44 @@ router.post('/:shopId/admin/orders/:orderId/regenerate-order-number', async (req
   }
 });
 
+router.post('/:shopId/admin/orders/:orderId/set-order-number', async (req, res) => {
+  try {
+    const { shopId: rawShopId, orderId } = req.params;
+    const shopId = resolveShopId(rawShopId);
+    if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+
+    const newOrderNumber = String(req.body?.orderNumber || '').trim();
+    if (!newOrderNumber) return res.status(400).json({ success: false, error: 'orderNumber ist erforderlich.' });
+
+    const existing = db.prepare('SELECT id, shop_id, order_number, invoice_path FROM orders WHERE id = ?').get(orderId) as any;
+    if (!existing) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
+    if (String(existing.shop_id) !== String(shopId)) return res.status(403).json({ success: false, error: 'Bestellung gehört nicht zu diesem Shop.' });
+
+    const conflict = db.prepare('SELECT id FROM orders WHERE order_number = ? AND id <> ?').get(newOrderNumber, orderId) as any;
+    if (conflict) return res.status(409).json({ success: false, error: 'Diese Bestellnummer ist bereits vergeben.' });
+
+    const oldInvoicePath = existing.invoice_path ? String(existing.invoice_path) : null;
+
+    db.prepare(`
+      UPDATE orders
+      SET order_number = ?, title = ?, invoice_number = NULL, invoice_date = NULL, invoice_path = NULL
+      WHERE id = ?
+    `).run(newOrderNumber, `Shop Bestellung ${newOrderNumber}`, orderId);
+
+    db.prepare('UPDATE shop_donations SET order_number = ? WHERE order_id = ?').run(newOrderNumber, orderId);
+
+    if (oldInvoicePath) {
+      const p = path.join(DATA_DIR, 'invoices', oldInvoicePath);
+      try { if (await fs.pathExists(p)) await fs.remove(p); } catch {}
+    }
+
+    const invoicePath = await generateInvoice(orderId);
+    res.json({ success: true, data: { orderId, orderNumber: newOrderNumber, invoicePath } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Admin: Update order status
 router.put('/:shopId/admin/orders/:orderId/status', (req, res) => {
   try {

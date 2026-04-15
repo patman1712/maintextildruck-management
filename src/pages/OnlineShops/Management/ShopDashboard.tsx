@@ -1530,6 +1530,30 @@ const ShopDashboard: React.FC = () => {
                                                 >
                                                     Details
                                                 </button>
+                                                {currentUser?.role === 'admin' && (
+                                                    <button
+                                                        onClick={async () => {
+                                                            const ok = window.confirm('Neue Nummer vergeben?\n\nDadurch wird die Bestell-/Rechnungsnummer neu vergeben und die Rechnung (PDF) neu erzeugt.');
+                                                            if (!ok) return;
+                                                            try {
+                                                                const res = await fetch(`/api/shop-customers/${shopId}/admin/orders/${order.id}/regenerate-order-number`, { method: 'POST' });
+                                                                const data = await res.json();
+                                                                if (!data.success) {
+                                                                    alert(data.error || 'Fehler beim Neuvergeben der Nummer.');
+                                                                    return;
+                                                                }
+                                                                await fetchShopOrders();
+                                                            } catch (e) {
+                                                                console.error(e);
+                                                                alert('Fehler beim Neuvergeben der Nummer.');
+                                                            }
+                                                        }}
+                                                        className="text-slate-700 hover:bg-slate-100 p-2 rounded-lg text-sm font-bold"
+                                                        title="Bestellnummer neu vergeben"
+                                                    >
+                                                        Nr neu
+                                                    </button>
+                                                )}
                                                 <button 
                                                     onClick={() => handleDeleteOrder(order.id)}
                                                     className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
