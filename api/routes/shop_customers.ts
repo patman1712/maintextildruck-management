@@ -386,22 +386,41 @@ router.post('/:shopId/orders', async (req, res) => {
     
     // Generate Order Number
     let orderNumber = `${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    let nextNr = 1;
-
-    // Use custom number circle if defined
-    if (shop.order_number_circle) {
-        nextNr = shop.next_order_number || 1;
-        // Simple replacements
-        orderNumber = shop.order_number_circle
-            .replace('{YEAR}', new Date().getFullYear().toString())
-            .replace('{NR}', nextNr.toString());
-    }
 
     // Start transaction
     const transaction = db.transaction(() => {
-      // Update next number if custom circle used
       if (shop.order_number_circle) {
-          db.prepare('UPDATE shops SET next_order_number = ? WHERE id = ?').run(nextNr + 1, shopId);
+          const year = new Date().getFullYear().toString();
+          let usedNr: number | null = null;
+
+          try {
+              const row = db.prepare(`
+                  UPDATE shops
+                  SET next_order_number = COALESCE(next_order_number, 1) + 1
+                  WHERE id = ?
+                  RETURNING (next_order_number - 1) AS used_nr
+              `).get(shopId) as any;
+              usedNr = Number(row?.used_nr);
+          } catch {
+              for (let attempt = 0; attempt < 25; attempt++) {
+                  const current = db.prepare('SELECT next_order_number FROM shops WHERE id = ?').get(shopId) as any;
+                  const currentNr = Number.isFinite(Number(current?.next_order_number)) ? Number(current.next_order_number) : 1;
+
+                  if (current?.next_order_number === null || current?.next_order_number === undefined) {
+                      const r = db.prepare('UPDATE shops SET next_order_number = ? WHERE id = ? AND next_order_number IS NULL').run(currentNr + 1, shopId);
+                      if (r.changes) { usedNr = currentNr; break; }
+                  } else {
+                      const r = db.prepare('UPDATE shops SET next_order_number = ? WHERE id = ? AND next_order_number = ?').run(currentNr + 1, shopId, currentNr);
+                      if (r.changes) { usedNr = currentNr; break; }
+                  }
+              }
+          }
+
+          if (!Number.isFinite(Number(usedNr))) throw new Error('Failed to allocate order number');
+
+          orderNumber = String(shop.order_number_circle)
+              .replace('{YEAR}', year)
+              .replace('{NR}', String(usedNr));
       }
 
       // 1. Create Order
@@ -912,6 +931,89 @@ router.get('/:shopId/admin/orders', (req, res) => {
 
     const orders = db.prepare('SELECT * FROM orders WHERE shop_id = ? ORDER BY created_at DESC').all(shopId);
     res.json({ success: true, data: orders });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/:shopId/admin/orders/:orderId/regenerate-order-number', async (req, res) => {
+  try {
+    const { shopId: rawShopId, orderId } = req.params;
+    const shopId = resolveShopId(rawShopId);
+    if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+
+    const shop = db.prepare('SELECT order_number_circle FROM shops WHERE id = ?').get(shopId) as any;
+    if (!shop?.order_number_circle) return res.status(400).json({ success: false, error: 'Für diesen Shop ist kein Bestellnummernkreis konfiguriert.' });
+
+    const existing = db.prepare('SELECT id, shop_id, order_number, invoice_path FROM orders WHERE id = ?').get(orderId) as any;
+    if (!existing) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
+    if (String(existing.shop_id) !== String(shopId)) return res.status(403).json({ success: false, error: 'Bestellung gehört nicht zu diesem Shop.' });
+
+    let newOrderNumber = '';
+    const oldInvoicePath = existing.invoice_path ? String(existing.invoice_path) : null;
+
+    const tx = db.transaction(() => {
+      const year = new Date().getFullYear().toString();
+
+      for (let attempt = 0; attempt < 10; attempt++) {
+        let usedNr: number | null = null;
+
+        try {
+          const row = db.prepare(`
+            UPDATE shops
+            SET next_order_number = COALESCE(next_order_number, 1) + 1
+            WHERE id = ?
+            RETURNING (next_order_number - 1) AS used_nr
+          `).get(shopId) as any;
+          usedNr = Number(row?.used_nr);
+        } catch {
+          for (let i = 0; i < 25; i++) {
+            const current = db.prepare('SELECT next_order_number FROM shops WHERE id = ?').get(shopId) as any;
+            const currentNr = Number.isFinite(Number(current?.next_order_number)) ? Number(current.next_order_number) : 1;
+            if (current?.next_order_number === null || current?.next_order_number === undefined) {
+              const r = db.prepare('UPDATE shops SET next_order_number = ? WHERE id = ? AND next_order_number IS NULL').run(currentNr + 1, shopId);
+              if (r.changes) { usedNr = currentNr; break; }
+            } else {
+              const r = db.prepare('UPDATE shops SET next_order_number = ? WHERE id = ? AND next_order_number = ?').run(currentNr + 1, shopId, currentNr);
+              if (r.changes) { usedNr = currentNr; break; }
+            }
+          }
+        }
+
+        if (!Number.isFinite(Number(usedNr))) throw new Error('Failed to allocate order number');
+
+        const candidate = String(shop.order_number_circle).replace('{YEAR}', year).replace('{NR}', String(usedNr));
+
+        try {
+          db.prepare(`
+            UPDATE orders
+            SET order_number = ?, title = ?, invoice_number = NULL, invoice_date = NULL, invoice_path = NULL
+            WHERE id = ?
+          `).run(candidate, `Shop Bestellung ${candidate}`, orderId);
+
+          db.prepare('UPDATE shop_donations SET order_number = ? WHERE order_id = ?').run(candidate, orderId);
+          newOrderNumber = candidate;
+          return;
+        } catch (e: any) {
+          const msg = String(e?.message || '');
+          if (msg.toLowerCase().includes('unique')) continue;
+          throw e;
+        }
+      }
+
+      throw new Error('Could not generate a unique order number');
+    });
+
+    tx();
+
+    if (oldInvoicePath) {
+      const p = path.join(DATA_DIR, 'invoices', oldInvoicePath);
+      try { if (await fs.pathExists(p)) await fs.remove(p); } catch {}
+    }
+
+    const invoicePath = await generateInvoice(orderId);
+
+    res.json({ success: true, data: { orderId, orderNumber: newOrderNumber, invoicePath } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

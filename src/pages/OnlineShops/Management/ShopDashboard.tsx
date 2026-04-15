@@ -2234,6 +2234,33 @@ const ShopDashboard: React.FC = () => {
                 </div>
                 
                 <div className="p-6 bg-slate-50 border-t flex justify-end items-center">
+                    {currentUser?.role === 'admin' && (
+                        <button
+                            onClick={async () => {
+                                const ok = window.confirm('Neue Nummer vergeben?\n\nDadurch wird die Bestell-/Rechnungsnummer neu vergeben und die Rechnung (PDF) neu erzeugt.');
+                                if (!ok) return;
+                                try {
+                                    const res = await fetch(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}/regenerate-order-number`, { method: 'POST' });
+                                    const data = await res.json();
+                                    if (!data.success) {
+                                        alert(data.error || 'Fehler beim Neuvergeben der Nummer.');
+                                        return;
+                                    }
+                                    await fetchShopOrders();
+                                    const res2 = await fetch(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}`);
+                                    const data2 = await res2.json();
+                                    if (data2.success) setSelectedOrder(data2.data);
+                                } catch (e) {
+                                    console.error(e);
+                                    alert('Fehler beim Neuvergeben der Nummer.');
+                                }
+                            }}
+                            className="mr-2 px-6 py-3 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-50 transition-all flex items-center"
+                        >
+                            <RefreshCw size={16} className="mr-2" />
+                            Nummer neu
+                        </button>
+                    )}
                     <button 
                         onClick={() => window.open(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}/invoice`, '_blank')}
                         className="mr-auto px-6 py-3 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-50 transition-all flex items-center"

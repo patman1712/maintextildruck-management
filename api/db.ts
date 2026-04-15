@@ -565,6 +565,12 @@ try {
     db.exec('ALTER TABLE orders ADD COLUMN order_number TEXT');
   }
 
+  try {
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_order_number_unique ON orders(order_number) WHERE order_number IS NOT NULL");
+  } catch (e) {
+    console.log('Could not create unique index on orders.order_number (duplicates may exist):', e);
+  }
+
   const hasPrintStatus = columns.some(col => col.name === 'print_status');
   if (!hasPrintStatus) {
     console.log('Migrating database: Adding print_status to orders table');
@@ -1172,6 +1178,12 @@ try {
           db.exec('ALTER TABLE orders ADD COLUMN invoice_number TEXT');
           db.exec('ALTER TABLE orders ADD COLUMN invoice_date DATETIME');
           db.exec('ALTER TABLE orders ADD COLUMN invoice_path TEXT'); // Path to stored PDF
+      }
+
+      try {
+          db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_invoice_number_unique ON orders(invoice_number) WHERE invoice_number IS NOT NULL");
+      } catch (e) {
+          console.log('Could not create unique index on orders.invoice_number (duplicates may exist):', e);
       }
   } catch (e) {
       console.error('Migration error (invoice details):', e);
