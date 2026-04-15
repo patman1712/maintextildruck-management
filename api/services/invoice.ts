@@ -60,57 +60,57 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
 
         // --- Header ---
         
-        // Shop Logos (Left)
-        // Logic: Show BOTH logos if available (email_logo_url AND logo_url) side by side
-        const logosToPrint = [];
-        if (shop.logo_url) logosToPrint.push(shop.logo_url);
-        if (shop.email_logo_url && shop.email_logo_url !== shop.logo_url) logosToPrint.push(shop.email_logo_url);
-        
+        const resolveLocalPath = (urlOrPath: string) => {
+            const p = String(urlOrPath || '');
+            if (!p || p.startsWith('http')) return '';
+            if (p.startsWith('/uploads/')) return path.join(UPLOAD_DIR, p.replace(/^\/uploads\//, ''));
+            if (p.startsWith('/')) return path.join(process.cwd(), p);
+            return path.join(process.cwd(), p);
+        };
+
+        const mainLogoSetting = db.prepare("SELECT value FROM settings WHERE key = 'logo'").get() as any;
+        const mainLogoUrl = mainLogoSetting?.value || '';
+        const shopLogoUrl = shop?.email_logo_url || shop?.logo_url || '';
+
+        const tryAddLogo = (logoUrl: string, x: number, y: number, width: number) => {
+            const absolutePath = resolveLocalPath(logoUrl);
+            if (!absolutePath) return false;
+            if (!fs.existsSync(absolutePath)) return false;
+            const ext = path.extname(absolutePath).slice(1).toUpperCase();
+            let format = ext;
+            if (format === 'JPG') format = 'JPEG';
+            const imgData = fs.readFileSync(absolutePath);
+            doc.addImage(imgData, format, x, y, width, 0);
+            return true;
+        };
+
         let logoAdded = false;
-        let currentLogoX = 20;
-        const logoWidth = 40; // Smaller width to fit two
-        const logoSpacing = 5;
+        const headerY = 15;
+        let x = 20;
+        const shopLogoWidth = 42;
+        const mainLogoWidth = 42;
 
-        if (logosToPrint.length > 0) {
-            try {
-                for (const logoUrl of logosToPrint) {
-                    let logoPath = logoUrl;
-                    let absolutePath = '';
-
-                    if (logoPath.startsWith('http')) {
-                        // Skip remote
-                    } else {
-                        // Local path
-                        if (logoPath.startsWith('/uploads/')) {
-                            const filename = path.basename(logoPath);
-                            absolutePath = path.join(UPLOAD_DIR, filename);
-                        } else if (logoPath.startsWith('/')) {
-                            absolutePath = path.join(process.cwd(), logoPath);
-                        } else {
-                             absolutePath = path.join(process.cwd(), logoPath);
-                        }
-
-                        if (fs.existsSync(absolutePath)) {
-                             const ext = path.extname(absolutePath).slice(1).toUpperCase();
-                             let format = ext;
-                             if (format === 'JPG') format = 'JPEG';
-                             
-                             const imgData = fs.readFileSync(absolutePath);
-                             doc.addImage(imgData, format, currentLogoX, 15, logoWidth, 0); 
-                             logoAdded = true;
-                             currentLogoX += logoWidth + logoSpacing;
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error('Error adding shop logo to PDF:', e);
-            }
+        const shopLogoAdded = !!shopLogoUrl && tryAddLogo(shopLogoUrl, x, headerY, shopLogoWidth);
+        if (shopLogoAdded) {
+            logoAdded = true;
+            x += shopLogoWidth + 6;
         }
 
-        // Fallback Title if no logo
+        const mainLogoAdded = !!mainLogoUrl && tryAddLogo(mainLogoUrl, x + (shopLogoAdded ? 6 : 0), headerY, mainLogoWidth);
+        if (shopLogoAdded && mainLogoAdded) {
+            const lineX = 20 + shopLogoWidth + 3;
+            doc.setDrawColor(180, 180, 180);
+            doc.setLineWidth(0.4);
+            doc.line(lineX, headerY, lineX, headerY + 18);
+            x += 6;
+        }
+        if (mainLogoAdded) {
+            logoAdded = true;
+        }
+
         if (!logoAdded) {
             doc.setFontSize(20);
-            doc.setTextColor(200, 0, 0); // Red
+            doc.setTextColor(200, 0, 0);
             doc.text("MAIN", 20, 30);
             doc.setTextColor(0, 0, 0);
             doc.text("TEXTILDRUCK", 50, 30);
