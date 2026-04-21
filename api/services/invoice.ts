@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import path from 'path';
 import fs from 'fs-extra';
 import db, { DATA_DIR } from '../db.js';
+import sharp from 'sharp';
 
 // Ensure invoices directory exists
 const INVOICE_DIR = path.join(DATA_DIR, 'invoices');
@@ -51,7 +52,7 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         }
 
         // Create PDF
-        const doc = new jsPDF();
+        const doc = new jsPDF({ compress: true });
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         
@@ -72,15 +73,21 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         const mainLogoUrl = mainLogoSetting?.value || '';
         const shopLogoUrl = shop?.email_logo_url || shop?.logo_url || '';
 
-        const tryAddLogo = (logoUrl: string, x: number, y: number, width: number) => {
+        const tryAddLogo = async (logoUrl: string, x: number, y: number, width: number) => {
             const absolutePath = resolveLocalPath(logoUrl);
             if (!absolutePath) return false;
             if (!fs.existsSync(absolutePath)) return false;
-            const ext = path.extname(absolutePath).slice(1).toUpperCase();
-            let format = ext;
-            if (format === 'JPG') format = 'JPEG';
-            const imgData = fs.readFileSync(absolutePath);
-            doc.addImage(imgData, format, x, y, width, 0);
+            const input = fs.readFileSync(absolutePath);
+            const targetDpi = 200;
+            const targetWidthPx = Math.max(1, Math.round((width / 25.4) * targetDpi));
+
+            const jpegBuffer = await sharp(input, { density: 300 })
+                .resize({ width: targetWidthPx, fit: 'inside', withoutEnlargement: true })
+                .flatten({ background: '#ffffff' })
+                .jpeg({ quality: 80, mozjpeg: true })
+                .toBuffer();
+
+            doc.addImage(jpegBuffer, 'JPEG', x, y, width, 0, undefined, 'FAST');
             return true;
         };
 
@@ -90,13 +97,13 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         const shopLogoWidth = 42;
         const mainLogoWidth = 42;
 
-        const shopLogoAdded = !!shopLogoUrl && tryAddLogo(shopLogoUrl, x, headerY, shopLogoWidth);
+        const shopLogoAdded = !!shopLogoUrl && (await tryAddLogo(shopLogoUrl, x, headerY, shopLogoWidth));
         if (shopLogoAdded) {
             logoAdded = true;
             x += shopLogoWidth + 6;
         }
 
-        const mainLogoAdded = !!mainLogoUrl && tryAddLogo(mainLogoUrl, x + (shopLogoAdded ? 6 : 0), headerY, mainLogoWidth);
+        const mainLogoAdded = !!mainLogoUrl && (await tryAddLogo(mainLogoUrl, x + (shopLogoAdded ? 6 : 0), headerY, mainLogoWidth));
         if (shopLogoAdded && mainLogoAdded) {
             const lineX = 20 + shopLogoWidth + 3;
             doc.setDrawColor(180, 180, 180);

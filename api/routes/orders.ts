@@ -170,45 +170,6 @@ router.post('/', async (req: Request, res: Response) => {
 
     console.log('Order added successfully:', id);
 
-    // AUTO-INVOICE & EMAIL
-    // Generate invoice and send confirmation email immediately
-    try {
-        console.log(`Auto-generating invoice for new order ${id}...`);
-        
-        // Wait briefly for database to settle
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        const invoicePath = await generateInvoice(id);
-        if (invoicePath) {
-            console.log(`Invoice generated at: ${invoicePath}`);
-            console.log(`Sending confirmation email to customer...`);
-            
-            // Retry mechanism for email sending
-            let emailSent = false;
-            let attempts = 0;
-            while (!emailSent && attempts < 2) {
-                try {
-                    emailSent = await sendOrderConfirmation(id, invoicePath);
-                    if (emailSent) break;
-                } catch (err) {
-                    console.error(`Email attempt ${attempts + 1} failed:`, err);
-                }
-                attempts++;
-                if (!emailSent) await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-            
-            if (emailSent) {
-                 console.log('✅ Order Confirmation Email sent successfully.');
-            } else {
-                 console.error('❌ Failed to send Order Confirmation Email after retries.');
-            }
-        } else {
-            console.error('❌ Invoice generation failed, cannot send email.');
-        }
-    } catch (e) {
-        console.error('Error in auto-invoice workflow:', e);
-    }
-
     res.json({ success: true, message: 'Order added' });
   } catch (error) {
     console.error('Error adding order to database:', error);
@@ -260,7 +221,8 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 
   // Handle Invoice Generation & Email
-  if (shouldGenerateInvoice) {
+  const isOnlineOrder = !!existing.shop_customer_id || !!existing.shopware_order_id;
+  if (shouldGenerateInvoice && isOnlineOrder) {
       try {
           console.log(`Generating invoice for order ${id}...`);
           const invoicePath = await generateInvoice(id);

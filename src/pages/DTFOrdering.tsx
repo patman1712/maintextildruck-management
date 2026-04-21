@@ -30,6 +30,7 @@ export default function DTFOrdering() {
     quantity: number;
     orderId: string;
     customerName: string;
+    type?: string;
     status?: string; // Add optional status
     reference?: string; // Add optional reference
   }[]>([]);
@@ -95,11 +96,12 @@ export default function DTFOrdering() {
   // Extract all available print files from ALL orders
   const allFilesRaw = orders.flatMap(order => 
     (order.files || [])
-      .filter(f => f.type === 'print' || f.type === 'vector')
+      .filter(f => (f.type || 'print') === 'print')
       .map(f => ({
         id: f.url || Math.random().toString(36),
         url: f.url,
         name: f.customName || f.name,
+        type: f.type || 'print',
         thumbnail: f.thumbnail,
         orderId: order.id,
         customerName: order.customerName,
@@ -133,7 +135,7 @@ export default function DTFOrdering() {
     .filter(o => {
         // Check if there are ANY print/vector files that are NOT yet ordered
         const hasPendingFiles = (o.files || []).some(f => 
-            (f.type === 'print' || f.type === 'vector') && f.status !== 'ordered'
+            (f.type || 'print') === 'print' && f.status !== 'ordered'
         );
         return hasPendingFiles;
     });
@@ -152,7 +154,7 @@ export default function DTFOrdering() {
       
       (mOrder.files || []).forEach((f: any) => {
            // Filter out ordered files
-           if ((f.type === 'print' || f.type === 'vector') && f.status !== 'ordered') {
+           if ((f.type || 'print') === 'print' && f.status !== 'ordered') {
                const ref = f.reference || (mOrder.id === 'dtf-manual-queue' ? 'Manueller Upload' : 'Unbekannt');
                if (!filesByRef[ref]) filesByRef[ref] = [];
                filesByRef[ref].push(f);
@@ -202,12 +204,13 @@ export default function DTFOrdering() {
           const filesToAdd = (sourceOrder.files || [])
              .filter((f: any) => {
                  const fileRef = f.reference || (originalOrderId === 'dtf-manual-queue' ? 'Manueller Upload' : 'Unbekannt');
-                 return fileRef === ref && (f.type === 'print' || f.type === 'vector' || !f.type) && f.status !== 'ordered';
+                 return fileRef === ref && (f.type || 'print') === 'print' && f.status !== 'ordered';
              })
              .map((f: any) => ({
                 id: Math.random().toString(36).substr(2, 9),
                 url: f.url,
                 name: f.customName || f.name,
+                type: f.type || 'print',
                 thumbnail: f.thumbnail,
                 orderId: orderId, // Use Virtual Group ID for tracking status update
                 customerName: originalOrderId === 'dtf-manual-queue' ? (f.reference || 'Manueller Upload') : 'Lager / Manuell',
@@ -231,11 +234,12 @@ export default function DTFOrdering() {
       if (!order) return;
       
       const filesToAdd = (order.files || [])
-        .filter(f => (f.type === 'print' || f.type === 'vector' || !f.type) && f.status !== 'ordered')
+        .filter(f => (f.type || 'print') === 'print' && f.status !== 'ordered')
         .map(f => ({
             id: Math.random().toString(36).substr(2, 9),
             url: f.url,
             name: f.customName || f.name,
+            type: f.type || 'print',
             thumbnail: f.thumbnail,
             orderId: order.id,
             customerName: order.customerName,
@@ -557,6 +561,7 @@ export default function DTFOrdering() {
                 id: uniqueId, // Use consistent ID
                 url: fileUrl,
                 name: uploadedFile.originalName,
+                type: 'print' as const,
                 thumbnail: thumbnail,
                 orderId: queueOrderId,
                 customerName: customer ? customer.name : 'Manueller Upload',
@@ -617,7 +622,8 @@ export default function DTFOrdering() {
                 quantity: f.quantity,
                 orderId: f.orderId,
                 name: f.name,
-                reference: f.reference
+                reference: f.reference,
+                type: f.type
             }))
         };
 

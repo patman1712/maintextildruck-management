@@ -19,6 +19,7 @@ interface DTFFileRequest {
     orderId?: string;
     name?: string;
     reference?: string;
+    type?: string;
 }
 
 interface DTFGenerateRequest {
@@ -44,6 +45,7 @@ type JobFileMeta = {
     orderId?: string;
     name?: string;
     reference?: string;
+    type?: string;
 };
 
 const pointsToMm = (pt: number) => pt / 2.83465;
@@ -324,12 +326,22 @@ router.post('/generate', async (req: Request, res: Response) => {
 
         const normalizedRequests = new Map<string, JobFileMeta>();
         const invalid: any[] = [];
+        const rejectedNonPrint: any[] = [];
         for (const f of files) {
             const url = typeof f?.url === 'string' ? f.url.trim() : '';
             const qty = Number.parseInt(String((f as any)?.quantity ?? '0'), 10);
+            const requestType = typeof (f as any)?.type === 'string' ? String((f as any).type).trim() : '';
             if (!url) continue;
             if (!Number.isFinite(qty) || qty < 1) {
                 invalid.push({ url, quantity: (f as any)?.quantity });
+                continue;
+            }
+
+            const dbFile = db.prepare('SELECT type FROM files WHERE path = ?').get(url) as any;
+            const dbType = typeof dbFile?.type === 'string' ? String(dbFile.type).trim() : '';
+            const effectiveType = requestType || dbType;
+            if (effectiveType && effectiveType !== 'print') {
+                rejectedNonPrint.push({ url, type: effectiveType });
                 continue;
             }
             const existing = normalizedRequests.get(url);
@@ -341,13 +353,22 @@ router.post('/generate', async (req: Request, res: Response) => {
                     quantity: qty,
                     orderId: typeof (f as any)?.orderId === 'string' ? (f as any).orderId : undefined,
                     name: typeof (f as any)?.name === 'string' ? (f as any).name : undefined,
-                    reference: typeof (f as any)?.reference === 'string' ? (f as any).reference : undefined
+                    reference: typeof (f as any)?.reference === 'string' ? (f as any).reference : undefined,
+                    type: requestType || dbType || undefined
                 });
             }
         }
 
         if (invalid.length > 0) {
             res.status(400).json({ success: false, error: 'Ungültige Menge in Auswahl.', invalid });
+            return;
+        }
+        if (rejectedNonPrint.length > 0) {
+            res.status(400).json({
+                success: false,
+                error: 'Für DTF-Bögen sind nur Druckdaten (Typ: print) erlaubt. Rohdaten/Vektoren werden nicht übernommen.',
+                rejected: rejectedNonPrint
+            });
             return;
         }
 
@@ -675,11 +696,12 @@ router.post('/generate', async (req: Request, res: Response) => {
             // Width = Used Width (Max X + W)
             
             const maxX = pageItems.reduce((max, item) => Math.max(max, (item.x || 0) + item.w), 0);
-            const pageWidth = maxX; 
+            const pageWidth = Math.max(1, maxX - paddingPoints);
             const pageHeight = pdfHeightFixedPoints;
 
             const page = outputPdf.addPage([pageWidth, pageHeight]);
             const placements: any[] = [];
+            let usedArtworkArea = 0;
             
             for (const item of pageItems) {
                 if (item.sourceIndex === undefined || item.x === undefined || item.y === undefined) continue;
@@ -696,8 +718,8 @@ router.post('/generate', async (req: Request, res: Response) => {
                 // x = item.x
                 // y = pageHeight - item.y - item.h
                 
-                const drawX = item.x + (paddingPoints / 2);
-                const drawY = pageHeight - item.y - item.h + (paddingPoints / 2);
+                const drawX = item.x;
+                const drawY = pageHeight - item.y - source.height;
                 
                 if (item.rotated) {
                     // Should not happen anymore as rotation is disabled in packer
@@ -716,6 +738,7 @@ router.post('/generate', async (req: Request, res: Response) => {
                     });
                 }
 
+                usedArtworkArea += source.width * source.height;
                 countsPlaced[source.originalUrl] = (countsPlaced[source.originalUrl] || 0) + 1;
                 const reqMeta = normalizedRequests.get(source.originalUrl);
                 placements.push({
@@ -748,14 +771,13 @@ router.post('/generate', async (req: Request, res: Response) => {
             await generateThumbnail(outputPath, outputFilename, 300, '_thumb');
             await generateThumbnail(outputPath, outputFilename, 1100, '_thumb_lg');
 
-            const usedArea = pageItems.reduce((sum, i) => sum + (i.w * i.h), 0);
             const sheetArea = pageWidth * pageHeight;
             jobPages.push({
                 index: pIdx,
                 pdf_url: `/uploads/${outputFilename}`,
                 width_mm: pointsToMm(pageWidth),
                 height_mm: pointsToMm(pageHeight),
-                utilization: sheetArea > 0 ? (usedArea / sheetArea) : 0,
+                utilization: sheetArea > 0 ? (usedArtworkArea / sheetArea) : 0,
                 placements
             });
         }
