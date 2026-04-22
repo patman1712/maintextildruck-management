@@ -72,10 +72,12 @@ export default function CustomerList() {
 
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Kundendaten...</div>;
 
-  const filteredCustomers = customers.filter((customer) => {
-    return customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           customer.email.toLowerCase().includes(searchTerm.toLowerCase());
-  });
+  const filteredCustomers = [...customers]
+    .filter((customer) => {
+      return customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+             customer.email.toLowerCase().includes(searchTerm.toLowerCase());
+    })
+    .sort((a, b) => (a.name || '').localeCompare((b.name || ''), 'de', { sensitivity: 'base' }));
 
   return (
     <div className="max-w-7xl mx-auto">
