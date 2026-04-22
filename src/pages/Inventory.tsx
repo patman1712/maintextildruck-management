@@ -287,6 +287,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const splitOrderItem = useAppStore((state) => state.splitOrderItem);
   const ensureManualOrder = useAppStore((state) => state.ensureManualOrder);
   const [supplierSort, setSupplierSort] = useState<'name_asc' | 'name_desc' | 'orders_desc'>('name_asc');
+  const [supplierFilterId, setSupplierFilterId] = useState<string>('all');
 
   // Split Item State
   const [showSplitModal, setShowSplitModal] = useState(false);
@@ -710,6 +711,23 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
     return entries;
   }, [itemsBySupplier, supplierSort]);
+
+  useEffect(() => {
+    if (supplierFilterId !== 'all' && !supplierEntries.some(e => e.supplierId === supplierFilterId)) {
+      setSupplierFilterId('all');
+    }
+  }, [supplierEntries, supplierFilterId]);
+
+  const supplierFilterOptions = useMemo(() => {
+    const options = supplierEntries.map(e => ({ supplierId: e.supplierId, name: e.name }));
+    options.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+    return options;
+  }, [supplierEntries]);
+
+  const visibleSupplierEntries = useMemo(() => {
+    if (supplierFilterId === 'all') return supplierEntries;
+    return supplierEntries.filter(e => e.supplierId === supplierFilterId);
+  }, [supplierEntries, supplierFilterId]);
   const [selectedOrders, setSelectedOrders] = useState<Record<string, string[]>>({}); // supplierId -> orderIds[]
 
   const deleteOrderItem = useAppStore((state) => state.deleteOrderItem);
@@ -927,6 +945,18 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     <div className="space-y-8">
         <div className="flex flex-col sm:flex-row justify-end sm:items-center gap-3">
             <select
+                value={supplierFilterId}
+                onChange={(e) => setSupplierFilterId(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[260px]"
+            >
+                <option value="all">Alle Lieferanten</option>
+                {supplierFilterOptions.map((opt) => (
+                    <option key={opt.supplierId} value={opt.supplierId}>
+                        {opt.name}
+                    </option>
+                ))}
+            </select>
+            <select
                 value={supplierSort}
                 onChange={(e) => setSupplierSort(e.target.value as any)}
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[260px]"
@@ -946,7 +976,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
             )}
         </div>
 
-        {supplierEntries.map(({ supplierId }) => {
+        {visibleSupplierEntries.map(({ supplierId }) => {
             const group = itemsBySupplier[supplierId];
             const supplier = group.supplier;
             
