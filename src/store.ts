@@ -48,6 +48,7 @@ export interface OrderItem {
   orderedAt?: string;
   receivedBy?: string;
   receivedAt?: string;
+  createdAt?: string;
 }
 
 export interface Order {
@@ -382,7 +383,8 @@ export const useAppStore = create<AppState>((set, get) => ({
                 orderedBy: i.ordered_by,
                 orderedAt: i.ordered_at,
                 receivedBy: i.received_by,
-                receivedAt: i.received_at
+                receivedAt: i.received_at,
+                createdAt: i.created_at
             }))
       }));
       
@@ -749,7 +751,8 @@ export const useAppStore = create<AppState>((set, get) => ({
                         id: data.id,
                         orderId,
                         status: 'pending',
-                        supplierName: state.suppliers.find(s => s.id === item.supplierId)?.name
+                        supplierName: state.suppliers.find(s => s.id === item.supplierId)?.name,
+                        createdAt: new Date().toISOString()
                     };
                     return { ...o, orderItems: [...(o.orderItems || []), newItem] };
                 }

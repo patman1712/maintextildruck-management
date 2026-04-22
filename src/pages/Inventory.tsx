@@ -287,6 +287,27 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const addOrderItem = useAppStore((state) => state.addOrderItem);
   const splitOrderItem = useAppStore((state) => state.splitOrderItem);
   const ensureManualOrder = useAppStore((state) => state.ensureManualOrder);
+  const [selectedShopId, setSelectedShopId] = useState<string>('all');
+
+  const shopOptions = useMemo(
+    () => [...customers].sort((a, b) => a.name.localeCompare(b.name, 'de')),
+    [customers]
+  );
+  const selectedShopName = useMemo(
+    () => shopOptions.find(c => c.id === selectedShopId)?.name || '',
+    [shopOptions, selectedShopId]
+  );
+
+  const normalizeShopText = (value?: string) => (value || '').trim().toLowerCase();
+  const manualItemMatchesShop = (item: any) => {
+    if (selectedShopId === 'all') return true;
+    const target = normalizeShopText(selectedShopName);
+    if (!target) return true;
+    const reference = normalizeShopText(item?.manualOrderNumber || '');
+    if (reference && (reference.includes(target) || target.includes(reference))) return true;
+    const notes = normalizeShopText(item?.notes || '');
+    return notes.includes(target);
+  };
 
   // Split Item State
   const [showSplitModal, setShowSplitModal] = useState(false);
@@ -649,7 +670,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
   // Group items by Supplier -> then list items with order info
   const itemsBySupplier = useMemo(() => {
-    const grouped: Record<string, { supplier: Supplier | undefined, items: (OrderItem & { orderTitle: string, orderNumber?: string, orderDeadline: string })[] }> = {};
+    const grouped: Record<string, { supplier: Supplier | undefined, items: (OrderItem & { orderTitle: string, orderNumber?: string, orderDeadline: string, orderCreatedAt?: string })[] }> = {};
     
     orders.forEach(order => {
         // Skip archived orders from "Current" tab
@@ -661,6 +682,16 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
         if (order.orderItems) {
             order.orderItems.forEach(item => {
+                const isInventoryManual = order.id === 'inventory-manual';
+                if (selectedShopId !== 'all') {
+                    const customerMatches =
+                        order.customerId === selectedShopId ||
+                        normalizeShopText(order.customerName) === normalizeShopText(selectedShopName);
+                    if (!customerMatches && !(isInventoryManual && manualItemMatchesShop(item))) {
+                        return;
+                    }
+                }
+
                 // Filter based on completion status
                 const isCompleted = item.status === 'received';
                 if (showCompleted !== isCompleted) return;
@@ -675,14 +706,15 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                     ...item,
                     orderTitle: order.title,
                     orderNumber: order.orderNumber,
-                    orderDeadline: order.deadline
+                    orderDeadline: order.deadline,
+                    orderCreatedAt: order.createdAt
                 });
             });
         }
     });
     
     return grouped;
-  }, [orders, suppliers, showCompleted]);
+  }, [orders, suppliers, showCompleted, selectedShopId, selectedShopName]);
 
   const supplierIds = Object.keys(itemsBySupplier);
   const [selectedOrders, setSelectedOrders] = useState<Record<string, string[]>>({}); // supplierId -> orderIds[]
@@ -874,8 +906,20 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     <>
     {supplierIds.length === 0 ? (
         <div className="max-w-4xl mx-auto">
-            {!showCompleted && (
-                <div className="flex justify-end mb-4">
+            <div className="flex flex-col sm:flex-row justify-end sm:items-center gap-3 mb-4">
+                <select
+                    value={selectedShopId}
+                    onChange={(e) => setSelectedShopId(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
+                >
+                    <option value="all">Alle Shops</option>
+                    {shopOptions.map((customer) => (
+                        <option key={customer.id} value={customer.id}>
+                            {customer.name}
+                        </option>
+                    ))}
+                </select>
+                {!showCompleted && (
                     <button 
                         onClick={() => setShowAddItemModal(true)}
                         className="bg-red-600 text-white px-4 py-2 rounded-lg inline-flex items-center hover:bg-red-700 transition-colors text-sm shadow-sm"
@@ -883,8 +927,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                         <Plus size={16} className="mr-2" />
                         Ware manuell hinzufügen
                     </button>
-                </div>
-            )}
+                )}
+            </div>
 
             <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
                 <ShoppingCart size={48} className="mx-auto mb-3 text-gray-300" />
@@ -900,17 +944,29 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         </div>
     ) : (
     <div className="space-y-8">
-        {!showCompleted && (
-            <div className="flex justify-end">
-                <button 
+        <div className="flex flex-col sm:flex-row justify-end sm:items-center gap-3">
+            <select
+                value={selectedShopId}
+                onChange={(e) => setSelectedShopId(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
+            >
+                <option value="all">Alle Shops</option>
+                {shopOptions.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                        {customer.name}
+                    </option>
+                ))}
+            </select>
+            {!showCompleted && (
+                <button
                     onClick={() => setShowAddItemModal(true)}
                     className="bg-red-600 text-white px-4 py-2 rounded-lg inline-flex items-center hover:bg-red-700 transition-colors text-sm shadow-sm"
                 >
                     <Plus size={16} className="mr-2" />
                     Ware manuell hinzufügen
                 </button>
-            </div>
-        )}
+            )}
+        </div>
 
         {supplierIds.map(supplierId => {
             const group = itemsBySupplier[supplierId];
@@ -939,7 +995,19 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                 ordersInGroup[groupKey].items.push(item);
             });
 
-            const orderIds = Object.keys(ordersInGroup);
+            const orderIds = Object.keys(ordersInGroup).sort((a, b) => {
+                const aGroup = ordersInGroup[a];
+                const bGroup = ordersInGroup[b];
+                const aTs = Math.max(
+                    new Date(aGroup.deadline || 0).getTime() || 0,
+                    ...aGroup.items.map(i => new Date(i.createdAt || i.orderedAt || i.receivedAt || i.orderCreatedAt || 0).getTime() || 0)
+                );
+                const bTs = Math.max(
+                    new Date(bGroup.deadline || 0).getTime() || 0,
+                    ...bGroup.items.map(i => new Date(i.createdAt || i.orderedAt || i.receivedAt || i.orderCreatedAt || 0).getTime() || 0)
+                );
+                return bTs - aTs;
+            });
             const selectedForThisSupplier = selectedOrders[supplierId] || [];
             const hasSelection = selectedForThisSupplier.length > 0;
 

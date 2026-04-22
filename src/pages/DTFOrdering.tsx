@@ -692,11 +692,10 @@ export default function DTFOrdering() {
                         originalOrderId = 'inventory-manual';
                         ref = orderId.replace('inventory-manual-group-', '');
                     
-                        // Update status for files in this manual group
-                    const urlsToMark = new Set(selectedFiles.filter(f => f.orderId === orderId).map(f => f.url));
+                        // Mark entire group as ordered, independent of adjusted selection quantity.
                         manualFiles = manualFiles.map((f: any) => {
                             const fRef = f.reference || 'Unbekannt';
-                        if (fRef === ref && urlsToMark.has(f.url) && (f.type === 'print' || f.type === 'vector')) {
+                        if (fRef === ref && (f.type === 'print' || f.type === 'vector')) {
                                 manualFilesChanged = true;
                                 return { ...f, status: 'ordered' as const };
                             }
@@ -707,13 +706,11 @@ export default function DTFOrdering() {
                         originalOrderId = 'dtf-manual-queue';
                         ref = orderId.replace('dtf-manual-queue-group-', '');
                     
-                        // For DTF Queue: DELETE the files entirely after printing, as requested by user
-                        // "erst danach soll die datei da wieder rausgehen" -> Delete
-                    const urlsToRemove = new Set(selectedFiles.filter(f => f.orderId === orderId).map(f => f.url));
+                        // Remove entire group after successful generation.
                         const initialLength = dtfQueueFiles.length;
                         dtfQueueFiles = dtfQueueFiles.filter((f: any) => {
                             const fRef = f.reference || 'Manueller Upload';
-                        const isMatch = fRef === ref && urlsToRemove.has(f.url) && (f.type === 'print' || f.type === 'vector');
+                        const isMatch = fRef === ref && (f.type === 'print' || f.type === 'vector');
                             return !isMatch; 
                         });
                     
@@ -724,11 +721,9 @@ export default function DTFOrdering() {
 
                 }
                 else if (orderId === 'dtf-manual-queue') {
-                    const filesToMark = selectedFiles.filter(f => f.orderId === orderId);
-                    const urlsToRemove = new Set(filesToMark.map(f => f.url));
+                    // If queue was selected directly, clear all printable files from it.
                     const initialLength = dtfQueueFiles.length;
                     dtfQueueFiles = dtfQueueFiles.filter((f: any) => {
-                        if (!urlsToRemove.has(f.url)) return true;
                         return !(f.type === 'print' || f.type === 'vector');
                     });
                     if (dtfQueueFiles.length !== initialLength) {
@@ -737,18 +732,18 @@ export default function DTFOrdering() {
                 } else if (orderId && orderId !== 'one-time' && !orderId.startsWith('temp-')) {
                     const order = orders.find(o => o.id === orderId);
                     if (order && order.files) {
-                        const urlsToMark = new Set(selectedFiles.filter(f => f.orderId === orderId).map(f => f.url));
+                        // Mark complete order as ordered so it disappears from "Offene Aufträge",
+                        // even when quantities were manually adjusted for this DTF run.
                         const newFiles = order.files.map(f => {
-                            if ((f.type === 'print' || f.type === 'vector') && urlsToMark.has(f.url)) {
+                            if (f.type === 'print' || f.type === 'vector') {
                                 return { ...f, status: 'ordered' as const };
                             }
                             return f;
                         });
-                        const hasPending = newFiles.some(f => (f.type === 'print' || f.type === 'vector') && f.status !== 'ordered');
                         
                         await updateOrder(orderId, { 
                             files: newFiles,
-                            printStatus: hasPending ? 'pending' : 'ordered'
+                            printStatus: 'ordered'
                         });
                         updatedCount++;
                     }
