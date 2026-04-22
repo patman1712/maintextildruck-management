@@ -694,13 +694,19 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
       const uniqueOrders = new Set(
         group.items.map(i => (i.orderId === 'inventory-manual' && i.manualOrderNumber) ? `manual-${i.manualOrderNumber}` : i.orderId)
       );
-      return { supplierId, supplier, name, ordersCount: uniqueOrders.size };
+      const openOrders = new Set(
+        group.items
+          .filter(i => i.status === 'pending')
+          .map(i => (i.orderId === 'inventory-manual' && i.manualOrderNumber) ? `manual-${i.manualOrderNumber}` : i.orderId)
+      );
+      return { supplierId, supplier, name, ordersCount: uniqueOrders.size, openOrdersCount: openOrders.size };
     });
 
     entries.sort((a, b) => {
       const aUnknown = a.name === 'Unbekannter Lieferant';
       const bUnknown = b.name === 'Unbekannter Lieferant';
       if (aUnknown !== bUnknown) return aUnknown ? 1 : -1;
+      if (!showCompleted && b.openOrdersCount !== a.openOrdersCount) return b.openOrdersCount - a.openOrdersCount;
       if (supplierSort === 'orders_desc') {
         if (b.ordersCount !== a.ordersCount) return b.ordersCount - a.ordersCount;
         return a.name.localeCompare(b.name, 'de');
@@ -710,7 +716,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     });
 
     return entries;
-  }, [itemsBySupplier, supplierSort]);
+  }, [itemsBySupplier, supplierSort, showCompleted]);
 
   useEffect(() => {
     if (supplierFilterId !== 'all' && !supplierEntries.some(e => e.supplierId === supplierFilterId)) {
@@ -1006,6 +1012,9 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
             const orderIds = Object.keys(ordersInGroup).sort((a, b) => {
                 const aGroup = ordersInGroup[a];
                 const bGroup = ordersInGroup[b];
+                const aHasOpen = aGroup.items.some(i => i.status === 'pending');
+                const bHasOpen = bGroup.items.some(i => i.status === 'pending');
+                if (!showCompleted && aHasOpen !== bHasOpen) return aHasOpen ? -1 : 1;
                 const aTs = Math.max(
                     new Date(aGroup.deadline || 0).getTime() || 0,
                     ...aGroup.items.map(i => new Date(i.createdAt || i.orderedAt || i.receivedAt || i.orderCreatedAt || 0).getTime() || 0)
