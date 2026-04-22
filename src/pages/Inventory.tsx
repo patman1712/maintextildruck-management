@@ -280,34 +280,13 @@ function SuppliersTab() {
 function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const orders = useAppStore((state) => state.orders);
   const suppliers = useAppStore((state) => state.suppliers);
-  const customers = useAppStore((state) => state.customers);
   const updateOrderItem = useAppStore((state) => state.updateOrderItem);
   const updateOrder = useAppStore((state) => state.updateOrder);
   const currentUser = useAppStore((state) => state.currentUser);
   const addOrderItem = useAppStore((state) => state.addOrderItem);
   const splitOrderItem = useAppStore((state) => state.splitOrderItem);
   const ensureManualOrder = useAppStore((state) => state.ensureManualOrder);
-  const [selectedShopId, setSelectedShopId] = useState<string>('all');
-
-  const shopOptions = useMemo(
-    () => [...customers].sort((a, b) => a.name.localeCompare(b.name, 'de')),
-    [customers]
-  );
-  const selectedShopName = useMemo(
-    () => shopOptions.find(c => c.id === selectedShopId)?.name || '',
-    [shopOptions, selectedShopId]
-  );
-
-  const normalizeShopText = (value?: string) => (value || '').trim().toLowerCase();
-  const manualItemMatchesShop = (item: any) => {
-    if (selectedShopId === 'all') return true;
-    const target = normalizeShopText(selectedShopName);
-    if (!target) return true;
-    const reference = normalizeShopText(item?.manualOrderNumber || '');
-    if (reference && (reference.includes(target) || target.includes(reference))) return true;
-    const notes = normalizeShopText(item?.notes || '');
-    return notes.includes(target);
-  };
+  const [supplierSort, setSupplierSort] = useState<'name_asc' | 'name_desc' | 'orders_desc'>('name_asc');
 
   // Split Item State
   const [showSplitModal, setShowSplitModal] = useState(false);
@@ -682,16 +661,6 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
         if (order.orderItems) {
             order.orderItems.forEach(item => {
-                const isInventoryManual = order.id === 'inventory-manual';
-                if (selectedShopId !== 'all') {
-                    const customerMatches =
-                        order.customerId === selectedShopId ||
-                        normalizeShopText(order.customerName) === normalizeShopText(selectedShopName);
-                    if (!customerMatches && !(isInventoryManual && manualItemMatchesShop(item))) {
-                        return;
-                    }
-                }
-
                 // Filter based on completion status
                 const isCompleted = item.status === 'received';
                 if (showCompleted !== isCompleted) return;
@@ -714,9 +683,33 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     });
     
     return grouped;
-  }, [orders, suppliers, showCompleted, selectedShopId, selectedShopName]);
+  }, [orders, suppliers, showCompleted]);
 
-  const supplierIds = Object.keys(itemsBySupplier);
+  const supplierEntries = useMemo(() => {
+    const entries = Object.keys(itemsBySupplier).map((supplierId) => {
+      const group = itemsBySupplier[supplierId];
+      const supplier = group?.supplier;
+      const name = supplier?.name || 'Unbekannter Lieferant';
+      const uniqueOrders = new Set(
+        group.items.map(i => (i.orderId === 'inventory-manual' && i.manualOrderNumber) ? `manual-${i.manualOrderNumber}` : i.orderId)
+      );
+      return { supplierId, supplier, name, ordersCount: uniqueOrders.size };
+    });
+
+    entries.sort((a, b) => {
+      const aUnknown = a.name === 'Unbekannter Lieferant';
+      const bUnknown = b.name === 'Unbekannter Lieferant';
+      if (aUnknown !== bUnknown) return aUnknown ? 1 : -1;
+      if (supplierSort === 'orders_desc') {
+        if (b.ordersCount !== a.ordersCount) return b.ordersCount - a.ordersCount;
+        return a.name.localeCompare(b.name, 'de');
+      }
+      if (supplierSort === 'name_desc') return b.name.localeCompare(a.name, 'de');
+      return a.name.localeCompare(b.name, 'de');
+    });
+
+    return entries;
+  }, [itemsBySupplier, supplierSort]);
   const [selectedOrders, setSelectedOrders] = useState<Record<string, string[]>>({}); // supplierId -> orderIds[]
 
   const deleteOrderItem = useAppStore((state) => state.deleteOrderItem);
@@ -904,22 +897,10 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
   return (
     <>
-    {supplierIds.length === 0 ? (
+    {supplierEntries.length === 0 ? (
         <div className="max-w-4xl mx-auto">
-            <div className="flex flex-col sm:flex-row justify-end sm:items-center gap-3 mb-4">
-                <select
-                    value={selectedShopId}
-                    onChange={(e) => setSelectedShopId(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
-                >
-                    <option value="all">Alle Shops</option>
-                    {shopOptions.map((customer) => (
-                        <option key={customer.id} value={customer.id}>
-                            {customer.name}
-                        </option>
-                    ))}
-                </select>
-                {!showCompleted && (
+            {!showCompleted && (
+                <div className="flex justify-end mb-4">
                     <button 
                         onClick={() => setShowAddItemModal(true)}
                         className="bg-red-600 text-white px-4 py-2 rounded-lg inline-flex items-center hover:bg-red-700 transition-colors text-sm shadow-sm"
@@ -927,8 +908,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                         <Plus size={16} className="mr-2" />
                         Ware manuell hinzufügen
                     </button>
-                )}
-            </div>
+                </div>
+            )}
 
             <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
                 <ShoppingCart size={48} className="mx-auto mb-3 text-gray-300" />
@@ -946,16 +927,13 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     <div className="space-y-8">
         <div className="flex flex-col sm:flex-row justify-end sm:items-center gap-3">
             <select
-                value={selectedShopId}
-                onChange={(e) => setSelectedShopId(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
+                value={supplierSort}
+                onChange={(e) => setSupplierSort(e.target.value as any)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[260px]"
             >
-                <option value="all">Alle Shops</option>
-                {shopOptions.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                        {customer.name}
-                    </option>
-                ))}
+                <option value="name_asc">Lieferant: A–Z</option>
+                <option value="name_desc">Lieferant: Z–A</option>
+                <option value="orders_desc">Lieferant: Meiste Aufträge</option>
             </select>
             {!showCompleted && (
                 <button
@@ -968,7 +946,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
             )}
         </div>
 
-        {supplierIds.map(supplierId => {
+        {supplierEntries.map(({ supplierId }) => {
             const group = itemsBySupplier[supplierId];
             const supplier = group.supplier;
             
