@@ -54,16 +54,21 @@ export class DhlClient {
 
     private splitStreet(address: string) {
         if (!address) return { name: '', number: '' };
+
+        const normalized = String(address)
+            .replace(/\s+/g, ' ')
+            .replace(/(\d)\s+([A-Za-zÄÖÜäöüß])/g, '$1$2')
+            .trim();
         
         // Simple regex for German addresses: Last digits are number
-        const match = address.match(/^(.+?)\s*(\d+(?:[a-zA-Z])?(?:[-/]\d+(?:[a-zA-Z])?)?)$/);
+        const match = normalized.match(/^(.+?)\s*(\d+(?:[A-Za-zÄÖÜäöüß])?(?:[-/]\d+(?:[A-Za-zÄÖÜäöüß])?)?)$/);
         if (match) {
             return { name: match[1].trim(), number: match[2].trim() };
         }
         
         // Fallback: If no number found, put everything in name and '1' in number (bad, but better than crash)
         // Ideally we should try to extract number differently or let user fix it
-        return { name: address.trim(), number: '' };
+        return { name: normalized, number: '' };
     }
 
     private parseGermanAddress(raw: string) {
