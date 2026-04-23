@@ -51,6 +51,10 @@ const ShopDashboard: React.FC = () => {
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [manualWeight, setManualWeight] = useState(0);
   const [pendingLabelOrder, setPendingLabelOrder] = useState<any | null>(null);
+  const [recipientName, setRecipientName] = useState('');
+  const [recipientStreet, setRecipientStreet] = useState('');
+  const [recipientZip, setRecipientZip] = useState('');
+  const [recipientCity, setRecipientCity] = useState('');
   
   // Editor Modal
   const [editorAssignment, setEditorAssignment] = useState<any | null>(null);
@@ -510,6 +514,24 @@ const ShopDashboard: React.FC = () => {
     setShowWeightModal(true);
     setPendingLabelOrder(order);
     setManualWeight(defaultWeight);
+
+    const parseAddress = (raw: string) => {
+        const s = String(raw || '').trim();
+        if (!s) return { street: '', zip: '', city: '' };
+        const parts = s.split(',').map(p => p.trim()).filter(Boolean);
+        const street = parts[0] || '';
+        const rest = parts.slice(1).join(' ') || '';
+        const m = rest.match(/(\d{4,6})\s+(.+)$/);
+        if (m) return { street, zip: m[1], city: m[2].trim() };
+        const m2 = s.match(/^(.*?)[,\n]\s*(\d{4,6})\s+(.+)$/);
+        if (m2) return { street: m2[1].trim(), zip: m2[2], city: m2[3].trim() };
+        return { street, zip: '', city: rest.trim() };
+    };
+    const addr = parseAddress(order?.customer_address || '');
+    setRecipientName(String(order?.customer_name || '').trim());
+    setRecipientStreet(addr.street);
+    setRecipientZip(addr.zip);
+    setRecipientCity(addr.city);
   };
 
   const handleConfirmWeight = async () => {
@@ -523,7 +545,11 @@ const ShopDashboard: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
             orderId: pendingLabelOrder.id,
-            manualWeight: manualWeight // Send manual weight
+            manualWeight: manualWeight,
+            recipientName: recipientName,
+            shippingStreet: recipientStreet,
+            shippingZip: recipientZip,
+            shippingCity: recipientCity
         })
       });
       const data = await res.json();
@@ -2373,6 +2399,50 @@ const ShopDashboard: React.FC = () => {
                 </div>
                 
                 <div className="p-6">
+                    <div className="mb-6">
+                        <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Empfänger</div>
+                        <div className="grid grid-cols-1 gap-3">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">Name</label>
+                                <input
+                                    type="text"
+                                    className="w-full border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:border-slate-800 focus:outline-none"
+                                    value={recipientName}
+                                    onChange={(e) => setRecipientName(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-600 mb-1">Straße & Hausnummer</label>
+                                <input
+                                    type="text"
+                                    className="w-full border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:border-slate-800 focus:outline-none"
+                                    value={recipientStreet}
+                                    onChange={(e) => setRecipientStreet(e.target.value)}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">PLZ</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:border-slate-800 focus:outline-none"
+                                        value={recipientZip}
+                                        onChange={(e) => setRecipientZip(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 mb-1">Ort</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border border-slate-200 rounded-lg p-2 text-sm text-slate-800 focus:border-slate-800 focus:outline-none"
+                                        value={recipientCity}
+                                        onChange={(e) => setRecipientCity(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-6">
                         <p className="text-sm text-blue-800 font-medium mb-1">Automatische Berechnung:</p>
                         <p className="text-xs text-blue-600">

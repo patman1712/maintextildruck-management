@@ -943,7 +943,7 @@ router.post('/:shopId/shipping-config', (req, res) => {
 router.post('/:shopId/shipping/create-label', async (req, res) => {
   try {
     const { shopId } = req.params;
-    const { orderId, manualWeight } = req.body; // Receive manualWeight from frontend
+    const { orderId, manualWeight, recipientName, shippingStreet, shippingZip, shippingCity } = req.body; // Receive manualWeight + optional recipient override
 
     // 1. Get Order Details
     const order = db.prepare(`
@@ -1104,6 +1104,36 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
     
     // Assign calculated weight to order object for DHL Client
     order.weight = totalWeight;
+
+    const safeRecipientName = typeof recipientName === 'string' ? recipientName.trim() : '';
+    const safeStreet = typeof shippingStreet === 'string' ? shippingStreet.trim() : '';
+    const safeZip = typeof shippingZip === 'string' ? shippingZip.trim() : '';
+    const safeCity = typeof shippingCity === 'string' ? shippingCity.trim() : '';
+    const hasRecipientOverride = !!(safeRecipientName || safeStreet || safeZip || safeCity);
+    if (hasRecipientOverride) {
+        if (safeRecipientName) {
+            order.first_name = '';
+            order.last_name = '';
+            order.customer_name = safeRecipientName;
+        }
+        if (safeStreet) order.shipping_street = safeStreet;
+        if (safeZip) order.shipping_zip = safeZip;
+        if (safeCity) order.shipping_city = safeCity;
+
+        const shouldUpdateAddress = !!(safeStreet && safeZip && safeCity);
+        try {
+            if (safeRecipientName) {
+                db.prepare('UPDATE orders SET customer_name = ? WHERE id = ?').run(safeRecipientName, orderId);
+            }
+            if (shouldUpdateAddress) {
+                const combinedAddress = `${safeStreet}, ${safeZip} ${safeCity}`;
+                order.customer_address = combinedAddress;
+                db.prepare('UPDATE orders SET customer_address = ? WHERE id = ?').run(combinedAddress, orderId);
+            }
+        } catch (e) {
+            console.warn('Failed to persist recipient override to order:', e);
+        }
+    }
 
     try {
         const client = new DhlClient(config.dhl_user, config.dhl_signature, config.dhl_ekp, config.dhl_api_key, !!config.dhl_sandbox, config.dhl_participation);
