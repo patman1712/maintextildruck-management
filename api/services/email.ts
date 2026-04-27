@@ -396,6 +396,115 @@ ${branding.company_name}
     }
 };
 
+export const sendShipmentNotification = async (orderId: string, trackingNumber?: string) => {
+    const config = getEmailConfig();
+    if (!config) {
+        console.warn('Email configuration missing. Skipping email sending.');
+        return false;
+    }
+
+    try {
+        const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
+        if (!order || !order.customer_email) return false;
+
+        let branding = {
+            logo_url: '',
+            email_logo_url: '',
+            primary_color: '#3b82f6',
+            secondary_color: '#1e40af',
+            company_name: config.sender_name,
+            footer_text: ''
+        };
+
+        if (order.shop_id) {
+            const shop = db.prepare('SELECT logo_url, email_logo_url, primary_color, secondary_color, name FROM shops WHERE id = ?').get(order.shop_id) as any;
+            if (shop) {
+                if (shop.logo_url && shop.logo_url.startsWith('http')) branding.logo_url = shop.logo_url;
+                if (shop.email_logo_url && shop.email_logo_url.startsWith('http')) branding.email_logo_url = shop.email_logo_url;
+                if (shop.primary_color) branding.primary_color = shop.primary_color;
+                if (shop.secondary_color) branding.secondary_color = shop.secondary_color;
+                if (shop.name) branding.company_name = shop.name;
+            }
+        }
+
+        const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
+        if (globalContent) {
+            const parts = [];
+            if (globalContent.company_name) parts.push(globalContent.company_name);
+            if (globalContent.company_address) parts.push(globalContent.company_address);
+            if (globalContent.contact_email) parts.push(globalContent.contact_email);
+            branding.footer_text = parts.join(' | ');
+        }
+
+        const tn = String(trackingNumber || order.tracking_number || '').trim();
+        const trackingUrl = tn ? `https://www.dhl.de/de/privatkunden/dhl-sendungsverfolgung.html?piececode=${encodeURIComponent(tn)}` : '';
+        const subject = tn
+            ? `Ihre Bestellung #${order.order_number} ist auf dem Weg (Sendungsnummer: ${tn})`
+            : `Ihre Bestellung #${order.order_number} ist auf dem Weg`;
+
+        let logosHtml = '';
+        if (branding.logo_url && branding.email_logo_url && branding.logo_url !== branding.email_logo_url) {
+            logosHtml = `
+                <img src="${branding.logo_url}" alt="${branding.company_name}" style="max-height: 60px; max-width: 150px; margin-right: 15px; vertical-align: middle;">
+                <img src="${branding.email_logo_url}" alt="" style="max-height: 60px; max-width: 150px; vertical-align: middle;">
+            `;
+        } else if (branding.email_logo_url) {
+            logosHtml = `<img src="${branding.email_logo_url}" alt="${branding.company_name}" style="max-height: 70px; max-width: 250px;">`;
+        } else if (branding.logo_url) {
+            logosHtml = `<img src="${branding.logo_url}" alt="${branding.company_name}" style="max-height: 70px; max-width: 250px;">`;
+        } else {
+            logosHtml = `<h1>${branding.company_name}</h1>`;
+        }
+
+        const html = `
+        <div style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 24px;">
+          <div style="max-width: 640px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+            <div style="padding: 22px; background: linear-gradient(90deg, ${branding.primary_color}, ${branding.secondary_color}); color: white;">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px;">
+                <div style="font-size: 18px; font-weight: 700;">Versandupdate</div>
+                <div style="text-align:right; font-size: 12px; opacity: 0.95;">Bestellung #${order.order_number}</div>
+              </div>
+            </div>
+            <div style="padding: 22px;">
+              <div style="margin-bottom: 14px; text-align:center;">${logosHtml}</div>
+              <p style="font-size: 14px; color: #0f172a; line-height: 1.5;">
+                Ihre Bestellung ist jetzt im Versand.
+              </p>
+              ${tn ? `
+                <div style="margin: 14px 0; padding: 14px; border-radius: 12px; border: 1px solid #e2e8f0; background: #f8fafc;">
+                  <div style="font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px;">Sendungsnummer</div>
+                  <div style="font-size: 16px; font-weight: 800; color: #0f172a;">${tn}</div>
+                  ${trackingUrl ? `<div style="margin-top: 10px;"><a href="${trackingUrl}" style="display:inline-block; padding: 10px 14px; border-radius: 12px; background: ${branding.primary_color}; color: white; text-decoration: none; font-weight: 700; font-size: 13px;">Sendung verfolgen</a></div>` : ''}
+                </div>
+              ` : ''}
+              <p style="font-size: 12px; color: #64748b; margin-top: 12px;">
+                Sie finden die Sendungsnummer auch jederzeit in Ihrem Kundenkonto unter „Meine Bestellungen“.
+              </p>
+            </div>
+            ${branding.footer_text ? `
+              <div style="padding: 16px 22px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px;">
+                ${branding.footer_text}
+              </div>
+            ` : ''}
+          </div>
+        </div>
+        `;
+
+        const text = tn
+            ? `Ihre Bestellung #${order.order_number} ist jetzt im Versand. Sendungsnummer: ${tn}\n${trackingUrl ? `Sendung verfolgen: ${trackingUrl}\n` : ''}`
+            : `Ihre Bestellung #${order.order_number} ist jetzt im Versand.`;
+
+        return await sendEmailWithInvoice({
+            to: [order.customer_email],
+            subject,
+            text,
+            html
+        });
+    } catch {
+        return false;
+    }
+};
+
 export const sendShopOrderNotification = async (orderId: string, invoicePath: string, recipients: string | string[]) => {
     try {
         const to = normalizeRecipientList(recipients);

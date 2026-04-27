@@ -7,6 +7,7 @@ import path from 'path';
 import { DATA_DIR } from '../db.js';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DhlClient } from '../services/dhl.js';
+import { sendShipmentNotification } from '../services/email.js';
 
 const router = Router();
 
@@ -1187,6 +1188,10 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
                     WHERE id = ?
                 `).run(result.trackingNumber, localUrl, orderId);
 
+                try {
+                    await sendShipmentNotification(orderId, result.trackingNumber);
+                } catch {}
+
                 res.json({ 
                     success: true, 
                     trackingNumber: result.trackingNumber, 
@@ -1194,6 +1199,20 @@ router.post('/:shopId/shipping/create-label', async (req, res) => {
                 });
             } catch (downloadErr) {
                 console.error('Failed to save label PDF:', downloadErr);
+                const labelUrlForDb = typeof result.labelUrl === 'string' && result.labelUrl.startsWith('data:') ? null : result.labelUrl;
+                try {
+                    db.prepare(`
+                        UPDATE orders 
+                        SET status = 'shipped', 
+                            tracking_number = ?, 
+                            label_url = ?, 
+                            shipped_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    `).run(result.trackingNumber, labelUrlForDb, orderId);
+                } catch {}
+                try {
+                    await sendShipmentNotification(orderId, result.trackingNumber);
+                } catch {}
                 // Fallback: Return the DHL URL/DataURI directly
                 res.json({ 
                     success: true, 

@@ -91,6 +91,11 @@ const ShopOrdersPage: React.FC = () => {
                          order.status === 'shipped' ? 'Versendet' : 
                          order.status === 'cancelled' ? 'Storniert' : order.status}
                       </div>
+                      {order.status === 'shipped' && order.tracking_number ? (
+                        <div className="text-xs text-slate-500 mt-1 font-medium">
+                          Sendungsnr: {order.tracking_number}
+                        </div>
+                      ) : null}
                     </div>
                     <div className="text-right">
                       <div className="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Gesamt</div>
