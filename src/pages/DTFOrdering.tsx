@@ -40,6 +40,8 @@ export default function DTFOrdering() {
   const [pickerTab, setPickerTab] = useState<'files' | 'products' | 'upload'>('files');
   const [pickerSearch, setPickerSearch] = useState("");
   const [pickerCustomerFilter, setPickerCustomerFilter] = useState(""); // "" = All, "ARCHIVED" = Archive, "NAME" = Specific Customer
+  const [pickerUseOriginalQuantity, setPickerUseOriginalQuantity] = useState(true);
+  const [pickerAddQuantity, setPickerAddQuantity] = useState(1);
   
   // Product Tab State
   const [productSearch, setProductSearch] = useState("");
@@ -54,6 +56,9 @@ export default function DTFOrdering() {
   const [uploadQuantity, setUploadQuantity] = useState(1);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [pendingOrderImportId, setPendingOrderImportId] = useState<string | null>(null);
+  const [pendingOrderImportQuantity, setPendingOrderImportQuantity] = useState(1);
+  const [pendingOrderImportMode, setPendingOrderImportMode] = useState<'original' | 'set_all'>('set_all');
 
   // Processing State
   const [isGenerating, setIsGenerating] = useState(false);
@@ -178,7 +183,8 @@ export default function DTFOrdering() {
 
   const openOrdersWithFiles = [...regularOrders, ...manualGroups];
 
-  const addOrderFiles = (orderId: string) => {
+  const addOrderFiles = (orderId: string, quantityOverride?: number) => {
+      const qtyOverride = typeof quantityOverride === 'number' ? Math.max(1, Math.floor(quantityOverride)) : undefined;
       // Check for virtual order (Manual Inventory Groups or Queue)
       if (orderId.includes('-group-')) {
           // Parse ID: {originalOrderId}-group-{ref}
@@ -215,7 +221,7 @@ export default function DTFOrdering() {
                 orderId: orderId, // Use Virtual Group ID for tracking status update
                 customerName: originalOrderId === 'dtf-manual-queue' ? (f.reference || 'Manueller Upload') : 'Lager / Manuell',
                 date: sourceOrder.createdAt,
-                quantity: Number(f.quantity) || 1,
+                quantity: qtyOverride ?? (Number(f.quantity) || 1),
                 width: 0,
                 height: 0,
                 reference: f.reference,
@@ -244,7 +250,7 @@ export default function DTFOrdering() {
             orderId: order.id,
             customerName: order.customerName,
             date: order.createdAt,
-            quantity: Number((f as any).quantity) || 1,
+            quantity: qtyOverride ?? (Number((f as any).quantity) || 1),
             width: 0,
             height: 0,
             status: 'pending' as const // Add status
@@ -277,6 +283,45 @@ export default function DTFOrdering() {
           
           return [...prev, ...uniqueNewFiles];
       });
+  };
+
+  const startOrderImport = (orderId: string) => {
+      const { suggested, hasMixed } = (() => {
+          if (orderId.includes('-group-')) {
+              let originalOrderId = '';
+              let ref = '';
+              if (orderId.startsWith('inventory-manual-group-')) {
+                  originalOrderId = 'inventory-manual';
+                  ref = orderId.replace('inventory-manual-group-', '');
+              } else if (orderId.startsWith('dtf-manual-queue-group-')) {
+                  originalOrderId = 'dtf-manual-queue';
+                  ref = orderId.replace('dtf-manual-queue-group-', '');
+              } else {
+                  return { suggested: 1, hasMixed: false };
+              }
+              const sourceOrder = orders.find(o => o.id === originalOrderId);
+              if (!sourceOrder) return { suggested: 1, hasMixed: false };
+              const relevant = (sourceOrder.files || []).filter((f: any) => {
+                  const fileRef = f.reference || (originalOrderId === 'dtf-manual-queue' ? 'Manueller Upload' : 'Unbekannt');
+                  return fileRef === ref && (f.type || 'print') === 'print' && f.status !== 'ordered';
+              });
+              const quantities = relevant.map((f: any) => Math.max(1, Number(f?.quantity) || 1));
+              const uniq = new Set(quantities);
+              const suggested = Math.max(1, quantities[0] || 1);
+              return { suggested, hasMixed: uniq.size > 1 };
+          }
+
+          const order = orders.find(o => o.id === orderId);
+          const relevant = (order?.files || []).filter((f: any) => (f.type || 'print') === 'print' && f.status !== 'ordered') || [];
+          const quantities = relevant.map((f: any) => Math.max(1, Number(f?.quantity) || 1));
+          const uniq = new Set(quantities);
+          const suggested = Math.max(1, quantities[0] || 1);
+          return { suggested, hasMixed: uniq.size > 1 };
+      })();
+
+      setPendingOrderImportId(orderId);
+      setPendingOrderImportQuantity(suggested);
+      setPendingOrderImportMode(hasMixed ? 'original' : 'set_all');
   };
 
   // Filter for picker
@@ -916,7 +961,7 @@ export default function DTFOrdering() {
                                             </button>
                                         )}
                                         <button 
-                                            onClick={() => !isSelected && addOrderFiles(order.id)}
+                                            onClick={() => !isSelected && startOrderImport(order.id)}
                                             disabled={isSelected}
                                             className={`${isSelected ? 'bg-yellow-500 cursor-default opacity-80' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs px-2 py-1.5 rounded shrink-0 flex items-center transition-all`}
                                         >
@@ -1205,16 +1250,37 @@ export default function DTFOrdering() {
                 ) : pickerTab === 'products' ? (
                     <div className="flex flex-col flex-1 overflow-hidden">
                         <div className="p-4 border-b border-gray-200 bg-gray-50">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                <input 
-                                    type="text" 
-                                    placeholder="Kunde oder Artikel suchen..." 
-                                    className="w-full pl-10 border border-gray-300 rounded p-2 focus:ring-red-500 focus:border-red-500"
-                                    value={productSearch}
-                                    onChange={(e) => setProductSearch(e.target.value)}
-                                    autoFocus
-                                />
+                            <div className="flex gap-4 items-start">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Kunde oder Artikel suchen..." 
+                                        className="w-full pl-10 border border-gray-300 rounded p-2 focus:ring-red-500 focus:border-red-500"
+                                        value={productSearch}
+                                        onChange={(e) => setProductSearch(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="shrink-0 flex flex-col items-end gap-1">
+                                    <label className="text-[10px] text-gray-500 flex items-center gap-2 select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={pickerUseOriginalQuantity}
+                                            onChange={(e) => setPickerUseOriginalQuantity(e.target.checked)}
+                                        />
+                                        Original-Menge übernehmen
+                                    </label>
+                                    {!pickerUseOriginalQuantity && (
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={pickerAddQuantity}
+                                            onChange={(e) => setPickerAddQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                                            className="w-28 border border-gray-300 rounded p-2 text-sm focus:ring-red-500 focus:border-red-500"
+                                        />
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <div className="flex-1 overflow-y-auto p-4 space-y-2">
@@ -1269,7 +1335,7 @@ export default function DTFOrdering() {
                                                                             url: file.file_url,
                                                                             name: file.file_name || product.name,
                                                                             thumbnail: file.thumbnail_url,
-                                                                            quantity: file.quantity || 1,
+                                                                            quantity: pickerUseOriginalQuantity ? (file.quantity || 1) : pickerAddQuantity,
                                                                             customerName: customer.name,
                                                                             reference: customer.name,
                                                                             sourceType: 'product',
@@ -1298,7 +1364,7 @@ export default function DTFOrdering() {
                     </div>
                 ) : (
                     <>
-                    <div className="p-4 border-b border-gray-200 bg-gray-50 flex gap-4">
+                    <div className="p-4 border-b border-gray-200 bg-gray-50 flex gap-4 items-start">
                         <div className="flex-1">
                             <input 
                                 type="text" 
@@ -1323,6 +1389,25 @@ export default function DTFOrdering() {
                                 ))}
                             </select>
                         </div>
+                        <div className="shrink-0 flex flex-col items-end gap-1">
+                            <label className="text-[10px] text-gray-500 flex items-center gap-2 select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={pickerUseOriginalQuantity}
+                                    onChange={(e) => setPickerUseOriginalQuantity(e.target.checked)}
+                                />
+                                Original-Menge übernehmen
+                            </label>
+                            {!pickerUseOriginalQuantity && (
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={pickerAddQuantity}
+                                    onChange={(e) => setPickerAddQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                                    className="w-28 border border-gray-300 rounded p-2 text-sm focus:ring-red-500 focus:border-red-500"
+                                />
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-4">
@@ -1338,7 +1423,7 @@ export default function DTFOrdering() {
                                             url: file.url,
                                             name: file.name,
                                             thumbnail: file.thumbnail,
-                                            quantity: file.quantity,
+                                            quantity: pickerUseOriginalQuantity ? file.quantity : pickerAddQuantity,
                                             customerName: file.customerName,
                                             reference: file.reference || file.customerName,
                                             sourceType: 'order',
@@ -1400,6 +1485,81 @@ export default function DTFOrdering() {
                     >
                         Fertig
                     </button>
+                </div>
+            </div>
+        </div>
+      )}
+      {pendingOrderImportId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+                <div className="p-4 border-b border-gray-200 flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                        <div className="text-xs text-gray-500">Auftrag übernehmen</div>
+                        <div className="text-lg font-bold text-gray-800 truncate">Druckanzahl wählen</div>
+                    </div>
+                    <button onClick={() => setPendingOrderImportId(null)} className="text-gray-500 hover:text-gray-700">
+                        ✕
+                    </button>
+                </div>
+                <div className="p-4 space-y-3">
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setPendingOrderImportMode('original')}
+                            className={`flex-1 px-3 py-2 rounded text-sm border ${pendingOrderImportMode === 'original' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-700 border-gray-300 hover:bg-gray-50'}`}
+                        >
+                            Original
+                        </button>
+                        <button
+                            onClick={() => setPendingOrderImportMode('set_all')}
+                            className={`flex-1 px-3 py-2 rounded text-sm border ${pendingOrderImportMode === 'set_all' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-700 border-gray-300 hover:bg-gray-50'}`}
+                        >
+                            Alle gleich
+                        </button>
+                    </div>
+                    {pendingOrderImportMode === 'set_all' ? (
+                        <div>
+                            <div className="text-sm text-gray-600 mb-2">
+                                Setzt die Anzahl für alle Druckdaten in diesem Auftrag.
+                            </div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Anzahl</label>
+                            <input
+                                type="number"
+                                min="1"
+                                value={pendingOrderImportQuantity}
+                                onChange={(e) => setPendingOrderImportQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                                className="w-full border border-gray-300 rounded p-2 text-sm focus:ring-red-500 focus:border-red-500"
+                                autoFocus
+                            />
+                        </div>
+                    ) : (
+                        <div className="text-sm text-gray-600">
+                            Übernimmt die Mengen aus dem Auftrag (pro Datei).
+                        </div>
+                    )}
+                    <div className="flex justify-end gap-2 pt-2">
+                        <button
+                            onClick={() => setPendingOrderImportId(null)}
+                            className="px-4 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                            Abbrechen
+                        </button>
+                        <button
+                            onClick={() => {
+                                const oid = pendingOrderImportId;
+                                const qty = pendingOrderImportQuantity;
+                                setPendingOrderImportId(null);
+                                if (!oid) return;
+                                if (pendingOrderImportMode === 'original') {
+                                    addOrderFiles(oid);
+                                } else {
+                                    addOrderFiles(oid, qty);
+                                }
+                            }}
+                            className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700"
+                        >
+                            Übernehmen
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
