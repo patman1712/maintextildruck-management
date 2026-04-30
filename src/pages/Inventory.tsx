@@ -300,6 +300,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   // Edit Order Item State
   const [editingOrderItem, setEditingOrderItem] = useState<OrderItem | null>(null);
   const [editItemForm, setEditItemForm] = useState({
+      supplierId: '',
       itemName: '',
       itemNumber: '',
       color: '',
@@ -311,6 +312,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const handleEditOrderItemClick = (item: OrderItem) => {
       setEditingOrderItem(item);
       setEditItemForm({
+          supplierId: item.supplierId,
           itemName: item.itemName,
           itemNumber: item.itemNumber || '',
           color: item.color || '',
@@ -323,6 +325,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const handleEditOrderItemSubmit = async () => {
       if (!editingOrderItem) return;
       await updateOrderItem(editingOrderItem.orderId, editingOrderItem.id, {
+          supplierId: editItemForm.supplierId,
           itemName: editItemForm.itemName,
           itemNumber: editItemForm.itemNumber,
           color: editItemForm.color,
@@ -1616,6 +1619,19 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                     </div>
                     
                     <div className="space-y-4 mb-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Shop / Lieferant</label>
+                            <select
+                                className="w-full border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500"
+                                value={editItemForm.supplierId}
+                                onChange={(e) => setEditItemForm({ ...editItemForm, supplierId: e.target.value })}
+                                disabled={suppliers.length === 0}
+                            >
+                                {suppliers.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Artikelname</label>
                             <input 
