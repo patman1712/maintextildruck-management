@@ -234,6 +234,7 @@ class GuillotinePacker {
         let bestRectIndex = -1;
         let bestScore = Number.MAX_VALUE;
         let bestX = Number.MAX_VALUE;
+        let bestY = Number.MAX_VALUE;
         
         // Search all free rects
         for (let i = 0; i < this.freeRects.length; i++) {
@@ -248,6 +249,7 @@ class GuillotinePacker {
                 if (rect.x < bestX) {
                     // Found a new leftmost candidate
                     bestX = rect.x;
+                    bestY = rect.y;
                     bestRectIndex = i;
                     // Calculate score for tie-breaking later?
                     // For now, just take it.
@@ -259,14 +261,23 @@ class GuillotinePacker {
                     bestScore = Math.min(leftoverHoriz, leftoverVert);
                     
                 } else if (rect.x === bestX) {
-                    // Same column. Pick the one that fits best (BSSF).
-                    const leftoverHoriz = Math.abs(rect.w - w);
-                    const leftoverVert = Math.abs(rect.h - h);
-                    const score = Math.min(leftoverHoriz, leftoverVert);
-                    
-                    if (score < bestScore) {
-                        bestScore = score;
+                    // Same column. Prefer the top-most free rect (smallest y),
+                    // then use BSSF as a tie-breaker.
+                    if (rect.y < bestY) {
+                        bestY = rect.y;
                         bestRectIndex = i;
+                        const leftoverHoriz = Math.abs(rect.w - w);
+                        const leftoverVert = Math.abs(rect.h - h);
+                        bestScore = Math.min(leftoverHoriz, leftoverVert);
+                    } else if (rect.y === bestY) {
+                        const leftoverHoriz = Math.abs(rect.w - w);
+                        const leftoverVert = Math.abs(rect.h - h);
+                        const score = Math.min(leftoverHoriz, leftoverVert);
+                        
+                        if (score < bestScore) {
+                            bestScore = score;
+                            bestRectIndex = i;
+                        }
                     }
                 }
             }
@@ -303,7 +314,7 @@ class GuillotinePacker {
             this.freeRects.push({
                 x: usedRect.x,
                 y: usedRect.y + h + g,
-                w: usedRect.w, 
+                w: w, 
                 h: usedRect.h - h - g
             });
         }
@@ -648,6 +659,28 @@ router.post('/generate', async (req: Request, res: Response) => {
              }
              
              pages = fallbackPackers.map(p => p.items).filter(items => items.length > 0);
+        }
+
+        const hasOverlap = (pageItems: Item[]) => {
+            for (let i = 0; i < pageItems.length; i++) {
+                const a = pageItems[i];
+                if (a.x === undefined || a.y === undefined) continue;
+                for (let j = i + 1; j < pageItems.length; j++) {
+                    const b = pageItems[j];
+                    if (b.x === undefined || b.y === undefined) continue;
+                    const ax1 = a.x, ay1 = a.y, ax2 = a.x + a.w, ay2 = a.y + a.h;
+                    const bx1 = b.x, by1 = b.y, bx2 = b.x + b.w, by2 = b.y + b.h;
+                    const overlapX = ax1 < bx2 && ax2 > bx1;
+                    const overlapY = ay1 < by2 && ay2 > by1;
+                    if (overlapX && overlapY) return true;
+                }
+            }
+            return false;
+        };
+
+        if (pages.some(p => hasOverlap(p))) {
+            res.status(500).json({ success: false, error: 'Interner Packing-Fehler: Platzierungen überlappen sich. Bitte erneut versuchen (oder padding reduzieren).' });
+            return;
         }
 
         // 3. Create Output PDFs (One per page)
