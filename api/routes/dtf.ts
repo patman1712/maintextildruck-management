@@ -661,6 +661,26 @@ router.post('/generate', async (req: Request, res: Response) => {
              pages = fallbackPackers.map(p => p.items).filter(items => items.length > 0);
         }
 
+        for (const pageItems of pages) {
+            if (!pageItems || pageItems.length === 0) continue;
+            let minX = Number.MAX_VALUE;
+            let minY = Number.MAX_VALUE;
+            for (const it of pageItems) {
+                if (it.x === undefined || it.y === undefined) continue;
+                if (it.x < minX) minX = it.x;
+                if (it.y < minY) minY = it.y;
+            }
+            if (!Number.isFinite(minX) || !Number.isFinite(minY)) continue;
+            if (minX <= 0.0001 && minY <= 0.0001) continue;
+            for (const it of pageItems) {
+                if (it.x === undefined || it.y === undefined) continue;
+                const nx = it.x - minX;
+                const ny = it.y - minY;
+                it.x = nx < 0 ? 0 : nx;
+                it.y = ny < 0 ? 0 : ny;
+            }
+        }
+
         const hasOverlap = (pageItems: Item[]) => {
             for (let i = 0; i < pageItems.length; i++) {
                 const a = pageItems[i];
