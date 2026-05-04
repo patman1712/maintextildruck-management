@@ -771,6 +771,13 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   };
 
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<string | null>(null);
+  const [emailConfirm, setEmailConfirm] = useState<null | {
+      supplierId: string;
+      supplierName: string;
+      emailTo: string;
+      items: any[];
+  }>(null);
+  const [emailConfirmBusy, setEmailConfirmBusy] = useState(false);
 
   const handleDeleteOrder = (orderId: string) => {
       if (orderId === 'inventory-manual' || orderId.startsWith('manual-')) {
@@ -907,19 +914,14 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     // Open email client
     window.location.href = `mailto:${emailTo}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
-    // Use a slight delay to ensure the mail client has triggered before showing the modal
     setTimeout(() => {
-        if (window.confirm("Haben Sie die E-Mail erfolgreich versendet?\n\nKlicken Sie auf 'OK', um die Artikel als 'Bestellt' zu markieren.\nKlicken Sie auf 'Abbrechen', wenn Sie die Mail doch nicht gesendet haben.")) {
-            // Process updates sequentially to avoid race conditions
-            (async () => {
-                for (const item of itemsToSend) {
-                    await updateStatus(item.orderId, item.id, 'ordered');
-                }
-                // Clear selection
-                setSelectedOrders(prev => ({ ...prev, [supplierId]: [] }));
-            })();
-        }
-    }, 500);
+        setEmailConfirm({
+            supplierId,
+            supplierName: group.supplier?.name || 'Lieferant',
+            emailTo,
+            items: itemsToSend
+        });
+    }, 350);
   };
 
   return (
@@ -1601,6 +1603,67 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                         >
                             <Scissors size={16} className="mr-2" />
                             Teillieferung speichern
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
+        {emailConfirm && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in duration-200">
+                    <div className="flex items-center text-blue-600 mb-4">
+                        <div className="bg-blue-100 p-2 rounded-full mr-3">
+                            <Mail size={24} />
+                        </div>
+                        <div className="min-w-0">
+                            <h3 className="text-xl font-bold text-gray-800">E-Mail versendet?</h3>
+                            <div className="text-xs text-gray-500 truncate">
+                                {emailConfirm.supplierName}{emailConfirm.emailTo ? ` · ${emailConfirm.emailTo}` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="mb-6 bg-gray-50 p-3 rounded border border-gray-200 text-sm text-gray-700">
+                        Klicken Sie auf <strong>Ja</strong>, um <strong>{emailConfirm.items.length}</strong> Positionen als <strong>Bestellt</strong> zu markieren.
+                    </div>
+                    
+                    <div className="flex justify-end space-x-3 pt-2 border-t border-gray-100">
+                        <button 
+                            onClick={() => setEmailConfirm(null)}
+                            disabled={emailConfirmBusy}
+                            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Nein
+                        </button>
+                        <button 
+                            onClick={async () => {
+                                if (!emailConfirm) return;
+                                setEmailConfirmBusy(true);
+                                try {
+                                    for (const item of emailConfirm.items) {
+                                        await updateStatus(item.orderId, item.id, 'ordered');
+                                    }
+                                    setSelectedOrders(prev => ({ ...prev, [emailConfirm.supplierId]: [] }));
+                                    setEmailConfirm(null);
+                                } finally {
+                                    setEmailConfirmBusy(false);
+                                }
+                            }}
+                            disabled={emailConfirmBusy}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 shadow-sm transition-colors flex items-center font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {emailConfirmBusy ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                    Bitte warten…
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircle size={16} className="mr-2" />
+                                    Ja, markieren
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>

@@ -214,11 +214,13 @@ interface Rect {
 class GuillotinePacker {
     width: number;
     height: number;
+    gap: number;
     freeRects: Rect[];
 
-    constructor(width: number, height: number) {
+    constructor(width: number, height: number, gap: number = 0) {
         this.width = width;
         this.height = height;
+        this.gap = Math.max(0, gap || 0);
         this.freeRects = [{ x: 0, y: 0, w: width, h: height }];
     }
 
@@ -294,21 +296,23 @@ class GuillotinePacker {
         // Bottom (Restricted Width): x, y+h, w, usedRect.h-h
         // Right (Full Height): x+w, y, usedRect.w-w, usedRect.h
         
+        const g = this.gap;
+
         // Add Bottom first (so it's picked first by Left-sort if x is same)
-        if (usedRect.h > h) {
+        if (usedRect.h > h + g) {
             this.freeRects.push({
                 x: usedRect.x,
-                y: usedRect.y + h,
-                w: w, 
-                h: usedRect.h - h
+                y: usedRect.y + h + g,
+                w: usedRect.w, 
+                h: usedRect.h - h - g
             });
         }
         
-        if (usedRect.w > w) {
+        if (usedRect.w > w + g) {
             this.freeRects.push({
-                x: usedRect.x + w,
+                x: usedRect.x + w + g,
                 y: usedRect.y,
-                w: usedRect.w - w, 
+                w: usedRect.w - w - g, 
                 h: usedRect.h
             });
         }
@@ -451,8 +455,8 @@ router.post('/generate', async (req: Request, res: Response) => {
 
                     for (let i = 0; i < file.quantity; i++) {
                         itemsToPack.push({
-                            w: width + paddingPoints,
-                            h: height + paddingPoints,
+                            w: width,
+                            h: height,
                             sourceIndex
                         });
                     }
@@ -518,7 +522,7 @@ router.post('/generate', async (req: Request, res: Response) => {
             const currentItems = [...originalItems].sort(strategy);
             
             const currentPackers: { packer: GuillotinePacker, items: Item[] }[] = [
-                { packer: new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT), items: [] }
+                { packer: new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT, paddingPoints), items: [] }
             ];
             
             let allFit = true;
@@ -546,7 +550,7 @@ router.post('/generate', async (req: Request, res: Response) => {
                 
                 // If it doesn't fit in any existing page, create a new one
                 if (!pos) {
-                    const newPacker = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
+                    const newPacker = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT, paddingPoints);
                     pos = newPacker.fit(item.w, item.h);
                     if (pos) {
                         currentPackers.push({ packer: newPacker, items: [] });
@@ -607,7 +611,7 @@ router.post('/generate', async (req: Request, res: Response) => {
              // If not, we just run the default height desc.
              
              const fallbackPackers: { packer: GuillotinePacker, items: Item[] }[] = [
-                 { packer: new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT), items: [] }
+                 { packer: new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT, paddingPoints), items: [] }
              ];
              
              for (const item of itemsToPack) {
@@ -626,7 +630,7 @@ router.post('/generate', async (req: Request, res: Response) => {
                  }
                  
                  if (!pos) {
-                     const newPacker = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT);
+                     const newPacker = new GuillotinePacker(PACKER_WIDTH, PACKER_HEIGHT, paddingPoints);
                      pos = newPacker.fit(item.w, item.h);
                      if (pos) {
                          fallbackPackers.push({ packer: newPacker, items: [] });
@@ -696,7 +700,7 @@ router.post('/generate', async (req: Request, res: Response) => {
             // Width = Used Width (Max X + W)
             
             const maxX = pageItems.reduce((max, item) => Math.max(max, (item.x || 0) + item.w), 0);
-            const pageWidth = Math.max(1, maxX - paddingPoints);
+            const pageWidth = Math.max(1, maxX);
             const pageHeight = pdfHeightFixedPoints;
 
             const page = outputPdf.addPage([pageWidth, pageHeight]);
