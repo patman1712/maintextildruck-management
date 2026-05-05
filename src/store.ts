@@ -667,6 +667,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (updatedOrder.description !== undefined) updatePayload.description = updatedOrder.description;
       if (updatedOrder.employees !== undefined) updatePayload.employees = updatedOrder.employees;
       if (updatedOrder.files !== undefined) updatePayload.files = updatedOrder.files;
+      if (updatedOrder.invoicedAt !== undefined) updatePayload.invoiced_at = updatedOrder.invoicedAt;
+      if (updatedOrder.invoicedBy !== undefined) updatePayload.invoiced_by = updatedOrder.invoicedBy;
       if (updatedOrder.steps) {
         if (updatedOrder.steps.processing !== undefined) updatePayload.processing = updatedOrder.steps.processing;
         if (updatedOrder.steps.produced !== undefined) updatePayload.produced = updatedOrder.steps.produced;

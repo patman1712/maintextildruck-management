@@ -10,6 +10,8 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
   const loading = useAppStore((state) => state.loading);
   const fetchData = useAppStore((state) => state.fetchData);
   const toggleOrderStep = useAppStore((state) => state.toggleOrderStep);
+  const updateOrder = useAppStore((state) => state.updateOrder);
+  const currentUser = useAppStore((state) => state.currentUser);
   const listStateKey = useMemo(() => `ordersListState:${location.pathname}`, [location.pathname]);
   const urlParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const [searchTerm, setSearchTerm] = useState(() => {
@@ -525,6 +527,22 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                             <div className="text-xs text-gray-500">
                               {order.invoicedBy || '—'}
                             </div>
+                          </div>
+                        ) : order.steps?.invoiced ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="text-sm text-gray-400">Nicht erfasst</div>
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const now = new Date().toISOString();
+                                const who = currentUser?.name || currentUser?.username || 'Unbekannt';
+                                await updateOrder(order.id, { invoicedAt: now, invoicedBy: who });
+                                fetchData();
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-800"
+                            >
+                              Jetzt nachtragen
+                            </button>
                           </div>
                         ) : (
                           <div className="text-sm text-gray-400">—</div>
