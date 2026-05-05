@@ -54,6 +54,8 @@ db.exec(`
     processing INTEGER DEFAULT 0,
     produced INTEGER DEFAULT 0,
     invoiced INTEGER DEFAULT 0,
+    invoiced_at DATETIME,
+    invoiced_by TEXT,
     steps TEXT,     -- stored as JSON string { processing: boolean, produced: boolean, invoiced: boolean }
     print_status TEXT DEFAULT 'pending', -- pending, ordered
     description TEXT,
@@ -660,6 +662,18 @@ try {
   if (!hasSteps) {
       console.log('Migrating database: Adding steps to orders table');
       db.exec('ALTER TABLE orders ADD COLUMN steps TEXT'); // JSON string for { processing: boolean, produced: boolean, invoiced: boolean }
+  }
+
+  const hasInvoicedAt = columns.some(col => col.name === 'invoiced_at');
+  if (!hasInvoicedAt) {
+    console.log('Migrating database: Adding invoiced_at to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN invoiced_at DATETIME');
+  }
+
+  const hasInvoicedBy = columns.some(col => col.name === 'invoiced_by');
+  if (!hasInvoicedBy) {
+    console.log('Migrating database: Adding invoiced_by to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN invoiced_by TEXT');
   }
 
   const fileColumns = db.prepare("PRAGMA table_info(files)").all() as any[];

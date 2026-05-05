@@ -325,6 +325,9 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
 
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Aufträge...</div>;
 
+  const effectiveStatusFilter = filter || statusFilter;
+  const showInvoiceMeta = effectiveStatusFilter === 'completed';
+
   const filteredOrders = orders.filter((order) => {
     const q = searchTerm.trim().toLowerCase();
     const title = String(order.title || '').toLowerCase();
@@ -332,8 +335,6 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
     const number = String((order as any).orderNumber || (order as any).order_number || '').toLowerCase();
     const matchesSearch = !q || title.includes(q) || customer.includes(q) || number.includes(q);
     
-    // If a prop filter is provided, force it. Otherwise use the dropdown.
-    const effectiveStatusFilter = filter || statusFilter;
     const matchesStatus = effectiveStatusFilter === "all" || order.status === effectiveStatusFilter;
     
     // Hide archived orders from normal lists unless specifically requested (though we don't have a UI for archived yet)
@@ -372,6 +373,16 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
 
     return matchesSearch && matchesStatus;
   });
+
+  const visibleOrders = (() => {
+    if (!showInvoiceMeta) return filteredOrders;
+    const withTs = (o: any) => {
+      const v = o?.invoicedAt || o?.invoiced_at;
+      const t = v ? new Date(v).getTime() : NaN;
+      return Number.isFinite(t) ? t : -Infinity;
+    };
+    return [...filteredOrders].sort((a: any, b: any) => withTs(b) - withTs(a));
+  })();
 
   const StepButton = ({ active, onClick, icon: Icon, label, colorClass }: { active: boolean, onClick: () => void, icon: any, label: string, colorClass: string }) => (
     <button
@@ -468,6 +479,9 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
               <tr>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Auftrag / Kunde</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Eingang</th>
+                {showInvoiceMeta && (
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rechnung</th>
+                )}
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deadline</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mitarbeiter</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fortschritt</th>
@@ -478,8 +492,8 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredOrders.length > 0 ? (
-                filteredOrders.map((order) => (
+              {visibleOrders.length > 0 ? (
+                visibleOrders.map((order) => (
                   <tr 
                     key={order.id} 
                     className="hover:bg-gray-50 transition-colors cursor-pointer"
@@ -501,6 +515,22 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                         {new Date(order.createdAt).toLocaleDateString('de-DE')}
                       </div>
                     </td>
+                    {showInvoiceMeta && (
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {order.invoicedAt ? (
+                          <div className="flex flex-col">
+                            <div className="text-sm text-gray-700">
+                              {new Date(order.invoicedAt).toLocaleString('de-DE')}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {order.invoicedBy || '—'}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-400">—</div>
+                        )}
+                      </td>
+                    )}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center text-sm text-gray-700">
                         <Calendar size={16} className="mr-2 text-gray-400" />

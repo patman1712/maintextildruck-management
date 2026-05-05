@@ -26,6 +26,8 @@ router.get('/', (req: Request, res: Response) => {
     processing: !!row.processing,
     produced: !!row.produced,
     invoiced: !!row.invoiced,
+    invoicedAt: row.invoiced_at,
+    invoicedBy: row.invoiced_by,
     printStatus: row.print_status,
     description: row.description,
     employees: row.employees ? JSON.parse(row.employees) : [],
@@ -206,6 +208,8 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (updates.processing !== undefined) { fields.push('processing = ?'); values.push(updates.processing ? 1 : 0); }
   if (updates.produced !== undefined) { fields.push('produced = ?'); values.push(updates.produced ? 1 : 0); }
   if (updates.invoiced !== undefined) { fields.push('invoiced = ?'); values.push(updates.invoiced ? 1 : 0); }
+  if (updates.invoiced_at !== undefined) { fields.push('invoiced_at = ?'); values.push(updates.invoiced_at); }
+  if (updates.invoiced_by !== undefined) { fields.push('invoiced_by = ?'); values.push(updates.invoiced_by); }
   if (updates.print_status !== undefined) { fields.push('print_status = ?'); values.push(updates.print_status); }
   if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
   if (updates.employees !== undefined) { fields.push('employees = ?'); values.push(JSON.stringify(updates.employees)); }
@@ -303,6 +307,8 @@ router.put('/:id', async (req: Request, res: Response) => {
     processing: !!updatedRow.processing,
     produced: !!updatedRow.produced,
     invoiced: !!updatedRow.invoiced,
+    invoicedAt: updatedRow.invoiced_at,
+    invoicedBy: updatedRow.invoiced_by,
     printStatus: updatedRow.print_status,
     description: updatedRow.description,
     employees: updatedRow.employees ? JSON.parse(updatedRow.employees) : [],

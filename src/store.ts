@@ -94,6 +94,8 @@ export interface Order {
   trackingNumber?: string;
   labelUrl?: string;
   shippedAt?: string;
+  invoicedAt?: string;
+  invoicedBy?: string;
 }
 
 export interface Supplier {
@@ -366,6 +368,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         trackingNumber: o.tracking_number,
         labelUrl: o.label_url,
         shippedAt: o.shipped_at,
+        invoicedAt: o.invoicedAt || o.invoiced_at,
+        invoicedBy: o.invoicedBy || o.invoiced_by,
         orderItems: (itemsByOrderId[o.id] || []).map((i: any) => ({
                 id: i.id,
                 orderId: i.order_id,
@@ -1011,6 +1015,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!order) return;
 
     const newSteps = { ...order.steps, [step]: !order.steps[step] };
+    const nowIso = new Date().toISOString();
+    const who = state.currentUser?.name || state.currentUser?.username || 'Unbekannt';
+    const nextInvoicedAt = step === 'invoiced' ? (newSteps.invoiced ? nowIso : undefined) : order.invoicedAt;
+    const nextInvoicedBy = step === 'invoiced' ? (newSteps.invoiced ? who : undefined) : order.invoicedBy;
     
     let newStatus = order.status;
     if (newSteps.processing && newSteps.produced && newSteps.invoiced) {
@@ -1020,22 +1028,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     set((state) => ({
-      orders: state.orders.map((o) => (o.id === id ? { ...o, steps: newSteps, status: newStatus } : o))
+      orders: state.orders.map((o) => (o.id === id ? { ...o, steps: newSteps, status: newStatus, invoicedAt: nextInvoicedAt, invoicedBy: nextInvoicedBy } : o))
     }));
 
     try {
+      const body: any = {
+        steps: newSteps,
+        processing: newSteps.processing,
+        produced: newSteps.produced,
+        invoiced: newSteps.invoiced,
+        status: newStatus
+      };
+      if (step === 'invoiced') {
+        body.invoiced_at = newSteps.invoiced ? nowIso : null;
+        body.invoiced_by = newSteps.invoiced ? who : null;
+      }
+
       await fetch(`/api/orders/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          steps: newSteps, // Backend needs to handle steps object or individual fields
-          // My backend implementation handles individual fields, so I need to send them individually or update backend
-          // Let's send individual fields to match backend implementation
-          processing: newSteps.processing,
-          produced: newSteps.produced,
-          invoiced: newSteps.invoiced,
-          status: newStatus
-        })
+        body: JSON.stringify(body)
       });
     } catch (error) {
       console.error('Error toggling step:', error);
