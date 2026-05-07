@@ -197,6 +197,44 @@ const ShopProductPage: React.FC = () => {
       return [];
   }, [backPrintVariant]);
 
+  const selectedSizeVariantId = React.useMemo(() => {
+      if (!selectedSize) return null;
+      if (!sizeVariants.length) return null;
+
+      const candidates = sizeVariants.filter(v => (v.values || []).includes(selectedSize));
+      if (candidates.length === 1) return candidates[0].id;
+      if (candidates.length === 0) return null;
+
+      const lower = selectedSize.trim().toLowerCase();
+      const looksNumeric = /^\d{2,3}$/.test(lower);
+      const looksKidsComposite = /^\d{2,3}\/\d{2,3}$/.test(lower);
+      const numeric = looksNumeric ? Number.parseInt(lower, 10) : NaN;
+      const isKids = looksKidsComposite || (!Number.isNaN(numeric) && numeric <= 176);
+
+      const pickByName = (needle: string) =>
+          candidates.find(c => String(c.name || '').toLowerCase().includes(needle))?.id ?? null;
+
+      if (isKids) {
+          return (
+              pickByName('kinder') ||
+              pickByName('kid') ||
+              pickByName('junior') ||
+              pickByName('youth') ||
+              pickByName('erwachsen') ||
+              pickByName('adult') ||
+              candidates[0].id
+          );
+      }
+
+      return (
+          pickByName('erwachsen') ||
+          pickByName('adult') ||
+          pickByName('kinder') ||
+          pickByName('kid') ||
+          candidates[0].id
+      );
+  }, [selectedSize, sizeVariants]);
+
   const currentPrice = React.useMemo(() => {
       if (!product) return 0;
       let price = product.price > 0 ? product.price : 29.95;
@@ -206,7 +244,11 @@ const ShopProductPage: React.FC = () => {
       // If variant is selected, use its price
       if (selectedVariantId && variants[selectedVariantId] && variants[selectedVariantId].price) {
           price = variants[selectedVariantId].price;
-      } 
+      }
+      // If no variant is selected but we can resolve a size-variant from the selected size, use its price
+      else if (selectedSizeVariantId && variants[selectedSizeVariantId] && variants[selectedSizeVariantId].price) {
+          price = variants[selectedSizeVariantId].price;
+      }
       // If no variant is selected, but variants exist, find the lowest price
       else if (hasVariants) {
           let minPrice = Infinity;
@@ -227,7 +269,7 @@ const ShopProductPage: React.FC = () => {
       }
       
       return price;
-  }, [product, variants, selectedVariantId]);
+  }, [product, variants, selectedVariantId, selectedSizeVariantId]);
 
   const stockEnabled = (product as any)?.stock_enabled === 1 || (product as any)?.stock_enabled === true;
   const stockQuantity = stockEnabled ? Math.max(0, Number((product as any)?.stock_quantity) || 0) : 0;
@@ -239,22 +281,20 @@ const ShopProductPage: React.FC = () => {
 
       // 1. Check Active Main Variant (Value is in selectedSize)
       if (selectedSize) {
-           if (selectedVariantId) {
-               // Specific variable selected
-               const v = shopVariables.find(v => String(v.id) === String(selectedVariantId));
+           const sizeVarId = selectedSizeVariantId;
+           if (sizeVarId) {
+               const v = shopVariables.find(v => String(v.id) === String(sizeVarId));
                if (v && v.price_per_value && v.variable_prices && v.variable_prices[selectedSize]) {
                    adjustment += v.variable_prices[selectedSize];
                }
            } else {
-               // No specific variant selected (Legacy Mode or simple Size)
-               // Check all 'size' variables for a match
                const sizeVars = shopVariables.filter(v => v.type === 'size' && v.price_per_value);
                for (const v of sizeVars) {
                    const values = v.values ? v.values.split(',').map((s: string) => s.trim()) : [];
                    if (values.includes(selectedSize)) {
                        if (v.variable_prices && v.variable_prices[selectedSize]) {
                            adjustment += v.variable_prices[selectedSize];
-                           break; // Stop after first match to avoid double counting if multiple variables have same value
+                           break;
                        }
                    }
                }
@@ -270,10 +310,19 @@ const ShopProductPage: React.FC = () => {
       }
 
       return adjustment;
-  }, [selectedSize, selectedBackPrint, backPrintVariant, shopVariables, selectedVariantId]);
+  }, [selectedSize, selectedBackPrint, backPrintVariant, shopVariables, selectedSizeVariantId]);
 
   // Derived state to show "Ab" (From) prefix
-  const showFromPrice = !selectedVariantId && Object.keys(variants).length > 0;
+  const showFromPrice = !selectedVariantId && !selectedSizeVariantId && Object.keys(variants).length > 0;
+
+  useEffect(() => {
+      setSelectedVariantValues(prev => {
+          const next = { ...prev };
+          for (const v of sizeVariants) delete next[v.id];
+          if (selectedSizeVariantId && selectedSize) next[selectedSizeVariantId] = selectedSize;
+          return next;
+      });
+  }, [selectedSize, selectedSizeVariantId, sizeVariants]);
 
   useEffect(() => {
     // Parse Personalization Options from Product Assignment
@@ -748,16 +797,10 @@ const ShopProductPage: React.FC = () => {
                         if (!val) {
                             setSelectedVariantValues(prev => {
                                 const next = { ...prev };
-                                if (selectedVariantId) delete next[selectedVariantId];
                                 for (const v of sizeVariants) delete next[v.id];
                                 return next;
                             });
                             return;
-                        }
-                        if (selectedVariantId) {
-                            setSelectedVariantValues(prev => ({ ...prev, [selectedVariantId]: val }));
-                        } else if (sizeVariants.length === 1) {
-                            setSelectedVariantValues(prev => ({ ...prev, [sizeVariants[0].id]: val }));
                         }
                     }}
                 >
