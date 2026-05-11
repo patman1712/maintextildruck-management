@@ -107,12 +107,12 @@ export default function DTFOrdering() {
   // Extract all available print files from ALL orders
   const allFilesRaw = orders.flatMap(order => 
     (order.files || [])
-      .filter(f => (f.type || 'print') === 'print')
+      .filter(f => f.type === 'print')
       .map(f => ({
         id: f.url || Math.random().toString(36),
         url: f.url,
         name: f.customName || f.name,
-        type: f.type || 'print',
+        type: f.type,
         thumbnail: f.thumbnail,
         orderId: order.id,
         customerName: order.customerName,
@@ -131,7 +131,7 @@ export default function DTFOrdering() {
   const seenKeys = new Set<string>();
 
   for (const file of allFilesRaw) {
-      const key = `${file.orderId}::${file.url}`;
+      const key = String(file.url || '').trim();
       if (!seenKeys.has(key)) {
           seenKeys.add(key);
           availableFiles.push(file);
@@ -144,9 +144,9 @@ export default function DTFOrdering() {
     .filter(o => o.id !== 'inventory-manual' && o.id !== 'dtf-manual-queue')
     .filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'archived')
     .filter(o => {
-        // Check if there are ANY print/vector files that are NOT yet ordered
+        // Check if there are ANY print files that are NOT yet ordered
         const hasPendingFiles = (o.files || []).some(f => 
-            (f.type || 'print') === 'print' && f.status !== 'ordered'
+            f.type === 'print' && f.status !== 'ordered'
         );
         return hasPendingFiles;
     });
@@ -165,7 +165,7 @@ export default function DTFOrdering() {
       
       (mOrder.files || []).forEach((f: any) => {
            // Filter out ordered files
-           if ((f.type || 'print') === 'print' && f.status !== 'ordered') {
+           if (f.type === 'print' && f.status !== 'ordered') {
                const ref = f.reference || (mOrder.id === 'dtf-manual-queue' ? 'Manueller Upload' : 'Unbekannt');
                if (!filesByRef[ref]) filesByRef[ref] = [];
                filesByRef[ref].push(f);
@@ -215,13 +215,13 @@ export default function DTFOrdering() {
           const filesToAdd = (sourceOrder.files || [])
              .filter((f: any) => {
                  const fileRef = f.reference || (originalOrderId === 'dtf-manual-queue' ? 'Manueller Upload' : 'Unbekannt');
-                 return fileRef === ref && (f.type || 'print') === 'print' && f.status !== 'ordered';
+                 return fileRef === ref && f.type === 'print' && f.status !== 'ordered';
              })
              .map((f: any) => ({
                 id: Math.random().toString(36).substr(2, 9),
                 url: f.url,
                 name: f.customName || f.name,
-                type: f.type || 'print',
+                type: f.type,
                 thumbnail: f.thumbnail,
                 orderId: orderId, // Use Virtual Group ID for tracking status update
                 customerName: originalOrderId === 'dtf-manual-queue' ? (f.reference || 'Manueller Upload') : 'Lager / Manuell',
@@ -245,12 +245,12 @@ export default function DTFOrdering() {
       if (!order) return;
       
       const filesToAdd = (order.files || [])
-        .filter(f => (f.type || 'print') === 'print' && f.status !== 'ordered')
+        .filter(f => f.type === 'print' && f.status !== 'ordered')
         .map(f => ({
             id: Math.random().toString(36).substr(2, 9),
             url: f.url,
             name: f.customName || f.name,
-            type: f.type || 'print',
+            type: f.type,
             thumbnail: f.thumbnail,
             orderId: order.id,
             customerName: order.customerName,
@@ -757,7 +757,7 @@ export default function DTFOrdering() {
                         // Mark entire group as ordered, independent of adjusted selection quantity.
                         manualFiles = manualFiles.map((f: any) => {
                             const fRef = f.reference || 'Unbekannt';
-                        if (fRef === ref && (f.type === 'print' || f.type === 'vector')) {
+                        if (fRef === ref && f.type === 'print') {
                                 manualFilesChanged = true;
                                 return { ...f, status: 'ordered' as const };
                             }
@@ -772,7 +772,7 @@ export default function DTFOrdering() {
                         const initialLength = dtfQueueFiles.length;
                         dtfQueueFiles = dtfQueueFiles.filter((f: any) => {
                             const fRef = f.reference || 'Manueller Upload';
-                        const isMatch = fRef === ref && (f.type === 'print' || f.type === 'vector');
+                        const isMatch = fRef === ref && f.type === 'print';
                             return !isMatch; 
                         });
                     
@@ -786,7 +786,7 @@ export default function DTFOrdering() {
                     // If queue was selected directly, clear all printable files from it.
                     const initialLength = dtfQueueFiles.length;
                     dtfQueueFiles = dtfQueueFiles.filter((f: any) => {
-                        return !(f.type === 'print' || f.type === 'vector');
+                        return f.type !== 'print';
                     });
                     if (dtfQueueFiles.length !== initialLength) {
                         dtfQueueChanged = true;
@@ -797,7 +797,7 @@ export default function DTFOrdering() {
                         // Mark complete order as ordered so it disappears from "Offene Aufträge",
                         // even when quantities were manually adjusted for this DTF run.
                         const newFiles = order.files.map(f => {
-                            if (f.type === 'print' || f.type === 'vector') {
+                            if (f.type === 'print') {
                                 return { ...f, status: 'ordered' as const };
                             }
                             return f;

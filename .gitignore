@@ -24,3 +24,9 @@ dist-ssr
 *.sln
 *.sw?
 .vite
+
+# Local data
+data/database.sqlite
+
+# Local scripts
+trash_rm_scripts/

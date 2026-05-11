@@ -355,8 +355,12 @@ router.post('/generate', async (req: Request, res: Response) => {
             const dbFile = db.prepare('SELECT type FROM files WHERE path = ?').get(url) as any;
             const dbType = typeof dbFile?.type === 'string' ? String(dbFile.type).trim() : '';
             const effectiveType = requestType || dbType;
-            if (effectiveType && effectiveType !== 'print') {
-                rejectedNonPrint.push({ url, type: effectiveType });
+            if (effectiveType !== 'print') {
+                rejectedNonPrint.push({
+                    url,
+                    type: effectiveType || null,
+                    reason: effectiveType ? 'non_print' : 'missing_type'
+                });
                 continue;
             }
             const existing = normalizedRequests.get(url);
@@ -381,7 +385,7 @@ router.post('/generate', async (req: Request, res: Response) => {
         if (rejectedNonPrint.length > 0) {
             res.status(400).json({
                 success: false,
-                error: 'Für DTF-Bögen sind nur Druckdaten (Typ: print) erlaubt. Rohdaten/Vektoren werden nicht übernommen.',
+                error: 'Für DTF-Bögen sind nur Druckdaten (Typ: print) erlaubt. Dateien ohne Typ oder mit Rohdaten/Vektor-Typ werden nicht übernommen.',
                 rejected: rejectedNonPrint
             });
             return;

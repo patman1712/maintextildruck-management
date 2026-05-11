@@ -138,7 +138,7 @@ router.post('/', async (req: Request, res: Response) => {
     
     // Also save files to the dedicated 'files' table for independent persistence
     if (files && Array.isArray(files)) {
-      const checkFile = db.prepare('SELECT id FROM files WHERE path = ?');
+      const checkFile = db.prepare('SELECT id, type FROM files WHERE path = ?');
       const insertFile = db.prepare(`
         INSERT INTO files (id, customer_id, order_id, name, original_name, path, type, thumbnail, quantity)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -151,6 +151,7 @@ router.post('/', async (req: Request, res: Response) => {
             if (!existing) {
               const fileId = Math.random().toString(36).substr(2, 9);
               const thumb = file.thumbnail || file.thumbnail_url || file.thumbnailUrl || null;
+              const fileType = typeof file.type === 'string' && file.type.trim() ? file.type.trim() : 'unknown';
               insertFile.run(
                 fileId, 
                 customer_id || null, 
@@ -158,10 +159,16 @@ router.post('/', async (req: Request, res: Response) => {
                 file.customName || file.name || 'Unbenannt', 
                 file.name || 'Unbenannt', 
                 file.url, 
-                file.type || 'print',
+                fileType,
                 thumb,
                 file.quantity || 1
               );
+            } else {
+              const incomingType = typeof file.type === 'string' && file.type.trim() ? file.type.trim() : '';
+              const existingType = typeof (existing as any)?.type === 'string' ? String((existing as any).type).trim() : '';
+              if (incomingType && (!existingType || existingType === 'unknown')) {
+                db.prepare('UPDATE files SET type = ? WHERE id = ?').run(incomingType, (existing as any).id);
+              }
             }
           } catch (e) {
             console.error('Error inserting file in orders POST:', e);
@@ -249,7 +256,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
   // Also update files table if files are in the update payload
   if (updates.files && Array.isArray(updates.files)) {
-    const checkFile = db.prepare('SELECT id FROM files WHERE path = ?');
+    const checkFile = db.prepare('SELECT id, type FROM files WHERE path = ?');
     const insertFile = db.prepare(`
       INSERT INTO files (id, customer_id, order_id, name, original_name, path, type, thumbnail, status, print_status, quantity)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -266,6 +273,7 @@ router.put('/:id', async (req: Request, res: Response) => {
             const customerId = updates.customer_id || existing.customer_id || null;
             const status = 'active';
             const printStatus = file.status === 'ordered' ? 'ordered' : (file.printStatus || file.print_status || 'pending');
+            const fileType = typeof file.type === 'string' && file.type.trim() ? file.type.trim() : 'unknown';
             
             insertFile.run(
               fileId, 
@@ -274,7 +282,7 @@ router.put('/:id', async (req: Request, res: Response) => {
               file.customName || file.name || 'Unbenannt', 
               file.name || 'Unbenannt', 
               file.url, 
-              file.type || 'print',
+              fileType,
               thumb,
               status,
               printStatus,
@@ -284,6 +292,11 @@ router.put('/:id', async (req: Request, res: Response) => {
             // Update quantity for existing file
             const printStatus = file.status === 'ordered' ? 'ordered' : (file.printStatus || file.print_status || null);
             db.prepare('UPDATE files SET quantity = ?, thumbnail = COALESCE(?, thumbnail), print_status = COALESCE(?, print_status) WHERE id = ?').run(file.quantity || 1, thumb, printStatus, existingFile.id);
+            const incomingType = typeof file.type === 'string' && file.type.trim() ? file.type.trim() : '';
+            const existingType = typeof existingFile?.type === 'string' ? String(existingFile.type).trim() : '';
+            if (incomingType && (!existingType || existingType === 'unknown')) {
+              db.prepare('UPDATE files SET type = ? WHERE id = ?').run(incomingType, existingFile.id);
+            }
           }
         } catch (e) {
           console.error('Error inserting/updating file in orders PUT:', e);
