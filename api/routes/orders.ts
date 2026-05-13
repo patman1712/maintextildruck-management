@@ -9,7 +9,17 @@ const router = Router();
 
 // GET all orders
 router.get('/', (req: Request, res: Response) => {
-  const stmt = db.prepare('SELECT * FROM orders ORDER BY created_at DESC');
+  const includeDeleted = String((req.query as any)?.includeDeleted || '') === 'true';
+  const onlyTrash = String((req.query as any)?.trash || '') === 'true';
+  const where =
+    includeDeleted ? '' :
+    onlyTrash ? 'WHERE deleted_at IS NOT NULL' :
+    'WHERE deleted_at IS NULL';
+  const orderBy =
+    onlyTrash ? 'ORDER BY deleted_at DESC, created_at DESC' :
+    'ORDER BY created_at DESC';
+
+  const stmt = db.prepare(`SELECT * FROM orders ${where} ${orderBy}`);
   const rows = stmt.all();
   
   const orders = rows.map((row: any) => ({
@@ -28,6 +38,8 @@ router.get('/', (req: Request, res: Response) => {
     invoiced: !!row.invoiced,
     invoicedAt: row.invoiced_at,
     invoicedBy: row.invoiced_by,
+    deletedAt: row.deleted_at,
+    deletedBy: row.deleted_by,
     printStatus: row.print_status,
     description: row.description,
     employees: row.employees ? JSON.parse(row.employees) : [],
@@ -47,6 +59,38 @@ router.get('/', (req: Request, res: Response) => {
   }));
   
   res.json({ success: true, data: orders });
+});
+
+router.post('/:id/restore', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const existing = db.prepare('SELECT id FROM orders WHERE id = ?').get(id) as any;
+  if (!existing) return res.status(404).json({ success: false, error: 'Order not found' });
+  db.prepare('UPDATE orders SET deleted_at = NULL, deleted_by = NULL WHERE id = ?').run(id);
+  res.json({ success: true, message: 'Order restored' });
+});
+
+router.delete('/trash/empty', (req: Request, res: Response) => {
+  try {
+    const deletedOrders = db.prepare('SELECT id FROM orders WHERE deleted_at IS NOT NULL').all() as any[];
+    const ids = deletedOrders.map(o => o.id).filter(Boolean);
+
+    const unlinkFiles = db.prepare('UPDATE files SET order_id = NULL WHERE order_id = ?');
+    const deleteOrderItems = db.prepare('DELETE FROM order_items WHERE order_id = ?');
+    const deleteOrder = db.prepare('DELETE FROM orders WHERE id = ?');
+
+    const run = db.transaction(() => {
+      for (const id of ids) {
+        unlinkFiles.run(id);
+        deleteOrderItems.run(id);
+        deleteOrder.run(id);
+      }
+    });
+    run();
+
+    res.json({ success: true, deletedCount: ids.length });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message || 'Failed to empty trash' });
+  }
 });
 
 router.get('/invoice/:orderNumber', async (req: Request, res: Response) => {
@@ -343,21 +387,26 @@ router.put('/:id', async (req: Request, res: Response) => {
 // DELETE order
 router.delete('/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  
-  try {
-    // Unlink files first (keep them, but remove order reference)
-    db.prepare('UPDATE files SET order_id = NULL WHERE order_id = ?').run(id);
 
-    const result = db.prepare('DELETE FROM orders WHERE id = ?').run(id);
-    
+  try {
+    const deletedBy = typeof (req.body as any)?.deleted_by === 'string' ? (req.body as any).deleted_by : null;
+    const result = db.prepare('UPDATE orders SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ? WHERE id = ? AND deleted_at IS NULL').run(deletedBy, id);
+
     if (result.changes > 0) {
-      res.json({ success: true, message: 'Order deleted' });
-    } else {
-      res.status(404).json({ success: false, error: 'Order not found' });
+      res.json({ success: true, message: 'Order trashed' });
+      return;
     }
-  } catch (error) {
-    console.error('Error deleting order:', error);
-    res.status(500).json({ success: false, error: 'Failed to delete order' });
+
+    const exists = db.prepare('SELECT id FROM orders WHERE id = ?').get(id) as any;
+    if (!exists) {
+      res.status(404).json({ success: false, error: 'Order not found' });
+      return;
+    }
+
+    res.json({ success: true, message: 'Order already trashed' });
+  } catch (error: any) {
+    console.error('Error trashing order:', error);
+    res.status(500).json({ success: false, error: 'Failed to trash order' });
   }
 });
 

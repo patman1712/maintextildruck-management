@@ -96,6 +96,8 @@ export interface Order {
   shippedAt?: string;
   invoicedAt?: string;
   invoicedBy?: string;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
 }
 
 export interface Supplier {
@@ -370,6 +372,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         shippedAt: o.shipped_at,
         invoicedAt: o.invoicedAt || o.invoiced_at,
         invoicedBy: o.invoicedBy || o.invoiced_by,
+        deletedAt: o.deletedAt ?? o.deleted_at ?? null,
+        deletedBy: o.deletedBy ?? o.deleted_by ?? null,
         orderItems: (itemsByOrderId[o.id] || []).map((i: any) => ({
                 id: i.id,
                 orderId: i.order_id,
@@ -913,40 +917,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteOrder: async (id) => {
     try {
       const state = get();
-      const order = state.orders.find(o => o.id === id);
-      
-      let updatedFiles = order?.files || [];
-
-      // Clean up 'internal' files before archiving
-      if (order && order.files) {
-        const internalFiles = order.files.filter(f => f.type === 'internal');
-        
-        for (const file of internalFiles) {
-            if (file.url) {
-                try {
-                    await fetch('/api/upload/delete', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ filePath: file.url })
-                    });
-                } catch (e) {
-                    console.error("Failed to delete internal file", e);
-                }
-            }
-        }
-        
-        // Remove internal files from the list
-        updatedFiles = order.files.filter(f => f.type !== 'internal');
-      }
+      const who = state.currentUser?.name || state.currentUser?.username || 'Unbekannt';
 
       set((state) => ({
-        orders: state.orders.map((o) => (o.id === id ? { ...o, status: 'archived', files: updatedFiles } : o))
+        orders: state.orders.filter((o) => o.id !== id)
       }));
       
       await fetch(`/api/orders/${id}`, {
-        method: 'PUT',
+        method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'archived', files: updatedFiles })
+        body: JSON.stringify({ deleted_by: who })
       });
       
     } catch (error) {

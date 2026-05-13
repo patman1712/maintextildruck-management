@@ -676,6 +676,22 @@ try {
     db.exec('ALTER TABLE orders ADD COLUMN invoiced_by TEXT');
   }
 
+  const hasDeletedAt = columns.some(col => col.name === 'deleted_at');
+  if (!hasDeletedAt) {
+    console.log('Migrating database: Adding deleted_at to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN deleted_at DATETIME');
+  }
+
+  const hasDeletedBy = columns.some(col => col.name === 'deleted_by');
+  if (!hasDeletedBy) {
+    console.log('Migrating database: Adding deleted_by to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN deleted_by TEXT');
+  }
+
+  try {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_orders_deleted_at ON orders(deleted_at)');
+  } catch {}
+
   const fileColumns = db.prepare("PRAGMA table_info(files)").all() as any[];
   const hasPrintStatusFile = fileColumns.some(col => col.name === 'print_status');
   if (!hasPrintStatusFile) {

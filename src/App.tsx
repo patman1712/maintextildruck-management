@@ -41,9 +41,11 @@ import ShopContentPage from "@/pages/OnlineShops/ShopContentPage";
 import Donations from "@/pages/Donations";
 import PublicDonations from "@/pages/PublicDonations";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import AdminRoute from "@/components/AdminRoute";
 import { useAppStore } from "@/store";
 import { useEffect, useRef, useState } from "react";
 import UpdateNotification from "@/components/UpdateNotification";
+import OrdersTrash from "@/pages/OrdersTrash";
 
 export default function App() {
   const fetchData = useAppStore((state) => state.fetchData);
@@ -171,6 +173,7 @@ export default function App() {
           <Route path="orders/finished" element={<OrderList filter="completed" source="manual" />} />
           <Route path="orders/online" element={<OrderList source="online" />} />
           <Route path="orders/online/finished" element={<OrderList filter="completed" source="online" />} />
+          <Route path="orders/trash" element={<AdminRoute><OrdersTrash /></AdminRoute>} />
           <Route path="orders/:id" element={<OrderDetails />} />
           <Route path="orders/:id/view" element={<InternalOrderView />} />
           <Route path="orders/:id/edit" element={<EditOrder />} />
