@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAppStore } from "@/store";
-import { Printer, Upload, Download, Trash2, FileText, Check, AlertCircle, Package, ChevronDown, ChevronRight, Search, User } from "lucide-react";
+import { Printer, Upload, Download, Trash2, FileText, Check, AlertCircle, Package, ChevronDown, ChevronRight, Search, User, RotateCcw } from "lucide-react";
 
 export default function DTFOrdering() {
   const orders = useAppStore((state) => state.orders);
@@ -188,6 +188,19 @@ export default function DTFOrdering() {
   });
 
   const openOrdersWithFiles = [...regularOrders, ...manualGroups];
+
+  const removeOrderFromSelection = (orderId: string) => {
+      setSelectedFiles(prev => prev.filter(f => f.orderId !== orderId));
+  };
+
+  const toggleOrderSelection = (orderId: string) => {
+      const isSelected = selectedFiles.some(f => f.orderId === orderId);
+      if (isSelected) {
+          removeOrderFromSelection(orderId);
+          return;
+      }
+      addOrderFiles(orderId);
+  };
 
   const addOrderFiles = (orderId: string) => {
       // Check for virtual order (Manual Inventory Groups or Queue)
@@ -978,14 +991,13 @@ export default function DTFOrdering() {
                                             </button>
                                         )}
                                         <button 
-                                            onClick={() => !isSelected && addOrderFiles(order.id)}
-                                            disabled={isSelected}
-                                            className={`${isSelected ? 'bg-yellow-500 cursor-default opacity-80' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs px-2 py-1.5 rounded shrink-0 flex items-center transition-all`}
+                                            onClick={() => toggleOrderSelection(order.id)}
+                                            className={`${isSelected ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'} text-white text-xs px-2 py-1.5 rounded shrink-0 flex items-center transition-all`}
                                         >
                                             {isSelected ? (
                                                 <>
-                                                    <Check size={12} className="mr-1" />
-                                                    In Auswahl
+                                                    <RotateCcw size={12} className="mr-1" />
+                                                    Rückgängig
                                                 </>
                                             ) : (
                                                 <>
