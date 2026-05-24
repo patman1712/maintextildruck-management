@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
 
 const ShopDashboard: React.FC = () => {
@@ -66,6 +66,7 @@ const ShopDashboard: React.FC = () => {
   const [sourceShopProducts, setSourceShopProducts] = useState<any[]>([]);
   const [isImporting, setIsImporting] = useState<string | null>(null); // ID of product being imported
   const [isDuplicating, setIsDuplicating] = useState<string | null>(null);
+  const [draggingCategory, setDraggingCategory] = useState<{ id: string; parentId: string | null } | null>(null);
   
   const categoryFormRef = useRef<HTMLDivElement>(null);
 
@@ -353,6 +354,72 @@ const ShopDashboard: React.FC = () => {
       await fetch(`/api/shop-management/${shopId}/categories/${id}`, { method: 'DELETE' });
       setCategories(categories.filter(c => c.id !== id));
     } catch (e) { console.error(e); }
+  };
+
+  const reorderCategoryGroup = async (parentId: string | null, orderedIds: string[]) => {
+    if (!shopId) return;
+    setCategories(prev => prev.map(c => {
+      if ((parentId ? c.parent_id === parentId : !c.parent_id) && orderedIds.includes(c.id)) {
+        const idx = orderedIds.indexOf(c.id);
+        return { ...c, sort_order: (idx + 1) * 10 };
+      }
+      return c;
+    }));
+    try {
+      const res = await fetch(`/api/shop-management/${shopId}/categories/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parent_id: parentId, ordered_ids: orderedIds })
+      });
+      const data = await res.json();
+      if (data.success) setCategories(data.data);
+      else throw new Error(data.error || 'Reorder fehlgeschlagen');
+    } catch (e) {
+      fetchCategories();
+    }
+  };
+
+  const handleCategoryDragStart = (cat: ShopCategory) => (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingCategory({ id: cat.id, parentId: cat.parent_id || null });
+  };
+
+  const handleCategoryDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleCategoryDrop = (target: ShopCategory) => async (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!draggingCategory) return;
+    const sourceId = draggingCategory.id;
+    const sourceParent = draggingCategory.parentId;
+    const targetParent = target.parent_id || null;
+    if (sourceParent !== targetParent) {
+      setDraggingCategory(null);
+      return;
+    }
+
+    const group = categories
+      .filter(c => (sourceParent ? c.parent_id === sourceParent : !c.parent_id))
+      .slice()
+      .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
+
+    const fromIdx = group.findIndex(c => c.id === sourceId);
+    const toIdx = group.findIndex(c => c.id === target.id);
+    if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) {
+      setDraggingCategory(null);
+      return;
+    }
+
+    const next = [...group];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    await reorderCategoryGroup(sourceParent, next.map(c => c.id));
+    setDraggingCategory(null);
+  };
+
+  const handleCategoryDragEnd = () => {
+    setDraggingCategory(null);
   };
 
   const handleAssignProduct = async (product: Product) => {
@@ -1244,10 +1311,24 @@ const ShopDashboard: React.FC = () => {
                             <p className="text-slate-500 italic">Keine Kategorien vorhanden.</p>
                         ) : (
                             // Render hierarchically
-                            categories.filter(c => !c.parent_id).map(cat => (
+                            categories
+                              .filter(c => !c.parent_id)
+                              .slice()
+                              .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0))
+                              .map(cat => (
                                 <div key={cat.id} className="space-y-2">
-                                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                        <span className="font-bold text-slate-800">{cat.name}</span>
+                                    <div
+                                        className={`flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 ${draggingCategory?.id === cat.id ? 'opacity-60' : ''}`}
+                                        draggable
+                                        onDragStart={handleCategoryDragStart(cat)}
+                                        onDragOver={handleCategoryDragOver}
+                                        onDrop={handleCategoryDrop(cat)}
+                                        onDragEnd={handleCategoryDragEnd}
+                                    >
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <GripVertical size={18} className="text-slate-300 shrink-0" />
+                                            <span className="font-bold text-slate-800 truncate">{cat.name}</span>
+                                        </div>
                                         <div className="flex items-center space-x-2">
                                             <span className="text-xs text-slate-400 font-mono bg-white px-2 py-1 rounded border border-slate-200">/{cat.slug}</span>
                                             <button 
@@ -1267,13 +1348,26 @@ const ShopDashboard: React.FC = () => {
                                     </div>
                                     {/* Subcategories */}
                                     <div className="pl-8 space-y-2 border-l-2 border-slate-100 ml-4">
-                                        {categories.filter(sub => sub.parent_id === cat.id).map(sub => (
-                                             <div key={sub.id} className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100 shadow-sm">
-                                                <div className="flex items-center gap-2">
+                                        {categories
+                                          .filter(sub => sub.parent_id === cat.id)
+                                          .slice()
+                                          .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0))
+                                          .map(sub => (
+                                             <div
+                                                key={sub.id}
+                                                className={`flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100 shadow-sm ${draggingCategory?.id === sub.id ? 'opacity-60' : ''}`}
+                                                draggable
+                                                onDragStart={handleCategoryDragStart(sub)}
+                                                onDragOver={handleCategoryDragOver}
+                                                onDrop={handleCategoryDrop(sub)}
+                                                onDragEnd={handleCategoryDragEnd}
+                                             >
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <GripVertical size={16} className="text-slate-200 shrink-0" />
                                                     {sub.image_url ? (
                                                         <img src={sub.image_url} alt="" className="w-8 h-8 rounded object-cover border border-slate-100" loading="lazy" decoding="async" />
                                                     ) : <div className="w-8 h-8 bg-slate-50 rounded border border-slate-100" />}
-                                                    <span className="font-medium text-slate-600">{sub.name}</span>
+                                                    <span className="font-medium text-slate-600 truncate">{sub.name}</span>
                                                 </div>
                                                 <div className="flex items-center space-x-2">
                                                     <span className="text-xs text-slate-400 font-mono bg-slate-50 px-2 py-0.5 rounded">/{sub.slug}</span>

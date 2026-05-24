@@ -78,6 +78,39 @@ router.put('/:shopId/categories/:id', (req, res) => {
   }
 });
 
+router.put('/:shopId/categories/reorder', (req, res) => {
+  try {
+    const { shopId } = req.params;
+    const parentIdRaw = (req.body as any)?.parent_id;
+    const parentId = typeof parentIdRaw === 'string' && parentIdRaw.trim() ? parentIdRaw.trim() : null;
+    const orderedIds = Array.isArray((req.body as any)?.ordered_ids) ? (req.body as any).ordered_ids : [];
+    const ids = orderedIds.filter((x: any) => typeof x === 'string' && x.trim()).map((x: string) => x.trim());
+
+    if (ids.length === 0) {
+      res.status(400).json({ success: false, error: 'ordered_ids fehlt.' });
+      return;
+    }
+
+    const updateStmt = parentId
+      ? db.prepare('UPDATE shop_categories SET sort_order = ? WHERE id = ? AND shop_id = ? AND parent_id = ?')
+      : db.prepare('UPDATE shop_categories SET sort_order = ? WHERE id = ? AND shop_id = ? AND parent_id IS NULL');
+
+    const run = db.transaction(() => {
+      for (let i = 0; i < ids.length; i++) {
+        const sortOrder = (i + 1) * 10;
+        if (parentId) updateStmt.run(sortOrder, ids[i], shopId, parentId);
+        else updateStmt.run(sortOrder, ids[i], shopId);
+      }
+    });
+    run();
+
+    const categories = db.prepare('SELECT * FROM shop_categories WHERE shop_id = ? ORDER BY sort_order ASC').all(shopId);
+    res.json({ success: true, data: categories });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.delete('/:shopId/categories/:id', (req, res) => {
   try {
     const { id } = req.params;
