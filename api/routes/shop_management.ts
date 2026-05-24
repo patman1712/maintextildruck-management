@@ -306,6 +306,7 @@ router.post('/:shopId/products/import', (req, res) => {
   try {
     const { shopId } = req.params; // Target Shop
     const { source_assignment_id } = req.body; // Source Assignment ID
+    const skipFiles = !!(req.body as any)?.skip_files;
     
     // 1. Fetch Source Assignment & Product Data
     const sourceAssignment = db.prepare(`
@@ -324,7 +325,7 @@ router.post('/:shopId/products/import', (req, res) => {
 
     // 2. Duplicate Customer Product (Base Article)
     const newProductId = crypto.randomUUID();
-    const newProductNumber = `${sourceAssignment.product_number}-COPY-${Date.now().toString().slice(-4)}`;
+    const newProductNumber = `${sourceAssignment.product_number}-Kopie-${Date.now().toString().slice(-4)}`;
     
     // Check if target shop has a different customer_id? 
     // Usually one user owns multiple shops, so customer_id should be the same.
@@ -360,17 +361,19 @@ router.post('/:shopId/products/import', (req, res) => {
     // Map old file IDs to new file IDs to update assignments later if needed
     const fileIdMap = new Map<string, string>();
 
-    for (const file of sourceFiles) {
-        const newFileId = crypto.randomUUID();
-        insertFile.run(
-            newFileId,
-            newProductId,
-            file.file_url,
-            file.file_name,
-            file.thumbnail_url,
-            file.type
-        );
-        fileIdMap.set(file.id, newFileId);
+    if (!skipFiles) {
+        for (const file of sourceFiles) {
+            const newFileId = crypto.randomUUID();
+            insertFile.run(
+                newFileId,
+                newProductId,
+                file.file_url,
+                file.file_name,
+                file.thumbnail_url,
+                file.type
+            );
+            fileIdMap.set(file.id, newFileId);
+        }
     }
 
     // 4. Create New Assignment for Target Shop
@@ -389,7 +392,7 @@ router.post('/:shopId/products/import', (req, res) => {
         newAssignmentId,
         shopId,
         newProductId,
-        null, // Reset category, as target shop might have different categories
+        String(sourceAssignment.shop_id || '') === String(shopId) ? sourceAssignment.category_id : null,
         sourceAssignment.price, // Sales price
         sourceAssignment.is_featured,
         sourceAssignment.personalization_enabled,
@@ -401,24 +404,26 @@ router.post('/:shopId/products/import', (req, res) => {
     );
 
     // 5. Duplicate Shop Product Images (Assignments)
-    // These link assignments to files. We need to link NEW assignment to NEW files (using map)
-    const sourceImages = db.prepare('SELECT * FROM shop_product_images WHERE shop_product_assignment_id = ?').all(source_assignment_id) as any[];
-    const insertImage = db.prepare(`
-        INSERT INTO shop_product_images (
-            id, shop_product_assignment_id, customer_product_file_id, sort_order, personalization_option_ids
-        ) VALUES (?, ?, ?, ?, ?)
-    `);
+    if (!skipFiles) {
+        // These link assignments to files. We need to link NEW assignment to NEW files (using map)
+        const sourceImages = db.prepare('SELECT * FROM shop_product_images WHERE shop_product_assignment_id = ?').all(source_assignment_id) as any[];
+        const insertImage = db.prepare(`
+            INSERT INTO shop_product_images (
+                id, shop_product_assignment_id, customer_product_file_id, sort_order, personalization_option_ids
+            ) VALUES (?, ?, ?, ?, ?)
+        `);
 
-    for (const img of sourceImages) {
-        const newFileId = fileIdMap.get(img.customer_product_file_id);
-        if (newFileId) {
-            insertImage.run(
-                crypto.randomUUID(),
-                newAssignmentId,
-                newFileId,
-                img.sort_order,
-                img.personalization_option_ids || '[]'
-            );
+        for (const img of sourceImages) {
+            const newFileId = fileIdMap.get(img.customer_product_file_id);
+            if (newFileId) {
+                insertImage.run(
+                    crypto.randomUUID(),
+                    newAssignmentId,
+                    newFileId,
+                    img.sort_order,
+                    img.personalization_option_ids || '[]'
+                );
+            }
         }
     }
 

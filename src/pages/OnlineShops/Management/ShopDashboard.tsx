@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
 
 const ShopDashboard: React.FC = () => {
@@ -65,6 +65,7 @@ const ShopDashboard: React.FC = () => {
   const [sourceShopId, setSourceShopId] = useState('');
   const [sourceShopProducts, setSourceShopProducts] = useState<any[]>([]);
   const [isImporting, setIsImporting] = useState<string | null>(null); // ID of product being imported
+  const [isDuplicating, setIsDuplicating] = useState<string | null>(null);
   
   const categoryFormRef = useRef<HTMLDivElement>(null);
 
@@ -160,6 +161,32 @@ const ShopDashboard: React.FC = () => {
           alert('Ein Fehler ist aufgetreten.');
       } finally {
           setIsImporting(null);
+      }
+  };
+
+  const handleDuplicateProduct = async (sourceAssignment: any) => {
+      if (!shop) return;
+      setIsDuplicating(sourceAssignment.id);
+      try {
+          const res = await fetch(`/api/shop-management/${shop.id}/products/import`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  source_assignment_id: sourceAssignment.id,
+                  skip_files: true
+              })
+          });
+          const data = await res.json();
+          if (data.success) {
+              fetchShopProducts();
+          } else {
+              alert('Fehler beim Duplizieren: ' + data.error);
+          }
+      } catch (e) {
+          console.error(e);
+          alert('Ein Fehler ist aufgetreten.');
+      } finally {
+          setIsDuplicating(null);
       }
   };
 
@@ -1346,6 +1373,14 @@ const ShopDashboard: React.FC = () => {
 
                                     <button onClick={() => setEditorAssignment(sp)} className="text-slate-400 hover:text-blue-600">
                                         <Edit2 size={18} />
+                                    </button>
+                                    <button
+                                        onClick={() => handleDuplicateProduct(sp)}
+                                        disabled={isDuplicating === sp.id}
+                                        className={`text-slate-400 hover:text-slate-700 ${isDuplicating === sp.id ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                        title="Duplizieren (ohne Druckdaten)"
+                                    >
+                                        {isDuplicating === sp.id ? <RefreshCw size={18} className="animate-spin" /> : <Copy size={18} />}
                                     </button>
                                     <button onClick={() => handleRemoveProduct(sp.id)} className="text-slate-400 hover:text-red-600">
                                         <Trash2 size={18} />
