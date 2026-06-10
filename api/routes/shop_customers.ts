@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs-extra';
 import { generateInvoice } from '../services/invoice.js';
+import { generateCancellationInvoice } from '../services/cancellation_invoice.js';
 import { sendOrderConfirmation, sendShopOrderNotification } from '../services/email.js';
 
 const router = Router();
@@ -308,7 +309,14 @@ router.get('/:shopId/admin/orders/:orderId', async (req, res) => {
     if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
 
     const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
-    res.json({ success: true, data: { ...(order as any), items } });
+    const cancellations = db.prepare('SELECT * FROM order_cancellations WHERE order_id = ? ORDER BY created_at DESC').all(orderId);
+    const parsedCancellations = cancellations.map((row: any) => ({
+      ...row,
+      items: (() => {
+        try { return JSON.parse(row.items_json || '[]'); } catch { return []; }
+      })()
+    }));
+    res.json({ success: true, data: { ...(order as any), items, cancellations: parsedCancellations } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -335,6 +343,135 @@ router.get('/:shopId/admin/orders/:orderId/invoice', async (req, res) => {
     }
 
     res.download(filePath, `Rechnung_${order.invoice_number || orderId}.pdf`);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.post('/:shopId/admin/orders/:orderId/cancel', async (req, res) => {
+  try {
+    const { shopId: rawShopId, orderId } = req.params;
+    const shopId = resolveShopId(rawShopId);
+    if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+
+    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND shop_id = ?').get(orderId, shopId) as any;
+    if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
+
+    const requestedItems = Array.isArray(req.body?.items) ? req.body.items : [];
+    const cancelledBy = typeof req.body?.cancelledBy === 'string' && req.body.cancelledBy.trim() ? req.body.cancelledBy.trim() : 'Unbekannt';
+    if (requestedItems.length === 0) {
+      return res.status(400).json({ success: false, error: 'Keine Artikel zum Stornieren ausgewählt.' });
+    }
+
+    const orderItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+    const orderItemMap = new Map(orderItems.map((item: any) => [item.id, item]));
+    const lineItems: any[] = [];
+    let totalAmount = 0;
+
+    for (const reqItem of requestedItems) {
+      const itemId = String(reqItem?.itemId || '').trim();
+      const cancelQty = Math.max(0, Number(reqItem?.quantity || 0));
+      const item = orderItemMap.get(itemId);
+      if (!item || cancelQty <= 0) continue;
+      const alreadyCancelled = Math.max(0, Number(item.cancelled_quantity || 0));
+      const availableQty = Math.max(0, Number(item.quantity || 0) - alreadyCancelled);
+      if (cancelQty > availableQty) {
+        return res.status(400).json({ success: false, error: `Zu hohe Stornomenge für ${item.item_name}.` });
+      }
+      const lineTotal = cancelQty * Number(item.price || 0);
+      totalAmount += lineTotal;
+      lineItems.push({
+        item_id: item.id,
+        item_name: item.item_name,
+        item_number: item.item_number,
+        size: item.size,
+        color: item.color,
+        notes: item.notes,
+        price: Number(item.price || 0),
+        cancelled_quantity: cancelQty,
+        line_total: lineTotal
+      });
+    }
+
+    if (lineItems.length === 0) {
+      return res.status(400).json({ success: false, error: 'Keine gültigen Artikel zum Stornieren ausgewählt.' });
+    }
+
+    const countRow = db.prepare('SELECT COUNT(*) as count FROM order_cancellations WHERE order_id = ?').get(orderId) as any;
+    const sequence = Number(countRow?.count || 0) + 1;
+    const cancellationId = crypto.randomUUID();
+    const cancellationNumber = `${order.order_number}-ST${sequence}`;
+
+    const updateItemStmt = db.prepare(`
+      UPDATE order_items
+      SET cancelled_quantity = COALESCE(cancelled_quantity, 0) + ?, cancelled_by = ?, cancelled_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    const insertCancellationStmt = db.prepare(`
+      INSERT INTO order_cancellations (
+        id, order_id, cancellation_number, cancellation_date, cancellation_path, items_json, created_by, total_amount, created_at
+      ) VALUES (?, ?, ?, CURRENT_TIMESTAMP, NULL, ?, ?, ?, CURRENT_TIMESTAMP)
+    `);
+
+    const run = db.transaction(() => {
+      for (const line of lineItems) {
+        updateItemStmt.run(line.cancelled_quantity, cancelledBy, line.item_id);
+      }
+      insertCancellationStmt.run(
+        cancellationId,
+        orderId,
+        cancellationNumber,
+        JSON.stringify(lineItems),
+        cancelledBy,
+        totalAmount
+      );
+
+      const refreshedItems = db.prepare('SELECT quantity, COALESCE(cancelled_quantity, 0) as cancelled_quantity FROM order_items WHERE order_id = ?').all(orderId) as any[];
+      const allCancelled = refreshedItems.length > 0 && refreshedItems.every((item: any) => Number(item.cancelled_quantity || 0) >= Number(item.quantity || 0));
+      if (allCancelled) {
+        db.prepare('UPDATE orders SET status = ? WHERE id = ?').run('cancelled', orderId);
+      }
+    });
+    run();
+
+    const pdfPath = await generateCancellationInvoice(cancellationId);
+    if (!pdfPath) {
+      return res.status(500).json({ success: false, error: 'Storno erstellt, aber PDF konnte nicht erzeugt werden.' });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        cancellationId,
+        cancellationNumber,
+        downloadUrl: `/api/shop-customers/${shopId}/admin/orders/${orderId}/cancellations/${cancellationId}/pdf`
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.get('/:shopId/admin/orders/:orderId/cancellations/:cancellationId/pdf', async (req, res) => {
+  try {
+    const { orderId, cancellationId } = req.params;
+    let cancellation = db.prepare('SELECT * FROM order_cancellations WHERE id = ? AND order_id = ?').get(cancellationId, orderId) as any;
+    if (!cancellation) return res.status(404).json({ success: false, error: 'Stornorechnung nicht gefunden.' });
+
+    if (!cancellation.cancellation_path) {
+      const file = await generateCancellationInvoice(cancellationId);
+      if (!file) return res.status(500).json({ success: false, error: 'Stornorechnung konnte nicht erstellt werden.' });
+      cancellation = db.prepare('SELECT * FROM order_cancellations WHERE id = ?').get(cancellationId) as any;
+    }
+
+    const filePath = path.join(DATA_DIR, 'invoices', cancellation.cancellation_path);
+    if (!fs.existsSync(filePath)) {
+      const file = await generateCancellationInvoice(cancellationId);
+      if (!file) return res.status(500).json({ success: false, error: 'Stornorechnung konnte nicht erstellt werden.' });
+      cancellation = db.prepare('SELECT * FROM order_cancellations WHERE id = ?').get(cancellationId) as any;
+    }
+
+    res.download(path.join(DATA_DIR, 'invoices', cancellation.cancellation_path), `Storno_${cancellation.cancellation_number || cancellationId}.pdf`);
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -126,6 +126,18 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS order_cancellations (
+    id TEXT PRIMARY KEY,
+    order_id TEXT NOT NULL,
+    cancellation_number TEXT NOT NULL,
+    cancellation_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    cancellation_path TEXT,
+    items_json TEXT NOT NULL,
+    created_by TEXT,
+    total_amount DECIMAL(10, 2) DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
@@ -1259,8 +1271,36 @@ try {
           db.exec('ALTER TABLE order_items ADD COLUMN received_by TEXT');
           db.exec('ALTER TABLE order_items ADD COLUMN received_at DATETIME');
       }
+
+      const hasCancelledQuantity = orderItemCols.some(col => col.name === 'cancelled_quantity');
+      if (!hasCancelledQuantity) {
+          console.log('Migrating database: Adding cancellation columns to order_items table');
+          db.exec('ALTER TABLE order_items ADD COLUMN cancelled_quantity INTEGER DEFAULT 0');
+          db.exec('ALTER TABLE order_items ADD COLUMN cancelled_by TEXT');
+          db.exec('ALTER TABLE order_items ADD COLUMN cancelled_at DATETIME');
+      }
   } catch (e) {
       console.error('Migration error (order_items tracking):', e);
+  }
+
+  try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS order_cancellations (
+          id TEXT PRIMARY KEY,
+          order_id TEXT NOT NULL,
+          cancellation_number TEXT NOT NULL,
+          cancellation_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+          cancellation_path TEXT,
+          items_json TEXT NOT NULL,
+          created_by TEXT,
+          total_amount DECIMAL(10, 2) DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_order_cancellations_number_unique ON order_cancellations(cancellation_number)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_order_cancellations_order_id ON order_cancellations(order_id)");
+  } catch (e) {
+      console.error('Migration error (order_cancellations):', e);
   }
 
   // Migration: Add price_per_value to product_variables

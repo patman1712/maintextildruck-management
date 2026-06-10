@@ -67,6 +67,9 @@ const ShopDashboard: React.FC = () => {
   const [isImporting, setIsImporting] = useState<string | null>(null); // ID of product being imported
   const [isDuplicating, setIsDuplicating] = useState<string | null>(null);
   const [draggingCategory, setDraggingCategory] = useState<{ id: string; parentId: string | null } | null>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelSelections, setCancelSelections] = useState<Record<string, number>>({});
+  const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   
   const categoryFormRef = useRef<HTMLDivElement>(null);
 
@@ -556,6 +559,68 @@ const ShopDashboard: React.FC = () => {
         alert(data.error || 'Fehler beim Löschen der Bestellung.');
       }
     } catch (e) { console.error(e); }
+  };
+
+  const openCancelModal = () => {
+    if (!selectedOrder?.items?.length) return;
+    const initial: Record<string, number> = {};
+    selectedOrder.items.forEach((item: any) => {
+      const available = Math.max(0, Number(item.quantity || 0) - Number(item.cancelled_quantity || 0));
+      if (available > 0) initial[item.id] = 0;
+    });
+    setCancelSelections(initial);
+    setShowCancelModal(true);
+  };
+
+  const setCancelQuantity = (itemId: string, quantity: number) => {
+    const item = selectedOrder?.items?.find((row: any) => row.id === itemId);
+    if (!item) return;
+    const available = Math.max(0, Number(item.quantity || 0) - Number(item.cancelled_quantity || 0));
+    const next = Math.max(0, Math.min(available, Math.floor(Number(quantity) || 0)));
+    setCancelSelections(prev => ({ ...prev, [itemId]: next }));
+  };
+
+  const handleCreateCancellation = async () => {
+    if (!selectedOrder?.id) return;
+    const items = Object.entries(cancelSelections)
+      .filter(([, quantity]) => Number(quantity) > 0)
+      .map(([itemId, quantity]) => ({ itemId, quantity }));
+
+    if (items.length === 0) {
+      alert('Bitte mindestens einen Artikel zum Stornieren auswählen.');
+      return;
+    }
+
+    setIsCancellingOrder(true);
+    try {
+      const cancelledBy = currentUser?.name || currentUser?.username || 'Unbekannt';
+      const res = await fetch(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, cancelledBy })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || 'Storno fehlgeschlagen.');
+        return;
+      }
+
+      await fetchShopOrders();
+      const detailsRes = await fetch(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}`);
+      const detailsData = await detailsRes.json();
+      if (detailsData.success) setSelectedOrder(detailsData.data);
+      setShowCancelModal(false);
+      setCancelSelections({});
+
+      if (data.data?.downloadUrl) {
+        window.open(data.data.downloadUrl, '_blank');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Storno fehlgeschlagen.');
+    } finally {
+      setIsCancellingOrder(false);
+    }
   };
 
   const handleCreateShippingLabel = async (order: any) => {
@@ -2392,13 +2457,18 @@ const ShopDashboard: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-200/50">
                                 {selectedOrder.items?.map((item: any) => (
-                                    <tr key={item.id}>
+                                    <tr key={item.id} className={Number(item.cancelled_quantity || 0) >= Number(item.quantity || 0) ? 'bg-red-50/60' : ''}>
                                         <td className="px-6 py-4">
                                             <div className="font-bold text-slate-800">{item.item_name}</div>
                                             <div className="flex gap-2 mt-1 flex-wrap">
                                                 {item.size && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Größe: {item.size}</span>}
                                                 {/* Only show color if it's different from size */}
                                                 {item.color && item.color !== item.size && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Farbe: {item.color}</span>}
+                                                {Number(item.cancelled_quantity || 0) > 0 && (
+                                                    <span className="text-[9px] bg-red-100 border border-red-200 px-1.5 py-0.5 rounded font-bold uppercase text-red-600">
+                                                        Storniert: {item.cancelled_quantity}
+                                                    </span>
+                                                )}
                                             </div>
                                             {item.notes && <div className="text-[10px] text-blue-600 font-medium mt-1 italic">Personalisierung: {formatPersonalization(item.notes)}</div>}
                                         </td>
@@ -2410,6 +2480,33 @@ const ShopDashboard: React.FC = () => {
                             </tbody>
                         </table>
                     </div>
+
+                    {!!selectedOrder.cancellations?.length && (
+                        <div className="mt-8">
+                            <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2 mb-4">Stornorechnungen</h4>
+                            <div className="space-y-2">
+                                {selectedOrder.cancellations.map((cancellation: any) => (
+                                    <div key={cancellation.id} className="flex items-center justify-between bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+                                        <div>
+                                            <div className="font-bold text-red-800">{cancellation.cancellation_number}</div>
+                                            <div className="text-xs text-red-600">
+                                                {new Date(cancellation.cancellation_date || cancellation.created_at).toLocaleString('de-DE')}
+                                                {cancellation.created_by ? ` · ${cancellation.created_by}` : ''}
+                                                {Number(cancellation.total_amount || 0) > 0 ? ` · ${Number(cancellation.total_amount).toFixed(2).replace('.', ',')} €` : ''}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => window.open(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}/cancellations/${cancellation.id}/pdf`, '_blank')}
+                                            className="px-4 py-2 bg-white border border-red-200 text-red-700 rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-red-50 transition-colors flex items-center"
+                                        >
+                                            <FileText size={14} className="mr-2" />
+                                            PDF
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
                 
                 <div className="p-6 bg-slate-50 border-t flex justify-end items-center">
@@ -2447,8 +2544,82 @@ const ShopDashboard: React.FC = () => {
                         <FileText size={16} className="mr-2" />
                         Rechnung
                     </button>
+                    <button
+                        onClick={openCancelModal}
+                        className="mr-2 px-6 py-3 bg-red-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-red-700 transition-all"
+                    >
+                        Storno
+                    </button>
                     <button onClick={() => setSelectedOrder(null)} className="px-8 py-3 bg-slate-800 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-700 transition-all">
                         Schließen
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {showCancelModal && selectedOrder && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+                <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                    <div>
+                        <h3 className="font-black text-lg text-slate-900">Artikel stornieren</h3>
+                        <p className="text-sm text-slate-500">Wählen Sie die Positionen und Mengen aus, die storniert werden sollen.</p>
+                    </div>
+                    <button onClick={() => setShowCancelModal(false)} className="p-2 hover:bg-slate-100 rounded-full">
+                        <X size={20} className="text-slate-400" />
+                    </button>
+                </div>
+                <div className="p-6 overflow-y-auto space-y-3">
+                    {selectedOrder.items?.map((item: any) => {
+                        const available = Math.max(0, Number(item.quantity || 0) - Number(item.cancelled_quantity || 0));
+                        const selectedQty = Number(cancelSelections[item.id] || 0);
+                        const disabled = available <= 0;
+                        return (
+                            <div key={item.id} className={`border rounded-xl p-4 ${disabled ? 'bg-slate-50 border-slate-100 opacity-70' : 'bg-white border-slate-200'}`}>
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="min-w-0">
+                                        <div className="font-bold text-slate-800">{item.item_name}</div>
+                                        <div className="flex gap-2 mt-1 flex-wrap">
+                                            {item.size && <span className="text-[10px] bg-slate-100 px-2 py-1 rounded font-bold uppercase text-slate-600">Größe: {item.size}</span>}
+                                            {item.color && item.color !== item.size && <span className="text-[10px] bg-slate-100 px-2 py-1 rounded font-bold uppercase text-slate-600">Farbe: {item.color}</span>}
+                                            <span className="text-[10px] bg-slate-100 px-2 py-1 rounded font-bold uppercase text-slate-600">Bestellt: {item.quantity}</span>
+                                            {Number(item.cancelled_quantity || 0) > 0 && <span className="text-[10px] bg-red-100 px-2 py-1 rounded font-bold uppercase text-red-600">Schon storniert: {item.cancelled_quantity}</span>}
+                                            <span className="text-[10px] bg-emerald-100 px-2 py-1 rounded font-bold uppercase text-emerald-700">Verfügbar: {available}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedQty > 0}
+                                            disabled={disabled}
+                                            onChange={(e) => setCancelQuantity(item.id, e.target.checked ? Math.max(1, Math.min(available, 1)) : 0)}
+                                        />
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={available}
+                                            disabled={disabled}
+                                            value={selectedQty}
+                                            onChange={(e) => setCancelQuantity(item.id, Number(e.target.value))}
+                                            className="w-24 border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-3">
+                    <button onClick={() => setShowCancelModal(false)} className="px-5 py-3 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-50 transition-all">
+                        Abbrechen
+                    </button>
+                    <button
+                        onClick={handleCreateCancellation}
+                        disabled={isCancellingOrder}
+                        className="px-5 py-3 bg-red-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-red-700 transition-all disabled:opacity-60"
+                    >
+                        {isCancellingOrder ? 'Erstelle Storno...' : 'Storno erstellen'}
                     </button>
                 </div>
             </div>
