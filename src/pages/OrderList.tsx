@@ -385,70 +385,6 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
     }
   };
 
-  const InvoiceMetaModal = () => {
-    if (!invoiceMetaModal) return null;
-    return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !invoiceMetaSaving && setInvoiceMetaModal(null)}>
-        <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 relative" onClick={e => e.stopPropagation()}>
-          <button
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
-            onClick={() => !invoiceMetaSaving && setInvoiceMetaModal(null)}
-          >
-            <X size={20} />
-          </button>
-          <h3 className="text-lg font-bold text-gray-900 mb-2">Rechnungsinfo erfassen</h3>
-          <p className="text-sm text-gray-500 mb-5">
-            Bitte Rechnungsnummer oder Notiz eintragen. Ohne diese Angabe kann der Auftrag nicht auf Rechnung abgeschlossen werden.
-          </p>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Rechnungsnummer</label>
-              <input
-                type="text"
-                inputMode="text"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                value={invoiceMetaModal.invoiceReference}
-                onChange={(e) => setInvoiceMetaModal((prev) => prev ? { ...prev, invoiceReference: e.target.value } : prev)}
-                placeholder="z.B. RE-2026-00123"
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Notiz</label>
-              <textarea
-                value={invoiceMetaModal.note}
-                onChange={(e) => setInvoiceMetaModal((prev) => prev ? { ...prev, note: e.target.value } : prev)}
-                placeholder="z.B. manuell verrechnet, Sammelrechnung, externes System..."
-                rows={4}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 mt-6">
-            <button
-              onClick={() => setInvoiceMetaModal(null)}
-              disabled={invoiceMetaSaving}
-              className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-            >
-              Abbrechen
-            </button>
-            <button
-              onClick={saveInvoiceMeta}
-              disabled={invoiceMetaSaving}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
-            >
-              {invoiceMetaSaving ? 'Speichert...' : (invoiceMetaModal.order.steps?.invoiced ? 'Speichern' : 'Auftrag abschließen')}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Aufträge...</div>;
 
   const effectiveStatusFilter = filter || statusFilter;
@@ -902,7 +838,66 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
 
       {statusUpdateModal && <StatusModal />}
       {importSingleModal && <ImportSingleModal />}
-      {invoiceMetaModal && <InvoiceMetaModal />}
+      {invoiceMetaModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !invoiceMetaSaving && setInvoiceMetaModal(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 relative" onClick={e => e.stopPropagation()}>
+            <button
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+              onClick={() => !invoiceMetaSaving && setInvoiceMetaModal(null)}
+            >
+              <X size={20} />
+            </button>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Rechnungsinfo erfassen</h3>
+            <p className="text-sm text-gray-500 mb-5">
+              Bitte Rechnungsnummer oder Notiz eintragen. Ohne diese Angabe kann der Auftrag nicht auf Rechnung abgeschlossen werden.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rechnungsnummer</label>
+                <input
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  value={invoiceMetaModal.invoiceReference}
+                  onChange={(e) => setInvoiceMetaModal((prev) => prev ? { ...prev, invoiceReference: e.target.value } : prev)}
+                  placeholder="z.B. RE-2026-00123"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notiz</label>
+                <textarea
+                  value={invoiceMetaModal.note}
+                  onChange={(e) => setInvoiceMetaModal((prev) => prev ? { ...prev, note: e.target.value } : prev)}
+                  placeholder="z.B. manuell verrechnet, Sammelrechnung, externes System..."
+                  rows={4}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setInvoiceMetaModal(null)}
+                disabled={invoiceMetaSaving}
+                className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={saveInvoiceMeta}
+                disabled={invoiceMetaSaving}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                {invoiceMetaSaving ? 'Speichert...' : (invoiceMetaModal.order.steps?.invoiced ? 'Speichern' : 'Auftrag abschließen')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
