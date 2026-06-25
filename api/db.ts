@@ -56,6 +56,8 @@ db.exec(`
     invoiced INTEGER DEFAULT 0,
     invoiced_at DATETIME,
     invoiced_by TEXT,
+    manual_invoice_reference TEXT,
+    manual_invoice_note TEXT,
     steps TEXT,     -- stored as JSON string { processing: boolean, produced: boolean, invoiced: boolean }
     print_status TEXT DEFAULT 'pending', -- pending, ordered
     description TEXT,
@@ -686,6 +688,18 @@ try {
   if (!hasInvoicedBy) {
     console.log('Migrating database: Adding invoiced_by to orders table');
     db.exec('ALTER TABLE orders ADD COLUMN invoiced_by TEXT');
+  }
+
+  const hasManualInvoiceReference = columns.some(col => col.name === 'manual_invoice_reference');
+  if (!hasManualInvoiceReference) {
+    console.log('Migrating database: Adding manual_invoice_reference to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN manual_invoice_reference TEXT');
+  }
+
+  const hasManualInvoiceNote = columns.some(col => col.name === 'manual_invoice_note');
+  if (!hasManualInvoiceNote) {
+    console.log('Migrating database: Adding manual_invoice_note to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN manual_invoice_note TEXT');
   }
 
   const hasDeletedAt = columns.some(col => col.name === 'deleted_at');

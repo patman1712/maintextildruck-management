@@ -261,6 +261,8 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (updates.invoiced !== undefined) { fields.push('invoiced = ?'); values.push(updates.invoiced ? 1 : 0); }
   if (updates.invoiced_at !== undefined) { fields.push('invoiced_at = ?'); values.push(updates.invoiced_at); }
   if (updates.invoiced_by !== undefined) { fields.push('invoiced_by = ?'); values.push(updates.invoiced_by); }
+  if (updates.manual_invoice_reference !== undefined) { fields.push('manual_invoice_reference = ?'); values.push(updates.manual_invoice_reference); }
+  if (updates.manual_invoice_note !== undefined) { fields.push('manual_invoice_note = ?'); values.push(updates.manual_invoice_note); }
   if (updates.print_status !== undefined) { fields.push('print_status = ?'); values.push(updates.print_status); }
   if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
   if (updates.employees !== undefined) { fields.push('employees = ?'); values.push(JSON.stringify(updates.employees)); }

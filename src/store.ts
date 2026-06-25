@@ -96,6 +96,8 @@ export interface Order {
   shippedAt?: string;
   invoicedAt?: string;
   invoicedBy?: string;
+  manualInvoiceReference?: string;
+  manualInvoiceNote?: string;
   deletedAt?: string | null;
   deletedBy?: string | null;
 }
@@ -372,6 +374,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         shippedAt: o.shipped_at,
         invoicedAt: o.invoicedAt || o.invoiced_at,
         invoicedBy: o.invoicedBy || o.invoiced_by,
+        manualInvoiceReference: o.manualInvoiceReference ?? o.manual_invoice_reference,
+        manualInvoiceNote: o.manualInvoiceNote ?? o.manual_invoice_note,
         deletedAt: o.deletedAt ?? o.deleted_at ?? null,
         deletedBy: o.deletedBy ?? o.deleted_by ?? null,
         orderItems: (itemsByOrderId[o.id] || []).map((i: any) => ({
@@ -673,6 +677,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (updatedOrder.files !== undefined) updatePayload.files = updatedOrder.files;
       if (updatedOrder.invoicedAt !== undefined) updatePayload.invoiced_at = updatedOrder.invoicedAt;
       if (updatedOrder.invoicedBy !== undefined) updatePayload.invoiced_by = updatedOrder.invoicedBy;
+      if (updatedOrder.manualInvoiceReference !== undefined) updatePayload.manual_invoice_reference = updatedOrder.manualInvoiceReference;
+      if (updatedOrder.manualInvoiceNote !== undefined) updatePayload.manual_invoice_note = updatedOrder.manualInvoiceNote;
       if (updatedOrder.steps) {
         if (updatedOrder.steps.processing !== undefined) updatePayload.processing = updatedOrder.steps.processing;
         if (updatedOrder.steps.produced !== undefined) updatePayload.produced = updatedOrder.steps.produced;

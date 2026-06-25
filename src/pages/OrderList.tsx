@@ -43,6 +43,8 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
   const [importSingleModal, setImportSingleModal] = useState(false);
   const [importOrderNumber, setImportOrderNumber] = useState("");
   const [importLoading, setImportLoading] = useState(false);
+  const [invoiceMetaModal, setInvoiceMetaModal] = useState<{ order: Order; invoiceReference: string; note: string } | null>(null);
+  const [invoiceMetaSaving, setInvoiceMetaSaving] = useState(false);
 
   const handleShopwareSync = async () => {
     if (!confirm('Möchten Sie jetzt Bestellungen aus Shopware abrufen? Nur bezahlte und offene Bestellungen werden importiert.')) return;
@@ -325,6 +327,124 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
     }
   };
 
+  const openInvoiceMetaModal = (order: Order) => {
+    setInvoiceMetaModal({
+      order,
+      invoiceReference: order.manualInvoiceReference || "",
+      note: order.manualInvoiceNote || ""
+    });
+  };
+
+  const handleInvoiceStepClick = async (order: Order) => {
+    if (order.steps?.invoiced) {
+      await toggleOrderStep(order.id, 'invoiced');
+      return;
+    }
+    openInvoiceMetaModal(order);
+  };
+
+  const saveInvoiceMeta = async () => {
+    if (!invoiceMetaModal) return;
+    const reference = invoiceMetaModal.invoiceReference.trim();
+    const note = invoiceMetaModal.note.trim();
+    if (!reference && !note) {
+      alert('Bitte Rechnungsnummer oder Notiz eintragen.');
+      return;
+    }
+
+    const order = invoiceMetaModal.order;
+    const nowIso = order.invoicedAt || new Date().toISOString();
+    const who = order.invoicedBy || currentUser?.name || currentUser?.username || 'Unbekannt';
+    const nextSteps = order.steps?.invoiced ? order.steps : { ...order.steps, invoiced: true };
+
+    let nextStatus = order.status;
+    if (!order.steps?.invoiced) {
+      if (nextSteps.processing && nextSteps.produced && nextSteps.invoiced) {
+        nextStatus = 'completed';
+      } else if (order.status === 'completed') {
+        nextStatus = 'active';
+      }
+    }
+
+    setInvoiceMetaSaving(true);
+    try {
+      await updateOrder(order.id, {
+        steps: nextSteps,
+        status: nextStatus,
+        invoicedAt: nowIso,
+        invoicedBy: who,
+        manualInvoiceReference: reference,
+        manualInvoiceNote: note
+      });
+      await fetchData();
+      setInvoiceMetaModal(null);
+    } catch (error: any) {
+      alert(error?.message || 'Rechnungsinfo konnte nicht gespeichert werden.');
+    } finally {
+      setInvoiceMetaSaving(false);
+    }
+  };
+
+  const InvoiceMetaModal = () => {
+    if (!invoiceMetaModal) return null;
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !invoiceMetaSaving && setInvoiceMetaModal(null)}>
+        <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 relative" onClick={e => e.stopPropagation()}>
+          <button
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            onClick={() => !invoiceMetaSaving && setInvoiceMetaModal(null)}
+          >
+            <X size={20} />
+          </button>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">Rechnungsinfo erfassen</h3>
+          <p className="text-sm text-gray-500 mb-5">
+            Bitte Rechnungsnummer oder Notiz eintragen. Ohne diese Angabe kann der Auftrag nicht auf Rechnung abgeschlossen werden.
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Rechnungsnummer</label>
+              <input
+                type="text"
+                value={invoiceMetaModal.invoiceReference}
+                onChange={(e) => setInvoiceMetaModal((prev) => prev ? { ...prev, invoiceReference: e.target.value } : prev)}
+                placeholder="z.B. RE-2026-00123"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notiz</label>
+              <textarea
+                value={invoiceMetaModal.note}
+                onChange={(e) => setInvoiceMetaModal((prev) => prev ? { ...prev, note: e.target.value } : prev)}
+                placeholder="z.B. manuell verrechnet, Sammelrechnung, externes System..."
+                rows={4}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-red-500 focus:border-red-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-6">
+            <button
+              onClick={() => setInvoiceMetaModal(null)}
+              disabled={invoiceMetaSaving}
+              className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Abbrechen
+            </button>
+            <button
+              onClick={saveInvoiceMeta}
+              disabled={invoiceMetaSaving}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+            >
+              {invoiceMetaSaving ? 'Speichert...' : (invoiceMetaModal.order.steps?.invoiced ? 'Speichern' : 'Auftrag abschließen')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) return <div className="p-8 text-center text-gray-500">Lade Aufträge...</div>;
 
   const effectiveStatusFilter = filter || statusFilter;
@@ -518,7 +638,7 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                       </div>
                     </td>
                     {showInvoiceMeta && (
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4">
                         {order.invoicedAt ? (
                           <div className="flex flex-col">
                             <div className="text-sm text-gray-700">
@@ -527,6 +647,16 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                             <div className="text-xs text-gray-500">
                               {order.invoicedBy || '—'}
                             </div>
+                            {order.manualInvoiceReference && (
+                              <div className="text-xs text-gray-700 mt-1">
+                                Re-Nr.: {order.manualInvoiceReference}
+                              </div>
+                            )}
+                            {order.manualInvoiceNote && (
+                              <div className="text-xs text-gray-500 mt-1 whitespace-pre-wrap break-words max-w-xs">
+                                {order.manualInvoiceNote}
+                              </div>
+                            )}
                           </div>
                         ) : order.steps?.invoiced ? (
                           <div className="flex flex-col gap-1">
@@ -534,10 +664,7 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                             <button
                               onClick={async (e) => {
                                 e.stopPropagation();
-                                const now = new Date().toISOString();
-                                const who = currentUser?.name || currentUser?.username || 'Unbekannt';
-                                await updateOrder(order.id, { invoicedAt: now, invoicedBy: who });
-                                fetchData();
+                                openInvoiceMetaModal(order);
                               }}
                               className="text-xs text-blue-600 hover:text-blue-800"
                             >
@@ -600,7 +727,7 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                          />
                          <StepButton 
                            active={order.steps?.invoiced} 
-                           onClick={() => toggleOrderStep(order.id, 'invoiced')} 
+                           onClick={() => handleInvoiceStepClick(order)} 
                            icon={FileText} 
                            label="Rech." 
                            colorClass="bg-green-500 hover:bg-green-600"
@@ -771,6 +898,7 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
 
       {statusUpdateModal && <StatusModal />}
       {importSingleModal && <ImportSingleModal />}
+      {invoiceMetaModal && <InvoiceMetaModal />}
     </div>
   );
 }
