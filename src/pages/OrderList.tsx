@@ -406,6 +406,10 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
               <label className="block text-sm font-medium text-gray-700 mb-1">Rechnungsnummer</label>
               <input
                 type="text"
+                inputMode="text"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 value={invoiceMetaModal.invoiceReference}
                 onChange={(e) => setInvoiceMetaModal((prev) => prev ? { ...prev, invoiceReference: e.target.value } : prev)}
                 placeholder="z.B. RE-2026-00123"
