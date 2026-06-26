@@ -43,6 +43,8 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
   const [importSingleModal, setImportSingleModal] = useState(false);
   const [importOrderNumber, setImportOrderNumber] = useState("");
   const [importLoading, setImportLoading] = useState(false);
+  const [productionModal, setProductionModal] = useState<{ order: Order; selection: 'complete' | 'partial' } | null>(null);
+  const [productionSaving, setProductionSaving] = useState(false);
   const [invoiceMetaModal, setInvoiceMetaModal] = useState<{ order: Order; invoiceReference: string; note: string } | null>(null);
   const [invoiceMetaSaving, setInvoiceMetaSaving] = useState(false);
 
@@ -324,6 +326,90 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
     } catch (err: any) {
       console.error(err);
       alert("Netzwerkfehler: " + err.message);
+    }
+  };
+
+  const getProductionStatusLabel = (status?: Order['productionStatus'] | null, produced?: boolean) => {
+    if (status === 'complete') return 'Vollständig produziert';
+    if (status === 'partial') return 'Teilweise produziert';
+    if (produced) return 'Produziert';
+    return null;
+  };
+
+  const getProductionStatusClass = (status?: Order['productionStatus'] | null, produced?: boolean) => {
+    if (status === 'complete') return 'bg-purple-100 text-purple-800 border-purple-200';
+    if (status === 'partial') return 'bg-amber-100 text-amber-800 border-amber-200';
+    if (produced) return 'bg-gray-100 text-gray-700 border-gray-200';
+    return '';
+  };
+
+  const openProductionModal = (order: Order) => {
+    setProductionModal({
+      order,
+      selection: order.productionStatus === 'partial' ? 'partial' : 'complete'
+    });
+  };
+
+  const handleProducedStepClick = async (order: Order) => {
+    openProductionModal(order);
+  };
+
+  const saveProductionStatus = async () => {
+    if (!productionModal) return;
+
+    const order = productionModal.order;
+    const nextSteps = order.steps?.produced ? order.steps : { ...order.steps, produced: true };
+
+    let nextStatus = order.status;
+    if (!order.steps?.produced) {
+      if (nextSteps.processing && nextSteps.produced && nextSteps.invoiced) {
+        nextStatus = 'completed';
+      } else if (order.status === 'completed') {
+        nextStatus = 'active';
+      }
+    }
+
+    setProductionSaving(true);
+    try {
+      await updateOrder(order.id, {
+        steps: nextSteps,
+        status: nextStatus,
+        productionStatus: productionModal.selection
+      });
+      await fetchData();
+      setProductionModal(null);
+    } catch (error: any) {
+      alert(error?.message || 'Produktionsstatus konnte nicht gespeichert werden.');
+    } finally {
+      setProductionSaving(false);
+    }
+  };
+
+  const clearProductionStatus = async () => {
+    if (!productionModal) return;
+
+    const order = productionModal.order;
+    const nextSteps = { ...order.steps, produced: false };
+    let nextStatus = order.status;
+    if (nextSteps.processing && nextSteps.produced && nextSteps.invoiced) {
+      nextStatus = 'completed';
+    } else if (order.status === 'completed') {
+      nextStatus = 'active';
+    }
+
+    setProductionSaving(true);
+    try {
+      await updateOrder(order.id, {
+        steps: nextSteps,
+        status: nextStatus,
+        productionStatus: null
+      });
+      await fetchData();
+      setProductionModal(null);
+    } catch (error: any) {
+      alert(error?.message || 'Produktionsstatus konnte nicht zurückgesetzt werden.');
+    } finally {
+      setProductionSaving(false);
     }
   };
 
@@ -650,7 +736,8 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex space-x-2">
+                      <div className="flex flex-col items-start gap-2">
+                        <div className="flex space-x-2">
                          <StepButton 
                            active={order.steps?.processing} 
                            onClick={() => toggleOrderStep(order.id, 'processing')} 
@@ -660,7 +747,7 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                          />
                          <StepButton 
                            active={order.steps?.produced} 
-                           onClick={() => toggleOrderStep(order.id, 'produced')} 
+                           onClick={() => handleProducedStepClick(order)} 
                            icon={CheckCircle} 
                            label="Prod." 
                            colorClass="bg-purple-500 hover:bg-purple-600"
@@ -672,6 +759,14 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                            label="Rech." 
                            colorClass="bg-green-500 hover:bg-green-600"
                          />
+                        </div>
+                        {getProductionStatusLabel(order.productionStatus, order.steps?.produced) && (
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getProductionStatusClass(order.productionStatus, order.steps?.produced)}`}
+                          >
+                            {getProductionStatusLabel(order.productionStatus, order.steps?.produced)}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -838,6 +933,74 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
 
       {statusUpdateModal && <StatusModal />}
       {importSingleModal && <ImportSingleModal />}
+      {productionModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !productionSaving && setProductionModal(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 relative" onClick={e => e.stopPropagation()}>
+            <button
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+              onClick={() => !productionSaving && setProductionModal(null)}
+            >
+              <X size={20} />
+            </button>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Produktionsstatus festlegen</h3>
+            <p className="text-sm text-gray-500 mb-5">
+              Bitte angeben, ob der Auftrag bereits vollst&auml;ndig produziert ist oder nur teilweise.
+            </p>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => setProductionModal((prev) => prev ? { ...prev, selection: 'complete' } : prev)}
+                className={`w-full text-left border rounded-lg p-4 transition-colors ${
+                  productionModal.selection === 'complete'
+                    ? 'border-purple-500 bg-purple-50 text-purple-900'
+                    : 'border-gray-200 hover:border-purple-300 hover:bg-gray-50'
+                }`}
+              >
+                <div className="font-semibold">Vollst&auml;ndig produziert</div>
+                <div className="text-sm text-gray-500">Der Auftrag ist komplett produziert und kann so gekennzeichnet werden.</div>
+              </button>
+
+              <button
+                onClick={() => setProductionModal((prev) => prev ? { ...prev, selection: 'partial' } : prev)}
+                className={`w-full text-left border rounded-lg p-4 transition-colors ${
+                  productionModal.selection === 'partial'
+                    ? 'border-amber-500 bg-amber-50 text-amber-900'
+                    : 'border-gray-200 hover:border-amber-300 hover:bg-gray-50'
+                }`}
+              >
+                <div className="font-semibold">Teilweise produziert</div>
+                <div className="text-sm text-gray-500">Es wurde nur ein Teil produziert. Der Unterschied wird separat in der Liste angezeigt.</div>
+              </button>
+            </div>
+
+            <div className="flex justify-between gap-3 mt-6">
+              <button
+                onClick={clearProductionStatus}
+                disabled={productionSaving || !productionModal.order.steps?.produced}
+                className="px-4 py-2 border border-red-200 text-red-600 rounded hover:bg-red-50 disabled:opacity-50"
+              >
+                Produktion zur&uuml;cksetzen
+              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setProductionModal(null)}
+                  disabled={productionSaving}
+                  className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  onClick={saveProductionStatus}
+                  disabled={productionSaving}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                >
+                  {productionSaving ? 'Speichert...' : (productionModal.order.steps?.produced ? 'Aktualisieren' : 'Speichern')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {invoiceMetaModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !invoiceMetaSaving && setInvoiceMetaModal(null)}>
           <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 relative" onClick={e => e.stopPropagation()}>

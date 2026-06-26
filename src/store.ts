@@ -96,6 +96,7 @@ export interface Order {
   shippedAt?: string;
   invoicedAt?: string;
   invoicedBy?: string;
+  productionStatus?: 'complete' | 'partial' | null;
   manualInvoiceReference?: string;
   manualInvoiceNote?: string;
   deletedAt?: string | null;
@@ -374,6 +375,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         shippedAt: o.shipped_at,
         invoicedAt: o.invoicedAt || o.invoiced_at,
         invoicedBy: o.invoicedBy || o.invoiced_by,
+        productionStatus: o.productionStatus ?? o.production_status ?? null,
         manualInvoiceReference: o.manualInvoiceReference ?? o.manual_invoice_reference,
         manualInvoiceNote: o.manualInvoiceNote ?? o.manual_invoice_note,
         deletedAt: o.deletedAt ?? o.deleted_at ?? null,
@@ -479,6 +481,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         status: order.status,
         processing: order.steps.processing,
         produced: order.steps.produced,
+        production_status: order.productionStatus ?? null,
         invoiced: order.steps.invoiced,
         print_status: order.printStatus,
         description: order.description,
@@ -677,6 +680,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (updatedOrder.files !== undefined) updatePayload.files = updatedOrder.files;
       if (updatedOrder.invoicedAt !== undefined) updatePayload.invoiced_at = updatedOrder.invoicedAt;
       if (updatedOrder.invoicedBy !== undefined) updatePayload.invoiced_by = updatedOrder.invoicedBy;
+      if (updatedOrder.productionStatus !== undefined) updatePayload.production_status = updatedOrder.productionStatus;
       if (updatedOrder.manualInvoiceReference !== undefined) updatePayload.manual_invoice_reference = updatedOrder.manualInvoiceReference;
       if (updatedOrder.manualInvoiceNote !== undefined) updatePayload.manual_invoice_note = updatedOrder.manualInvoiceNote;
       if (updatedOrder.steps) {
@@ -1007,6 +1011,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const who = state.currentUser?.name || state.currentUser?.username || 'Unbekannt';
     const nextInvoicedAt = step === 'invoiced' ? (newSteps.invoiced ? nowIso : undefined) : order.invoicedAt;
     const nextInvoicedBy = step === 'invoiced' ? (newSteps.invoiced ? who : undefined) : order.invoicedBy;
+    const nextProductionStatus = step === 'produced' && !newSteps.produced ? null : order.productionStatus;
     
     let newStatus = order.status;
     if (newSteps.processing && newSteps.produced && newSteps.invoiced) {
@@ -1016,7 +1021,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     set((state) => ({
-      orders: state.orders.map((o) => (o.id === id ? { ...o, steps: newSteps, status: newStatus, invoicedAt: nextInvoicedAt, invoicedBy: nextInvoicedBy } : o))
+      orders: state.orders.map((o) => (o.id === id ? { ...o, steps: newSteps, status: newStatus, invoicedAt: nextInvoicedAt, invoicedBy: nextInvoicedBy, productionStatus: nextProductionStatus } : o))
     }));
 
     try {
@@ -1027,6 +1032,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         invoiced: newSteps.invoiced,
         status: newStatus
       };
+      if (step === 'produced' && !newSteps.produced) {
+        body.production_status = null;
+      }
       if (step === 'invoiced') {
         body.invoiced_at = newSteps.invoiced ? nowIso : null;
         body.invoiced_by = newSteps.invoiced ? who : null;

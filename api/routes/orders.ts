@@ -35,6 +35,7 @@ router.get('/', (req: Request, res: Response) => {
     status: row.status,
     processing: !!row.processing,
     produced: !!row.produced,
+    productionStatus: row.production_status,
     invoiced: !!row.invoiced,
     invoicedAt: row.invoiced_at,
     invoicedBy: row.invoiced_by,
@@ -159,7 +160,7 @@ router.post('/:id/regenerate-invoice', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   const { 
     id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person, 
-    deadline, status, processing, produced, invoiced, print_status, description, employees, files, shop_id 
+    deadline, status, processing, produced, production_status, invoiced, print_status, description, employees, files, shop_id 
   } = req.body;
 
   console.log('Received order payload:', req.body);
@@ -168,14 +169,14 @@ router.post('/', async (req: Request, res: Response) => {
     const stmt = db.prepare(`
       INSERT INTO orders (
         id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person,
-        deadline, status, processing, produced, invoiced, print_status, description, employees, files, shop_id
+        deadline, status, processing, produced, production_status, invoiced, print_status, description, employees, files, shop_id
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
       id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person,
-      deadline, status, processing ? 1 : 0, produced ? 1 : 0, invoiced ? 1 : 0, 
+      deadline, status, processing ? 1 : 0, produced ? 1 : 0, production_status || null, invoiced ? 1 : 0, 
       print_status || 'pending',
       description, JSON.stringify(employees || []), JSON.stringify(files || []), shop_id
     );
@@ -258,6 +259,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
   if (updates.processing !== undefined) { fields.push('processing = ?'); values.push(updates.processing ? 1 : 0); }
   if (updates.produced !== undefined) { fields.push('produced = ?'); values.push(updates.produced ? 1 : 0); }
+  if (updates.production_status !== undefined) { fields.push('production_status = ?'); values.push(updates.production_status); }
   if (updates.invoiced !== undefined) { fields.push('invoiced = ?'); values.push(updates.invoiced ? 1 : 0); }
   if (updates.invoiced_at !== undefined) { fields.push('invoiced_at = ?'); values.push(updates.invoiced_at); }
   if (updates.invoiced_by !== undefined) { fields.push('invoiced_by = ?'); values.push(updates.invoiced_by); }

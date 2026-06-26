@@ -53,6 +53,7 @@ db.exec(`
     order_number TEXT, -- Format: YYYY-XXXX
     processing INTEGER DEFAULT 0,
     produced INTEGER DEFAULT 0,
+    production_status TEXT,
     invoiced INTEGER DEFAULT 0,
     invoiced_at DATETIME,
     invoiced_by TEXT,
@@ -700,6 +701,12 @@ try {
   if (!hasManualInvoiceNote) {
     console.log('Migrating database: Adding manual_invoice_note to orders table');
     db.exec('ALTER TABLE orders ADD COLUMN manual_invoice_note TEXT');
+  }
+
+  const hasProductionStatus = columns.some(col => col.name === 'production_status');
+  if (!hasProductionStatus) {
+    console.log('Migrating database: Adding production_status to orders table');
+    db.exec('ALTER TABLE orders ADD COLUMN production_status TEXT');
   }
 
   const hasDeletedAt = columns.some(col => col.name === 'deleted_at');
