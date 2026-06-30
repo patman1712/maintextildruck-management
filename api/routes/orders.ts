@@ -39,6 +39,8 @@ router.get('/', (req: Request, res: Response) => {
     invoiced: !!row.invoiced,
     invoicedAt: row.invoiced_at,
     invoicedBy: row.invoiced_by,
+    manualInvoiceReference: row.manual_invoice_reference,
+    manualInvoiceNote: row.manual_invoice_note,
     deletedAt: row.deleted_at,
     deletedBy: row.deleted_by,
     printStatus: row.print_status,
