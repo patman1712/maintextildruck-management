@@ -85,6 +85,120 @@ router.delete('/:customerId/files/:fileId', (req: Request, res: Response) => {
   }
 });
 
+// ============= CUSTOMER PHOTOS (Produktfotos Galerie) =============
+// GET all customer photos
+router.get('/:id/photos', (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const photos = db.prepare('SELECT * FROM customer_photos WHERE customer_id = ? ORDER BY created_at DESC').all(id);
+    res.json({ success: true, data: photos });
+  } catch (error: any) {
+    console.error('Error fetching customer photos:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST new customer photo
+router.post('/:id/photos', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { id: photoId, file_url, file_name, thumbnail_url, note } = req.body;
+  
+  if (!file_url) {
+    return res.status(400).json({ success: false, error: 'file_url is required' });
+  }
+
+  try {
+    const newId = photoId || Math.random().toString(36).substr(2, 9);
+    const stmt = db.prepare(`
+      INSERT INTO customer_photos (id, customer_id, file_url, file_name, thumbnail_url, note)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(newId, id, file_url, file_name || null, thumbnail_url || null, note || null);
+    const photo = db.prepare('SELECT * FROM customer_photos WHERE id = ?').get(newId);
+    res.json({ success: true, data: photo });
+  } catch (error: any) {
+    console.error('Error creating customer photo:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// PUT update customer photo (note / metadata)
+router.put('/photos/:photoId', (req: Request, res: Response) => {
+  const { photoId } = req.params;
+  const { note, file_name } = req.body;
+
+  try {
+    const existing = db.prepare('SELECT * FROM customer_photos WHERE id = ?').get(photoId) as any;
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Photo not found' });
+    }
+
+    const fields = [];
+    const values = [];
+    if (note !== undefined) { fields.push('note = ?'); values.push(note); }
+    if (file_name !== undefined) { fields.push('file_name = ?'); values.push(file_name); }
+
+    if (fields.length === 0) {
+      return res.json({ success: true, data: existing, message: 'No changes' });
+    }
+
+    values.push(photoId);
+    const stmt = db.prepare(`UPDATE customer_photos SET ${fields.join(', ')} WHERE id = ?`);
+    stmt.run(...values);
+
+    const updated = db.prepare('SELECT * FROM customer_photos WHERE id = ?').get(photoId);
+    res.json({ success: true, data: updated });
+  } catch (error: any) {
+    console.error('Error updating customer photo:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE customer photo
+router.delete('/photos/:photoId', async (req: Request, res: Response) => {
+  const { photoId } = req.params;
+  try {
+    const photo = db.prepare('SELECT * FROM customer_photos WHERE id = ?').get(photoId) as any;
+    if (!photo) {
+      return res.status(404).json({ success: false, error: 'Photo not found' });
+    }
+
+    // Delete files from disk
+    if (photo.file_url && typeof photo.file_url === 'string' && photo.file_url.startsWith('/uploads/')) {
+      try {
+        const relative = photo.file_url.replace(/^\/uploads\//, '');
+        const fullPath = path.join(UPLOAD_DIR, relative);
+        if (fullPath.startsWith(UPLOAD_DIR) && await fs.pathExists(fullPath)) {
+          await fs.remove(fullPath);
+        }
+      } catch (e) {
+        console.warn('Could not delete photo file from disk:', e);
+      }
+    }
+    if (photo.thumbnail_url && typeof photo.thumbnail_url === 'string' && photo.thumbnail_url.startsWith('/uploads/')) {
+      try {
+        const relative = photo.thumbnail_url.replace(/^\/uploads\//, '');
+        const fullPath = path.join(UPLOAD_DIR, relative);
+        if (fullPath.startsWith(UPLOAD_DIR) && await fs.pathExists(fullPath)) {
+          await fs.remove(fullPath);
+        }
+      } catch (e) {
+        console.warn('Could not delete photo thumbnail from disk:', e);
+      }
+    }
+
+    const result = db.prepare('DELETE FROM customer_photos WHERE id = ?').run(photoId);
+    if (result.changes > 0) {
+      res.json({ success: true, message: 'Photo deleted' });
+    } else {
+      res.status(404).json({ success: false, error: 'Photo not found' });
+    }
+  } catch (error: any) {
+    console.error('Error deleting customer photo:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   try {

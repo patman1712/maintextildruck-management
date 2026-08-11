@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore, Order, ShopProductAssignment, Product } from "@/store";
-import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon, Copy, Layers, Globe } from "lucide-react";
+import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon, Copy, Layers, Globe, Eye } from "lucide-react";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import CustomerOnlineShopProducts from "@/components/CustomerOnlineShopProducts";
 
@@ -30,7 +30,7 @@ export default function CustomerDetails() {
   const [isDragging, setIsDragging] = useState(false);
 
   // Tabs
-  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'previews' | 'products' | 'shop_products' | 'shopware_products' | 'shopware' | 'photoshop'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'files' | 'previews' | 'photos' | 'products' | 'shop_products' | 'shopware_products' | 'shopware' | 'photoshop'>('overview');
   
   const [customer, setCustomer] = useState(customers.find(c => c.id === id));
   const [customerOrders, setCustomerOrders] = useState(
@@ -39,6 +39,15 @@ export default function CustomerDetails() {
   
   // Archived Files State
   const [archivedFiles, setArchivedFiles] = useState<any[]>([]);
+
+  // Customer Photos State (Produktfotos Galerie)
+  const [customerPhotos, setCustomerPhotos] = useState<any[]>([]);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [editingPhotoNoteId, setEditingPhotoNoteId] = useState<string | null>(null);
+  const [editNoteDraft, setEditNoteDraft] = useState('');
+  const [photoTab, setPhotoTab] = useState<'upload' | 'gallery'>('gallery');
+  const [uploadPhotoFile, setUploadPhotoFile] = useState<File | null>(null);
+  const [uploadPhotoName, setUploadPhotoName] = useState("");
 
   // Shopware State
   const [shopwareConfig, setShopwareConfig] = useState<{
@@ -122,6 +131,7 @@ export default function CustomerDetails() {
       if (customer) {
           fetchProducts();
           fetchCustomerFiles();
+          fetchCustomerPhotos();
       }
   }, [customer]);
 
@@ -144,6 +154,122 @@ export default function CustomerDetails() {
       } catch (err) {
           console.error(err);
       }
+  };
+
+  // --- Customer Photos (Produktfotos Galerie) ---
+  const fetchCustomerPhotos = async () => {
+      if (!customer) return;
+      try {
+          const res = await fetch(`/api/customers/${customer.id}/photos`);
+          const data = await res.json();
+          if (data.success) {
+              setCustomerPhotos(data.data);
+          }
+      } catch (err) {
+          console.error(err);
+      }
+  };
+
+  const handlePhotoUpload = async () => {
+      if (!uploadPhotoFile || !customer) return;
+      setIsUploadingPhoto(true);
+      try {
+          const formData = new FormData();
+          formData.append('print', uploadPhotoFile);
+
+          const res = await fetch('/api/upload', {
+              method: 'POST',
+              body: formData
+          });
+          const data = await res.json();
+
+          if (data.success && data.files && data.files.print && data.files.print.length > 0) {
+              const uploaded = data.files.print[0];
+              const photoName = uploadPhotoName.trim() || uploaded.originalName || uploadPhotoFile.name;
+
+              const saveRes = await fetch(`/api/customers/${customer.id}/photos`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      file_url: uploaded.path,
+                      file_name: photoName,
+                      thumbnail_url: uploaded.thumbnail || null
+                  })
+              });
+              const saveData = await saveRes.json();
+              if (saveData.success) {
+                  setUploadPhotoFile(null);
+                  setUploadPhotoName("");
+                  setPhotoTab('gallery');
+                  await fetchCustomerPhotos();
+              } else {
+                  alert('Fehler beim Speichern: ' + (saveData.error || 'Unbekannter Fehler'));
+              }
+          } else {
+              alert('Upload fehlgeschlagen: ' + (data.error || 'Server antwortete ohne Erfolg'));
+          }
+      } catch (err) {
+          console.error(err);
+          alert('Upload fehlgeschlagen: Netzwerkfehler');
+      } finally {
+          setIsUploadingPhoto(false);
+      }
+  };
+
+  const startEditPhotoNote = (photo: any) => {
+      setEditingPhotoNoteId(photo.id);
+      setEditNoteDraft(photo.note || '');
+  };
+
+  const savePhotoNote = async (photoId: string) => {
+      try {
+          const res = await fetch(`/api/customers/photos/${photoId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ note: editNoteDraft })
+          });
+          const data = await res.json();
+          if (data.success) {
+              setCustomerPhotos(prev => prev.map(p => p.id === photoId ? { ...p, note: editNoteDraft } : p));
+              setEditingPhotoNoteId(null);
+              setEditNoteDraft('');
+          } else {
+              alert('Fehler beim Speichern: ' + (data.error || 'Unbekannter Fehler'));
+          }
+      } catch (err) {
+          console.error(err);
+          alert('Netzwerkfehler');
+      }
+  };
+
+  const cancelEditPhotoNote = () => {
+      setEditingPhotoNoteId(null);
+      setEditNoteDraft('');
+  };
+
+  const handleDeletePhoto = (photo: any) => {
+      if (!confirm(`Möchten Sie das Bild "${photo.file_name || photo.id}" wirklich löschen?`)) return;
+      setConfirmModal({
+          isOpen: true,
+          title: 'Bild löschen',
+          message: 'Diese Aktion entfernt das Bild endgültig.',
+          type: 'danger',
+          confirmText: 'Löschen',
+          onConfirm: async () => {
+              try {
+                  const res = await fetch(`/api/customers/photos/${photo.id}`, { method: 'DELETE' });
+                  const data = await res.json();
+                  if (data.success) {
+                      setCustomerPhotos(prev => prev.filter(p => p.id !== photo.id));
+                  } else {
+                      alert('Fehler beim Löschen: ' + (data.error || 'Unbekannter Fehler'));
+                  }
+              } catch (err) {
+                  console.error(err);
+                  alert('Netzwerkfehler beim Löschen');
+              }
+          }
+      });
   };
 
   // --- Products Logic ---
@@ -1116,6 +1242,15 @@ export default function CustomerDetails() {
                 </div>
             </button>
             <button
+                onClick={() => setActiveTab('photos')}
+                className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'photos' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+                <div className="flex items-center">
+                    <ImageIcon size={16} className="mr-2" />
+                    Produktfotos ({customerPhotos.length})
+                </div>
+            </button>
+            <button
                 onClick={() => setActiveTab('photoshop')}
                 className={`py-4 px-4 font-medium text-sm border-b-2 transition-colors ${activeTab === 'photoshop' ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
@@ -1581,6 +1716,210 @@ export default function CustomerDetails() {
                         </div>
                     )}
                 </div>
+            </div>
+        )}
+
+        {/* TAB: PHOTOS (Produktfotos Galerie) */}
+        {activeTab === 'photos' && (
+            <div className="animate-in fade-in">
+                <div className="px-8 py-4 bg-gray-50 border-b border-gray-100">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-800">Produktfotos Galerie</h3>
+                            <p className="text-sm text-gray-500">Fotos mit Notizen pro Bild verwalten</p>
+                        </div>
+                        <div className="flex space-x-2">
+                            <button 
+                                onClick={() => setPhotoTab('gallery')}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${photoTab === 'gallery' ? 'bg-red-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                            >
+                                📷 Galerie
+                            </button>
+                            <button 
+                                onClick={() => setPhotoTab('upload')}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${photoTab === 'upload' ? 'bg-red-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                            >
+                                <Plus size={14} className="inline mr-1" /> Hochladen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                {photoTab === 'upload' ? (
+                    <div className="p-8 max-w-2xl">
+                        <div className="bg-white border border-gray-200 rounded-lg p-6">
+                            <h4 className="font-semibold text-gray-800 mb-4">Neues Produktfoto hochladen</h4>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Datei auswählen</label>
+                                    <div className="flex items-center gap-3">
+                                        <input 
+                                            type="file" 
+                                            accept="image/*,.pdf,.psd,.ai"
+                                            onChange={(e) => {
+                                                if (e.target.files?.[0]) {
+                                                    setUploadPhotoFile(e.target.files[0]);
+                                                    if (!uploadPhotoName) setUploadPhotoName(e.target.files[0].name);
+                                                }
+                                            }}
+                                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
+                                        />
+                                    </div>
+                                    {uploadPhotoFile && (
+                                        <p className="mt-2 text-xs text-gray-500">
+                                            Ausgewählt: {uploadPhotoFile.name} ({Math.round(uploadPhotoFile.size / 1024)} KB)
+                                        </p>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Titel / Name (optional)</label>
+                                    <input 
+                                        type="text" 
+                                        value={uploadPhotoName}
+                                        onChange={(e) => setUploadPhotoName(e.target.value)}
+                                        placeholder="z.B. T-Shirt Vorderseite Motiv Rot"
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                    />
+                                </div>
+                                <div className="flex justify-end space-x-3 pt-2">
+                                    <button 
+                                        onClick={() => { setPhotoTab('gallery'); setUploadPhotoFile(null); setUploadPhotoName(''); }}
+                                        className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50"
+                                    >
+                                        Abbrechen
+                                    </button>
+                                    <button 
+                                        onClick={handlePhotoUpload}
+                                        disabled={!uploadPhotoFile || isUploadingPhoto}
+                                        className="px-5 py-2 text-sm font-semibold text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                                    >
+                                        {isUploadingPhoto ? (
+                                            <>⏳ Lädt hoch...</>
+                                        ) : (
+                                            <><Upload size={16} className="mr-2" /> Speichern</>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="p-8">
+                        {customerPhotos.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                {customerPhotos.map((photo) => (
+                                    <div key={photo.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow group">
+                                        <div className="aspect-video bg-gray-100 relative cursor-pointer overflow-hidden" onClick={() => window.open(photo.file_url, '_blank')}>
+                                            {(photo.thumbnail_url || photo.file_url) ? (
+                                                <img 
+                                                    src={photo.thumbnail_url || photo.file_url} 
+                                                    alt={photo.file_name || 'Produktfoto'} 
+                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                                    loading="lazy"
+                                                    decoding="async"
+                                                    onError={(e) => { e.currentTarget.style.objectFit = 'contain'; }}
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center">
+                                                    <ImageIcon size={48} className="text-gray-300" />
+                                                </div>
+                                            )}
+                                            <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); window.open(photo.file_url, '_blank'); }}
+                                                    className="bg-white/95 hover:bg-white rounded-full p-1.5 shadow-sm border border-gray-200 text-gray-600 hover:text-blue-600"
+                                                    title="Öffnen"
+                                                >
+                                                    <Eye size={14} />
+                                                </button>
+                                                <button 
+                                                    onClick={(e) => { e.stopPropagation(); handleDeletePhoto(photo); }}
+                                                    className="bg-white/95 hover:bg-white rounded-full p-1.5 shadow-sm border border-gray-200 text-gray-600 hover:text-red-600"
+                                                    title="Löschen"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="p-4 space-y-3">
+                                            <div>
+                                                <p className="text-sm font-semibold text-gray-800 break-words line-clamp-1" title={photo.file_name}>
+                                                    {photo.file_name || 'Unbenanntes Foto'}
+                                                </p>
+                                                <p className="text-[11px] text-gray-400 mt-0.5">
+                                                    {photo.created_at ? new Date(photo.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''}
+                                                </p>
+                                            </div>
+                                            
+                                            {editingPhotoNoteId === photo.id ? (
+                                                <div className="space-y-2">
+                                                    <textarea 
+                                                        value={editNoteDraft}
+                                                        onChange={(e) => setEditNoteDraft(e.target.value)}
+                                                        placeholder="Notiz zu diesem Foto, z.B. 'Farben prüfen, nur auf hellen Shirts möglich'"
+                                                        rows={3}
+                                                        className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-y"
+                                                        autoFocus
+                                                    />
+                                                    <div className="flex space-x-2">
+                                                        <button 
+                                                            onClick={() => savePhotoNote(photo.id)}
+                                                            className="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs font-medium py-1.5 rounded-md flex items-center justify-center"
+                                                        >
+                                                            <Save size={12} className="mr-1" /> Speichern
+                                                        </button>
+                                                        <button 
+                                                            onClick={cancelEditPhotoNote}
+                                                            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium py-1.5 rounded-md flex items-center justify-center"
+                                                        >
+                                                            <X size={12} className="mr-1" /> Abbrechen
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div 
+                                                    onClick={() => startEditPhotoNote(photo)}
+                                                    className={`cursor-pointer rounded-md transition-colors border ${photo.note ? 'border-gray-200 bg-gray-50/50 hover:bg-gray-50 hover:border-red-200' : 'border-dashed border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'}`}
+                                                >
+                                                    {photo.note ? (
+                                                        <div className="p-2.5">
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
+                                                                    {photo.note}
+                                                                </p>
+                                                                <Pencil size={12} className="text-gray-400 flex-shrink-0 mt-0.5" />
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="p-2.5 text-center text-[11px] text-gray-400 hover:text-gray-500 font-medium py-3">
+                                                            <Pencil size={12} className="inline mr-1 mb-0.5" /> Notiz hinzufügen
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-20 max-w-lg mx-auto">
+                                <div className="w-20 h-20 mx-auto bg-red-50 rounded-full flex items-center justify-center mb-4">
+                                    <ImageIcon size={40} className="text-red-300" />
+                                </div>
+                                <h4 className="text-lg font-semibold text-gray-800 mb-2">Noch keine Produktfotos vorhanden</h4>
+                                <p className="text-sm text-gray-500 mb-6">
+                                    Lege jetzt das erste Foto an, um eine Galerie mit Notizen pro Bild aufzubauen.
+                                </p>
+                                <button 
+                                    onClick={() => setPhotoTab('upload')}
+                                    className="bg-red-600 text-white px-6 py-2.5 rounded-md text-sm font-semibold hover:bg-red-700 inline-flex items-center"
+                                >
+                                    <Upload size={16} className="mr-2" /> Erstes Foto hochladen
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         )}
 

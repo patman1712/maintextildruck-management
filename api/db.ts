@@ -1349,6 +1349,25 @@ try {
       console.error('Migration error (product_variables colors):', e);
   }
 
+  // Customer Photos (Produktfotos Galerie mit Notizen)
+  try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS customer_photos (
+          id TEXT PRIMARY KEY,
+          customer_id TEXT NOT NULL,
+          file_url TEXT NOT NULL,
+          file_name TEXT,
+          thumbnail_url TEXT,
+          note TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE
+        )
+      `);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_customer_photos_customer_id ON customer_photos(customer_id)");
+  } catch (e) {
+      console.error('Migration error (customer_photos):', e);
+  }
+
   // Ensure default row for global content
   try {
       const row = db.prepare("SELECT id FROM global_shop_content WHERE id = 'main'").get();
