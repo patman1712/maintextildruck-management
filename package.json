@@ -6,7 +6,7 @@
   "scripts": {
     "client:dev": "vite",
     "build": "tsc -b && vite build",
-    "start": "tsx api/server.ts",
+    "start": "NODE_OPTIONS=\"--max-old-space-size=512 --expose-gc\" tsx api/server.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc --noEmit",
@@ -14,7 +14,6 @@
     "dev": "concurrently \"npm run client:dev\" \"npm run server:dev\""
   },
   "dependencies": {
-    "@imgly/background-removal": "^1.7.0",
     "@paypal/react-paypal-js": "^9.0.1",
     "@types/nodemailer": "^7.0.11",
     "bcryptjs": "^3.0.3",
