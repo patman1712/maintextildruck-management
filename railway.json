@@ -11,8 +11,7 @@
     ]
   },
   "deploy": {
-    "healthcheckPath": "/api/health",
-    "healthcheckTimeout": 300,
+    "healthcheckTimeout": 600,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10,
     "startCommand": "npm run start",
@@ -21,7 +20,7 @@
     "cronSchedule": null,
     "pullRequestPreviewsEnabled": false,
     "resourceRequests": {
-      "cpu": "0.5",
+      "cpu": "0.25",
       "memory": "1024"
     },
     "resourceLimits": {
