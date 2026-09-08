@@ -22,6 +22,7 @@ const ShopCheckoutPage: React.FC = () => {
   const [shippingConfig, setShippingConfig] = useState<any>(null);
   const [shippingCost, setShippingCost] = useState(5.95);
   const [paypalConfig, setPaypalConfig] = useState<{ clientId: string, mode: string } | null>(null);
+  const [selectedShippingMethod, setSelectedShippingMethod] = useState<'dhl' | 'pickup'>('dhl');
 
   useEffect(() => {
     // Fetch PayPal Config
@@ -49,6 +50,11 @@ const ShopCheckoutPage: React.FC = () => {
   }, [shop?.id]);
 
   useEffect(() => {
+    if (selectedShippingMethod === 'pickup') {
+        const fee = parseFloat(shippingConfig?.pickup_fee || 0);
+        setShippingCost(isNaN(fee) ? 0 : fee);
+        return;
+    }
     if (shippingConfig && shippingConfig.shipping_tiers && Array.isArray(shippingConfig.shipping_tiers) && shippingConfig.shipping_tiers.length > 0) {
         // Calculate total weight
         let totalWeight = 0;
@@ -91,7 +97,7 @@ const ShopCheckoutPage: React.FC = () => {
             }
         }
     }
-  }, [cart, shippingConfig]);
+  }, [cart, shippingConfig, selectedShippingMethod]);
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const shipping = shippingCost;
@@ -113,12 +119,11 @@ const ShopCheckoutPage: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState('PayPal');
   const isGuest = !currentCustomer;
   const isEmailValid = !isGuest || /^\S+@\S+\.\S+$/.test(address.email);
+  const isPickupSelected = selectedShippingMethod === 'pickup';
   const canProceedFromAddress =
     !!address.firstName &&
     !!address.lastName &&
-    !!address.street &&
-    !!address.zip &&
-    !!address.city &&
+    (isPickupSelected || (!!address.street && !!address.zip && !!address.city)) &&
     (!isGuest || isEmailValid);
 
   const handlePlaceOrder = async (transactionId?: string) => {
@@ -144,7 +149,8 @@ const ShopCheckoutPage: React.FC = () => {
           paymentStatus: transactionId ? 'paid' : 'open',
           transactionId,
           totalAmount: total,
-          shippingCosts: shipping
+          shippingCosts: shipping,
+          shipping_method: selectedShippingMethod
         })
       });
       const data = await res.json();
@@ -238,7 +244,7 @@ const ShopCheckoutPage: React.FC = () => {
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 space-y-8 animate-in fade-in duration-500">
               <div className="flex items-center space-x-3 mb-2">
                 <MapPin size={24} className="text-slate-400" />
-                <h2 className="text-xl font-black uppercase italic tracking-tight">Lieferadresse</h2>
+                <h2 className="text-xl font-black uppercase italic tracking-tight">Lieferadresse & Versandart</h2>
               </div>
               
               {!guestCheckoutEnabled && !currentCustomer && (
@@ -259,6 +265,51 @@ const ShopCheckoutPage: React.FC = () => {
                 </div>
               )}
 
+              {/* Shipping Method Selection */}
+              {shippingConfig?.pickup_enabled && (
+                <div className="space-y-4">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 border-b pb-2">Versandart wählen</h3>
+                  <div className="grid gap-4">
+                    <label className={`flex items-start p-5 border-2 rounded-2xl cursor-pointer transition-all group ${selectedShippingMethod === 'dhl' ? 'border-blue-500 bg-blue-50/40' : 'border-slate-100 hover:border-blue-100 hover:bg-blue-50/20'}`}>
+                      <input 
+                          type="radio" 
+                          name="shipping_method" 
+                          className="w-5 h-5 text-blue-600 mt-0.5" 
+                          checked={selectedShippingMethod === 'dhl'} 
+                          onChange={() => setSelectedShippingMethod('dhl')} 
+                      />
+                      <div className="ml-4 flex-1">
+                        <div className="font-black uppercase italic tracking-tighter text-slate-800 flex items-center">
+                          <Truck size={16} className="mr-2 text-blue-600" /> DHL Versand
+                        </div>
+                        <div className="text-xs text-slate-500 font-medium mt-1">Wir liefern deine Bestellung bequem nach Hause.</div>
+                      </div>
+                    </label>
+                    <label className={`flex items-start p-5 border-2 rounded-2xl cursor-pointer transition-all group ${selectedShippingMethod === 'pickup' ? 'border-orange-500 bg-orange-50/40' : 'border-slate-100 hover:border-orange-100 hover:bg-orange-50/20'}`}>
+                      <input 
+                          type="radio" 
+                          name="shipping_method" 
+                          className="w-5 h-5 text-orange-600 mt-0.5" 
+                          checked={selectedShippingMethod === 'pickup'} 
+                          onChange={() => setSelectedShippingMethod('pickup')} 
+                      />
+                      <div className="ml-4 flex-1">
+                        <div className="font-black uppercase italic tracking-tighter text-slate-800 flex items-center">
+                          <MapPin size={16} className="mr-2 text-orange-600" /> Abholung Packstation Main Textildruck
+                        </div>
+                        <div className="text-xs text-slate-500 font-medium mt-1">Du holst deine Bestellung persönlich bei uns ab. Du erhältst einen Code + Fachnummer, sobald sie fertig ist.</div>
+                        {parseFloat(shippingConfig?.pickup_fee || 0) > 0 && (
+                          <div className="text-xs font-bold text-orange-700 mt-2">Abholgebühr: {parseFloat(shippingConfig.pickup_fee).toFixed(2).replace('.', ',')} €</div>
+                        )}
+                        {parseFloat(shippingConfig?.pickup_fee || 0) === 0 && (
+                          <div className="text-xs font-bold text-green-700 mt-2">Kostenlose Abholung</div>
+                        )}
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Vorname*</label>
@@ -272,18 +323,34 @@ const ShopCheckoutPage: React.FC = () => {
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Firma (Optional)</label>
                   <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.company} onChange={e => setAddress({...address, company: e.target.value})} />
                 </div>
-                <div className="col-span-full space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Straße & Hausnummer*</label>
-                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.street} onChange={e => setAddress({...address, street: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">PLZ*</label>
-                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.zip} onChange={e => setAddress({...address, zip: e.target.value})} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Stadt*</label>
-                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.city} onChange={e => setAddress({...address, city: e.target.value})} />
-                </div>
+                {!isPickupSelected && (
+                  <>
+                    <div className="col-span-full space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Straße & Hausnummer*</label>
+                      <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.street} onChange={e => setAddress({...address, street: e.target.value})} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">PLZ*</label>
+                      <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.zip} onChange={e => setAddress({...address, zip: e.target.value})} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Stadt*</label>
+                      <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.city} onChange={e => setAddress({...address, city: e.target.value})} />
+                    </div>
+                  </>
+                )}
+                {isPickupSelected && (
+                  <div className="col-span-full">
+                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-sm">
+                      <div className="font-bold text-orange-800 flex items-center mb-1">
+                        <MapPin size={14} className="mr-2" /> Abholung vor Ort
+                      </div>
+                      <div className="text-orange-700 text-xs leading-relaxed">
+                        Du brauchst keine Lieferadresse anzugeben. Die Abholadresse lautet: <strong>Main Textildruck</strong>. Du erhältst per E-Mail eine Benachrichtigung mit Abholcode und Fachnummer, sobald deine Bestellung fertig ist.
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="col-span-full space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">E-Mail{isGuest ? '*' : ''}</label>
                   <input
@@ -517,7 +584,7 @@ const ShopCheckoutPage: React.FC = () => {
                 <span>{cartTotal.toFixed(2).replace('.', ',')} €*</span>
               </div>
               <div className="flex justify-between text-slate-400 font-bold uppercase tracking-widest text-[10px] pb-4 border-b border-slate-800">
-                <span>Versandkosten</span>
+                <span>{isPickupSelected ? 'Abholgebühr' : 'Versandkosten'}</span>
                 <span>{shipping.toFixed(2).replace('.', ',')} €*</span>
               </div>
               <div className="flex justify-between items-baseline pt-2">
@@ -531,8 +598,10 @@ const ShopCheckoutPage: React.FC = () => {
 
             <div className="space-y-4 pt-4 border-t border-slate-800">
               <div className="flex items-center space-x-3 text-slate-400">
-                <Truck size={16} />
-                <span className="text-[10px] font-bold uppercase tracking-widest">Lieferzeit: 10-14 Werktage</span>
+                {isPickupSelected ? <MapPin size={16} /> : <Truck size={16} />}
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  {isPickupSelected ? 'Abholbereit in ca. 10-14 Werktagen' : 'Lieferzeit: 10-14 Werktage'}
+                </span>
               </div>
               <div className="flex items-center space-x-3 text-slate-400">
                 <ShieldCheck size={16} />

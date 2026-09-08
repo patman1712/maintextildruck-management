@@ -22,17 +22,28 @@ router.get('/', (req: Request, res: Response) => {
   const stmt = db.prepare(`SELECT * FROM orders ${where} ${orderBy}`);
   const rows = stmt.all();
   
+  const safeJsonParse = (raw: any, fallback: any): any => {
+    if (raw === null || raw === undefined) return fallback;
+    if (typeof raw !== 'string') return raw;
+    try { return JSON.parse(raw); } catch (e) {
+      console.error('JSON parse failed for orders column:', String(raw).slice(0, 80), e);
+      return fallback;
+    }
+  };
+
   const orders = rows.map((row: any) => ({
     id: row.id,
     title: row.title,
     orderNumber: row.order_number,
     customerId: row.customer_id,
     customer_name: row.customer_name,
+    customer_contact_person: row.customer_contact_person,
     customer_email: row.customer_email,
     customer_phone: row.customer_phone,
     customer_address: row.customer_address,
     deadline: row.deadline,
     status: row.status,
+    orderType: row.order_type || 'standard',
     processing: !!row.processing,
     produced: !!row.produced,
     productionStatus: row.production_status,
@@ -45,8 +56,9 @@ router.get('/', (req: Request, res: Response) => {
     deletedBy: row.deleted_by,
     printStatus: row.print_status,
     description: row.description,
-    employees: row.employees ? JSON.parse(row.employees) : [],
-    files: row.files ? JSON.parse(row.files) : [],
+    sampleItems: safeJsonParse(row.sample_items, []),
+    employees: safeJsonParse(row.employees, []),
+    files: safeJsonParse(row.files, []),
     created_at: row.created_at,
     approvalStatus: row.approval_status,
     approvedBy: row.approved_by,
@@ -58,7 +70,7 @@ router.get('/', (req: Request, res: Response) => {
     shopId: row.shop_id,
     paymentMethod: row.payment_method,
     paymentStatus: row.payment_status,
-    steps: row.steps ? JSON.parse(row.steps) : { processing: !!row.processing, produced: !!row.produced, invoiced: !!row.invoiced } // Map steps JSON or fallback
+    steps: safeJsonParse(row.steps, { processing: !!row.processing, produced: !!row.produced, invoiced: !!row.invoiced }) // Map steps JSON or fallback
   }));
   
   res.json({ success: true, data: orders });
@@ -162,25 +174,43 @@ router.post('/:id/regenerate-invoice', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   const { 
     id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person, 
-    deadline, status, processing, produced, production_status, invoiced, print_status, description, employees, files, shop_id 
+    deadline, status, order_type, processing, produced, production_status, invoiced, print_status, description, sample_items, employees, files, shop_id,
+    shipping_method, pickup_code, pickup_compartment, pickup_status
   } = req.body;
 
   console.log('Received order payload:', req.body);
   
   try {
+    // Robuste Default-Werte für NOT NULL Spalten
+    const today = new Date().toISOString().split('T')[0];
+    const safeDeadline = (typeof deadline === 'string' && deadline.trim().length > 0) ? deadline.trim() : today;
+    const safeTitle = (typeof title === 'string' && title.trim().length > 0) ? title.trim() : 'Auftrag';
+    const safeCustomerName = (typeof customer_name === 'string' && customer_name.trim().length > 0) ? customer_name.trim() : 'Unbekannter Kunde';
+    const safeStatus = (typeof status === 'string' && status.trim().length > 0) ? status.trim() : 'active';
+    const safeOrderType = (typeof order_type === 'string' && order_type.trim().length > 0) ? order_type.trim() : 'standard';
+    const safeId = (typeof id === 'string' && id.trim().length > 0) ? id.trim() : Math.random().toString(36).substr(2, 9);
+    const isPickup = String(shipping_method || 'dhl').trim().toLowerCase() === 'pickup';
+    const safeShippingMethod = isPickup ? 'pickup' : (String(shipping_method || 'dhl').trim() || 'dhl');
+    const safePickupStatus = isPickup ? (String(pickup_status || 'pending').trim() || 'pending') : null;
+
     const stmt = db.prepare(`
       INSERT INTO orders (
         id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person,
-        deadline, status, processing, produced, production_status, invoiced, print_status, description, employees, files, shop_id
+        deadline, status, order_type, processing, produced, production_status, invoiced, print_status, description, sample_items, employees, files, shop_id,
+        shipping_method, pickup_code, pickup_compartment, pickup_status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
-      id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person,
-      deadline, status, processing ? 1 : 0, produced ? 1 : 0, production_status || null, invoiced ? 1 : 0, 
+      safeId, safeTitle, order_number || null, customer_id || null, safeCustomerName, customer_email || null, customer_phone || null, customer_address || null, customer_contact_person || null,
+      safeDeadline, safeStatus, safeOrderType, processing ? 1 : 0, produced ? 1 : 0, production_status || null, invoiced ? 1 : 0, 
       print_status || 'pending',
-      description, JSON.stringify(employees || []), JSON.stringify(files || []), shop_id
+      description || null, JSON.stringify(sample_items || []), JSON.stringify(employees || []), JSON.stringify(files || []), shop_id || null,
+      safeShippingMethod,
+      pickup_code || null,
+      pickup_compartment || null,
+      safePickupStatus
     );
     
     // Also save files to the dedicated 'files' table for independent persistence
@@ -259,6 +289,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (updates.customer_contact_person !== undefined) { fields.push('customer_contact_person = ?'); values.push(updates.customer_contact_person); }
   if (updates.deadline !== undefined) { fields.push('deadline = ?'); values.push(updates.deadline); }
   if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
+  if (updates.order_type !== undefined) { fields.push('order_type = ?'); values.push(updates.order_type); }
   if (updates.processing !== undefined) { fields.push('processing = ?'); values.push(updates.processing ? 1 : 0); }
   if (updates.produced !== undefined) { fields.push('produced = ?'); values.push(updates.produced ? 1 : 0); }
   if (updates.production_status !== undefined) { fields.push('production_status = ?'); values.push(updates.production_status); }
@@ -269,6 +300,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (updates.manual_invoice_note !== undefined) { fields.push('manual_invoice_note = ?'); values.push(updates.manual_invoice_note); }
   if (updates.print_status !== undefined) { fields.push('print_status = ?'); values.push(updates.print_status); }
   if (updates.description !== undefined) { fields.push('description = ?'); values.push(updates.description); }
+  if (updates.sample_items !== undefined) { fields.push('sample_items = ?'); values.push(JSON.stringify(updates.sample_items)); }
   if (updates.employees !== undefined) { fields.push('employees = ?'); values.push(JSON.stringify(updates.employees)); }
   if (updates.files !== undefined) { fields.push('files = ?'); values.push(JSON.stringify(updates.files)); }
 
@@ -355,6 +387,15 @@ router.put('/:id', async (req: Request, res: Response) => {
     });
   }
 
+  const safeJsonParsePut = (raw: any, fallback: any): any => {
+    if (raw === null || raw === undefined) return fallback;
+    if (typeof raw !== 'string') return raw;
+    try { return JSON.parse(raw); } catch (e) {
+      console.error('JSON parse failed in PUT orders:', String(raw).slice(0, 80), e);
+      return fallback;
+    }
+  };
+
   const updatedRow = db.prepare('SELECT * FROM orders WHERE id = ?').get(id) as any;
   const mapped = {
     id: updatedRow.id,
@@ -362,20 +403,25 @@ router.put('/:id', async (req: Request, res: Response) => {
     orderNumber: updatedRow.order_number,
     customerId: updatedRow.customer_id,
     customer_name: updatedRow.customer_name,
+    customer_contact_person: updatedRow.customer_contact_person,
     customer_email: updatedRow.customer_email,
     customer_phone: updatedRow.customer_phone,
     customer_address: updatedRow.customer_address,
     deadline: updatedRow.deadline,
     status: updatedRow.status,
+    orderType: updatedRow.order_type || 'standard',
     processing: !!updatedRow.processing,
     produced: !!updatedRow.produced,
     invoiced: !!updatedRow.invoiced,
     invoicedAt: updatedRow.invoiced_at,
     invoicedBy: updatedRow.invoiced_by,
+    manualInvoiceReference: updatedRow.manual_invoice_reference,
+    manualInvoiceNote: updatedRow.manual_invoice_note,
     printStatus: updatedRow.print_status,
     description: updatedRow.description,
-    employees: updatedRow.employees ? JSON.parse(updatedRow.employees) : [],
-    files: updatedRow.files ? JSON.parse(updatedRow.files) : [],
+    sampleItems: safeJsonParsePut(updatedRow.sample_items, []),
+    employees: safeJsonParsePut(updatedRow.employees, []),
+    files: safeJsonParsePut(updatedRow.files, []),
     created_at: updatedRow.created_at,
     approvalStatus: updatedRow.approval_status,
     approvedBy: updatedRow.approved_by,
@@ -384,7 +430,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     approvalToken: updatedRow.approval_token,
     approvalComment: updatedRow.approval_comment,
     shopwareOrderId: updatedRow.shopware_order_id,
-    steps: updatedRow.steps ? JSON.parse(updatedRow.steps) : { processing: !!updatedRow.processing, produced: !!updatedRow.produced, invoiced: !!updatedRow.invoiced }
+    steps: safeJsonParsePut(updatedRow.steps, { processing: !!updatedRow.processing, produced: !!updatedRow.produced, invoiced: !!updatedRow.invoiced })
   };
 
   res.json({ success: true, message: 'Order updated', data: mapped });

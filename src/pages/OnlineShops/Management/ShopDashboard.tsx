@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical, Send } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
 
 const ShopDashboard: React.FC = () => {
@@ -34,8 +34,18 @@ const ShopDashboard: React.FC = () => {
     sender_zip: '',
     sender_city: '',
     sender_country: 'DEU',
-    packaging_weight: 0
+    packaging_weight: 0,
+    pickup_enabled: false,
+    pickup_fee: 0,
+    pickup_email_template: ''
   });
+
+  // Pickup Ready Modal
+  const [showPickupReadyModal, setShowPickupReadyModal] = useState(false);
+  const [pendingPickupOrder, setPendingPickupOrder] = useState<any | null>(null);
+  const [pickupCode, setPickupCode] = useState('');
+  const [pickupCompartment, setPickupCompartment] = useState('');
+  const [isProcessingPickupReady, setIsProcessingPickupReady] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
@@ -243,6 +253,42 @@ const ShopDashboard: React.FC = () => {
         alert('Verbindung fehlgeschlagen: ' + e.message);
     } finally {
         setIsTestingConnection(false);
+    }
+  };
+
+  const handleOpenPickupReadyModal = (order: any) => {
+    setPendingPickupOrder(order);
+    setPickupCode(order?.pickup_code || '');
+    setPickupCompartment(order?.pickup_compartment || '');
+    setShowPickupReadyModal(true);
+  };
+
+  const handleMarkPickupReady = async () => {
+    if (!pendingPickupOrder) return;
+    setIsProcessingPickupReady(true);
+    try {
+      const res = await fetch(`/api/shop-management/${shopId}/shipping/pickup-ready`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: pendingPickupOrder.id,
+          pickup_code: pickupCode || undefined,
+          pickup_compartment: pickupCompartment || undefined,
+          auto_generate: !pickupCode && !pickupCompartment
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Abholung bereit! Mail wurde an den Kunden gesendet.\n\nAbholcode: ${data.data.pickup_code}\nFachnummer: ${data.data.pickup_compartment}`);
+        setShowPickupReadyModal(false);
+        fetchShopOrders();
+      } else {
+        alert('Fehler: ' + data.error);
+      }
+    } catch (e: any) {
+      alert('Fehler: ' + e.message);
+    } finally {
+      setIsProcessingPickupReady(false);
     }
   };
 
@@ -1678,14 +1724,18 @@ const ShopDashboard: React.FC = () => {
                                     <th className="py-4 px-4 font-bold">Kunde</th>
                                     <th className="py-4 px-4 font-bold">Status</th>
                                     <th className="py-4 px-4 font-bold">Zahlstatus</th>
+                                    <th className="py-4 px-4 font-bold">Versand</th>
                                     <th className="py-4 px-4 font-bold">Betrag</th>
                                     <th className="py-4 px-4 font-bold">Datum</th>
                                     <th className="py-4 px-4 font-bold">Aktionen</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
-                                {shopOrders.map(order => (
-                                    <tr key={order.id} className="hover:bg-slate-50 transition-colors">
+                                {shopOrders.map(order => {
+                                    const isPickupOrder = String(order.shipping_method || 'dhl').toLowerCase() === 'pickup';
+                                    const isPickupReady = order.pickup_status === 'ready';
+                                    return (
+                                    <tr key={order.id} className={`hover:bg-slate-50 transition-colors ${isPickupReady ? 'bg-green-50/30' : ''}`}>
                                         <td className="py-4 px-4 font-bold text-slate-800">
                                             #{order.order_number}
                                         </td>
@@ -1722,6 +1772,33 @@ const ShopDashboard: React.FC = () => {
                                                 <option value="open">Offen</option>
                                                 <option value="paid">Komplett bezahlt</option>
                                             </select>
+                                        </td>
+                                        <td className="py-4 px-4">
+                                            {isPickupOrder ? (
+                                                <div className="space-y-1">
+                                                    <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${
+                                                        isPickupReady ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'
+                                                    }`}>
+                                                        <MapPin size={10} className="mr-1" />
+                                                        {isPickupReady ? 'ABHOLBEREIT' : 'ABHOLUNG'}
+                                                    </span>
+                                                    {order.pickup_code && (
+                                                        <div className="text-[10px] font-mono text-slate-600 font-bold">
+                                                            {order.pickup_code}
+                                                        </div>
+                                                    )}
+                                                    {order.pickup_compartment && (
+                                                        <div className="text-[10px] text-slate-500 font-bold">
+                                                            {order.pickup_compartment}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800">
+                                                    <Truck size={10} className="mr-1" />
+                                                    DHL
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="py-4 px-4 font-bold text-slate-800">
                                             {order.total_amount?.toFixed(2).replace('.', ',')} €
@@ -1783,36 +1860,57 @@ const ShopDashboard: React.FC = () => {
                                                 </button>
                                                 {order.status !== 'cancelled' && (
                                                     <div className="flex items-center space-x-1">
-                                                        <button 
-                                                            onClick={() => handleCreateShippingLabel(order)}
-                                                            disabled={isCreatingLabel}
-                                                            className={`p-2 rounded-lg transition-all ${
-                                                                order.tracking_number 
-                                                                ? 'text-green-600 hover:bg-green-50' 
-                                                                : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
-                                                            }`}
-                                                            title={order.tracking_number ? `Label erstellt: ${order.tracking_number}` : 'DHL Label erstellen'}
-                                                        >
-                                                            <Truck size={18} className={isCreatingLabel ? 'animate-pulse' : ''} />
-                                                        </button>
-                                                        {order.label_url && (
-                                                            <a 
-                                                                href={order.label_url} 
-                                                                target="_blank" 
-                                                                rel="noopener noreferrer"
-                                                                className="flex items-center space-x-1 px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all text-[10px] font-bold"
-                                                                title="Versandlabel öffnen"
-                                                            >
-                                                                <Truck size={12} />
-                                                                <span>LABEL</span>
-                                                            </a>
+                                                        {isPickupOrder ? (
+                                                            <>
+                                                                <button 
+                                                                    onClick={() => handleOpenPickupReadyModal(order)}
+                                                                    disabled={isProcessingPickupReady}
+                                                                    className={`px-3 py-1.5 rounded-lg transition-all text-[10px] font-black uppercase tracking-wider flex items-center space-x-1 ${
+                                                                        isPickupReady 
+                                                                        ? 'bg-green-600 text-white hover:bg-green-700' 
+                                                                        : 'bg-orange-500 text-white hover:bg-orange-600 shadow-sm'
+                                                                    }`}
+                                                                    title={isPickupReady ? 'Abholcode wurde bereits gesendet (erneut senden)' : 'Bestellung als abholbereit markieren + Code senden'}
+                                                                >
+                                                                    <MapPin size={12} className={isProcessingPickupReady ? 'animate-pulse' : ''} />
+                                                                    <span>{isPickupReady ? 'ERNEUT SENDEN' : 'ABHOLUNG BEREIT'}</span>
+                                                                </button>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <button 
+                                                                    onClick={() => handleCreateShippingLabel(order)}
+                                                                    disabled={isCreatingLabel}
+                                                                    className={`p-2 rounded-lg transition-all ${
+                                                                        order.tracking_number 
+                                                                        ? 'text-green-600 hover:bg-green-50' 
+                                                                        : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                                                                    }`}
+                                                                    title={order.tracking_number ? `Label erstellt: ${order.tracking_number}` : 'DHL Label erstellen'}
+                                                                >
+                                                                    <Truck size={18} className={isCreatingLabel ? 'animate-pulse' : ''} />
+                                                                </button>
+                                                                {order.label_url && (
+                                                                    <a 
+                                                                        href={order.label_url} 
+                                                                        target="_blank" 
+                                                                        rel="noopener noreferrer"
+                                                                        className="flex items-center space-x-1 px-2 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all text-[10px] font-bold"
+                                                                        title="Versandlabel öffnen"
+                                                                    >
+                                                                        <Truck size={12} />
+                                                                        <span>LABEL</span>
+                                                                    </a>
+                                                                )}
+                                                            </>
                                                         )}
                                                     </div>
                                                 )}
                                             </div>
                                         </td>
                                     </tr>
-                                ))}
+                                );
+                            })}
                             </tbody>
                         </table>
                         {shopOrders.length === 0 && (
@@ -2123,6 +2221,90 @@ const ShopDashboard: React.FC = () => {
                                     maxLength={3}
                                 />
                             </div>
+                        </div>
+                    </div>
+
+                    {/* Pickup / Abholung Packstation */}
+                    <div className="pt-8 mt-8 border-t border-slate-200">
+                        <div className="flex items-center justify-between mb-6">
+                            <div>
+                                <h3 className="font-bold text-lg text-slate-800 flex items-center">
+                                    <MapPin size={20} className="mr-2 text-orange-600" />
+                                    Abholung Packstation Main Textildruck
+                                </h3>
+                                <p className="text-sm text-slate-500 mt-1">
+                                    Aktiviere die Abholoption für Kunden im Checkout und konfiguriere die Bestätigungsmail.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+                            <div className="flex items-start mb-2">
+                                <input 
+                                    type="checkbox" 
+                                    id="pickup_enabled"
+                                    className="h-5 w-5 text-orange-600 rounded border-orange-300 focus:ring-orange-500 mt-0.5"
+                                    checked={!!shippingConfig.pickup_enabled}
+                                    onChange={(e) => setShippingConfig({ ...shippingConfig, pickup_enabled: e.target.checked })}
+                                />
+                                <label htmlFor="pickup_enabled" className="ml-3 block font-bold text-orange-900">
+                                    Abholung Packstation im Shop aktivieren
+                                </label>
+                            </div>
+                            <p className="text-xs text-orange-700 ml-8">
+                                Kunden können dann im Checkout zwischen DHL Versand und persönlicher Abholung wählen.
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-1">
+                                    Abholgebühr (€) <span className="text-slate-400 font-normal text-xs">(statt Versandkosten)</span>
+                                </label>
+                                <input 
+                                    type="number" 
+                                    step="0.01"
+                                    min="0"
+                                    className="w-full border border-slate-300 rounded-lg p-2 font-bold text-lg"
+                                    value={shippingConfig.pickup_fee || 0}
+                                    onChange={(e) => setShippingConfig({ ...shippingConfig, pickup_fee: parseFloat(e.target.value) || 0 })}
+                                    placeholder="0.00"
+                                    disabled={!shippingConfig.pickup_enabled}
+                                />
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Gib 0.00 ein für kostenlose Abholung.
+                                </p>
+                            </div>
+                            <div className="flex items-end space-x-2">
+                                <div className="flex-1">
+                                    <label className="block text-sm font-bold text-slate-700 mb-1">
+                                        Status
+                                    </label>
+                                    <div className={`px-3 py-2 rounded-lg font-bold text-xs uppercase tracking-widest ${shippingConfig.pickup_enabled ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-500'}`}>
+                                        {shippingConfig.pickup_enabled ? 'AKTIV' : 'NICHT AKTIV'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-6">
+                            <label className="block text-sm font-bold text-slate-700 mb-2">
+                                Text für die erste Bestätigungsmail (Abholung)
+                            </label>
+                            <p className="text-xs text-slate-500 mb-2">
+                                Dieser Text wird sofort nach der Bestellung an den Kunden gesendet. Verwende folgende Platzhalter:
+                                <code className="ml-2 px-2 py-0.5 bg-slate-100 rounded text-[10px] font-mono">{'{{order_number}}'} {'{{customer_name}}'} {'{{shop_name}}'}</code>
+                            </p>
+                            <textarea
+                                className="w-full border border-slate-300 rounded-lg p-3 min-h-[180px] font-mono text-sm"
+                                value={shippingConfig.pickup_email_template || ''}
+                                onChange={(e) => setShippingConfig({ ...shippingConfig, pickup_email_template: e.target.value })}
+                                disabled={!shippingConfig.pickup_enabled}
+                                placeholder={`Hallo {{customer_name}},\n\nVielen Dank für deine Bestellung ({{order_number}}) bei {{shop_name}}!\n\nDu hast die Abholung an unserer Packstation gewählt. Wir melden uns in Kürze per E-Mail bei dir, sobald deine Bestellung fertig ist und du sie abholen kannst. Du erhältst dann einen persönlichen Abholcode und die Fachnummer.\n\nFreundliche Grüße,\nDein Team von {{shop_name}}`}
+                            />
+                            <p className="text-xs text-slate-400 mt-2 italic">
+                                Bleibt das Feld leer, wird der globale Standardtext verwendet.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -2783,6 +2965,91 @@ const ShopDashboard: React.FC = () => {
                     >
                         <Truck size={16} className="mr-2" />
                         Label jetzt kaufen
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Pickup Ready Modal */}
+      {showPickupReadyModal && pendingPickupOrder && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden transform transition-all">
+                <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-5 flex justify-between items-center">
+                    <h3 className="font-bold text-white flex items-center text-lg">
+                        <MapPin size={22} className="mr-2" /> 
+                        Abholung bereit machen
+                    </h3>
+                    <button onClick={() => setShowPickupReadyModal(false)} className="text-orange-100 hover:text-white transition-colors">
+                        <X size={22} />
+                    </button>
+                </div>
+                
+                <div className="p-6 space-y-6">
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                        <div className="text-xs font-black uppercase tracking-wider text-orange-700 mb-1">Bestellung</div>
+                        <div className="font-black text-slate-800 text-lg">#{pendingPickupOrder.order_number}</div>
+                        <div className="text-sm text-slate-600 mt-1">{pendingPickupOrder.customer_name} · {pendingPickupOrder.customer_email}</div>
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                        <strong>Hinweis:</strong> Lässt du die Felder leer, werden automatisch ein zufälliger Abholcode (Format <code className="bg-blue-100 px-1 rounded">MT-1234</code>) und eine Fachnummer (Fach 1–30) generiert und an den Kunden per E-Mail gesendet.
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+                                Abholcode
+                            </label>
+                            <input
+                                type="text"
+                                className="w-full border-2 border-slate-200 rounded-lg p-3 text-xl font-black font-mono text-slate-800 focus:border-orange-500 focus:outline-none transition-colors text-center"
+                                value={pickupCode}
+                                onChange={(e) => setPickupCode(e.target.value)}
+                                placeholder="z.B. MT-1234"
+                            />
+                            <p className="text-[10px] text-slate-400 mt-1 text-center">Leer lassen für Auto-Generierung</p>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+                                Fachnummer
+                            </label>
+                            <input
+                                type="text"
+                                className="w-full border-2 border-slate-200 rounded-lg p-3 text-xl font-black text-slate-800 focus:border-orange-500 focus:outline-none transition-colors text-center"
+                                value={pickupCompartment}
+                                onChange={(e) => setPickupCompartment(e.target.value)}
+                                placeholder="z.B. Fach 12"
+                            />
+                            <p className="text-[10px] text-slate-400 mt-1 text-center">Leer lassen für Auto-Generierung</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end space-x-3">
+                    <button 
+                        onClick={() => setShowPickupReadyModal(false)}
+                        className="px-4 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition-colors text-sm"
+                        disabled={isProcessingPickupReady}
+                    >
+                        Abbrechen
+                    </button>
+                    <button 
+                        onClick={handleMarkPickupReady}
+                        disabled={isProcessingPickupReady}
+                        className="px-6 py-2 bg-orange-600 text-white font-bold rounded-lg hover:bg-orange-700 transition-colors shadow-lg shadow-orange-200 text-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isProcessingPickupReady ? (
+                            <>
+                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
+                                Wird gesendet...
+                            </>
+                        ) : (
+                            <>
+                                <Send size={16} className="mr-2" />
+                                Code generieren + Mail senden
+                            </>
+                        )}
                     </button>
                 </div>
             </div>

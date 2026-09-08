@@ -912,6 +912,70 @@ try {
     console.error('Migration error (packaging_weight):', e);
   }
 
+  // ============================================
+  // NEU: Pickup / Abholung Packstation Migrationen
+  // ============================================
+  // Migration: Orders erweitern um Pickup Felder
+  try {
+    const orderCols = db.prepare("PRAGMA table_info(orders)").all() as any[];
+    if (!orderCols.some(col => col.name === 'shipping_method')) {
+      console.log('Migrating database: Adding shipping_method to orders (default: dhl)');
+      db.exec("ALTER TABLE orders ADD COLUMN shipping_method TEXT DEFAULT 'dhl'");
+    }
+    if (!orderCols.some(col => col.name === 'pickup_code')) {
+      console.log('Migrating database: Adding pickup_code to orders');
+      db.exec("ALTER TABLE orders ADD COLUMN pickup_code TEXT");
+    }
+    if (!orderCols.some(col => col.name === 'pickup_compartment')) {
+      console.log('Migrating database: Adding pickup_compartment to orders');
+      db.exec("ALTER TABLE orders ADD COLUMN pickup_compartment TEXT");
+    }
+    if (!orderCols.some(col => col.name === 'pickup_status')) {
+      console.log('Migrating database: Adding pickup_status to orders (default: pending)');
+      db.exec("ALTER TABLE orders ADD COLUMN pickup_status TEXT DEFAULT 'pending'");
+    }
+  } catch (e) {
+    console.error('Migration error (orders pickup fields):', e);
+  }
+
+  // Migration: Shipping Configs (Shop + Global) erweitern um Pickup Einstellungen
+  try {
+    const shopShippingCols = db.prepare("PRAGMA table_info(shop_shipping_config)").all() as any[];
+    if (shopShippingCols.length > 0) {
+      if (!shopShippingCols.some(col => col.name === 'pickup_enabled')) {
+        console.log('Migrating database: Adding pickup_enabled to shop_shipping_config');
+        db.exec("ALTER TABLE shop_shipping_config ADD COLUMN pickup_enabled BOOLEAN DEFAULT 0");
+      }
+      if (!shopShippingCols.some(col => col.name === 'pickup_fee')) {
+        console.log('Migrating database: Adding pickup_fee to shop_shipping_config');
+        db.exec("ALTER TABLE shop_shipping_config ADD COLUMN pickup_fee DECIMAL(10, 2) DEFAULT 0.00");
+      }
+      if (!shopShippingCols.some(col => col.name === 'pickup_email_template')) {
+        console.log('Migrating database: Adding pickup_email_template to shop_shipping_config');
+        db.exec("ALTER TABLE shop_shipping_config ADD COLUMN pickup_email_template TEXT");
+      }
+    }
+
+    const globalShippingCols = db.prepare("PRAGMA table_info(global_shipping_config)").all() as any[];
+    if (globalShippingCols.length > 0) {
+      if (!globalShippingCols.some(col => col.name === 'pickup_enabled')) {
+        console.log('Migrating database: Adding pickup_enabled to global_shipping_config');
+        db.exec("ALTER TABLE global_shipping_config ADD COLUMN pickup_enabled BOOLEAN DEFAULT 0");
+      }
+      if (!globalShippingCols.some(col => col.name === 'pickup_fee')) {
+        console.log('Migrating database: Adding pickup_fee to global_shipping_config');
+        db.exec("ALTER TABLE global_shipping_config ADD COLUMN pickup_fee DECIMAL(10, 2) DEFAULT 0.00");
+      }
+      if (!globalShippingCols.some(col => col.name === 'pickup_email_template')) {
+        console.log('Migrating database: Adding pickup_email_template to global_shipping_config');
+        db.exec("ALTER TABLE global_shipping_config ADD COLUMN pickup_email_template TEXT");
+      }
+    }
+  } catch (e) {
+    console.error('Migration error (pickup config fields):', e);
+  }
+  // ============================================
+
   // New table for shipping configuration
   db.exec(`
     CREATE TABLE IF NOT EXISTS shop_shipping_config (
@@ -930,8 +994,35 @@ try {
       sender_country TEXT DEFAULT 'DEU',
       packaging_weight DECIMAL(10, 3) DEFAULT 0,
       shipping_tiers TEXT, -- JSON array of {min: number, max: number, price: number}
+      pickup_enabled BOOLEAN DEFAULT 0,
+      pickup_fee DECIMAL(10, 2) DEFAULT 0.00,
+      pickup_email_template TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS global_shipping_config (
+      id TEXT PRIMARY KEY DEFAULT 'main',
+      dhl_user TEXT,
+      dhl_signature TEXT,
+      dhl_ekp TEXT,
+      dhl_api_key TEXT,
+      dhl_sandbox BOOLEAN DEFAULT 0,
+      dhl_participation TEXT DEFAULT '01',
+      sender_name TEXT,
+      sender_street TEXT,
+      sender_house_number TEXT,
+      sender_zip TEXT,
+      sender_city TEXT,
+      sender_country TEXT DEFAULT 'DEU',
+      packaging_weight DECIMAL(10, 3) DEFAULT 0,
+      shipping_tiers TEXT, -- JSON array of {min: number, max: number, price: number}
+      pickup_enabled BOOLEAN DEFAULT 0,
+      pickup_fee DECIMAL(10, 2) DEFAULT 0.00,
+      pickup_email_template TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 

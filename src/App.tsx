@@ -46,6 +46,8 @@ import { useAppStore } from "@/store";
 import { useEffect, useRef, useState } from "react";
 import UpdateNotification from "@/components/UpdateNotification";
 import OrdersTrash from "@/pages/OrdersTrash";
+import SampleOrders from "@/pages/SampleOrders";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export default function App() {
   const fetchData = useAppStore((state) => state.fetchData);
@@ -112,6 +114,7 @@ export default function App() {
 
   if (isShopDomain) {
       return (
+        <ErrorBoundary fallbackTitle="Shop kann nicht angezeigt werden">
          <Router>
             <Routes>
                <Route path="/" element={<ShopLayout />}>
@@ -131,6 +134,7 @@ export default function App() {
                </Route>
             </Routes>
          </Router>
+        </ErrorBoundary>
       );
   }
 
@@ -141,13 +145,14 @@ export default function App() {
         onReload={() => window.location.reload()} 
         onClose={() => setUpdateAvailable(false)} 
       />
+      <ErrorBoundary fallbackTitle="Manager kann nicht angezeigt werden">
       <Router>
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/proof/:token" element={<PublicOrderProof />} />
         <Route path="/donations/:token" element={<PublicDonations />} />
-        <Route path="/shop/:shopId" element={<ShopLayout />}>
+        <Route path="/shop/:shopId" element={<ErrorBoundary fallbackTitle="Shop-Bereich kann nicht angezeigt werden"><ShopLayout /></ErrorBoundary>}>
           <Route index element={<ShopHome />} />
           <Route path="category/:categorySlug" element={<ShopCategoryPage />} />
           <Route path="product/:productId" element={<ShopProductPage />} />
@@ -163,7 +168,9 @@ export default function App() {
         
         <Route path="/dashboard" element={
           <ProtectedRoute>
-            <DashboardLayout />
+            <ErrorBoundary fallbackTitle="Dashboard kann nicht angezeigt werden">
+              <DashboardLayout />
+            </ErrorBoundary>
           </ProtectedRoute>
         }>
           <Route index element={<DashboardHome />} />
@@ -173,7 +180,8 @@ export default function App() {
           <Route path="orders/finished" element={<OrderList filter="completed" source="manual" />} />
           <Route path="orders/online" element={<OrderList source="online" />} />
           <Route path="orders/online/finished" element={<OrderList filter="completed" source="online" />} />
-          <Route path="orders/trash" element={<AdminRoute><OrdersTrash /></AdminRoute>} />
+          <Route path="sample-orders" element={<ErrorBoundary fallbackTitle="Musterbestellungen können nicht angezeigt werden"><SampleOrders /></ErrorBoundary>} />
+          <Route path="orders/trash" element={<AdminRoute><ErrorBoundary fallbackTitle="Papierkorb kann nicht angezeigt werden"><OrdersTrash /></ErrorBoundary></AdminRoute>} />
           <Route path="orders/:id" element={<OrderDetails />} />
           <Route path="orders/:id/view" element={<InternalOrderView />} />
           <Route path="orders/:id/edit" element={<EditOrder />} />
@@ -199,6 +207,7 @@ export default function App() {
         </Route>
       </Routes>
     </Router>
+    </ErrorBoundary>
     </>
   );
 }

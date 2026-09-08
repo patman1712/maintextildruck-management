@@ -361,7 +361,7 @@ router.get('/:id/shipping-config', (req, res) => {
         shopId = shop.id;
     }
 
-    const config = db.prepare('SELECT packaging_weight, shipping_tiers FROM shop_shipping_config WHERE shop_id = ?').get(shopId) as any;
+    const config = db.prepare('SELECT packaging_weight, shipping_tiers, pickup_enabled, pickup_fee FROM shop_shipping_config WHERE shop_id = ?').get(shopId) as any;
     
     // Parse shop tiers
     let shopTiers = [];
@@ -374,7 +374,7 @@ router.get('/:id/shipping-config', (req, res) => {
     }
 
     // Get global config
-    const globalConfig = db.prepare("SELECT shipping_tiers, packaging_weight FROM global_shipping_config WHERE id = 'main'").get() as any;
+    const globalConfig = db.prepare("SELECT shipping_tiers, packaging_weight, pickup_enabled, pickup_fee, pickup_email_template FROM global_shipping_config WHERE id = 'main'").get() as any;
     let globalTiers = [];
     if (globalConfig && globalConfig.shipping_tiers) {
         try {
@@ -397,11 +397,23 @@ router.get('/:id/shipping-config', (req, res) => {
         packagingWeight = parseFloat(globalConfig.packaging_weight);
     }
 
+    let pickupEnabled = false;
+    let pickupFee = 0;
+    if (config && (config.pickup_enabled === true || config.pickup_enabled === 1 || Number(config.pickup_enabled) > 0)) {
+        pickupEnabled = true;
+        pickupFee = Number(config.pickup_fee || globalConfig?.pickup_fee || 0);
+    } else if (globalConfig && (globalConfig.pickup_enabled === true || globalConfig.pickup_enabled === 1 || Number(globalConfig.pickup_enabled) > 0)) {
+        pickupEnabled = true;
+        pickupFee = Number(globalConfig.pickup_fee || 0);
+    }
+
     res.json({ 
         success: true, 
         data: {
             packaging_weight: packagingWeight,
-            shipping_tiers: finalTiers
+            shipping_tiers: finalTiers,
+            pickup_enabled: pickupEnabled,
+            pickup_fee: pickupFee
         } 
     });
   } catch (error: any) {

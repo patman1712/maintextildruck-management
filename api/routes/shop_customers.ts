@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { generateInvoice } from '../services/invoice.js';
 import { generateCancellationInvoice } from '../services/cancellation_invoice.js';
-import { sendOrderConfirmation, sendShopOrderNotification } from '../services/email.js';
+import { sendOrderConfirmation, sendShopOrderNotification, sendPickupConfirmation } from '../services/email.js';
 
 const router = Router();
 
@@ -499,7 +499,8 @@ router.post('/:shopId/orders', async (req, res) => {
       paymentStatus,
       transactionId,
       totalAmount,
-      shippingCosts
+      shippingCosts,
+      shipping_method
     } = req.body;
 
     console.log(`[Order] Data: Customer=${customerId}, Items=${items?.length}, Total=${totalAmount}`);
@@ -508,7 +509,10 @@ router.post('/:shopId/orders', async (req, res) => {
         return res.status(403).json({ success: false, error: 'Gastbestellungen sind in diesem Shop deaktiviert. Bitte einloggen oder registrieren.' });
     }
 
-    if (!address || !address.firstName || !address.lastName || !address.street || !address.zip || !address.city) {
+    // Validate address only for shipping (not for pickup)
+    const isPickup = String(shipping_method || 'dhl').trim().toLowerCase() === 'pickup';
+
+    if (!isPickup && (!address || !address.firstName || !address.lastName || !address.street || !address.zip || !address.city)) {
         return res.status(400).json({ success: false, error: 'Bitte füllen Sie alle Pflichtfelder der Adresse aus.' });
     }
 
@@ -560,18 +564,10 @@ router.post('/:shopId/orders', async (req, res) => {
               .replace('{NR}', String(usedNr));
       }
 
-      // 1. Create Order
-      // Logic: If paymentStatus is 'paid', status is 'active'. If 'open', status is 'on_hold' (or similar).
-      // But user said: "Aufträge sollen erst dort unter aktuelle aufträge erscheinen wenn der status komplett bezahlt vergeben wurde!"
-      // So if not paid, we might want to use a status that is filtered out by default in the main list.
-      // 'active' orders ARE shown in the main list.
-      // So let's use 'pending_payment' for open orders?
-      // Or just keep 'active' but filter in frontend?
-      // User says: "aufträge sollen erst dort unter aktuelle aufträge erscheinen wenn der status komplett bezahlt vergeben wurde"
-      // This implies we should set status to 'pending_payment' if not paid.
-      
       const isPaid = paymentStatus === 'paid';
       const initialStatus = isPaid ? 'active' : 'pending_payment';
+      const finalShippingMethod = isPickup ? 'pickup' : (String(shipping_method || 'dhl').trim() || 'dhl');
+      const finalPickupStatus = isPickup ? 'pending' : null;
 
       db.prepare(`
         INSERT INTO orders (
@@ -579,8 +575,8 @@ router.post('/:shopId/orders', async (req, res) => {
           customer_name, customer_email, customer_phone, customer_address,
           order_number, total_amount, shipping_costs, payment_method,
           payment_status, transaction_id,
-          status, deadline
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          status, deadline, shipping_method, pickup_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         orderId,
         `Shop Bestellung ${orderNumber}`,
@@ -590,15 +586,17 @@ router.post('/:shopId/orders', async (req, res) => {
         `${address.firstName} ${address.lastName}`,
         address.email || '',
         address.phone || '',
-        `${address.street}, ${address.zip} ${address.city}`,
+        isPickup ? 'Abholung Packstation' : `${address.street}, ${address.zip} ${address.city}`,
         orderNumber,
         totalAmount,
         shippingCosts,
         paymentMethod,
-        paymentStatus || 'open', // Default to 'open' instead of 'pending'
+        paymentStatus || 'open',
         transactionId || null,
         initialStatus,
-        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString() // Default 14 days
+        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        finalShippingMethod,
+        finalPickupStatus
       );
 
       // 2. Create Order Items
@@ -1045,6 +1043,16 @@ router.post('/:shopId/orders', async (req, res) => {
             }
         } else {
             console.error('[Order] Failed to generate invoice');
+        }
+
+        // Send Pickup Confirmation Email if order is pickup
+        if (isPickup) {
+            try {
+                await sendPickupConfirmation(orderId);
+                console.log(`[Order] Pickup confirmation email sent for order ${orderId}`);
+            } catch (e) {
+                console.error('[Order] Failed to send pickup confirmation email:', e);
+            }
         }
     } catch (e) {
         console.error('[Order] Error in post-processing:', e);

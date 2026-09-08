@@ -601,3 +601,230 @@ export const sendShopOrderNotification = async (orderId: string, invoicePath: st
         return false;
     }
 };
+
+// ============================================
+// NEU: Pickup / Abholung Packstation Mails
+// ============================================
+const PICKUP_DEFAULT_CONFIRMATION_TEXT = `Liebe/r {{customer_name}},
+
+vielen Dank für Deine Bestellung #{{order_number}} bei {{shop_name}}!
+
+Du hast die Abholung in unserer Packstation gewählt. Wir bearbeiten Deine Bestellung jetzt und melden uns SOFORT per E-Mail, sobald sie zur Abholung bereit liegt. Dann erhältst Du einen persönlichen Abholcode und die Fachnummer.
+
+Liebe Grüße
+Dein Team von {{shop_name}}`;
+
+const PICKUP_DEFAULT_READY_TEXT = `Liebe/r {{customer_name}},
+
+Deine Bestellung #{{order_number}} ist FERTIG und wartet auf Dich in der Packstation!
+
+🏷️ Dein Abholcode: {{pickup_code}}
+🔐 Fach-Nummer: {{pickup_compartment}}
+
+Gib einfach den Abholcode am Terminal ein und öffne das zugehörige Fach.
+
+Liebe Grüße
+Dein Team von {{shop_name}}`;
+
+const renderPickupTemplate = (template: string | null | undefined, vars: Record<string, string>) => {
+  let text = (template || '').trim();
+  if (!text) text = PICKUP_DEFAULT_CONFIRMATION_TEXT;
+  return text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => vars[key] || '');
+};
+
+export const sendPickupConfirmation = async (orderId: string) => {
+  const config = getEmailConfig();
+  if (!config) {
+    console.warn('[Pickup] Email config missing, skipping confirmation.');
+    return false;
+  }
+  try {
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
+    if (!order || !order.customer_email) return false;
+
+    let branding: any = {
+      logo_url: '', email_logo_url: '',
+      primary_color: '#0f172a', secondary_color: '#334155',
+      company_name: config.sender_name || 'Main Textildruck',
+      footer_text: ''
+    };
+    if (order.shop_id) {
+      const shop = db.prepare('SELECT logo_url, email_logo_url, primary_color, secondary_color, name FROM shops WHERE id = ?').get(order.shop_id) as any;
+      if (shop) {
+        if (shop.logo_url?.startsWith('http')) branding.logo_url = shop.logo_url;
+        if (shop.email_logo_url?.startsWith('http')) branding.email_logo_url = shop.email_logo_url;
+        if (shop.primary_color) branding.primary_color = shop.primary_color;
+        if (shop.secondary_color) branding.secondary_color = shop.secondary_color;
+        if (shop.name) branding.company_name = shop.name;
+      }
+    }
+    const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
+    if (globalContent) {
+      const parts = [];
+      if (globalContent.company_name) parts.push(globalContent.company_name);
+      if (globalContent.company_address) parts.push(globalContent.company_address);
+      if (globalContent.contact_email) parts.push(globalContent.contact_email);
+      branding.footer_text = parts.join(' | ');
+    }
+
+    let templateRaw: string | null = null;
+    if (order.shop_id) {
+      const shopCfg = db.prepare('SELECT pickup_email_template FROM shop_shipping_config WHERE shop_id = ?').get(order.shop_id) as any;
+      templateRaw = shopCfg?.pickup_email_template || null;
+    }
+    if (!templateRaw) {
+      const gCfg = db.prepare("SELECT pickup_email_template FROM global_shipping_config WHERE id = 'main'").get() as any;
+      templateRaw = gCfg?.pickup_email_template || null;
+    }
+    if (!templateRaw) templateRaw = PICKUP_DEFAULT_CONFIRMATION_TEXT;
+
+    const vars = {
+      order_number: order.order_number || order.id,
+      customer_name: order.customer_name || 'Kunde',
+      shop_name: branding.company_name,
+      pickup_code: order.pickup_code || '',
+      pickup_compartment: order.pickup_compartment || ''
+    };
+    const renderedText = renderPickupTemplate(templateRaw, vars);
+    const renderedLines = renderedText.split('\n').map(l => l.trimEnd());
+    const bodyHtml = renderedLines.map(l => l ? `<p style="font-size:14px; color:#0f172a; line-height:1.65; margin:0 0 12px 0;">${l}</p>` : '<div style="height:4px;"></div>').join('');
+
+    const logosHtml =
+      branding.logo_url ? `<img src="${branding.logo_url}" alt="${branding.company_name}" style="max-height:70px; max-width:250px;">` :
+      `<h1 style="margin:0; color:white;">${branding.company_name}</h1>`;
+
+    const subject = `Bestellbestätigung #${order.order_number} – Abholung Packstation`;
+    const html = `
+    <div style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 24px;">
+      <div style="max-width: 620px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+        <div style="padding: 22px; background: linear-gradient(90deg, ${branding.primary_color}, ${branding.secondary_color}); color: white;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px;">
+            <div>
+              <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing:.08em; opacity:.95;">Packstation Abholung</div>
+              <div style="font-size: 20px; font-weight: 800; margin-top:2px;">Bestellung eingegangen</div>
+            </div>
+            <div style="text-align:right; background: rgba(255,255,255,.12); padding:8px 12px; border-radius:10px;">
+              <div style="font-size: 11px; opacity:.9;">#</div>
+              <div style="font-size: 16px; font-weight: 800;">${order.order_number}</div>
+            </div>
+          </div>
+        </div>
+        <div style="padding: 22px;">
+          <div style="margin-bottom: 16px; text-align:center;">${logosHtml}</div>
+          ${bodyHtml}
+          <div style="margin-top: 18px; padding: 14px; border-radius: 12px; border: 1px dashed #94a3b8; background: #f8fafc;">
+            <div style="font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: .08em; margin-bottom:4px;">⏰ Nächster Schritt</div>
+            <div style="font-size: 13px; color: #0f172a;">Wir melden uns per E-Mail mit Deinem persönlichen Abholcode und der Fachnummer, sobald die Bestellung fertig ist.</div>
+          </div>
+        </div>
+        ${branding.footer_text ? `<div style="padding: 16px 22px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px;">${branding.footer_text}</div>` : ''}
+      </div>
+    </div>`;
+
+    const text = renderedText + `\n\n--\nNächster Schritt: Du erhältst bald eine weitere E-Mail mit Abholcode und Fachnummer.`;
+
+    return await sendEmailWithInvoice({ to: [order.customer_email], subject, text, html });
+  } catch (e) {
+    console.error('[Pickup Confirmation] Error:', e);
+    return false;
+  }
+};
+
+export const sendPickupReady = async (orderId: string, code: string, compartment: string) => {
+  const config = getEmailConfig();
+  if (!config) {
+    console.warn('[Pickup Ready] Email config missing, skipping.');
+    return false;
+  }
+  try {
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
+    if (!order || !order.customer_email) return false;
+
+    let branding: any = {
+      logo_url: '', email_logo_url: '',
+      primary_color: '#16a34a', secondary_color: '#15803d',
+      company_name: config.sender_name || 'Main Textildruck',
+      footer_text: ''
+    };
+    if (order.shop_id) {
+      const shop = db.prepare('SELECT logo_url, email_logo_url, primary_color, secondary_color, name FROM shops WHERE id = ?').get(order.shop_id) as any;
+      if (shop) {
+        if (shop.logo_url?.startsWith('http')) branding.logo_url = shop.logo_url;
+        if (shop.email_logo_url?.startsWith('http')) branding.email_logo_url = shop.email_logo_url;
+        if (shop.name) branding.company_name = shop.name;
+        if (shop.primary_color) { branding.primary_color = shop.primary_color; branding.secondary_color = shop.secondary_color || shop.primary_color; }
+      }
+    }
+    const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
+    if (globalContent) {
+      const parts = [];
+      if (globalContent.company_name) parts.push(globalContent.company_name);
+      if (globalContent.company_address) parts.push(globalContent.company_address);
+      if (globalContent.contact_email) parts.push(globalContent.contact_email);
+      branding.footer_text = parts.join(' | ');
+    }
+
+    const vars = {
+      order_number: order.order_number || order.id,
+      customer_name: order.customer_name || 'Kunde',
+      shop_name: branding.company_name,
+      pickup_code: code,
+      pickup_compartment: compartment
+    };
+    const renderedText = renderPickupTemplate(PICKUP_DEFAULT_READY_TEXT, vars);
+    const renderedLines = renderedText.split('\n').map(l => l.trimEnd());
+    const bodyHtml = renderedLines.map(l => l ? `<p style="font-size:14px; color:#0f172a; line-height:1.65; margin:0 0 12px 0;">${l}</p>` : '<div style="height:4px;"></div>').join('');
+
+    const logosHtml =
+      branding.logo_url ? `<img src="${branding.logo_url}" alt="${branding.company_name}" style="max-height:70px; max-width:250px;">` :
+      `<h1 style="margin:0; color:white;">${branding.company_name}</h1>`;
+
+    const subject = `✅ Bereit zur Abholung! Bestellung #${order.order_number} – Code ${code}`;
+    const html = `
+    <div style="font-family: Arial, sans-serif; background-color: #f0fdf4; padding: 24px;">
+      <div style="max-width: 620px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; border: 2px solid #16a34a; box-shadow: 0 8px 30px rgba(22,163,74,.12);">
+        <div style="padding: 22px; background: linear-gradient(90deg, #16a34a, #15803d); color: white;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="background: rgba(255,255,255,.2); padding:6px; border-radius:10px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </div>
+              <div>
+                <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing:.08em; opacity:.95;">Packstation</div>
+                <div style="font-size: 20px; font-weight: 800; margin-top:2px;">Bestellung abholbereit!</div>
+              </div>
+            </div>
+            <div style="text-align:right; background: rgba(255,255,255,.18); padding:8px 12px; border-radius:10px;">
+              <div style="font-size: 11px; opacity:.9;">#</div>
+              <div style="font-size: 16px; font-weight: 800;">${order.order_number}</div>
+            </div>
+          </div>
+        </div>
+        <div style="padding: 22px;">
+          <div style="margin-bottom: 16px; text-align:center;">${logosHtml}</div>
+          ${bodyHtml}
+          <div style="margin-top: 18px; display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div style="padding: 16px; border-radius: 12px; background: #fef3c7; border: 1px solid #f59e0b; text-align:center;">
+              <div style="font-size: 11px; font-weight: 800; color: #92400e; text-transform: uppercase; letter-spacing:.08em;">Abholcode</div>
+              <div style="margin-top:6px; font-size: 28px; font-weight: 900; letter-spacing: 2px; color: #78350f;">${code}</div>
+            </div>
+            <div style="padding: 16px; border-radius: 12px; background: #dbeafe; border: 1px solid #3b82f6; text-align:center;">
+              <div style="font-size: 11px; font-weight: 800; color: #1e40af; text-transform: uppercase; letter-spacing:.08em;">Fach-Nummer</div>
+              <div style="margin-top:6px; font-size: 28px; font-weight: 900; letter-spacing: 1px; color: #1e3a8a;">${compartment}</div>
+            </div>
+          </div>
+          <div style="margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: #f0fdf4; border: 1px solid #bbf7d0; font-size: 13px; color: #14532d;">
+            💡 Tipp: Gib einfach den Abholcode am Packstation-Terminal ein – das Fach öffnet sich automatisch.
+          </div>
+        </div>
+        ${branding.footer_text ? `<div style="padding: 16px 22px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px;">${branding.footer_text}</div>` : ''}
+      </div>
+    </div>`;
+
+    return await sendEmailWithInvoice({ to: [order.customer_email], subject, text: renderedText, html });
+  } catch (e) {
+    console.error('[Pickup Ready] Error:', e);
+    return false;
+  }
+};
+// ============================================

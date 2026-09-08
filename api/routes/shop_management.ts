@@ -7,7 +7,7 @@ import path from 'path';
 import { DATA_DIR } from '../db.js';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DhlClient } from '../services/dhl.js';
-import { sendShipmentNotification } from '../services/email.js';
+import { sendShipmentNotification, sendPickupReady } from '../services/email.js';
 
 const router = Router();
 
@@ -935,11 +935,11 @@ router.get('/:shopId/shipping-config', (req, res) => {
 router.post('/:shopId/shipping-config', (req, res) => {
   try {
     const { shopId } = req.params;
-    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight, shipping_tiers } = req.body;
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight, shipping_tiers, pickup_enabled, pickup_fee, pickup_email_template } = req.body;
 
     db.prepare(`
-      INSERT INTO shop_shipping_config (shop_id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight, shipping_tiers)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO shop_shipping_config (shop_id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight, shipping_tiers, pickup_enabled, pickup_fee, pickup_email_template)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(shop_id) DO UPDATE SET
         dhl_user = excluded.dhl_user,
         dhl_signature = excluded.dhl_signature,
@@ -954,7 +954,10 @@ router.post('/:shopId/shipping-config', (req, res) => {
         sender_city = excluded.sender_city,
         sender_country = excluded.sender_country,
         packaging_weight = excluded.packaging_weight,
-        shipping_tiers = excluded.shipping_tiers
+        shipping_tiers = excluded.shipping_tiers,
+        pickup_enabled = excluded.pickup_enabled,
+        pickup_fee = excluded.pickup_fee,
+        pickup_email_template = excluded.pickup_email_template
     `).run(
         shopId, 
         dhl_user, 
@@ -970,7 +973,10 @@ router.post('/:shopId/shipping-config', (req, res) => {
         sender_city, 
         sender_country, 
         packaging_weight || 0,
-        shipping_tiers ? JSON.stringify(shipping_tiers) : '[]'
+        shipping_tiers ? JSON.stringify(shipping_tiers) : '[]',
+        pickup_enabled ? 1 : 0,
+        typeof pickup_fee === 'number' || (pickup_fee && String(pickup_fee).trim() !== '') ? Number(pickup_fee) : 0,
+        pickup_email_template ? String(pickup_email_template).trim() : null
     );
 
     res.json({ success: true });
@@ -978,6 +984,105 @@ router.post('/:shopId/shipping-config', (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// ============================================
+// NEU: Pickup / Abholung Packstation
+// ============================================
+// Global Shipping Config um Pickup erweitern (GET/POST sind schon vorhanden, siehe Routes oben bei Global! Wir sichern nur ab, dass die Pickup-Felder beim Speichern erhalten bleiben!)
+router.get('/shipping/global-config', (req, res) => {
+  try {
+    const config = db.prepare("SELECT * FROM global_shipping_config WHERE id = 'main'").get() as any;
+    if (config && config.shipping_tiers) {
+      try { config.shipping_tiers = JSON.parse(config.shipping_tiers); }
+      catch (e) { config.shipping_tiers = []; }
+    }
+    res.json({ success: true, data: config || {} });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+router.post('/shipping/global-config', (req, res) => {
+  try {
+    const { dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight, shipping_tiers, pickup_enabled, pickup_fee, pickup_email_template } = req.body;
+    db.prepare(`
+      INSERT INTO global_shipping_config (id, dhl_user, dhl_signature, dhl_ekp, dhl_api_key, dhl_sandbox, dhl_participation, sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country, packaging_weight, shipping_tiers, pickup_enabled, pickup_fee, pickup_email_template)
+      VALUES ('main', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        dhl_user = excluded.dhl_user,
+        dhl_signature = excluded.dhl_signature,
+        dhl_ekp = excluded.dhl_ekp,
+        dhl_api_key = excluded.dhl_api_key,
+        dhl_sandbox = excluded.dhl_sandbox,
+        dhl_participation = excluded.dhl_participation,
+        sender_name = excluded.sender_name,
+        sender_street = excluded.sender_street,
+        sender_house_number = excluded.sender_house_number,
+        sender_zip = excluded.sender_zip,
+        sender_city = excluded.sender_city,
+        sender_country = excluded.sender_country,
+        packaging_weight = excluded.packaging_weight,
+        shipping_tiers = excluded.shipping_tiers,
+        pickup_enabled = excluded.pickup_enabled,
+        pickup_fee = excluded.pickup_fee,
+        pickup_email_template = excluded.pickup_email_template
+    `).run(
+      dhl_user, dhl_signature, dhl_ekp, dhl_api_key,
+      dhl_sandbox ? 1 : 0, dhl_participation,
+      sender_name, sender_street, sender_house_number, sender_zip, sender_city, sender_country,
+      packaging_weight || 0,
+      shipping_tiers ? JSON.stringify(shipping_tiers) : '[]',
+      pickup_enabled ? 1 : 0,
+      typeof pickup_fee === 'number' || (pickup_fee && String(pickup_fee).trim() !== '') ? Number(pickup_fee) : 0,
+      pickup_email_template ? String(pickup_email_template).trim() : null
+    );
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// WICHTIG: Pickup-Ready machen (statt Label erstellen!)
+router.post('/:shopId/shipping/pickup-ready', async (req, res) => {
+  try {
+    const { shopId } = req.params;
+    const { orderId, pickup_code, pickup_compartment, auto_generate } = req.body;
+
+    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND shop_id = ?').get(orderId, shopId) as any;
+    if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
+
+    let finalCode = (pickup_code || '').toString().trim();
+    let finalCompartment = (pickup_compartment || '').toString().trim();
+
+    if (auto_generate || !finalCode) {
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      finalCode = `MT-${rand}`;
+    }
+    if (auto_generate || !finalCompartment) {
+      const fach = Math.floor(1 + Math.random() * 30);
+      finalCompartment = `Fach ${fach}`;
+    }
+
+    db.prepare(`
+      UPDATE orders
+      SET pickup_code = ?, pickup_compartment = ?, pickup_status = 'ready', shipping_method = 'pickup'
+      WHERE id = ?
+    `).run(finalCode, finalCompartment, orderId);
+
+    const emailOk = await sendPickupReady(orderId, finalCode, finalCompartment);
+
+    res.json({
+      success: true,
+      pickup_code: finalCode,
+      pickup_compartment: finalCompartment,
+      pickup_status: 'ready',
+      email_sent: emailOk
+    });
+  } catch (error: any) {
+    console.error('[Pickup Ready] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+// ============================================
 
 router.post('/:shopId/shipping/create-label', async (req, res) => {
   try {
