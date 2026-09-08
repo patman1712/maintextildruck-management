@@ -1827,30 +1827,6 @@ const ShopDashboard: React.FC = () => {
                                                 >
                                                     Details
                                                 </button>
-                                                {currentUser?.role === 'admin' && (
-                                                    <button
-                                                        onClick={async () => {
-                                                            const ok = window.confirm('Neue Nummer vergeben?\n\nDadurch wird die Bestell-/Rechnungsnummer neu vergeben und die Rechnung (PDF) neu erzeugt.');
-                                                            if (!ok) return;
-                                                            try {
-                                                                const res = await fetch(`/api/shop-customers/${shopId}/admin/orders/${order.id}/regenerate-order-number`, { method: 'POST' });
-                                                                const data = await res.json();
-                                                                if (!data.success) {
-                                                                    alert(data.error || 'Fehler beim Neuvergeben der Nummer.');
-                                                                    return;
-                                                                }
-                                                                await fetchShopOrders();
-                                                            } catch (e) {
-                                                                console.error(e);
-                                                                alert('Fehler beim Neuvergeben der Nummer.');
-                                                            }
-                                                        }}
-                                                        className="text-slate-700 hover:bg-slate-100 p-2 rounded-lg text-sm font-bold"
-                                                        title="Bestellnummer neu vergeben"
-                                                    >
-                                                        Nr neu
-                                                    </button>
-                                                )}
                                                 <button 
                                                     onClick={() => handleDeleteOrder(order.id)}
                                                     className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
@@ -2577,37 +2553,115 @@ const ShopDashboard: React.FC = () => {
                                         <option value="cancelled">Storniert</option>
                                     </select>
                                 </div>
-                                {selectedOrder.tracking_number && (
-                                    <div className="pt-4 border-t border-slate-50 space-y-3">
-                                        <h5 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Versandinformationen</h5>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-xs text-slate-500">Sendungsnummer:</span>
-                                            <span className="text-xs font-mono font-bold text-slate-700">{selectedOrder.tracking_number}</span>
-                                        </div>
-                                        {selectedOrder.label_url && (
-                                            <div className="flex space-x-2">
-                                                <a 
-                                                    href={selectedOrder.label_url} 
-                                                    target="_blank" 
-                                                    rel="noopener noreferrer"
-                                                    className="flex-1 flex items-center justify-center px-4 py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors"
-                                                >
-                                                    <Truck size={14} className="mr-2" />
-                                                    Versandlabel (PDF)
-                                                </a>
-                                                <a 
-                                                    href={`https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${selectedOrder.tracking_number}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="flex-1 flex items-center justify-center px-4 py-2 bg-slate-50 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors border border-slate-200"
-                                                >
-                                                    <ExternalLink size={14} className="mr-2" />
-                                                    Verfolgen
-                                                </a>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+
+                                {/* --- VERSAND & ABHOLUNG SEKTION (IMMER SICHTBAR) --- */}
+                                <div className="pt-4 border-t border-slate-100 space-y-4">
+                                    <h5 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Versand & Abholung</h5>
+                                    {(() => {
+                                        const isPickup = String(selectedOrder.shipping_method || 'dhl').toLowerCase() === 'pickup';
+                                        const isPickupReady = selectedOrder.pickup_status === 'ready';
+                                        if (isPickup) {
+                                            // ===== PICKUP / ABHOLUNG ANSICHT =====
+                                            return (
+                                                <div className={`rounded-xl border-2 p-4 space-y-3 ${isPickupReady ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${
+                                                            isPickupReady ? 'bg-green-600 text-white' : 'bg-orange-500 text-white'
+                                                        }`}>
+                                                            <MapPin size={10} className="mr-1.5" />
+                                                            {isPickupReady ? 'Abholbereit' : 'Warte auf Bearbeitung'}
+                                                        </span>
+                                                        <button
+                                                            onClick={() => handleOpenPickupReadyModal(selectedOrder)}
+                                                            disabled={isProcessingPickupReady}
+                                                            className={`px-3 py-1.5 rounded-lg transition-all text-[10px] font-black uppercase tracking-wider flex items-center ml-3 shadow-sm ${
+                                                                isPickupReady 
+                                                                ? 'bg-green-600 text-white hover:bg-green-700' 
+                                                                : 'bg-orange-600 text-white hover:bg-orange-700'
+                                                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                                        >
+                                                            <MapPin size={12} className="mr-1.5" />
+                                                            {isPickupReady ? 'Erneut senden' : 'Abholung bereit + Mail senden'}
+                                                        </button>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <div>
+                                                            <div className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Abholcode</div>
+                                                            <div className={`rounded-lg px-3 py-2 text-center font-black font-mono text-lg border-2 ${
+                                                                selectedOrder.pickup_code ? 'bg-white border-slate-200 text-slate-800' : 'bg-slate-100 border-dashed border-slate-300 text-slate-400 italic text-xs font-normal py-3'
+                                                            }`}>
+                                                                {selectedOrder.pickup_code || '— Noch nicht generiert —'}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Fachnummer</div>
+                                                            <div className={`rounded-lg px-3 py-2 text-center font-black text-lg border-2 ${
+                                                                selectedOrder.pickup_compartment ? 'bg-white border-slate-200 text-slate-800' : 'bg-slate-100 border-dashed border-slate-300 text-slate-400 italic text-xs font-normal py-3'
+                                                            }`}>
+                                                                {selectedOrder.pickup_compartment || '— Noch nicht zugewiesen —'}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        } else {
+                                            // ===== DHL VERSAND ANSICHT =====
+                                            return (
+                                                <div className={`rounded-xl border-2 p-4 space-y-3 ${
+                                                    selectedOrder.tracking_number ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'
+                                                }`}>
+                                                    <div className="flex items-center justify-between">
+                                                        <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${
+                                                            selectedOrder.tracking_number ? 'bg-blue-600 text-white' : 'bg-slate-500 text-white'
+                                                        }`}>
+                                                            <Truck size={10} className="mr-1.5" />
+                                                            DHL Versand {selectedOrder.tracking_number ? '· Label erstellt' : '· Kein Label'}
+                                                        </span>
+                                                        <div className="flex space-x-2">
+                                                            <button
+                                                                onClick={() => handleCreateShippingLabel(selectedOrder)}
+                                                                disabled={isCreatingLabel}
+                                                                className="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-[10px] font-black uppercase tracking-wider flex items-center transition-all disabled:opacity-50 shadow-sm"
+                                                            >
+                                                                <Truck size={12} className={`mr-1.5 ${isCreatingLabel ? 'animate-pulse' : ''}`} />
+                                                                {selectedOrder.tracking_number ? 'Label neu erstellen' : 'DHL Label erstellen'}
+                                                            </button>
+                                                            {selectedOrder.label_url && (
+                                                                <a
+                                                                    href={selectedOrder.label_url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="px-3 py-1.5 rounded-lg bg-white border border-blue-200 text-blue-600 text-[10px] font-black uppercase tracking-wider flex items-center hover:bg-blue-50 transition-all"
+                                                                >
+                                                                    <FileText size={12} className="mr-1.5" />
+                                                                    Label PDF
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {selectedOrder.tracking_number && (
+                                                        <div className="flex items-center justify-between bg-white rounded-lg border border-blue-100 px-4 py-2.5">
+                                                            <div>
+                                                                <div className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Sendungsnummer</div>
+                                                                <div className="font-mono font-bold text-sm text-slate-800">{selectedOrder.tracking_number}</div>
+                                                            </div>
+                                                            <a
+                                                                href={`https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=${selectedOrder.tracking_number}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="flex items-center px-3 py-1.5 bg-slate-800 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-slate-900 transition-colors"
+                                                            >
+                                                                <ExternalLink size={11} className="mr-1.5" />
+                                                                Verfolgen
+                                                            </a>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        }
+                                    })()}
+                                </div>
+                                {/* --- ENDE VERSAND & ABHOLUNG --- */}
                                 <div className="pt-4 border-t border-slate-50 space-y-2">
                                     <div className="flex justify-between text-sm text-slate-500">
                                         <span>Zwischensumme:</span>
