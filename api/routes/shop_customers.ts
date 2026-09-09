@@ -509,10 +509,10 @@ router.post('/:shopId/orders', async (req, res) => {
         return res.status(403).json({ success: false, error: 'Gastbestellungen sind in diesem Shop deaktiviert. Bitte einloggen oder registrieren.' });
     }
 
-    // Validate address only for shipping (not for pickup)
+    // Validate address: ALWAYS required (billing address!
     const isPickup = String(shipping_method || 'dhl').trim().toLowerCase() === 'pickup';
 
-    if (!isPickup && (!address || !address.firstName || !address.lastName || !address.street || !address.zip || !address.city)) {
+    if (!address || !address.firstName || !address.lastName || !address.street || !address.zip || !address.city) {
         return res.status(400).json({ success: false, error: 'Bitte füllen Sie alle Pflichtfelder der Adresse aus.' });
     }
 
@@ -586,7 +586,8 @@ router.post('/:shopId/orders', async (req, res) => {
         `${address.firstName} ${address.lastName}`,
         address.email || '',
         address.phone || '',
-        isPickup ? 'Abholung Packstation' : `${address.street}, ${address.zip} ${address.city}`,
+        // customer_address: IMMER echte Rechnungsadresse vom Kunden (auch bei Pickup!)
+        `${address.street}, ${address.zip} ${address.city}`,
         orderNumber,
         totalAmount,
         shippingCosts,

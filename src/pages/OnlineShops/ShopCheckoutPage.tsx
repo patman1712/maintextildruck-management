@@ -120,10 +120,13 @@ const ShopCheckoutPage: React.FC = () => {
   const isGuest = !currentCustomer;
   const isEmailValid = !isGuest || /^\S+@\S+\.\S+$/.test(address.email);
   const isPickupSelected = selectedShippingMethod === 'pickup';
+  // WICHTIG: Adress-Pflichtfelder IMMER - auch bei Pickup! Das sind die Rechnungsadressendaten!
   const canProceedFromAddress =
     !!address.firstName &&
     !!address.lastName &&
-    (isPickupSelected || (!!address.street && !!address.zip && !!address.city)) &&
+    !!address.street &&
+    !!address.zip &&
+    !!address.city &&
     (!isGuest || isEmailValid);
 
   const handlePlaceOrder = async (transactionId?: string) => {
@@ -323,30 +326,27 @@ const ShopCheckoutPage: React.FC = () => {
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Firma (Optional)</label>
                   <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.company} onChange={e => setAddress({...address, company: e.target.value})} />
                 </div>
-                {!isPickupSelected && (
-                  <>
-                    <div className="col-span-full space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Straße & Hausnummer*</label>
-                      <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.street} onChange={e => setAddress({...address, street: e.target.value})} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">PLZ*</label>
-                      <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.zip} onChange={e => setAddress({...address, zip: e.target.value})} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Stadt*</label>
-                      <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.city} onChange={e => setAddress({...address, city: e.target.value})} />
-                    </div>
-                  </>
-                )}
+                <div className="col-span-full space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Straße & Hausnummer*</label>
+                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.street} onChange={e => setAddress({...address, street: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">PLZ*</label>
+                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.zip} onChange={e => setAddress({...address, zip: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Stadt*</label>
+                  <input type="text" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-slate-200 transition-all font-medium" value={address.city} onChange={e => setAddress({...address, city: e.target.value})} />
+                </div>
                 {isPickupSelected && (
                   <div className="col-span-full">
                     <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-sm">
-                      <div className="font-bold text-orange-800 flex items-center mb-1">
-                        <MapPin size={14} className="mr-2" /> Abholung vor Ort
+                      <div className="font-bold text-orange-800 flex items-center mb-2">
+                        <MapPin size={14} className="mr-2" /> Abholung Packstation Main Textildruck
                       </div>
                       <div className="text-orange-700 text-xs leading-relaxed">
-                        Du brauchst keine Lieferadresse anzugeben. Die Abholadresse lautet: <strong>Main Textildruck</strong>. Du erhältst per E-Mail eine Benachrichtigung mit Abholcode und Fachnummer, sobald deine Bestellung fertig ist.
+                        <strong>Hinweis:</strong> Die oben angegebenen Adressdaten dienen ausschließlich als <strong>Rechnungsadresse</strong> und werden auf deiner Rechnung abgebildet.<br />
+                        Die Lieferung erfolgt <strong>nicht!</strong> Du holst deine Bestellung persönlich bei uns ab. Du erhältst bald eine E-Mail mit Abholcode + Fachnummer, sobald sie fertig ist.
                       </div>
                     </div>
                   </div>
