@@ -108,6 +108,14 @@ export default function InternalOrderView() {
                         {new Date(order.deadline).toLocaleDateString('de-DE')}
                     </span>
                 </div>
+                {order.dtf_printed_at && (
+                    <div className="flex items-center bg-green-600/20 px-3 py-1 rounded-full border border-green-400/40" title="DTF Druckdatum">
+                        <Printer size={15} className="mr-1.5 text-green-300" />
+                        <span className="font-mono font-bold text-green-200 text-xs">
+                            gedruckt: {new Date(order.dtf_printed_at).toLocaleDateString('de-DE')} {new Date(order.dtf_printed_at).toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})}
+                        </span>
+                    </div>
+                )}
             </div>
         </div>
       </div>

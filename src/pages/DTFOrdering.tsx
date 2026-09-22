@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAppStore } from "@/store";
-import { Printer, Upload, Download, Trash2, FileText, Check, AlertCircle, Package, ChevronDown, ChevronRight, Search, User, RotateCcw } from "lucide-react";
+import { Printer, Upload, Download, Trash2, FileText, Check, AlertCircle, Package, ChevronDown, ChevronRight, Search, User, RotateCcw, Info } from "lucide-react";
 
 export default function DTFOrdering() {
   const orders = useAppStore((state) => state.orders);
@@ -1073,13 +1073,10 @@ export default function DTFOrdering() {
                         <span className="bg-slate-100 text-slate-600 w-6 h-6 rounded-full flex items-center justify-center text-xs mr-2">2</span>
                         Ausgewählte Dateien ({selectedFiles.reduce((acc, curr) => acc + curr.quantity, 0)})
                     </h3>
-                    <button 
-                        onClick={() => setShowFilePicker(true)}
-                        className="text-sm bg-red-600 text-white px-3 py-1.5 rounded hover:bg-red-700 flex items-center"
-                    >
-                        <Upload size={16} className="mr-2" />
-                        Dateien hinzufügen
-                    </button>
+                    <div className="text-xs text-slate-500 flex items-center">
+                        <Info size={13} className="mr-1" />
+                        Dateien werden nur noch über Aufträge hinzugefügt
+                    </div>
                 </div>
                 
                 <div className="overflow-y-auto p-2 space-y-2 flex-1">

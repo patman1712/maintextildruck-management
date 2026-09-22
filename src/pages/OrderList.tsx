@@ -37,6 +37,17 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
       const s = urlParams.get('status');
       return s === 'all' || s === 'active' || s === 'completed' ? s : 'active';
   });
+  const [printDateSort, setPrintDateSort] = useState<"none" | "asc" | "desc">(() => {
+      try {
+          const raw = sessionStorage.getItem(`ordersListState:${window.location.pathname}`);
+          if (raw) {
+              const parsed = JSON.parse(raw);
+              const s = parsed?.printSort;
+              if (s === 'none' || s === 'asc' || s === 'desc') return s;
+          }
+      } catch {}
+      return 'none';
+  });
   const [approvalInfoOrder, setApprovalInfoOrder] = useState<Order | null>(null);
 
   const [statusUpdateModal, setStatusUpdateModal] = useState<{ order: Order, isOpen: boolean } | null>(null);
@@ -102,10 +113,11 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
   useEffect(() => {
       const payload: any = { q: searchTerm };
       if (!filter) payload.status = statusFilter;
+      payload.printSort = printDateSort;
       try {
           sessionStorage.setItem(listStateKey, JSON.stringify(payload));
       } catch {}
-  }, [filter, listStateKey, searchTerm, statusFilter]);
+  }, [filter, listStateKey, searchTerm, statusFilter, printDateSort]);
 
   useEffect(() => {
       const restoreKey = sessionStorage.getItem('ordersListRestoreKey');
@@ -523,13 +535,34 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
   });
 
   const visibleOrders = (() => {
-    if (!showInvoiceMeta) return filteredOrders;
-    const withTs = (o: any) => {
-      const v = o?.invoicedAt || o?.invoiced_at;
-      const t = v ? new Date(v).getTime() : NaN;
-      return Number.isFinite(t) ? t : -Infinity;
-    };
-    return [...filteredOrders].sort((a: any, b: any) => withTs(b) - withTs(a));
+    let result = [...filteredOrders];
+    // 1. Druckdatum Sortierung (immer vor invoiceMeta anwenden!)
+    if (printDateSort !== 'none') {
+        const withTs = (o: any) => {
+            const v = o?.dtf_printed_at;
+            const t = v ? new Date(v).getTime() : NaN;
+            // Ohne Druckdatum: bei desc hinten, bei asc vorne
+            if (!Number.isFinite(t)) {
+                return printDateSort === 'desc' ? -Infinity : Infinity;
+            }
+            return t;
+        };
+        if (printDateSort === 'desc') {
+            result.sort((a, b) => withTs(b) - withTs(a));
+        } else {
+            result.sort((a, b) => withTs(a) - withTs(b));
+        }
+    }
+    // 2. InvoiceMeta Sortierung (Fertige Aufträge)
+    if (showInvoiceMeta) {
+        const withTs = (o: any) => {
+            const v = o?.invoicedAt || o?.invoiced_at;
+            const t = v ? new Date(v).getTime() : NaN;
+            return Number.isFinite(t) ? t : -Infinity;
+        };
+        result.sort((a, b) => withTs(b) - withTs(a));
+    }
+    return result;
   })();
 
   const StepButton = ({ active, onClick, icon: Icon, label, colorClass }: { active: boolean, onClick: () => void, icon: any, label: string, colorClass: string }) => (
@@ -617,6 +650,16 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
               <option value="completed">Abgeschlossen</option>
             </select>
           )}
+          <select 
+            className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-red-500 focus:border-red-500 bg-white"
+            value={printDateSort}
+            onChange={(e) => setPrintDateSort(e.target.value as any)}
+            title="Nach DTF Druck-Datum sortieren"
+          >
+            <option value="none">Sortierung: Standard</option>
+            <option value="desc">Druck-Datum: Neueste zuerst</option>
+            <option value="asc">Druck-Datum: Älteste zuerst</option>
+          </select>
         </div>
       </div>
 
@@ -631,6 +674,9 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rechnung</th>
                 )}
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Deadline</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                  <Printer size={12} /> DTF Druck
+                </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mitarbeiter</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fortschritt</th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -707,6 +753,27 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                         <Calendar size={16} className="mr-2 text-gray-400" />
                         {new Date(order.deadline).toLocaleDateString('de-DE')}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {order.dtf_printed_at ? (
+                        <div title={`Gedruckt am ${new Date(order.dtf_printed_at).toLocaleString('de-DE')}`} className="flex items-center text-sm text-green-700 font-medium">
+                          <Printer size={16} className="mr-2 text-green-600" />
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-green-800 font-black uppercase tracking-wider">GEDRUCKT</span>
+                            <span className="font-mono font-bold text-green-900 text-xs">
+                              {new Date(order.dtf_printed_at).toLocaleDateString('de-DE')}
+                            </span>
+                            <span className="font-mono text-[10px] text-green-700">
+                              {new Date(order.dtf_printed_at).toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center text-sm text-gray-400 italic">
+                          <span className="w-3 h-3 mr-2 rounded-full bg-slate-300 border border-slate-200 inline-block" />
+                          Noch nicht gedruckt
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex -space-x-2 overflow-hidden">

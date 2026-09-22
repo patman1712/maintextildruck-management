@@ -101,6 +101,11 @@ export interface Order {
   manualInvoiceNote?: string;
   deletedAt?: string | null;
   deletedBy?: string | null;
+  shipping_method?: 'dhl' | 'pickup' | string;
+  pickup_code?: string | null;
+  pickup_compartment?: string | null;
+  pickup_status?: 'pending' | 'ready' | string | null;
+  dtf_printed_at?: string | null;
 }
 
 export interface Supplier {

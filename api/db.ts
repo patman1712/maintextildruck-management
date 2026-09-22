@@ -934,6 +934,10 @@ try {
       console.log('Migrating database: Adding pickup_status to orders (default: pending)');
       db.exec("ALTER TABLE orders ADD COLUMN pickup_status TEXT DEFAULT 'pending'");
     }
+    if (!orderCols.some(col => col.name === 'dtf_printed_at')) {
+      console.log('Migrating database: Adding dtf_printed_at to orders (Druck-Datum für DTF-Bögen)');
+      db.exec("ALTER TABLE orders ADD COLUMN dtf_printed_at TEXT");
+    }
   } catch (e) {
     console.error('Migration error (orders pickup fields):', e);
   }

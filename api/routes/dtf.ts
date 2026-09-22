@@ -862,6 +862,16 @@ router.post('/generate', async (req: Request, res: Response) => {
             utilization: jobPages.length > 0 ? jobPages.reduce((sum, p) => sum + (p.utilization || 0), 0) / jobPages.length : 0
         };
 
+        // Setze dtf_printed_at auf alle betroffenen Orders (Druck-Datum)
+        if (orderIds.length > 0) {
+            const now = new Date().toISOString();
+            const updateStmt = db.prepare(`UPDATE orders SET dtf_printed_at = ? WHERE id = ?`);
+            const tx = db.transaction((ids: string[]) => {
+                for (const id of ids) updateStmt.run(now, id);
+            });
+            tx(orderIds);
+        }
+
         db.prepare(`
             INSERT INTO dtf_jobs (id, pdf_urls, roll_width_mm, roll_length_mm, padding_mm, files_json, pages_json, order_ids_json, stats_json)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
