@@ -397,7 +397,18 @@ const ShopProductPage: React.FC = () => {
 
   const images = React.useMemo(() => {
       if (!product || !product.files) return [];
-      return (product.files || []).filter((f: any) => !f.type || f.type === 'view' || f.type === 'preview' || (f.thumbnail_url && f.type !== 'print' && f.type !== 'vector' && f.type !== 'internal'));
+      // Shop-Bilder (aus shop_product_images) haben shop_product_assignment_id gesetzt!
+      // Diese BILDER IMMER durchlassen! Egal was type/f.thumbnail_url ist.
+      return (product.files || []).filter((f: any) => {
+          // Fix 1: Alle Shop-assigneten Bilder auf jeden Fall anzeigen
+          if (f && (f.shop_product_assignment_id || f.sort_order !== undefined)) {
+              return true;
+          }
+          // Fix 1b: Fallback Filter für alte customer_product_files
+          if (!f.type || f.type === 'view' || f.type === 'preview') return true;
+          if (f.thumbnail_url && f.type !== 'print' && f.type !== 'vector' && f.type !== 'internal') return true;
+          return false;
+      });
   }, [product]);
 
   const displayedImages = React.useMemo(() => {
@@ -412,67 +423,47 @@ const ShopProductPage: React.FC = () => {
               }
           }
 
-          // 1. Check Attribute Restrictions (Back Print, Color, etc.)
+          // 1. Check Attribute Restrictions (Back Print Motiv, Größe, Farbe etc.)
+          // ACHTUNG: Nur wenn die Attribute Restrictions WERTE enthält (also: Bild ist an bestimmte Auswahl gebunden)
           if (Object.keys(restrictions).length > 0) {
-              // Iterate all restrictions
               for (const [varId, allowedValues] of Object.entries(restrictions)) {
                    // Check against selected Back Print
                    if (backPrintVariant && String(backPrintVariant.id) === String(varId)) {
                        if (selectedBackPrint) {
                            if (!allowedValues.includes(selectedBackPrint)) return false;
                        } else {
-                           // If file is restricted to a Back Print option, but none selected yet -> Hide
+                           // Bild hat konkrete Motiv-Restriktion, aber noch kein Motiv gewählt → verstecken
                            return false;
                        }
                    }
                    else if (varId === 'standard') {
-                       // Standard restriction (e.g. Size S, M) - Check against selectedSize
                        if (selectedSize) {
                             if (!allowedValues.includes(selectedSize)) return false;
                        } else {
-                            // Restriction exists but no size selected yet -> Hide? 
-                            // Or show if we assume unselected means "all sizes"? 
-                            // Usually restrictions mean "Only show for these".
+                            // Größe Restriktion, aber noch keine Größe gewählt → noch verstecken
                             return false;
                        }
                    }
-                   // Check against other variants (Color etc.)
                    else {
                        const selectedVal = selectedVariantValues[varId];
                        if (selectedVal) {
                            if (!allowedValues.includes(selectedVal)) return false;
-                       } 
-                       // If restriction exists but no value selected for that variant -> Hide
-                       else {
+                       } else {
+                           // Restriktion vorhanden, aber Variante noch nicht gewählt → verstecken
                            return false;
                        }
                    }
               }
           } else {
-              // New Logic: If image has NO restrictions but belongs to a variant group (like Back Print),
-              // we should probably hide it unless it's a "general" back print image?
-              // But usually, back print images are specific to a value (Motiv A, Motiv B).
-              // If an image is assigned to the "Back Print" variant GROUP but has NO value restrictions,
-              // it means "Show for ANY Back Print selection"? Or "Show always"?
-              
-              // The user requirement is: "Show back print images ONLY when back print is selected".
-              // This implies that images associated with Back Print should be hidden if selectedBackPrint is empty.
-              
-              // We need to know if this image is "associated" with Back Print.
-              // We can check `img.variant_ids` (array of variant IDs this image belongs to).
-              
-              if (img.variant_ids && img.variant_ids.length > 0) {
-                  // Check if any of the assigned variant IDs is the Back Print ID
-                  if (backPrintVariant && img.variant_ids.map((id: any) => String(id)).includes(String(backPrintVariant.id))) {
-                      // If image is associated with Back Print, but no back print is selected -> Hide
-                      if (!selectedBackPrint) return false;
-                  }
-              }
+              // Fix 2: KEINE Wert-Restriktionen! -> Bild NIE wegen variant_ids verstecken!
+              // Wenn ein Bild nur an die GRUPPE Rückendruck (variant_ids) gebunden ist (ohne Motiv),
+              // oder an Gruppe Initialen / Kindergrößen usw. → IMMER ANZEIGEN.
+              // Der alte Code hat hier BackPrint Bilder sofort ohne Motiv-Auswahl versteckt!
           }
     
-          // 2. Standard images (no personalization requirements)
+          // 2. Standard/Personalisierte Unterscheidung
           if (!img.personalization_option_ids || img.personalization_option_ids.length === 0) {
-              // Hide standard images if ANY personalized image is currently valid and active
+              // Bilder ohne Personalization Tag: nur ausblenden wenn es ein passendes personalized Bild gibt
               const activeOptionIds = Object.keys(selectedPersonalization).filter(k => !!selectedPersonalization[k]);
               
               const hasActivePersonalizedImage = images.some((i: any) => 
@@ -485,7 +476,6 @@ const ShopProductPage: React.FC = () => {
               return true; 
           } 
           
-          // Personalized images
           else {
               const requiredIds = img.personalization_option_ids;
               const activeOptionIds = Object.keys(selectedPersonalization).filter(k => !!selectedPersonalization[k]);

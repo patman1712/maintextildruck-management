@@ -78,6 +78,59 @@ const deleteJobPdfs = async (urls: string[]) => {
     return { deleted, skipped };
 };
 
+// MANUELLE DEBUG ROUTE: DTF Druckdaten nachträglich in Orders schreiben (für alle vorhandenen dtf_jobs)
+// Einfach per Browser Console aufrufen nach Login:
+//   fetch('/api/dtf/retro-fill-print-dates', {method: 'POST'}).then(r=>r.json()).then(console.log)
+router.post('/retro-fill-print-dates', async (req: Request, res: Response) => {
+    try {
+        const dtfJobsCols = db.prepare("PRAGMA table_info(dtf_jobs)").all() as any[];
+        const hasCreatedAt = dtfJobsCols.some(col => col.name === 'created_at');
+        const jobs = db.prepare(`SELECT id${hasCreatedAt ? ', created_at' : ''}, order_ids_json FROM dtf_jobs ORDER BY id DESC`).all() as any[];
+
+        const updateStmt = db.prepare(`UPDATE orders SET dtf_printed_at = ? WHERE id = ? AND dtf_printed_at IS NULL`);
+        const orderIdToTs: Record<string, string> = {};
+        let retroUpdated = 0;
+        const details: any[] = [];
+
+        const tx = db.transaction(() => {
+            for (const job of jobs) {
+                let jobTs = job.created_at;
+                if (!jobTs) {
+                    const m = /(\d{10})/.exec(job.id || '');
+                    jobTs = m ? new Date(Number(m[1]) * 1000).toISOString() : new Date().toISOString();
+                }
+                let orderIds: string[] = [];
+                try { orderIds = JSON.parse(job.order_ids_json || '[]'); } catch {}
+                if (!Array.isArray(orderIds)) continue;
+                let jobCount = 0;
+                for (const orderId of orderIds) {
+                    if (!orderId) continue;
+                    // Nur die aktuellste Zeit nehmen (neueste Job gewinnt, falls mehrere)
+                    if (!orderIdToTs[orderId] || new Date(orderIdToTs[orderId]).getTime() < new Date(jobTs).getTime()) {
+                        orderIdToTs[orderId] = jobTs;
+                    }
+                }
+            }
+            for (const orderId of Object.keys(orderIdToTs)) {
+                const ts = orderIdToTs[orderId];
+                const info = updateStmt.run(ts, orderId);
+                if (info.changes > 0) {
+                    retroUpdated++;
+                    details.push({ orderId, ts });
+                }
+            }
+        });
+        tx();
+
+        const msg = `DTF Retro-Fill erfolgreich: ${retroUpdated} Orders (aus ${jobs.length} Jobs) wurden mit dtf_printed_at befüllt!`;
+        console.log(`[RETRO-FILL] ${msg}`);
+        res.json({ success: true, message: msg, retroUpdated, jobsCount: jobs.length, debug: details.slice(0, 50) });
+    } catch (error: any) {
+        console.error(`[RETRO-FILL] Fehler:`, error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 router.get('/jobs', (req: Request, res: Response) => {
     try {
         const rows = db.prepare(`
@@ -86,7 +139,6 @@ router.get('/jobs', (req: Request, res: Response) => {
             ORDER BY datetime(created_at) DESC
             LIMIT 500
         `).all() as any[];
-
         const data = rows.map(r => ({
             id: r.id,
             created_at: r.created_at,

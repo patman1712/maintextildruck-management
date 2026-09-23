@@ -70,6 +70,12 @@ router.get('/', (req: Request, res: Response) => {
     shopId: row.shop_id,
     paymentMethod: row.payment_method,
     paymentStatus: row.payment_status,
+    // --- Pickup + DTF Druck-Felder (NEU!) ---
+    shipping_method: row.shipping_method || 'dhl',
+    pickup_code: row.pickup_code,
+    pickup_compartment: row.pickup_compartment,
+    pickup_status: row.pickup_status,
+    dtf_printed_at: row.dtf_printed_at,
     steps: safeJsonParse(row.steps, { processing: !!row.processing, produced: !!row.produced, invoiced: !!row.invoiced }) // Map steps JSON or fallback
   }));
   
@@ -430,6 +436,12 @@ router.put('/:id', async (req: Request, res: Response) => {
     approvalToken: updatedRow.approval_token,
     approvalComment: updatedRow.approval_comment,
     shopwareOrderId: updatedRow.shopware_order_id,
+    // --- Pickup + DTF Druck-Felder (NEU!) ---
+    shipping_method: updatedRow.shipping_method || 'dhl',
+    pickup_code: updatedRow.pickup_code,
+    pickup_compartment: updatedRow.pickup_compartment,
+    pickup_status: updatedRow.pickup_status,
+    dtf_printed_at: updatedRow.dtf_printed_at,
     steps: safeJsonParsePut(updatedRow.steps, { processing: !!updatedRow.processing, produced: !!updatedRow.produced, invoiced: !!updatedRow.invoiced })
   };
 

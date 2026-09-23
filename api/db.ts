@@ -938,42 +938,42 @@ try {
       console.log('Migrating database: Adding dtf_printed_at to orders (Druck-Datum für DTF-Bögen)');
       db.exec("ALTER TABLE orders ADD COLUMN dtf_printed_at TEXT");
     }
-    // --- Retro-Fill: Bereits vorhandene dtf_jobs in Orders nachträglich eintragen! ---
-    try {
-      const jobs = db.prepare("SELECT id, created_at, order_ids_json FROM dtf_jobs").all() as any[];
-      if (jobs.length > 0) {
-        const updateStmt = db.prepare(`UPDATE orders SET dtf_printed_at = COALESCE(dtf_printed_at, ?) WHERE id = ? AND dtf_printed_at IS NULL`);
-        let retroUpdated = 0;
-        const tx = db.transaction(() => {
-          for (const job of jobs) {
-            let jobTs = job.created_at;
-            // Falls Job kein created_at hat: nehme ID (Timestamp) oder jetzt
-            if (!jobTs) {
-              const m = /(\d{10})/.exec(job.id || '');
-              jobTs = m ? new Date(Number(m[1]) * 1000).toISOString() : new Date().toISOString();
-            }
-            let orderIds: string[] = [];
-            try {
-              orderIds = JSON.parse(job.order_ids_json || '[]');
-            } catch {}
-            if (!Array.isArray(orderIds)) continue;
-            for (const orderId of orderIds) {
-              if (!orderId) continue;
-              const info = updateStmt.run(jobTs, orderId);
-              if (info.changes > 0) retroUpdated++;
-            }
-          }
-        });
-        tx();
-        if (retroUpdated > 0) {
-          console.log(`DTF Retro-Fill: ${retroUpdated} Orders mit dtf_printed_at aus ${jobs.length} dtf_jobs nachträglich befüllt!`);
-        }
-      }
-    } catch (retroErr) {
-      console.error('Migration retro dtf_printed_at fill Fehler (unschädlich):', retroErr);
-    }
   } catch (e) {
     console.error('Migration error (orders pickup fields):', e);
+  }
+
+  // --- Retro-Fill (IMMER ausführen, NICHT nur bei neuer Spalte!): Bereits vorhandene dtf_jobs in Orders nachträglich eintragen. Idempotent (COALESCE). ---
+  try {
+    const dtfJobsCols = db.prepare("PRAGMA table_info(dtf_jobs)").all() as any[];
+    const hasCreatedAt = dtfJobsCols.some(col => col.name === 'created_at');
+    const jobs = db.prepare(`SELECT id${hasCreatedAt ? ', created_at' : ''}, order_ids_json FROM dtf_jobs`).all() as any[];
+    if (jobs.length > 0) {
+      const updateStmt = db.prepare(`UPDATE orders SET dtf_printed_at = ? WHERE id = ? AND dtf_printed_at IS NULL`);
+      let retroUpdated = 0;
+      const tx = db.transaction(() => {
+        for (const job of jobs) {
+          let jobTs = job.created_at;
+          if (!jobTs) {
+            const m = /(\d{10})/.exec(job.id || '');
+            jobTs = m ? new Date(Number(m[1]) * 1000).toISOString() : new Date().toISOString();
+          }
+          let orderIds: string[] = [];
+          try { orderIds = JSON.parse(job.order_ids_json || '[]'); } catch {}
+          if (!Array.isArray(orderIds)) continue;
+          for (const orderId of orderIds) {
+            if (!orderId) continue;
+            const info = updateStmt.run(jobTs, orderId);
+            if (info.changes > 0) retroUpdated++;
+          }
+        }
+      });
+      tx();
+      if (retroUpdated > 0) {
+        console.log(`DTF Retro-Fill (Startup): ${retroUpdated} Orders mit dtf_printed_at aus ${jobs.length} dtf_jobs nachträglich befüllt!`);
+      }
+    }
+  } catch (retroErr) {
+    console.error('Migration retro dtf_printed_at fill Fehler (unschädlich):', retroErr);
   }
 
   // Migration: Shipping Configs (Shop + Global) erweitern um Pickup Einstellungen
