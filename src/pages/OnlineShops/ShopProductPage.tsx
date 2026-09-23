@@ -398,15 +398,20 @@ const ShopProductPage: React.FC = () => {
   const images = React.useMemo(() => {
       if (!product || !product.files) return [];
       // Shop-Bilder (aus shop_product_images) haben shop_product_assignment_id gesetzt!
-      // Diese BILDER IMMER durchlassen! Egal was type/f.thumbnail_url ist.
+      // Diese BILDER IMMER durchlassen, ABER:
+      // → INTERNES DRUCK/VECTOR/INTERNAL ZEUG IMMER RAUS! (kein Logo-Wappen etc.)
       return (product.files || []).filter((f: any) => {
-          // Fix 1: Alle Shop-assigneten Bilder auf jeden Fall anzeigen
-          if (f && (f.shop_product_assignment_id || f.sort_order !== undefined)) {
+          // Regel 1: Typ ist VERBOTEN (Druck / Vektor / Intern) -> immer weg!
+          if (f && f.type && (f.type === 'print' || f.type === 'vector' || f.type === 'internal')) {
+              return false;
+          }
+          // Regel 2: Echte Shop-Ansichts-Bilder -> 100% durchlassen!
+          if (f && (f.shop_product_assignment_id !== undefined && f.shop_product_assignment_id !== null && f.shop_product_assignment_id !== '')) {
               return true;
           }
-          // Fix 1b: Fallback Filter für alte customer_product_files
+          // Regel 3: Fallback (Kunden-Uploads / Preview-Motive)
           if (!f.type || f.type === 'view' || f.type === 'preview') return true;
-          if (f.thumbnail_url && f.type !== 'print' && f.type !== 'vector' && f.type !== 'internal') return true;
+          if (f.thumbnail_url) return true;
           return false;
       });
   }, [product]);
