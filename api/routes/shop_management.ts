@@ -1068,18 +1068,30 @@ router.post('/:shopId/shipping/pickup-ready', async (req, res) => {
       WHERE id = ?
     `).run(finalCode, finalCompartment, orderId);
 
-    const emailOk = await sendPickupReady(orderId, finalCode, finalCompartment);
+    const emailOk = await sendPickupReady(orderId, finalCode, finalCompartment).catch((mailErr: any) => {
+      console.error('[Pickup Ready] MAIL FAIL:', mailErr);
+      return false;
+    });
 
     res.json({
       success: true,
+      data: {
+        pickup_code: finalCode,
+        pickup_compartment: finalCompartment,
+        pickup_status: 'ready'
+      },
       pickup_code: finalCode,
       pickup_compartment: finalCompartment,
       pickup_status: 'ready',
-      email_sent: emailOk
+      email_sent: !!emailOk
     });
   } catch (error: any) {
     console.error('[Pickup Ready] Error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Unbekannter Fehler',
+      data: null
+    });
   }
 });
 // ============================================

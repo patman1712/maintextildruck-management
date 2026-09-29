@@ -277,16 +277,21 @@ const ShopDashboard: React.FC = () => {
           auto_generate: !pickupCode && !pickupCompartment
         })
       });
-      const data = await res.json();
-      if (data.success) {
-        alert(`Abholung bereit! Mail wurde an den Kunden gesendet.\n\nAbholcode: ${data.data.pickup_code}\nFachnummer: ${data.data.pickup_compartment}`);
+      const data = await res.json().catch(() => ({}));
+      if (data && data.success) {
+        // Robust: Versuche zuerst data.data.pickup_code, Fallback auf data.pickup_code
+        const finalCode = (data.data && data.data.pickup_code) || data.pickup_code || pickupCode || 'Auto';
+        const finalCompartment = (data.data && data.data.pickup_compartment) || data.pickup_compartment || pickupCompartment || 'Auto';
+        const wasEmailSent = (data.email_sent === true) ? '\n\n✅ E-Mail wurde an den Kunden gesendet!' : '\n\n⚠️ E-Mail konnte nicht automatisch gesendet werden (bitte manuell informieren).';
+
+        alert(`✅ Abholung bereit!${wasEmailSent}\n\nAbholcode: ${finalCode}\nFachnummer: ${finalCompartment}`);
         setShowPickupReadyModal(false);
         fetchShopOrders();
       } else {
-        alert('Fehler: ' + data.error);
+        alert('❌ Fehler: ' + (data?.error || 'Unbekannter Server-Fehler. Bitte Konsole prüfen!'));
       }
     } catch (e: any) {
-      alert('Fehler: ' + e.message);
+      alert('❌ Netzwerk-Fehler: ' + (e?.message || String(e)));
     } finally {
       setIsProcessingPickupReady(false);
     }
