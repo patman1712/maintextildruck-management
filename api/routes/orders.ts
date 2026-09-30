@@ -327,7 +327,7 @@ router.post('/', async (req: Request, res: Response) => {
   const { 
     id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person, 
     deadline, status, order_type, processing, produced, production_status, invoiced, print_status, description, sample_items, employees, files, shop_id,
-    shipping_method, pickup_code, pickup_compartment, pickup_status
+    shipping_method, pickup_code, pickup_compartment, pickup_status, dtf_printed_at
   } = req.body;
 
   console.log('Received order payload:', req.body);
@@ -349,9 +349,9 @@ router.post('/', async (req: Request, res: Response) => {
       INSERT INTO orders (
         id, title, order_number, customer_id, customer_name, customer_email, customer_phone, customer_address, customer_contact_person,
         deadline, status, order_type, processing, produced, production_status, invoiced, print_status, description, sample_items, employees, files, shop_id,
-        shipping_method, pickup_code, pickup_compartment, pickup_status
+        shipping_method, pickup_code, pickup_compartment, pickup_status, dtf_printed_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -362,7 +362,8 @@ router.post('/', async (req: Request, res: Response) => {
       safeShippingMethod,
       pickup_code || null,
       pickup_compartment || null,
-      safePickupStatus
+      safePickupStatus,
+      dtf_printed_at || null
     );
     
     // Also save files to the dedicated 'files' table for independent persistence
@@ -455,6 +456,17 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (updates.sample_items !== undefined) { fields.push('sample_items = ?'); values.push(JSON.stringify(updates.sample_items)); }
   if (updates.employees !== undefined) { fields.push('employees = ?'); values.push(JSON.stringify(updates.employees)); }
   if (updates.files !== undefined) { fields.push('files = ?'); values.push(JSON.stringify(updates.files)); }
+
+  if (updates.dtf_printed_at !== undefined) {
+    const existingVal = existing.dtf_printed_at;
+    const incomingVal = updates.dtf_printed_at;
+    const finalVal = existingVal ? (incomingVal || existingVal) : incomingVal;
+    if (finalVal) { fields.push('dtf_printed_at = ?'); values.push(finalVal); }
+  }
+  if (updates.shipping_method !== undefined) { fields.push('shipping_method = ?'); values.push(updates.shipping_method || 'dhl'); }
+  if (updates.pickup_code !== undefined) { fields.push('pickup_code = ?'); values.push(updates.pickup_code || null); }
+  if (updates.pickup_compartment !== undefined) { fields.push('pickup_compartment = ?'); values.push(updates.pickup_compartment || null); }
+  if (updates.pickup_status !== undefined) { fields.push('pickup_status = ?'); values.push(updates.pickup_status || null); }
 
   // Check if invoice needs to be generated (if invoiced flag changed to true)
   const shouldGenerateInvoice = updates.invoiced === true && !existing.invoiced;

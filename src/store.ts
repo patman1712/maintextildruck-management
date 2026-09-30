@@ -385,6 +385,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         manualInvoiceNote: o.manualInvoiceNote ?? o.manual_invoice_note,
         deletedAt: o.deletedAt ?? o.deleted_at ?? null,
         deletedBy: o.deletedBy ?? o.deleted_by ?? null,
+        shipping_method: o.shipping_method || o.shippingMethod || 'dhl',
+        pickup_code: o.pickup_code ?? o.pickupCode ?? null,
+        pickup_compartment: o.pickup_compartment ?? o.pickupCompartment ?? null,
+        pickup_status: o.pickup_status ?? o.pickupStatus ?? null,
+        dtf_printed_at: o.dtf_printed_at ?? o.dtfPrintedAt ?? null,
         orderItems: (itemsByOrderId[o.id] || []).map((i: any) => ({
                 id: i.id,
                 orderId: i.order_id,
@@ -472,7 +477,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       set((state) => ({ orders: [order, ...state.orders] }));
       
-      const orderPayload = {
+      const orderPayload: any = {
         id: order.id,
         title: order.title,
         order_number: order.orderNumber,
@@ -491,7 +496,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         print_status: order.printStatus,
         description: order.description,
         employees: order.employees,
-        files: order.files
+        files: order.files,
+        shipping_method: order.shipping_method || 'dhl',
+        pickup_code: order.pickup_code || null,
+        pickup_compartment: order.pickup_compartment || null,
+        pickup_status: order.pickup_status || null,
+        dtf_printed_at: order.dtf_printed_at || null
       };
 
       await fetch('/api/orders', {
@@ -688,6 +698,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (updatedOrder.productionStatus !== undefined) updatePayload.production_status = updatedOrder.productionStatus;
       if (updatedOrder.manualInvoiceReference !== undefined) updatePayload.manual_invoice_reference = updatedOrder.manualInvoiceReference;
       if (updatedOrder.manualInvoiceNote !== undefined) updatePayload.manual_invoice_note = updatedOrder.manualInvoiceNote;
+      if (updatedOrder.shipping_method !== undefined) updatePayload.shipping_method = updatedOrder.shipping_method;
+      if (updatedOrder.pickup_code !== undefined) updatePayload.pickup_code = updatedOrder.pickup_code;
+      if (updatedOrder.pickup_compartment !== undefined) updatePayload.pickup_compartment = updatedOrder.pickup_compartment;
+      if (updatedOrder.pickup_status !== undefined) updatePayload.pickup_status = updatedOrder.pickup_status;
+      if (updatedOrder.dtf_printed_at !== undefined) updatePayload.dtf_printed_at = updatedOrder.dtf_printed_at;
       if (updatedOrder.steps) {
         if (updatedOrder.steps.processing !== undefined) updatePayload.processing = updatedOrder.steps.processing;
         if (updatedOrder.steps.produced !== undefined) updatePayload.produced = updatedOrder.steps.produced;
