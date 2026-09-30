@@ -62,13 +62,16 @@ router.get('/', (req: Request, res: Response) => {
     }
 
     // --- Quelle 2: files.order_id (Direkt im Auftrag hochgeladene DTF/Druckdateien!) ---
+    // ⚠️ WICHTIG: NUR Dateien mit print_status = 'ordered' oder 'completed' zählen!
+    //            Pending Dateien (rotes Symbol) = noch NICHT gedruckt!
     const fileOrderTs: Record<string, string> = {};
     try {
       const fileRows = db.prepare(`
         SELECT order_id, MIN(created_at) as first_date
         FROM files
         WHERE order_id IS NOT NULL
-          AND (type = 'dtf' OR type = 'print' OR type = 'preview' OR type = 'vector' OR type = 'unknown')
+          AND (type = 'dtf' OR type = 'print')
+          AND COALESCE(print_status, 'pending') IN ('ordered', 'completed')
         GROUP BY order_id
       `).all() as any[];
       for (const fr of fileRows) {
@@ -77,11 +80,17 @@ router.get('/', (req: Request, res: Response) => {
     } catch (fileErr) { /* ignorieren falls Tabelle fehlt */ }
 
     // --- Zusatzquelle 3: orders.files JSON (Alte Dateien direkt im JSON!) ---
+    // ⚠️ AUCH HIER: NUR wenn mindestens eine Datei mit status='ordered' vorhanden ist!
     const jsonFileOrderTs: Record<string, string> = {};
 
     // --- Jetzt: NULL Orders berechnen + bulk update! ---
     const updateStmt = db.prepare(`UPDATE orders SET dtf_printed_at = ? WHERE id = ? AND dtf_printed_at IS NULL`);
     const orderIdsToUpdate: Array<[string, string]> = [];
+    // --- 🔥 ZUSATZ: Bereits falsch gesetzte dtf_printed_at (alte Retro-Fills) WIEDER RÜCKGÄNGIG machen!
+    //    Wenn eine Order aktuell ein dtf_printed_at hat, aber
+    //    KEIN dtf_job referenziert UND KEINE ordered/completed Druckdatei hat → auf NULL setzen!
+    const resetStmt = db.prepare(`UPDATE orders SET dtf_printed_at = NULL WHERE id = ?`);
+    const orderIdsToReset: string[] = [];
 
     const orders = rows.map((row: any) => {
       let printedAt = row.dtf_printed_at;
@@ -97,13 +106,17 @@ router.get('/', (req: Request, res: Response) => {
           printedAt = fileOrderTs[row.id];
         }
         // Fallback C: orders.files JSON nach dtf/print durchsuchen
+        // ⚠️ AUSSCHLIESSLICH wenn mindestens eine Datei mit status='ordered'/'completed' drin ist!
         if (!printedAt) {
           try {
             const embedded = safeJsonParse(row.files, []);
             if (Array.isArray(embedded) && embedded.length > 0) {
               const hasDtfFile = embedded.some((f: any) => {
                 const t = String(f?.type || '').toLowerCase();
-                return t === 'dtf' || t === 'print' || f?.name?.toLowerCase?.().includes('dtf');
+                const fs = String(f?.status || f?.print_status || 'pending').toLowerCase();
+                const isDtfOrPrint = t === 'dtf' || t === 'print' || f?.name?.toLowerCase?.().includes('dtf');
+                const isOrderedOrDone = fs === 'ordered' || fs === 'completed';
+                return isDtfOrPrint && isOrderedOrDone;
               });
               if (hasDtfFile) {
                 printedAt = row.created_at || new Date().toISOString();
@@ -115,6 +128,31 @@ router.get('/', (req: Request, res: Response) => {
 
         // Gefunden! Für bulk update vormerken
         if (printedAt) orderIdsToUpdate.push([printedAt, row.id]);
+      } else {
+        // ✅ printedAt war bereits in DB gesetzt (nicht NULL) → JETZT PRÜFEN: Ist das überhaupt gerechtfertigt?
+        // Wenn: KEIN dtf_job für diese Order existiert
+        // UND: Keine Datei in files Tabelle mit ordered/completed
+        // UND: Keine Datei im orders.files JSON mit ordered/completed status
+        // → DANN: Falsch-positiv! Zurücksetzen auf NULL (User sieht rotes Symbol → KEIN "GEDRUCKT"-Label!)
+        const hasJob = !!jobOrderTs[row.id];
+        const hasOrderedFile = !!fileOrderTs[row.id];
+        let hasOrderedJsonFile = false;
+        try {
+          const embedded = safeJsonParse(row.files, []);
+          if (Array.isArray(embedded)) {
+            hasOrderedJsonFile = embedded.some((f: any) => {
+              const t = String(f?.type || '').toLowerCase();
+              const fs = String(f?.status || f?.print_status || 'pending').toLowerCase();
+              const isDtfOrPrint = t === 'dtf' || t === 'print' || String(f?.name || '').toLowerCase().includes('dtf');
+              const isOrderedOrDone = fs === 'ordered' || fs === 'completed';
+              return isDtfOrPrint && isOrderedOrDone;
+            });
+          }
+        } catch {}
+        if (!hasJob && !hasOrderedFile && !hasOrderedJsonFile) {
+          printedAt = null;
+          orderIdsToReset.push(row.id);
+        }
       }
 
       return {
@@ -167,12 +205,17 @@ router.get('/', (req: Request, res: Response) => {
     });
 
     // Bulk persistieren (damit nächstes Mal direkt da, Live-Berechnung beim 1. Request reicht!)
-    if (orderIdsToUpdate.length > 0) {
+    if (orderIdsToUpdate.length > 0 || orderIdsToReset.length > 0) {
       const tx = db.transaction(() => {
         for (const [ts, id] of orderIdsToUpdate) updateStmt.run(ts, id);
+        for (const rid of orderIdsToReset) resetStmt.run(rid);
       });
       tx();
-      console.log(`DTF Live Fallback (orders GET): ${orderIdsToUpdate.length} Orders mit dtf_printed_at automatisch befüllt & gespeichert!`);
+      console.log(
+        `DTF Live Fallback (orders GET): ` +
+        `${orderIdsToUpdate.length} Orders NEU mit dtf_printed_at befüllt + ` +
+        `${orderIdsToReset.length} Orders ZURÜCKGESETZT (falsch-positiv ohne ordered-Druckdateien!)`
+      );
     }
 
     res.json({ success: true, data: orders });
