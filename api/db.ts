@@ -942,14 +942,16 @@ try {
     console.error('Migration error (orders pickup fields):', e);
   }
 
-  // --- Retro-Fill (IMMER ausführen, NICHT nur bei neuer Spalte!): Bereits vorhandene dtf_jobs in Orders nachträglich eintragen. Idempotent (COALESCE). ---
+  // --- Retro-Fill (IMMER ausführen, NICHT nur bei neuer Spalte!): Bereits vorhandene dtf_jobs + files Tabelle in Orders nachträglich eintragen. Idempotent. ---
   try {
     const dtfJobsCols = db.prepare("PRAGMA table_info(dtf_jobs)").all() as any[];
     const hasCreatedAt = dtfJobsCols.some(col => col.name === 'created_at');
     const jobs = db.prepare(`SELECT id${hasCreatedAt ? ', created_at' : ''}, order_ids_json FROM dtf_jobs`).all() as any[];
-    if (jobs.length > 0) {
+
+    // --- 1. Runde: dtf_jobs ---
+    let retroUpdated = 0;
+    try {
       const updateStmt = db.prepare(`UPDATE orders SET dtf_printed_at = ? WHERE id = ? AND dtf_printed_at IS NULL`);
-      let retroUpdated = 0;
       const tx = db.transaction(() => {
         for (const job of jobs) {
           let jobTs = job.created_at;
@@ -969,8 +971,42 @@ try {
       });
       tx();
       if (retroUpdated > 0) {
-        console.log(`DTF Retro-Fill (Startup): ${retroUpdated} Orders mit dtf_printed_at aus ${jobs.length} dtf_jobs nachträglich befüllt!`);
+        console.log(`DTF Retro-Fill 1/2 Startup (Jobs): ${retroUpdated} Orders mit dtf_printed_at aus ${jobs.length} dtf_jobs nachträglich befüllt!`);
       }
+    } catch (e) { console.error('Retro-Fill 1 Fehler:', e); }
+
+    // --- 2. Runde (NEU!): files.order_id type=dtf/print/preview/vector ---
+    // Auch wenn Auftrag KEIN dtf_job hat, aber direkt DTF-Dateien per Upload im Auftrag hochgeladen wurden!
+    try {
+      const filesCols = db.prepare("PRAGMA table_info(files)").all() as any[];
+      const hasOrderId = filesCols.some(col => col.name === 'order_id');
+      const hasFilesType = filesCols.some(col => col.name === 'type');
+      if (hasOrderId && hasFilesType) {
+        const rows = db.prepare(`
+          SELECT order_id, MIN(created_at) as first_date
+          FROM files
+          WHERE order_id IS NOT NULL
+            AND (type = 'dtf' OR type = 'print' OR type = 'preview' OR type = 'vector' OR type = 'unknown')
+          GROUP BY order_id
+        `).all() as any[];
+        if (rows.length > 0) {
+          const updateStmt2 = db.prepare(`UPDATE orders SET dtf_printed_at = ? WHERE id = ? AND dtf_printed_at IS NULL`);
+          let fileUpdates = 0;
+          const tx2 = db.transaction(() => {
+            for (const r of rows) {
+              if (!r.order_id || !r.first_date) continue;
+              const info = updateStmt2.run(r.first_date, r.order_id);
+              if (info.changes > 0) fileUpdates++;
+            }
+          });
+          tx2();
+          if (fileUpdates > 0) {
+            console.log(`DTF Retro-Fill 2/2 Startup (Files Tabelle): ${fileUpdates} Orders mit dtf_printed_at aus hochgeladenen Dateien nachträglich befüllt!`);
+          }
+        }
+      }
+    } catch (fileRetroErr) {
+      console.error('DTF Retro-Fill 2 Fehler (unschädlich):', fileRetroErr);
     }
   } catch (retroErr) {
     console.error('Migration retro dtf_printed_at fill Fehler (unschädlich):', retroErr);

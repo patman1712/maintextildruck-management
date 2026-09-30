@@ -31,55 +31,201 @@ router.get('/', (req: Request, res: Response) => {
     }
   };
 
-  const orders = rows.map((row: any) => ({
-    id: row.id,
-    title: row.title,
-    orderNumber: row.order_number,
-    customerId: row.customer_id,
-    customer_name: row.customer_name,
-    customer_contact_person: row.customer_contact_person,
-    customer_email: row.customer_email,
-    customer_phone: row.customer_phone,
-    customer_address: row.customer_address,
-    deadline: row.deadline,
-    status: row.status,
-    orderType: row.order_type || 'standard',
-    processing: !!row.processing,
-    produced: !!row.produced,
-    productionStatus: row.production_status,
-    invoiced: !!row.invoiced,
-    invoicedAt: row.invoiced_at,
-    invoicedBy: row.invoiced_by,
-    manualInvoiceReference: row.manual_invoice_reference,
-    manualInvoiceNote: row.manual_invoice_note,
-    deletedAt: row.deleted_at,
-    deletedBy: row.deleted_by,
-    printStatus: row.print_status,
-    description: row.description,
-    sampleItems: safeJsonParse(row.sample_items, []),
-    employees: safeJsonParse(row.employees, []),
-    files: safeJsonParse(row.files, []),
-    created_at: row.created_at,
-    approvalStatus: row.approval_status,
-    approvedBy: row.approved_by,
-    approvedAt: row.approved_at,
-    rejectionReason: row.rejection_reason,
-    approvalToken: row.approval_token,
-    approvalComment: row.approval_comment,
-    shopwareOrderId: row.shopware_order_id, // Map DB column to frontend property
-    shopId: row.shop_id,
-    paymentMethod: row.payment_method,
-    paymentStatus: row.payment_status,
-    // --- Pickup + DTF Druck-Felder (NEU!) ---
-    shipping_method: row.shipping_method || 'dhl',
-    pickup_code: row.pickup_code,
-    pickup_compartment: row.pickup_compartment,
-    pickup_status: row.pickup_status,
-    dtf_printed_at: row.dtf_printed_at,
-    steps: safeJsonParse(row.steps, { processing: !!row.processing, produced: !!row.produced, invoiced: !!row.invoiced }) // Map steps JSON or fallback
-  }));
-  
-  res.json({ success: true, data: orders });
+  // ======================================================
+  // 🔥 DTF PRINTED AT LIVE FALLBACK (ROOT CAUSE FIX!)
+  // Problem: Aufträge hatten dtf_printed_at NULL, obwohl DTF-Dateien oder DTF-Jobs existieren!
+  // => Live berechnen + in DB persistieren, damit nächstes Mal schnell!
+  // ======================================================
+  try {
+    const dtfJobsCols = db.prepare("PRAGMA table_info(dtf_jobs)").all() as any[];
+    const hasJobsCreatedAt = dtfJobsCols.some(col => col.name === 'created_at');
+
+    // --- Quelle 1: dtf_jobs.order_ids_json (Bögen generiert) ---
+    const jobs = db.prepare(`SELECT id${hasJobsCreatedAt ? ', created_at' : ''}, order_ids_json FROM dtf_jobs`).all() as any[];
+    const jobOrderTs: Record<string, string> = {};
+    for (const job of jobs) {
+      let jobTs = hasJobsCreatedAt ? job.created_at : null;
+      if (!jobTs) {
+        const m = /(\d{10})/.exec(job.id || '');
+        jobTs = m ? new Date(Number(m[1]) * 1000).toISOString() : new Date().toISOString();
+      }
+      let orderIds: string[] = [];
+      try { orderIds = JSON.parse(job.order_ids_json || '[]'); } catch {}
+      if (!Array.isArray(orderIds)) continue;
+      for (const orderId of orderIds) {
+        if (!orderId) continue;
+        // Nimm das NEUESTE Datum, falls mehrere Jobs für einen Auftrag
+        if (!jobOrderTs[orderId] || new Date(jobTs).getTime() > new Date(jobOrderTs[orderId]).getTime()) {
+          jobOrderTs[orderId] = jobTs;
+        }
+      }
+    }
+
+    // --- Quelle 2: files.order_id (Direkt im Auftrag hochgeladene DTF/Druckdateien!) ---
+    const fileOrderTs: Record<string, string> = {};
+    try {
+      const fileRows = db.prepare(`
+        SELECT order_id, MIN(created_at) as first_date
+        FROM files
+        WHERE order_id IS NOT NULL
+          AND (type = 'dtf' OR type = 'print' OR type = 'preview' OR type = 'vector' OR type = 'unknown')
+        GROUP BY order_id
+      `).all() as any[];
+      for (const fr of fileRows) {
+        if (fr.order_id && fr.first_date) fileOrderTs[fr.order_id] = fr.first_date;
+      }
+    } catch (fileErr) { /* ignorieren falls Tabelle fehlt */ }
+
+    // --- Zusatzquelle 3: orders.files JSON (Alte Dateien direkt im JSON!) ---
+    const jsonFileOrderTs: Record<string, string> = {};
+
+    // --- Jetzt: NULL Orders berechnen + bulk update! ---
+    const updateStmt = db.prepare(`UPDATE orders SET dtf_printed_at = ? WHERE id = ? AND dtf_printed_at IS NULL`);
+    const orderIdsToUpdate: Array<[string, string]> = [];
+
+    const orders = rows.map((row: any) => {
+      let printedAt = row.dtf_printed_at;
+
+      // Wenn NULL, dann Fallback prüfen!
+      if (printedAt === null || printedAt === undefined) {
+        // Fallback A: dtf_jobs
+        if (jobOrderTs[row.id]) {
+          printedAt = jobOrderTs[row.id];
+        }
+        // Fallback B: files Tabelle
+        if (!printedAt && fileOrderTs[row.id]) {
+          printedAt = fileOrderTs[row.id];
+        }
+        // Fallback C: orders.files JSON nach dtf/print durchsuchen
+        if (!printedAt) {
+          try {
+            const embedded = safeJsonParse(row.files, []);
+            if (Array.isArray(embedded) && embedded.length > 0) {
+              const hasDtfFile = embedded.some((f: any) => {
+                const t = String(f?.type || '').toLowerCase();
+                return t === 'dtf' || t === 'print' || f?.name?.toLowerCase?.().includes('dtf');
+              });
+              if (hasDtfFile) {
+                printedAt = row.created_at || new Date().toISOString();
+                jsonFileOrderTs[row.id] = printedAt;
+              }
+            }
+          } catch {}
+        }
+
+        // Gefunden! Für bulk update vormerken
+        if (printedAt) orderIdsToUpdate.push([printedAt, row.id]);
+      }
+
+      return {
+        id: row.id,
+        title: row.title,
+        orderNumber: row.order_number,
+        customerId: row.customer_id,
+        customer_name: row.customer_name,
+        customer_contact_person: row.customer_contact_person,
+        customer_email: row.customer_email,
+        customer_phone: row.customer_phone,
+        customer_address: row.customer_address,
+        deadline: row.deadline,
+        status: row.status,
+        orderType: row.order_type || 'standard',
+        processing: !!row.processing,
+        produced: !!row.produced,
+        productionStatus: row.production_status,
+        invoiced: !!row.invoiced,
+        invoicedAt: row.invoiced_at,
+        invoicedBy: row.invoiced_by,
+        manualInvoiceReference: row.manual_invoice_reference,
+        manualInvoiceNote: row.manual_invoice_note,
+        deletedAt: row.deleted_at,
+        deletedBy: row.deleted_by,
+        printStatus: row.print_status,
+        description: row.description,
+        sampleItems: safeJsonParse(row.sample_items, []),
+        employees: safeJsonParse(row.employees, []),
+        files: safeJsonParse(row.files, []),
+        created_at: row.created_at,
+        approvalStatus: row.approval_status,
+        approvedBy: row.approved_by,
+        approvedAt: row.approved_at,
+        rejectionReason: row.rejection_reason,
+        approvalToken: row.approval_token,
+        approvalComment: row.approval_comment,
+        shopwareOrderId: row.shopware_order_id,
+        shopId: row.shop_id,
+        paymentMethod: row.payment_method,
+        paymentStatus: row.payment_status,
+        // --- Pickup + DTF Druck-Felder (NEU! dtf_printed_at garantiert jetzt NICHT NULL wenn Dateien da!) ---
+        shipping_method: row.shipping_method || 'dhl',
+        pickup_code: row.pickup_code,
+        pickup_compartment: row.pickup_compartment,
+        pickup_status: row.pickup_status,
+        dtf_printed_at: printedAt || null,
+        steps: safeJsonParse(row.steps, { processing: !!row.processing, produced: !!row.produced, invoiced: !!row.invoiced })
+      };
+    });
+
+    // Bulk persistieren (damit nächstes Mal direkt da, Live-Berechnung beim 1. Request reicht!)
+    if (orderIdsToUpdate.length > 0) {
+      const tx = db.transaction(() => {
+        for (const [ts, id] of orderIdsToUpdate) updateStmt.run(ts, id);
+      });
+      tx();
+      console.log(`DTF Live Fallback (orders GET): ${orderIdsToUpdate.length} Orders mit dtf_printed_at automatisch befüllt & gespeichert!`);
+    }
+
+    res.json({ success: true, data: orders });
+  } catch (bigErr: any) {
+    console.error('DTF Live Fallback Fehler (unschädlich, fallback to raw orders):', bigErr);
+    const orders = rows.map((row: any) => ({
+      id: row.id,
+      title: row.title,
+      orderNumber: row.order_number,
+      customerId: row.customer_id,
+      customer_name: row.customer_name,
+      customer_contact_person: row.customer_contact_person,
+      customer_email: row.customer_email,
+      customer_phone: row.customer_phone,
+      customer_address: row.customer_address,
+      deadline: row.deadline,
+      status: row.status,
+      orderType: row.order_type || 'standard',
+      processing: !!row.processing,
+      produced: !!row.produced,
+      productionStatus: row.production_status,
+      invoiced: !!row.invoiced,
+      invoicedAt: row.invoiced_at,
+      invoicedBy: row.invoiced_by,
+      manualInvoiceReference: row.manual_invoice_reference,
+      manualInvoiceNote: row.manual_invoice_note,
+      deletedAt: row.deleted_at,
+      deletedBy: row.deleted_by,
+      printStatus: row.print_status,
+      description: row.description,
+      sampleItems: safeJsonParse(row.sample_items, []),
+      employees: safeJsonParse(row.employees, []),
+      files: safeJsonParse(row.files, []),
+      created_at: row.created_at,
+      approvalStatus: row.approval_status,
+      approvedBy: row.approved_by,
+      approvedAt: row.approved_at,
+      rejectionReason: row.rejection_reason,
+      approvalToken: row.approval_token,
+      approvalComment: row.approval_comment,
+      shopwareOrderId: row.shopware_order_id,
+      shopId: row.shop_id,
+      paymentMethod: row.payment_method,
+      paymentStatus: row.payment_status,
+      shipping_method: row.shipping_method || 'dhl',
+      pickup_code: row.pickup_code,
+      pickup_compartment: row.pickup_compartment,
+      pickup_status: row.pickup_status,
+      dtf_printed_at: row.dtf_printed_at,
+      steps: safeJsonParse(row.steps, { processing: !!row.processing, produced: !!row.produced, invoiced: !!row.invoiced })
+    }));
+    res.json({ success: true, data: orders });
+  }
 });
 
 router.post('/:id/restore', (req: Request, res: Response) => {
