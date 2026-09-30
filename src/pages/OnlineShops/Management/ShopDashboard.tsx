@@ -81,6 +81,13 @@ const ShopDashboard: React.FC = () => {
   const [cancelSelections, setCancelSelections] = useState<Record<string, number>>({});
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   
+  const [showCorrectionModal, setShowCorrectionModal] = useState(false);
+  const [correctionStreet, setCorrectionStreet] = useState('');
+  const [correctionZip, setCorrectionZip] = useState('');
+  const [correctionCity, setCorrectionCity] = useState('');
+  const [correctionNote, setCorrectionNote] = useState('');
+  const [isSavingCorrection, setIsSavingCorrection] = useState(false);
+  
   const categoryFormRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -671,6 +678,90 @@ const ShopDashboard: React.FC = () => {
       alert('Storno fehlgeschlagen.');
     } finally {
       setIsCancellingOrder(false);
+    }
+  };
+
+  const openCorrectionModal = () => {
+    const addr = selectedOrder?.customer_address || '';
+    let street = '';
+    let zip = '';
+    let city = '';
+    const parts = addr.split(',').map(p => p.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      street = parts[0];
+      const last = parts[parts.length - 1];
+      const zipMatch = last.match(/^(\d{4,5})\s+(.+)$/);
+      if (zipMatch) {
+        zip = zipMatch[1];
+        city = zipMatch[2];
+      } else {
+        city = last;
+      }
+    } else if (parts.length === 1) {
+      const zipMatch = parts[0].match(/^(\d{4,5})\s+(.+)$/);
+      if (zipMatch) {
+        zip = zipMatch[1];
+        city = zipMatch[2];
+      } else {
+        street = parts[0];
+      }
+    }
+    setCorrectionStreet(street);
+    setCorrectionZip(zip);
+    setCorrectionCity(city);
+    setCorrectionNote('');
+    setShowCorrectionModal(true);
+  };
+
+  const handleSaveCorrection = async () => {
+    if (!selectedOrder?.id) return;
+    if (!correctionStreet.trim() || !correctionZip.trim() || !correctionCity.trim()) {
+      alert('Bitte Straße, PLZ und Ort ausfüllen.');
+      return;
+    }
+    const newAddress = `${correctionStreet.trim()}, ${correctionZip.trim()} ${correctionCity.trim()}`;
+    if (newAddress === (selectedOrder.customer_address || '').trim()) {
+      alert('Die neue Adresse stimmt mit der alten überein. Bitte ändern Sie mindestens ein Feld.');
+      return;
+    }
+
+    setIsSavingCorrection(true);
+    try {
+      const createdBy = currentUser?.name || currentUser?.username || 'Unbekannt';
+      const res = await fetch(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}/correct-invoice`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          new_address: newAddress,
+          created_by: createdBy,
+          note: correctionNote.trim() || undefined
+        })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || 'Rechnungskorrektur fehlgeschlagen.');
+        return;
+      }
+
+      await fetchShopOrders();
+      const detailsRes = await fetch(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}`);
+      const detailsData = await detailsRes.json();
+      if (detailsData.success) setSelectedOrder(detailsData.data);
+      setShowCorrectionModal(false);
+      setCorrectionStreet('');
+      setCorrectionZip('');
+      setCorrectionCity('');
+      setCorrectionNote('');
+
+      if (data.data?.downloadUrl) {
+        window.open(data.data.downloadUrl, '_blank');
+      }
+      alert('Rechnungskorrektur erfolgreich erstellt!');
+    } catch (e) {
+      console.error(e);
+      alert('Rechnungskorrektur fehlgeschlagen.');
+    } finally {
+      setIsSavingCorrection(false);
     }
   };
 
@@ -2748,6 +2839,55 @@ const ShopDashboard: React.FC = () => {
                             </div>
                         </div>
                     )}
+
+                    {!!selectedOrder.corrections?.length && (
+                        <div className="mt-8">
+                            <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2 mb-4">Rechnungskorrekturen</h4>
+                            <div className="space-y-3">
+                                {selectedOrder.corrections.map((correction: any) => (
+                                    <div key={correction.id} className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div>
+                                                <div className="font-black text-amber-900">{correction.correction_number}</div>
+                                                <div className="text-xs text-amber-700 mt-1">
+                                                    {new Date(correction.created_at).toLocaleString('de-DE')}
+                                                    {correction.created_by ? ` · Erstellt von ${correction.created_by}` : ''}
+                                                </div>
+                                                <div className="text-xs text-amber-700 mt-1">
+                                                    {correction.original_invoice_number && correction.new_invoice_number 
+                                                        ? `Aus ${correction.original_invoice_number} → ${correction.new_invoice_number}` 
+                                                        : correction.new_invoice_number ? `Neue Rechnung: ${correction.new_invoice_number}` : ''}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => window.open(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}/corrections/${correction.id}/pdf`, '_blank')}
+                                                className="px-4 py-2 bg-white border border-amber-300 text-amber-800 rounded-lg font-bold text-xs uppercase tracking-widest hover:bg-amber-100 transition-colors flex items-center shrink-0"
+                                            >
+                                                <FileText size={14} className="mr-2" />
+                                                PDF
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
+                                            <div className="bg-white border border-amber-200 rounded-lg p-3">
+                                                <div className="text-[10px] uppercase tracking-widest font-black text-amber-600 mb-1">Alte Adresse</div>
+                                                <div className="text-sm text-slate-700 whitespace-pre-line">{correction.old_customer_address || '—'}</div>
+                                            </div>
+                                            <div className="bg-white border-2 border-emerald-300 rounded-lg p-3">
+                                                <div className="text-[10px] uppercase tracking-widest font-black text-emerald-600 mb-1">Neue Adresse</div>
+                                                <div className="text-sm text-slate-800 whitespace-pre-line font-semibold">{correction.new_customer_address || '—'}</div>
+                                            </div>
+                                        </div>
+                                        {correction.note && (
+                                            <div className="mt-2 bg-white border border-amber-200 rounded-lg p-3">
+                                                <div className="text-[10px] uppercase tracking-widest font-black text-amber-600 mb-1">Notiz / Grund</div>
+                                                <div className="text-sm text-slate-700">{correction.note}</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
                 
                 <div className="p-6 bg-slate-50 border-t flex justify-end items-center">
@@ -2780,11 +2920,22 @@ const ShopDashboard: React.FC = () => {
                     )}
                     <button 
                         onClick={() => window.open(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}/invoice`, '_blank')}
-                        className="mr-auto px-6 py-3 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-50 transition-all flex items-center"
+                        className="mr-2 px-6 py-3 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-50 transition-all flex items-center"
                     >
                         <FileText size={16} className="mr-2" />
                         Rechnung
                     </button>
+                    {currentUser?.role === 'admin' && (
+                        <button
+                            onClick={openCorrectionModal}
+                            disabled={!selectedOrder.invoice_number}
+                            title={!selectedOrder.invoice_number ? 'Noch keine Rechnung vorhanden' : 'Rechnungsadresse korrigieren und neue Rechnung erstellen'}
+                            className="mr-2 px-6 py-3 bg-amber-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        >
+                            <Edit2 size={16} className="mr-2" />
+                            Rechnungskorrektur
+                        </button>
+                    )}
                     <button
                         onClick={openCancelModal}
                         className="mr-2 px-6 py-3 bg-red-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-red-700 transition-all"
@@ -2861,6 +3012,95 @@ const ShopDashboard: React.FC = () => {
                         className="px-5 py-3 bg-red-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-red-700 transition-all disabled:opacity-60"
                     >
                         {isCancellingOrder ? 'Erstelle Storno...' : 'Storno erstellen'}
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {showCorrectionModal && selectedOrder && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+                <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
+                    <div>
+                        <h3 className="font-black text-lg text-slate-900">Rechnungskorrektur erstellen</h3>
+                        <p className="text-sm text-slate-500 mt-1">
+                            Korrigieren Sie NUR die Rechnungsadresse. Es wird automatisch eine neue Rechnung mit dem Betreff „Rechnungskorrektur aus {selectedOrder.invoice_number || 'der bestehenden Rechnung'}“ generiert.
+                        </p>
+                    </div>
+                    <button onClick={() => setShowCorrectionModal(false)} className="p-2 hover:bg-slate-100 rounded-full">
+                        <X size={20} className="text-slate-400" />
+                    </button>
+                </div>
+                <div className="p-6 overflow-y-auto space-y-5">
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        <div className="text-[10px] uppercase tracking-widest font-black text-amber-700 mb-1">Aktuelle Rechnungsadresse</div>
+                        <div className="text-sm text-slate-700">{selectedOrder.customer_address || '—'}</div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Straße + Hausnummer *</label>
+                        <input
+                            type="text"
+                            value={correctionStreet}
+                            onChange={(e) => setCorrectionStreet(e.target.value)}
+                            placeholder="z.B. Musterstraße 12"
+                            className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">PLZ *</label>
+                            <input
+                                type="text"
+                                value={correctionZip}
+                                onChange={(e) => setCorrectionZip(e.target.value)}
+                                placeholder="z.B. 63179"
+                                className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Ort *</label>
+                            <input
+                                type="text"
+                                value={correctionCity}
+                                onChange={(e) => setCorrectionCity(e.target.value)}
+                                placeholder="z.B. Obertshausen"
+                                className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Notiz / Grund der Korrektur (optional)</label>
+                        <textarea
+                            value={correctionNote}
+                            onChange={(e) => setCorrectionNote(e.target.value)}
+                            placeholder="z.B. Falsche Hausnummer vom Kunden übermittelt"
+                            rows={3}
+                            className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
+                        />
+                    </div>
+                </div>
+                <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-3">
+                    <button onClick={() => setShowCorrectionModal(false)} className="px-5 py-3 bg-white border border-slate-300 text-slate-700 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-slate-50 transition-all">
+                        Abbrechen
+                    </button>
+                    <button
+                        onClick={handleSaveCorrection}
+                        disabled={isSavingCorrection || !correctionStreet.trim() || !correctionZip.trim() || !correctionCity.trim()}
+                        className="px-5 py-3 bg-amber-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-amber-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center"
+                    >
+                        {isSavingCorrection ? (
+                            <>
+                                <RefreshCw size={16} className="mr-2 animate-spin" />
+                                Erstelle Korrektur...
+                            </>
+                        ) : (
+                            <>
+                                <Save size={16} className="mr-2" />
+                                Korrektur speichern
+                            </>
+                        )}
                     </button>
                 </div>
             </div>

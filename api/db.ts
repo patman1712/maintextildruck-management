@@ -1489,6 +1489,31 @@ try {
       console.error('Migration error (order_cancellations):', e);
   }
 
+  // Migration: Invoice Corrections (Rechnungskorrekturen)
+  try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS order_invoice_corrections (
+          id TEXT PRIMARY KEY,
+          order_id TEXT NOT NULL,
+          correction_number TEXT NOT NULL,
+          original_invoice_number TEXT,
+          original_invoice_date DATETIME,
+          new_invoice_number TEXT,
+          new_invoice_date DATETIME,
+          new_invoice_path TEXT,
+          old_customer_address TEXT,
+          new_customer_address TEXT,
+          created_by TEXT,
+          note TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_order_invoice_corrections_number_unique ON order_invoice_corrections(correction_number)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_order_invoice_corrections_order_id ON order_invoice_corrections(order_id)");
+  } catch (e) {
+      console.error('Migration error (order_invoice_corrections):', e);
+  }
+
   // Migration: Add price_per_value to product_variables
   try {
       const variableCols = db.prepare("PRAGMA table_info(product_variables)").all() as any[];

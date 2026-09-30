@@ -477,6 +477,231 @@ router.get('/:shopId/admin/orders/:orderId/cancellations/:cancellationId/pdf', a
   }
 });
 
+// ======= INVOICE KORREKTUR (Rechnungskorrektur) =======
+
+// Admin: GET a single order (+ items + cancellations + invoice corrections)
+router.get('/:shopId/admin/orders/:orderId', async (req, res) => {
+  try {
+    const { shopId: rawShopId, orderId } = req.params;
+    const shopId = resolveShopId(rawShopId);
+    if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+
+    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND shop_id = ?').get(orderId, shopId) as any;
+    if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
+
+    const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
+    const cancellations = db.prepare('SELECT * FROM order_cancellations WHERE order_id = ? ORDER BY created_at DESC').all(orderId);
+    const parsedCancellations = cancellations.map((row: any) => ({
+      ...row,
+      items: (() => {
+        try { return JSON.parse(row.items_json || '[]'); } catch { return []; }
+      })()
+    }));
+    const corrections = db.prepare('SELECT * FROM order_invoice_corrections WHERE order_id = ? ORDER BY created_at DESC').all(orderId);
+
+    res.json({
+      success: true,
+      data: {
+        ...(order as any),
+        items,
+        cancellations: parsedCancellations,
+        corrections
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Admin: Create Invoice Correction (nur Rechnungsadresse ändern + neue Rechnung)
+router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) => {
+  try {
+    const { shopId: rawShopId, orderId } = req.params;
+    const shopId = resolveShopId(rawShopId);
+    if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+
+    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND shop_id = ?').get(orderId, shopId) as any;
+    if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
+
+    const newAddressRaw = req.body?.new_address;
+    const createdBy = typeof req.body?.created_by === 'string' && req.body.created_by.trim() ? req.body.created_by.trim() : 'Unbekannt';
+    const noteRaw = typeof req.body?.note === 'string' ? req.body.note : '';
+
+    if (typeof newAddressRaw !== 'string' || !newAddressRaw.trim()) {
+      return res.status(400).json({ success: false, error: 'Neue Rechnungsadresse fehlt.' });
+    }
+    const newAddress = newAddressRaw.trim();
+    const oldAddress = order.customer_address || '';
+
+    if (newAddress === oldAddress) {
+      return res.status(400).json({ success: false, error: 'Neue Adresse ist identisch mit der alten.' });
+    }
+
+    if (!order.invoice_number) {
+      return res.status(400).json({
+        success: false,
+        error: 'Noch keine Original-Rechnung vorhanden. Bitte zuerst eine Rechnung erzeugen.'
+      });
+    }
+
+    const shop = db.prepare('SELECT invoice_number_circle, next_invoice_number FROM shops WHERE id = ?').get(shopId) as any || {};
+
+    // Neue Rechnungsnummer generieren
+    const originalInvoiceNumber = order.invoice_number;
+    const originalInvoiceDate = order.invoice_date;
+    let newInvoiceNumber: string;
+    const nowIso = new Date().toISOString();
+
+    if (shop.invoice_number_circle) {
+      const year = new Date().getFullYear().toString();
+      const rawTpl = String(shop.invoice_number_circle);
+      let nextNr = Number(shop.next_invoice_number || 1);
+      let attempt = 0;
+      let finalTpl = rawTpl
+        .replace(/\{YYYY\}/g, year)
+        .replace(/\{YEAR\}/g, year)
+        .replace(/\{JAHR\}/g, year);
+
+      while (attempt < 50) {
+        const candidate = finalTpl.replace(/\{NR\}/g, String(nextNr)).replace(/\{NUMMER\}/g, String(nextNr)).replace(/\{NUMBER\}/g, String(nextNr));
+        const existing = db.prepare('SELECT 1 FROM orders WHERE invoice_number = ? UNION SELECT 1 FROM order_invoice_corrections WHERE new_invoice_number = ?').get(candidate, candidate);
+        if (!existing) { newInvoiceNumber = candidate; break; }
+        nextNr++;
+        attempt++;
+      }
+      if (!newInvoiceNumber!) {
+        newInvoiceNumber = `${order.order_number}-KORR-${Date.now()}`;
+      } else {
+        db.prepare('UPDATE shops SET next_invoice_number = ? WHERE id = ?').run(nextNr + 1, shopId);
+      }
+    } else {
+      const countRow = db.prepare('SELECT COUNT(*) as count FROM order_invoice_corrections WHERE order_id = ?').get(orderId) as any;
+      const seq = Number(countRow?.count || 0) + 1;
+      newInvoiceNumber = `${order.order_number}-R${seq}`;
+      // Check uniqueness
+      const existing = db.prepare('SELECT 1 FROM orders WHERE invoice_number = ? UNION SELECT 1 FROM order_invoice_corrections WHERE new_invoice_number = ?').get(newInvoiceNumber, newInvoiceNumber);
+      if (existing) newInvoiceNumber = `${order.order_number}-R${seq}-${Date.now()}`;
+    }
+
+    const correctionId = crypto.randomUUID();
+    const correctionNumber = `KORR-${newInvoiceNumber}`;
+    const subjectSuffix = `Rechnungskorrektur aus RE.${originalInvoiceNumber}`;
+    const customFileName = `Rechnungskorrektur_${String(newInvoiceNumber).replace(/[^\w\-]/g, '_')}.pdf`;
+
+    // 1. Order customer_address aktualisieren
+    db.prepare('UPDATE orders SET customer_address = ? WHERE id = ?').run(newAddress, orderId);
+
+    // 2. Neue Rechnung PDF generieren (mit neuer Nummer + neuem Subject, ABER Order selbst NICHT überschreiben)
+    // => Wir generieren die Korrektur-Rechnung mit neuer Nummer und speichern sie separat.
+    // Danach wird die Order mit der NEUEN Rechnungsnummer + Path aktualisiert,
+    // damit die Haupt-Rechnung die korrigierte Adresse enthält.
+    let newPdfPath = await generateInvoice(orderId, {
+      forceRegenerate: true,
+      newInvoiceNumber,
+      overwriteInvoiceDate: nowIso,
+      subjectSuffix,
+      customFileName,
+      doNotSaveToOrder: true
+    });
+
+    if (!newPdfPath) {
+      // Rollback address
+      try { db.prepare('UPDATE orders SET customer_address = ? WHERE id = ?').run(oldAddress, orderId); } catch {}
+      return res.status(500).json({ success: false, error: 'Rechnungskorrektur PDF konnte nicht erstellt werden.' });
+    }
+
+    const newPdfFileName = path.basename(newPdfPath);
+
+    // 3. Order jetzt mit der neuen Rechnungsnummer / Datum / Path aktualisieren
+    db.prepare(`
+      UPDATE orders
+      SET customer_address = ?,
+          invoice_number = ?,
+          invoice_date = ?,
+          invoice_path = ?
+      WHERE id = ?
+    `).run(newAddress, newInvoiceNumber, nowIso, newPdfFileName, orderId);
+
+    // 4. Korrektur-Eintrag speichern
+    const insertCorrection = db.prepare(`
+      INSERT INTO order_invoice_corrections (
+        id, order_id, correction_number,
+        original_invoice_number, original_invoice_date,
+        new_invoice_number, new_invoice_date, new_invoice_path,
+        old_customer_address, new_customer_address,
+        created_by, note, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `);
+    insertCorrection.run(
+      correctionId, orderId, correctionNumber,
+      originalInvoiceNumber, originalInvoiceDate,
+      newInvoiceNumber, nowIso, newPdfFileName,
+      oldAddress, newAddress,
+      createdBy, noteRaw || null
+    );
+
+    // 5. Aktualisierte Order + Korrektur zurückgeben
+    const updatedOrder = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
+    const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
+    const cancellations = db.prepare('SELECT * FROM order_cancellations WHERE order_id = ? ORDER BY created_at DESC').all(orderId);
+    const corrections = db.prepare('SELECT * FROM order_invoice_corrections WHERE order_id = ? ORDER BY created_at DESC').all(orderId);
+
+    res.json({
+      success: true,
+      message: 'Rechnungskorrektur erfolgreich erstellt.',
+      data: {
+        correction: {
+          id: correctionId,
+          correction_number: correctionNumber,
+          original_invoice_number: originalInvoiceNumber,
+          new_invoice_number: newInvoiceNumber,
+          new_invoice_date: nowIso,
+          old_customer_address: oldAddress,
+          new_customer_address: newAddress,
+          download_url: `/api/shop-customers/${shopId}/admin/orders/${orderId}/corrections/${correctionId}/pdf`
+        },
+        order: {
+          ...(updatedOrder as any),
+          items,
+          cancellations: cancellations.map((row: any) => ({
+            ...row,
+            items: (() => { try { return JSON.parse(row.items_json || '[]'); } catch { return []; } })()
+          })),
+          corrections
+        }
+      }
+    });
+
+  } catch (error: any) {
+    console.error('[Invoice Correction] ERROR:', error);
+    res.status(500).json({ success: false, error: error.message || 'Interner Fehler.' });
+  }
+});
+
+// Admin: Download Invoice Correction PDF
+router.get('/:shopId/admin/orders/:orderId/corrections/:correctionId/pdf', async (req, res) => {
+  try {
+    const { orderId, correctionId } = req.params;
+    let correction = db.prepare('SELECT * FROM order_invoice_corrections WHERE id = ? AND order_id = ?').get(correctionId, orderId) as any;
+    if (!correction) return res.status(404).json({ success: false, error: 'Rechnungskorrektur nicht gefunden.' });
+
+    const filePath = correction.new_invoice_path
+      ? path.join(DATA_DIR, 'invoices', correction.new_invoice_path)
+      : '';
+
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, error: 'PDF Datei nicht mehr vorhanden.' });
+    }
+
+    const dlName = correction.new_invoice_number
+      ? `Rechnungskorrektur_${String(correction.new_invoice_number).replace(/[^\w\-]/g, '_')}.pdf`
+      : `Rechnungskorrektur_${correctionId}.pdf`;
+    res.download(filePath, dlName);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Place a new order from a shop
 router.post('/:shopId/orders', async (req, res) => {
   try {

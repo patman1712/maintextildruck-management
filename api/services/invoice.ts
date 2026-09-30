@@ -10,7 +10,17 @@ fs.ensureDirSync(INVOICE_DIR);
 
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
-export const generateInvoice = async (orderId: string): Promise<string | null> => {
+export const generateInvoice = async (
+    orderId: string,
+    opts?: {
+        forceRegenerate?: boolean;
+        newInvoiceNumber?: string;
+        subjectSuffix?: string; // z.B. "Rechnungskorrektur aus RE.2026-9980"
+        overwriteInvoiceDate?: string;
+        doNotSaveToOrder?: boolean;
+        customFileName?: string;
+    }
+): Promise<string | null> => {
     try {
         // Fetch Order
         const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
@@ -34,19 +44,26 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
 
         // Check if invoice number is already set
         const orderCheck = db.prepare('SELECT invoice_number, invoice_date FROM orders WHERE id = ?').get(orderId) as any;
-        
-        let invoiceNumber = orderCheck?.invoice_number || order.invoice_number;
-        let invoiceDate = orderCheck?.invoice_date || order.invoice_date;
 
-        if (!invoiceNumber) {
-            // STRICT REQUIREMENT: Invoice Number = Order Number
-            invoiceNumber = order.order_number;
-            invoiceDate = new Date().toISOString();
+        let invoiceNumber = opts?.newInvoiceNumber || orderCheck?.invoice_number || order.invoice_number;
+        let invoiceDate = opts?.overwriteInvoiceDate || orderCheck?.invoice_date || order.invoice_date;
+        const forceRegen = !!opts?.forceRegenerate;
 
-            console.log(`Assigning Invoice Number ${invoiceNumber} to Order ${orderId}`);
+        if (!invoiceNumber || forceRegen) {
+            if (opts?.newInvoiceNumber) {
+                invoiceNumber = opts.newInvoiceNumber;
+            } else {
+                // STRICT REQUIREMENT: Invoice Number = Order Number
+                invoiceNumber = order.order_number;
+            }
+            invoiceDate = opts?.overwriteInvoiceDate || new Date().toISOString();
+
+            console.log(`Assigning Invoice Number ${invoiceNumber} to Order ${orderId} (forceRegen=${forceRegen})`);
 
             // Update Order
-            db.prepare('UPDATE orders SET invoice_number = ?, invoice_date = ? WHERE id = ?').run(invoiceNumber, invoiceDate, orderId);
+            if (!opts?.doNotSaveToOrder) {
+                db.prepare('UPDATE orders SET invoice_number = ?, invoice_date = ? WHERE id = ?').run(invoiceNumber, invoiceDate, orderId);
+            }
         } else {
              console.log(`Order ${orderId} already has Invoice Number ${invoiceNumber}`);
         }
@@ -193,11 +210,19 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         // Title
         doc.setFontSize(16);
         doc.setFont("helvetica", "bold");
-        doc.text(`Rechnung Nr. ${invoiceNumber}`, 20, 110);
-        
+        const titleText = opts?.subjectSuffix
+            ? `${opts.subjectSuffix}`
+            : `Rechnung Nr. ${invoiceNumber}`;
+        doc.text(titleText, 20, 110);
+
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
-        doc.text("Wir erlauben uns, Ihnen folgende Leistungen in Rechnung zu stellen:", 20, 120);
+        if (opts?.subjectSuffix) {
+            doc.text(`Rechnungs-Nr. ${invoiceNumber}`, 20, 120);
+            doc.text("Aufgrund der geänderten Rechnungsadresse stellen wir Ihnen die korrigierte Rechnung wie folgt zu:", 20, 128);
+        } else {
+            doc.text("Wir erlauben uns, Ihnen folgende Leistungen in Rechnung zu stellen:", 20, 120);
+        }
 
         // --- Table ---
         let y = 130;
@@ -225,7 +250,10 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         const drawContinuationHeader = () => {
             doc.setFontSize(10);
             doc.setFont("helvetica", "bold");
-            doc.text(`Rechnung Nr. ${invoiceNumber}`, 20, 18);
+            doc.text(
+                opts?.subjectSuffix ? opts.subjectSuffix : `Rechnung Nr. ${invoiceNumber}`,
+                20, 18
+            );
             doc.setFont("helvetica", "normal");
             doc.setFontSize(8);
             doc.text(`Bestell-Nr. ${order.order_number}`, 195, 18, { align: 'right' });
@@ -470,15 +498,20 @@ export const generateInvoice = async (orderId: string): Promise<string | null> =
         }
 
         // Save PDF
-        const fileName = `Rechnung_${invoiceNumber}.pdf`;
+        const safeInvoiceNumber = String(invoiceNumber || orderId).replace(/[^\w\-]/g, '_');
+        const fileName = opts?.customFileName
+            ? opts.customFileName
+            : `Rechnung_${safeInvoiceNumber}.pdf`;
         const filePath = path.join(INVOICE_DIR, fileName);
-        
+
         // Output as Buffer and write to file
         const pdfOutput = doc.output('arraybuffer');
         fs.writeFileSync(filePath, Buffer.from(pdfOutput));
 
         // Update Order with path
-        db.prepare('UPDATE orders SET invoice_path = ? WHERE id = ?').run(fileName, orderId);
+        if (!opts?.doNotSaveToOrder) {
+            db.prepare('UPDATE orders SET invoice_path = ? WHERE id = ?').run(fileName, orderId);
+        }
 
         return filePath;
 
