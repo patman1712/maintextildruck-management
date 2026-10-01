@@ -2925,17 +2925,15 @@ const ShopDashboard: React.FC = () => {
                         <FileText size={16} className="mr-2" />
                         Rechnung
                     </button>
-                    {currentUser?.role === 'admin' && (
-                        <button
-                            onClick={openCorrectionModal}
-                            disabled={!selectedOrder.invoice_number}
-                            title={!selectedOrder.invoice_number ? 'Noch keine Rechnung vorhanden' : 'Rechnungsadresse korrigieren und neue Rechnung erstellen'}
-                            className="mr-2 px-6 py-3 bg-amber-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                        >
-                            <Edit2 size={16} className="mr-2" />
-                            Rechnungskorrektur
-                        </button>
-                    )}
+                    <button
+                        onClick={openCorrectionModal}
+                        disabled={!selectedOrder.invoice_number}
+                        title={!selectedOrder.invoice_number ? 'Noch keine Rechnung vorhanden' : 'Rechnungsadresse korrigieren und neue Rechnung erstellen'}
+                        className="mr-2 px-6 py-3 bg-amber-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-amber-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                    >
+                        <Edit2 size={16} className="mr-2" />
+                        Rechnungskorrektur
+                    </button>
                     <button
                         onClick={openCancelModal}
                         className="mr-2 px-6 py-3 bg-red-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-red-700 transition-all"
