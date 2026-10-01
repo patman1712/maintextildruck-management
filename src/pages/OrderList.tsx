@@ -891,30 +891,30 @@ export default function OrderList({ filter, source }: { filter?: "active" | "com
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <div className="flex justify-end space-x-1">
-                        <button 
+                  <div className="flex flex-nowrap justify-end items-center gap-1 min-w-0 overflow-visible">
+                        <button
                           onClick={(e) => handleShareProof(order.id, e)}
-                          className="text-gray-400 hover:text-blue-600 transition-colors p-2 hover:bg-blue-50 rounded-full"
-                          title="Digitalen Abzug teilen"
+                          className="shrink-0 text-gray-400 hover:text-blue-600 transition-colors p-2 hover:bg-blue-50 rounded-full"
+                          title="Digitalen Abzug teilen / Freigabe"
                         >
                           <Share2 size={18} />
                         </button>
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(`/dashboard/orders/${order.id}/view`);
                           }}
-                          className="text-gray-400 hover:text-purple-600 transition-colors p-2 hover:bg-purple-50 rounded-full"
+                          className="shrink-0 text-gray-400 hover:text-purple-600 transition-colors p-2 hover:bg-purple-50 rounded-full"
                           title="Digitale Laufzettel-Ansicht"
                         >
                           <Eye size={18} />
                         </button>
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(`/dashboard/orders/${order.id}/edit`);
                           }}
-                          className="text-gray-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-full"
+                          className="shrink-0 text-gray-400 hover:text-red-600 transition-colors p-2 hover:bg-red-50 rounded-full"
                           title="Auftrag bearbeiten"
                         >
                           <Edit size={18} />
