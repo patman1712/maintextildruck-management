@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical, Send } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical, Send, CreditCard, Bell } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
 
 const ShopDashboard: React.FC = () => {
@@ -679,6 +679,47 @@ const ShopDashboard: React.FC = () => {
       alert('Storno fehlgeschlagen.');
     } finally {
       setIsCancellingOrder(false);
+    }
+  };
+
+  const isVorkasseUnpaid = (order: any) => {
+    if (!order) return false;
+    const pm = String(order.payment_method || order.paymentMethod || '').toLowerCase().trim();
+    const isVorkasse = pm === 'vorkasse' || pm === 'advance' || pm === 'bank_transfer' || pm === 'überweisung' || pm === 'uberweisung' || pm.includes('vorkass') || pm.includes('uberweis') || pm.includes('bank');
+    if (!isVorkasse) return false;
+    const ps = String(order.payment_status || 'pending').toLowerCase().trim();
+    const isPaid = ps === 'paid' || ps === 'completed';
+    return !isPaid;
+  };
+
+  const handleSendPaymentReminder = async (orderId: string, orderEmail?: string) => {
+    if (!orderId || !shopId) return;
+    const note = window.prompt(
+      `Zahlungserinnerung senden an ${orderEmail || 'Kunde'}?\n\n(Optional) Individueller Hinweis (wird zusätzlich im blauen Kasten in der E-Mail angezeigt):`,
+      ''
+    );
+    if (note === null) return;
+    try {
+      const res = await fetch(`/api/shop-customers/${shopId}/admin/orders/${orderId}/send-payment-reminder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: note.trim() || undefined })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.error || 'Zahlungserinnerung konnte nicht versandt werden.');
+        return;
+      }
+      await fetchShopOrders();
+      if (selectedOrder?.id === orderId) {
+        const detailsRes = await fetch(`/api/shop-customers/${shopId}/admin/orders/${orderId}`);
+        const detailsData = await detailsRes.json();
+        if (detailsData.success) setSelectedOrder(detailsData.data);
+      }
+      alert(`✅ ${data.message || 'Zahlungserinnerung erfolgreich versandt.'}`);
+    } catch (e: any) {
+      console.error(e);
+      alert('Zahlungserinnerung konnte nicht versandt werden.');
     }
   };
 
@@ -1927,6 +1968,15 @@ const ShopDashboard: React.FC = () => {
                                                 >
                                                     Details
                                                 </button>
+                                                {isVorkasseUnpaid(order) && (
+                                                    <button
+                                                        onClick={() => handleSendPaymentReminder(order.id, order.customer_email as string)}
+                                                        className="text-amber-600 hover:text-amber-800 hover:bg-amber-50 p-2 rounded-lg transition-colors animate-pulse-once"
+                                                        title="Zahlungserinnerung mit Bankdaten per E-Mail senden"
+                                                    >
+                                                        <Bell size={18} />
+                                                    </button>
+                                                )}
                                                 <button 
                                                     onClick={() => handleDeleteOrder(order.id)}
                                                     className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-colors"
@@ -2936,6 +2986,16 @@ const ShopDashboard: React.FC = () => {
                             <RefreshCw size={16} className="mr-2" />
                             Nummer neu
                         </button>
+                    )}
+                    {isVorkasseUnpaid(selectedOrder) && (
+                      <button
+                        onClick={() => handleSendPaymentReminder(selectedOrder.id, selectedOrder.customer_email as string)}
+                        className="mr-2 px-6 py-3 bg-amber-500 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-amber-600 transition-all flex items-center shadow-sm"
+                        title="Zahlungserinnerung mit Bankdaten und Verwendungszweck per E-Mail an den Kunden senden"
+                      >
+                        <CreditCard size={16} className="mr-2" />
+                        Erinnerung
+                      </button>
                     )}
                     <button 
                         onClick={() => window.open(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}/invoice`, '_blank')}

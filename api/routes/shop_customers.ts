@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { generateInvoice } from '../services/invoice.js';
 import { generateCancellationInvoice } from '../services/cancellation_invoice.js';
-import { sendOrderConfirmation, sendShopOrderNotification, sendPickupConfirmation } from '../services/email.js';
+import { sendOrderConfirmation, sendShopOrderNotification, sendPickupConfirmation, sendVorkassePaymentReminder } from '../services/email.js';
 
 const router = Router();
 
@@ -718,6 +718,71 @@ router.get('/:shopId/admin/orders/:orderId/corrections/:correctionId/pdf', async
     res.download(filePath, dlName);
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Admin: Vorkasse Zahlungserinnerung per E-Mail senden (mit Bankdaten + Verwendungszweck)
+router.post('/:shopId/admin/orders/:orderId/send-payment-reminder', async (req, res) => {
+  try {
+    const { shopId: rawShopId, orderId } = req.params;
+    const shopId = resolveShopId(rawShopId);
+    if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+
+    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND shop_id = ?').get(orderId, shopId) as any;
+    if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
+
+    // Nur für Vorkasse / Überweisung zulassen
+    const pm = String(order.payment_method || order.paymentMethod || '').toLowerCase().trim();
+    const isVorkasse = pm === 'vorkasse' || pm === 'advance' || pm === 'bank_transfer' || pm === 'überweisung' || pm === 'uberweisung' || pm.includes('vorkass') || pm.includes('uberweis') || pm.includes('bank');
+    if (!isVorkasse) {
+      return res.status(400).json({ success: false, error: 'Zahlungserinnerung ist nur bei Zahlungsart "Vorkasse" / "Überweisung" verfügbar.' });
+    }
+
+    // Nur senden, wenn NICHT schon bezahlt
+    const ps = String(order.payment_status || 'pending').toLowerCase().trim();
+    const isPaid = ps === 'paid' || ps === 'completed';
+    if (isPaid) {
+      return res.status(400).json({ success: false, error: 'Bestellung ist bereits als "Komplett bezahlt" markiert.' });
+    }
+
+    const noteRaw = typeof req.body?.note === 'string' ? req.body.note : '';
+
+    const result = await sendVorkassePaymentReminder(orderId, noteRaw || undefined);
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        error: result.error || 'Zahlungserinnerung konnte nicht versandt werden.'
+      });
+    }
+
+    // Optional: Log in DB (Spalte last_payment_reminder_at falls vorhanden – wir benutzen Retro-Fill)
+    try {
+      const cols = db.prepare("PRAGMA table_info(orders)").all() as any[];
+      if (cols.some(c => c.name === 'last_payment_reminder_at')) {
+        db.prepare('UPDATE orders SET last_payment_reminder_at = CURRENT_TIMESTAMP WHERE id = ?').run(orderId);
+      } else {
+        try { db.exec("ALTER TABLE orders ADD COLUMN last_payment_reminder_at DATETIME"); } catch {}
+        try { db.prepare('UPDATE orders SET last_payment_reminder_at = CURRENT_TIMESTAMP WHERE id = ?').run(orderId); } catch {}
+      }
+      if (cols.some(c => c.name === 'payment_reminder_count')) {
+        db.prepare('UPDATE orders SET payment_reminder_count = COALESCE(payment_reminder_count, 0) + 1 WHERE id = ?').run(orderId);
+      } else {
+        try { db.exec("ALTER TABLE orders ADD COLUMN payment_reminder_count INTEGER DEFAULT 0"); } catch {}
+        try { db.prepare('UPDATE orders SET payment_reminder_count = COALESCE(payment_reminder_count, 0) + 1 WHERE id = ?').run(orderId); } catch {}
+      }
+    } catch {}
+
+    res.json({
+      success: true,
+      message: `Zahlungserinnerung erfolgreich an ${result.recipient} versandt.`,
+      data: {
+        recipient: result.recipient,
+        sent_at: new Date().toISOString()
+      }
+    });
+  } catch (error: any) {
+    console.error('[Payment Reminder] ERROR:', error);
+    res.status(500).json({ success: false, error: error.message || 'Interner Fehler.' });
   }
 });
 

@@ -828,3 +828,184 @@ export const sendPickupReady = async (orderId: string, code: string, compartment
   }
 };
 // ============================================
+
+/**
+ * Vorkasse-Zahlungserinnerung per E-Mail mit Bankdaten.
+ * Wird manuell angestoßen (Button in ShopDashboard), wenn:
+ *   - order.payment_method === 'Vorkasse' (oder payment_method ist 'advance' / 'bank_transfer')
+ *   - order.payment_status NICHT 'paid' oder 'completed'
+ */
+export const sendVorkassePaymentReminder = async (orderId: string, customNote?: string): Promise<{ success: boolean; recipient: string | null; error?: string }> => {
+  const config = getEmailConfig();
+  if (!config) {
+    console.warn('[Payment Reminder] Email config missing.');
+    return { success: false, recipient: null, error: 'Keine E-Mail-Konfiguration hinterlegt.' };
+  }
+  try {
+    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
+    if (!order) return { success: false, recipient: null, error: 'Bestellung nicht gefunden.' };
+    if (!order.customer_email) return { success: false, recipient: null, error: 'Kunde hat keine E-Mail-Adresse.' };
+
+    // --- Branding (Shop-spezifisch + Global Content) ---
+    let branding: any = {
+      logo_url: '', email_logo_url: '',
+      primary_color: '#0f172a', secondary_color: '#334155',
+      company_name: config.sender_name || 'Main Textildruck',
+      footer_text: ''
+    };
+    if (order.shop_id) {
+      const shop = db.prepare('SELECT logo_url, email_logo_url, primary_color, secondary_color, name FROM shops WHERE id = ?').get(order.shop_id) as any;
+      if (shop) {
+        if (shop.logo_url?.startsWith('http')) branding.logo_url = shop.logo_url;
+        if (shop.email_logo_url?.startsWith('http')) branding.email_logo_url = shop.email_logo_url;
+        if (shop.primary_color) branding.primary_color = shop.primary_color;
+        if (shop.secondary_color) branding.secondary_color = shop.secondary_color;
+        if (shop.name) branding.company_name = shop.name;
+      }
+    }
+    const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
+    if (globalContent) {
+      const parts = [];
+      if (globalContent.company_name) parts.push(globalContent.company_name);
+      if (globalContent.company_address) parts.push(globalContent.company_address);
+      if (globalContent.contact_email) parts.push(globalContent.contact_email);
+      branding.footer_text = parts.join(' | ');
+    }
+
+    // --- Bankdaten (Priority: Shop > Global) ---
+    let bankData: any = {
+      bank_name: globalContent?.bank_name || '',
+      iban: globalContent?.bank_iban || '',
+      bic: globalContent?.bank_bic || '',
+      company_name: globalContent?.company_name || branding.company_name
+    };
+    if (order.shop_id) {
+      const shopBank = db.prepare("SELECT bank_name, bank_iban, bank_bic, company_name FROM shop_shipping_config WHERE shop_id = ?").get(order.shop_id) as any;
+      if (shopBank) {
+        if (shopBank.bank_name) bankData.bank_name = shopBank.bank_name;
+        if (shopBank.bank_iban) bankData.iban = shopBank.bank_iban;
+        if (shopBank.bank_bic) bankData.bic = shopBank.bank_bic;
+        if (shopBank.company_name) bankData.company_name = shopBank.company_name;
+      }
+    }
+
+    // --- Daten ---
+    const orderNumber = order.order_number || order.id;
+    const customerName = order.customer_name || 'Sehr geehrte Damen und Herren';
+    const orderDate = order.created_at ? new Date(order.created_at).toLocaleDateString('de-DE') : '';
+    const totalRaw = Number(order.total_price || order.total || 0);
+    const total = isNaN(totalRaw) ? '0,00' : totalRaw.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + 7);
+    const dueDateStr = dueDate.toLocaleDateString('de-DE');
+
+    // --- Logo ---
+    const logosHtml =
+      branding.logo_url ? `<img src="${branding.logo_url}" alt="${branding.company_name}" style="max-height:70px; max-width:250px;">` :
+      `<h1 style="margin:0; color:white;">${branding.company_name}</h1>`;
+
+    // --- Betrag & Bankdaten Box ---
+    const bankBoxHtml = `
+      <div style="margin-top: 6px; padding: 18px; border-radius: 14px; background: linear-gradient(180deg, #fff7ed, #ffedd5); border: 1px solid #fdba74;">
+        <div style="display:grid; grid-template-columns: 1.1fr 1fr; gap: 16px;">
+          <div>
+            <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing:.08em; color:#9a3412; margin-bottom:6px;">🧾 Zu zahlender Betrag</div>
+            <div style="font-size: 26px; font-weight: 900; color: #7c2d12;">${total}</div>
+            <div style="font-size: 12px; color: #78350f; margin-top:6px;">Bestellung: <b>${orderNumber}</b>${orderDate ? ` · vom ${orderDate}` : ''}</div>
+            <div style="font-size: 12px; color: #78350f; margin-top:2px;">Zahlungsziel: <b>${dueDateStr}</b></div>
+          </div>
+          <div>
+            <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing:.08em; color:#9a3412; margin-bottom:6px;">🏦 Bankverbindung</div>
+            <div style="font-size: 13px; color: #0f172a; line-height: 1.6;">
+              <div><b>${bankData.company_name || branding.company_name}</b></div>
+              ${bankData.bank_name ? `<div>${bankData.bank_name}</div>` : ''}
+              ${bankData.iban ? `<div>IBAN: <b style="font-family: monospace;">${bankData.iban}</b></div>` : ''}
+              ${bankData.bic ? `<div>BIC: <b style="font-family: monospace;">${bankData.bic}</b></div>` : ''}
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: white; border: 1px dashed #fb923c; font-size: 12px; color:#7c2d12;">
+          💡 Bitte geben Sie im Verwendungszweck <b>unbedingt die Bestellnummer „${orderNumber}“</b> an, damit wir die Zahlung zuordnen können. Vielen Dank!
+        </div>
+      </div>`;
+
+    // --- Body Intro ---
+    const introHtml = `
+      <div style="font-size: 15px; color: #0f172a; line-height: 1.7;">
+        <p style="margin:0 0 10px 0;">Hallo ${customerName},</p>
+        <p style="margin:0 0 10px 0;">vielen Dank für Ihre Bestellung bei <b>${branding.company_name}</b>. Wir möchten Sie freundlich daran erinnern, dass der Betrag für Ihre Bestellung <b>#${orderNumber}</b> bisher noch nicht bei uns eingegangen ist.</p>
+        <p style="margin:0 0 8px 0;">Um die Bearbeitung Ihrer Bestellung fortsetzen zu können, bitten wir Sie um die zeitnahe Überweisung des offenen Betrags auf die unten genannte Bankverbindung.</p>
+      </div>`;
+
+    const noteHtml = customNote?.trim() ? `
+      <div style="margin-top: 16px; padding: 14px 16px; border-radius: 12px; background: #eef2ff; border: 1px solid #a5b4fc; font-size: 13px; color: #1e1b4b;">
+        <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing:.1em; color:#4338ca; margin-bottom:4px;">📝 Hinweis von uns</div>
+        ${customNote.trim()}
+      </div>` : '';
+
+    const nextStepHtml = `
+      <div style="margin-top: 20px; padding: 14px; border-radius: 12px; border: 1px dashed #94a3b8; background: #f8fafc;">
+        <div style="font-size: 12px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: .08em; margin-bottom:4px;">⏰ Was passiert als Nächstes?</div>
+        <div style="font-size: 13px; color: #0f172a;">Sobald der Zahlungseingang bei uns verbucht wurde, setzen wir die Bestellung unverzüglich in Produktion / Versand. Danke für Ihre Unterstützung!</div>
+      </div>`;
+
+    // --- Subject / HTML / TEXT ---
+    const subject = `💰 Zahlungserinnerung – Bestellung #${orderNumber} (${branding.company_name})`;
+    const html = `
+    <div style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 24px;">
+      <div style="max-width: 620px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+        <div style="padding: 22px; background: linear-gradient(90deg, ${branding.primary_color}, ${branding.secondary_color}); color: white;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px;">
+            <div>
+              <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing:.08em; opacity:.95;">Vorkasse · Zahlungserinnerung</div>
+              <div style="font-size: 20px; font-weight: 800; margin-top:2px;">Zahlung ausstehend</div>
+            </div>
+            <div style="text-align:right; background: rgba(255,255,255,.12); padding:8px 12px; border-radius:10px;">
+              <div style="font-size: 11px; opacity:.9;">#</div>
+              <div style="font-size: 16px; font-weight: 800;">${orderNumber}</div>
+            </div>
+          </div>
+        </div>
+        <div style="padding: 22px;">
+          <div style="margin-bottom: 16px; text-align:center;">${logosHtml}</div>
+          ${introHtml}
+          ${bankBoxHtml}
+          ${noteHtml}
+          ${nextStepHtml}
+        </div>
+        ${branding.footer_text ? `<div style="padding: 16px 22px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px;">${branding.footer_text}</div>` : ''}
+      </div>
+    </div>`;
+
+    const textLines = [
+      `Zahlungserinnerung – Bestellung #${orderNumber} (${branding.company_name})`,
+      ``,
+      `Hallo ${customerName},`,
+      ``,
+      `vielen Dank für Ihre Bestellung. Der Betrag für die Bestellung #${orderNumber} ist noch offen.`,
+      ``,
+      `Zu zahlender Betrag: ${total}`,
+      `Zahlungsziel: ${dueDateStr}`,
+      `Verwendungszweck: ${orderNumber}`,
+      ``,
+      `Bankverbindung:`,
+      `${bankData.company_name || branding.company_name}`,
+      bankData.bank_name ? bankData.bank_name : '',
+      bankData.iban ? `IBAN: ${bankData.iban}` : '',
+      bankData.bic ? `BIC: ${bankData.bic}` : '',
+      ``,
+      customNote?.trim() ? `Hinweis von uns:\n${customNote.trim()}\n\n` : '',
+      `Sobald der Zahlungseingang bei uns verbucht wurde, setzen wir die Bestellung sofort fort.`,
+      ``,
+      `Mit freundlichen Grüßen,`,
+      `${branding.company_name}`
+    ];
+    const text = textLines.filter(Boolean).join('\n');
+
+    const ok = await sendEmailWithInvoice({ to: [order.customer_email], subject, text, html });
+    return { success: !!ok, recipient: order.customer_email, error: ok ? undefined : 'E-Mail Versand fehlgeschlagen (Siehe Logs).' };
+  } catch (e: any) {
+    console.error('[Payment Reminder] Error:', e);
+    return { success: false, recipient: null, error: e.message || 'Interner Fehler.' };
+  }
+};
