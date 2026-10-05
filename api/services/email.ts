@@ -880,12 +880,17 @@ export const sendVorkassePaymentReminder = async (orderId: string, customNote?: 
       company_name: globalContent?.company_name || branding.company_name
     };
     if (order.shop_id) {
-      const shopBank = db.prepare("SELECT bank_name, bank_iban, bank_bic, company_name FROM shop_shipping_config WHERE shop_id = ?").get(order.shop_id) as any;
-      if (shopBank) {
-        if (shopBank.bank_name) bankData.bank_name = shopBank.bank_name;
-        if (shopBank.bank_iban) bankData.iban = shopBank.bank_iban;
-        if (shopBank.bank_bic) bankData.bic = shopBank.bank_bic;
-        if (shopBank.company_name) bankData.company_name = shopBank.company_name;
+      try {
+        // Shop-Shipping-Config kann diese Spalten haben (je nach Migration Stand); sicher per Fallback
+        const shopBankAll = db.prepare("SELECT * FROM shop_shipping_config WHERE shop_id = ?").get(order.shop_id) as any;
+        if (shopBankAll) {
+          if (shopBankAll.bank_name) bankData.bank_name = shopBankAll.bank_name;
+          if (shopBankAll.bank_iban) bankData.iban = shopBankAll.bank_iban;
+          if (shopBankAll.bank_bic) bankData.bic = shopBankAll.bank_bic;
+          if (shopBankAll.company_name) bankData.company_name = shopBankAll.company_name;
+        }
+      } catch {
+        // Spalten existieren evtl. nicht in shop_shipping_config (altes DB Schema) -> Fallback global
       }
     }
 
