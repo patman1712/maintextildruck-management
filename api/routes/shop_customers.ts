@@ -524,17 +524,25 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
     if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
 
     const newAddressRaw = req.body?.new_address;
+    const newNameRaw = req.body?.new_customer_name;
     const createdBy = typeof req.body?.created_by === 'string' && req.body.created_by.trim() ? req.body.created_by.trim() : 'Unbekannt';
     const noteRaw = typeof req.body?.note === 'string' ? req.body.note : '';
 
     if (typeof newAddressRaw !== 'string' || !newAddressRaw.trim()) {
       return res.status(400).json({ success: false, error: 'Neue Rechnungsadresse fehlt.' });
     }
+    if (typeof newNameRaw !== 'string' || !newNameRaw.trim()) {
+      return res.status(400).json({ success: false, error: 'Neuer Name / Rechnungsempfänger fehlt.' });
+    }
     const newAddress = newAddressRaw.trim();
+    const newName = newNameRaw.trim();
     const oldAddress = order.customer_address || '';
+    const oldName = order.customer_name || '';
 
-    if (newAddress === oldAddress) {
-      return res.status(400).json({ success: false, error: 'Neue Adresse ist identisch mit der alten.' });
+    const addressChanged = newAddress !== oldAddress;
+    const nameChanged = newName !== oldName;
+    if (!addressChanged && !nameChanged) {
+      return res.status(400).json({ success: false, error: 'Keine Änderungen: Name UND Adresse sind identisch mit der aktuellen.' });
     }
 
     if (!order.invoice_number) {
@@ -588,54 +596,63 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
     const subjectSuffix = `Rechnungskorrektur aus RE.${originalInvoiceNumber}`;
     const customFileName = `Rechnungskorrektur_${String(newInvoiceNumber).replace(/[^\w\-]/g, '_')}.pdf`;
 
-    // 1. Order customer_address aktualisieren
-    db.prepare('UPDATE orders SET customer_address = ? WHERE id = ?').run(newAddress, orderId);
+    // 1. Order customer_address + customer_name aktualisieren
+    db.prepare('UPDATE orders SET customer_address = ?, customer_name = ? WHERE id = ?').run(newAddress, newName, orderId);
 
     // 2. Neue Rechnung PDF generieren (mit neuer Nummer + neuem Subject, ABER Order selbst NICHT überschreiben)
     // => Wir generieren die Korrektur-Rechnung mit neuer Nummer und speichern sie separat.
     // Danach wird die Order mit der NEUEN Rechnungsnummer + Path aktualisiert,
     // damit die Haupt-Rechnung die korrigierte Adresse enthält.
-    let newPdfPath = await generateInvoice(orderId, {
-      forceRegenerate: true,
-      newInvoiceNumber,
-      overwriteInvoiceDate: nowIso,
-      subjectSuffix,
-      customFileName,
-      doNotSaveToOrder: true
-    });
+    let newPdfPath: string | null = null;
+    try {
+      newPdfPath = await generateInvoice(orderId, {
+        forceRegenerate: true,
+        newInvoiceNumber,
+        overwriteInvoiceDate: nowIso,
+        subjectSuffix,
+        customFileName,
+        doNotSaveToOrder: true
+      });
+    } catch (err: any) {
+      console.error('[Invoice Correction] PDF failed:', err);
+      newPdfPath = null;
+    }
 
     if (!newPdfPath) {
-      // Rollback address
-      try { db.prepare('UPDATE orders SET customer_address = ? WHERE id = ?').run(oldAddress, orderId); } catch {}
+      // Rollback address + name
+      try { db.prepare('UPDATE orders SET customer_address = ?, customer_name = ? WHERE id = ?').run(oldAddress, oldName, orderId); } catch {}
       return res.status(500).json({ success: false, error: 'Rechnungskorrektur PDF konnte nicht erstellt werden.' });
     }
 
     const newPdfFileName = path.basename(newPdfPath);
 
-    // 3. Order jetzt mit der neuen Rechnungsnummer / Datum / Path aktualisieren
+    // 3. Order jetzt mit der neuen Rechnungsnummer / Datum / Path aktualisieren + Name/Adresse endgültig
     db.prepare(`
       UPDATE orders
-      SET customer_address = ?,
+      SET customer_name = ?,
+          customer_address = ?,
           invoice_number = ?,
           invoice_date = ?,
           invoice_path = ?
       WHERE id = ?
-    `).run(newAddress, newInvoiceNumber, nowIso, newPdfFileName, orderId);
+    `).run(newName, newAddress, newInvoiceNumber, nowIso, newPdfFileName, orderId);
 
-    // 4. Korrektur-Eintrag speichern
+    // 4. Korrektur-Eintrag speichern (inkl. altem/neuem Namen)
     const insertCorrection = db.prepare(`
       INSERT INTO order_invoice_corrections (
         id, order_id, correction_number,
         original_invoice_number, original_invoice_date,
         new_invoice_number, new_invoice_date, new_invoice_path,
+        old_customer_name, new_customer_name,
         old_customer_address, new_customer_address,
         created_by, note, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `);
     insertCorrection.run(
       correctionId, orderId, correctionNumber,
       originalInvoiceNumber, originalInvoiceDate,
       newInvoiceNumber, nowIso, newPdfFileName,
+      oldName || null, newName,
       oldAddress, newAddress,
       createdBy, noteRaw || null
     );
@@ -656,6 +673,8 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
           original_invoice_number: originalInvoiceNumber,
           new_invoice_number: newInvoiceNumber,
           new_invoice_date: nowIso,
+          old_customer_name: oldName,
+          new_customer_name: newName,
           old_customer_address: oldAddress,
           new_customer_address: newAddress,
           download_url: `/api/shop-customers/${shopId}/admin/orders/${orderId}/corrections/${correctionId}/pdf`

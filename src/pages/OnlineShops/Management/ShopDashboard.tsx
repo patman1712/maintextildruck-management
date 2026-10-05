@@ -82,6 +82,7 @@ const ShopDashboard: React.FC = () => {
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
   
   const [showCorrectionModal, setShowCorrectionModal] = useState(false);
+  const [correctionName, setCorrectionName] = useState('');
   const [correctionStreet, setCorrectionStreet] = useState('');
   const [correctionZip, setCorrectionZip] = useState('');
   const [correctionCity, setCorrectionCity] = useState('');
@@ -706,6 +707,7 @@ const ShopDashboard: React.FC = () => {
         street = parts[0];
       }
     }
+    setCorrectionName((selectedOrder.customer_name as string) || '');
     setCorrectionStreet(street);
     setCorrectionZip(zip);
     setCorrectionCity(city);
@@ -715,15 +717,15 @@ const ShopDashboard: React.FC = () => {
 
   const handleSaveCorrection = async () => {
     if (!selectedOrder?.id) return;
+    if (!correctionName.trim()) {
+      alert('Bitte Name / Rechnungsempfänger ausfüllen.');
+      return;
+    }
     if (!correctionStreet.trim() || !correctionZip.trim() || !correctionCity.trim()) {
       alert('Bitte Straße, PLZ und Ort ausfüllen.');
       return;
     }
     const newAddress = `${correctionStreet.trim()}, ${correctionZip.trim()} ${correctionCity.trim()}`;
-    if (newAddress === (selectedOrder.customer_address || '').trim()) {
-      alert('Die neue Adresse stimmt mit der alten überein. Bitte ändern Sie mindestens ein Feld.');
-      return;
-    }
 
     setIsSavingCorrection(true);
     try {
@@ -732,6 +734,7 @@ const ShopDashboard: React.FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          new_customer_name: correctionName.trim(),
           new_address: newAddress,
           created_by: createdBy,
           note: correctionNote.trim() || undefined
@@ -748,6 +751,7 @@ const ShopDashboard: React.FC = () => {
       const detailsData = await detailsRes.json();
       if (detailsData.success) setSelectedOrder(detailsData.data);
       setShowCorrectionModal(false);
+      setCorrectionName('');
       setCorrectionStreet('');
       setCorrectionZip('');
       setCorrectionCity('');
@@ -2844,7 +2848,9 @@ const ShopDashboard: React.FC = () => {
                         <div className="mt-8">
                             <h4 className="text-sm font-black uppercase tracking-widest text-slate-400 border-b border-slate-100 pb-2 mb-4">Rechnungskorrekturen</h4>
                             <div className="space-y-3">
-                                {selectedOrder.corrections.map((correction: any) => (
+                                {selectedOrder.corrections.map((correction: any) => {
+                                    const nameChanged = !!correction.old_customer_name && !!correction.new_customer_name && correction.old_customer_name !== correction.new_customer_name;
+                                    return (
                                     <div key={correction.id} className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                                         <div className="flex items-center justify-between mb-3">
                                             <div>
@@ -2867,6 +2873,18 @@ const ShopDashboard: React.FC = () => {
                                                 PDF
                                             </button>
                                         </div>
+                                        {nameChanged && (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                                <div className="bg-white border border-amber-200 rounded-lg p-3">
+                                                    <div className="text-[10px] uppercase tracking-widest font-black text-amber-600 mb-1">Alter Name</div>
+                                                    <div className="text-sm text-slate-700 whitespace-pre-line">{correction.old_customer_name || '—'}</div>
+                                                </div>
+                                                <div className="bg-white border-2 border-emerald-300 rounded-lg p-3">
+                                                    <div className="text-[10px] uppercase tracking-widest font-black text-emerald-600 mb-1">Neuer Name</div>
+                                                    <div className="text-sm text-slate-800 whitespace-pre-line font-semibold">{correction.new_customer_name || '—'}</div>
+                                                </div>
+                                            </div>
+                                        )}
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
                                             <div className="bg-white border border-amber-200 rounded-lg p-3">
                                                 <div className="text-[10px] uppercase tracking-widest font-black text-amber-600 mb-1">Alte Adresse</div>
@@ -2884,7 +2902,8 @@ const ShopDashboard: React.FC = () => {
                                             </div>
                                         )}
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
@@ -3023,7 +3042,7 @@ const ShopDashboard: React.FC = () => {
                     <div>
                         <h3 className="font-black text-lg text-slate-900">Rechnungskorrektur erstellen</h3>
                         <p className="text-sm text-slate-500 mt-1">
-                            Korrigieren Sie NUR die Rechnungsadresse. Es wird automatisch eine neue Rechnung mit dem Betreff „Rechnungskorrektur aus {selectedOrder.invoice_number || 'der bestehenden Rechnung'}“ generiert.
+                            Korrigieren Sie optional den Rechnungsempfänger (Name) UND/ODER die Rechnungsadresse. Es wird automatisch eine neue Rechnung mit dem Betreff „Rechnungskorrektur aus {selectedOrder.invoice_number || 'der bestehenden Rechnung'}“ generiert.
                         </p>
                     </div>
                     <button onClick={() => setShowCorrectionModal(false)} className="p-2 hover:bg-slate-100 rounded-full">
@@ -3032,10 +3051,22 @@ const ShopDashboard: React.FC = () => {
                 </div>
                 <div className="p-6 overflow-y-auto space-y-5">
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        <div className="text-[10px] uppercase tracking-widest font-black text-amber-700 mb-1">Aktueller Rechnungsempfänger</div>
+                        <div className="text-sm font-bold text-slate-900 mb-2">{selectedOrder.customer_name || '—'}</div>
                         <div className="text-[10px] uppercase tracking-widest font-black text-amber-700 mb-1">Aktuelle Rechnungsadresse</div>
                         <div className="text-sm text-slate-700">{selectedOrder.customer_address || '—'}</div>
                     </div>
 
+                    <div>
+                        <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Name / Rechnungsempfänger *</label>
+                        <input
+                            type="text"
+                            value={correctionName}
+                            onChange={(e) => setCorrectionName(e.target.value)}
+                            placeholder="z.B. Max Mustermann GmbH"
+                            className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                        />
+                    </div>
                     <div>
                         <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Straße + Hausnummer *</label>
                         <input
@@ -3073,7 +3104,7 @@ const ShopDashboard: React.FC = () => {
                         <textarea
                             value={correctionNote}
                             onChange={(e) => setCorrectionNote(e.target.value)}
-                            placeholder="z.B. Falsche Hausnummer vom Kunden übermittelt"
+                            placeholder="z.B. Falscher Name / Adresse vom Kunden übermittelt"
                             rows={3}
                             className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
                         />
@@ -3085,7 +3116,7 @@ const ShopDashboard: React.FC = () => {
                     </button>
                     <button
                         onClick={handleSaveCorrection}
-                        disabled={isSavingCorrection || !correctionStreet.trim() || !correctionZip.trim() || !correctionCity.trim()}
+                        disabled={isSavingCorrection || !correctionName.trim() || !correctionStreet.trim() || !correctionZip.trim() || !correctionCity.trim()}
                         className="px-5 py-3 bg-amber-600 text-white rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-amber-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center"
                     >
                         {isSavingCorrection ? (
