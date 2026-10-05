@@ -171,6 +171,14 @@ export default function OrderDetails() {
             </div>
             <div className="flex items-center">
               <button
+                onClick={() => navigate(`/dashboard/orders/${id}/edit`)}
+                className="mr-3 flex items-center px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition-colors text-sm font-medium shadow-sm"
+                title="Auftrag bearbeiten (Kundendaten, Adresse, Produkte, Fristen etc.)"
+              >
+                <PenTool size={16} className="mr-2" />
+                Bearbeiten
+              </button>
+              <button
                 onClick={() => window.print()}
                 className="mr-3 flex items-center px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-md transition-colors text-sm font-medium shadow-sm"
                 title="Druckansicht"
