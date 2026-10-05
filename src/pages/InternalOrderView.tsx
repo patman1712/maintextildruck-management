@@ -4,7 +4,7 @@ import { useAppStore } from "@/store";
 import { 
     ArrowLeft, Calendar, User, FileText, Image as ImageIcon, 
     CheckCircle, AlertCircle, Phone, Mail, MapPin, Printer, PenTool, 
-    X, Info, Clock, Download
+    X, Info, Clock, Download, Edit
 } from "lucide-react";
 
 export default function InternalOrderView() {
@@ -102,6 +102,14 @@ export default function InternalOrderView() {
                 </div>
             </div>
             <div className="flex items-center space-x-4 text-sm">
+                <button
+                    onClick={() => navigate(`/dashboard/orders/${id}/edit`)}
+                    className="flex items-center px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold uppercase tracking-wider text-xs transition-colors shadow-sm"
+                    title="Auftrag bearbeiten (Kundendaten, Adresse, Produkte, etc.)"
+                >
+                    <Edit size={14} className="mr-1.5" />
+                    Bearbeiten
+                </button>
                 <div className="flex items-center" title="Deadline">
                     <Calendar size={16} className="mr-1.5 text-red-400" />
                     <span className="font-mono font-bold text-red-100">
