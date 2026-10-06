@@ -107,8 +107,8 @@ export const generateInvoice = async (
         //    => Fallback auf (bereits normalisierte) order_items.
         // =========================================================================
         const orderTotal = Number(order.total_amount || 0);
-        const shipping = Number(order.shipping_costs || 0);
-        const itemsTotal = +(orderTotal - shipping).toFixed(2);
+        const orderShipping = Number(order.shipping_costs || 0);
+        const itemsTotal = +(orderTotal - orderShipping).toFixed(2);
 
         let sdRows: any[] = [];
         try {
