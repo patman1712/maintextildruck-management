@@ -527,6 +527,9 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
     const newNameRaw = req.body?.new_customer_name;
     const createdBy = typeof req.body?.created_by === 'string' && req.body.created_by.trim() ? req.body.created_by.trim() : 'Unbekannt';
     const noteRaw = typeof req.body?.note === 'string' ? req.body.note : '';
+    // ADMIN-ONLY: optional customItems (manuell geänderte Positionen)
+    const createdByUserId = typeof req.body?.created_by_user_id === 'string' ? req.body.created_by_user_id.trim() : '';
+    const customItemsRaw = Array.isArray(req.body?.customItems) ? req.body.customItems : undefined;
 
     if (typeof newAddressRaw !== 'string' || !newAddressRaw.trim()) {
       return res.status(400).json({ success: false, error: 'Neue Rechnungsadresse fehlt.' });
@@ -534,6 +537,45 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
     if (typeof newNameRaw !== 'string' || !newNameRaw.trim()) {
       return res.status(400).json({ success: false, error: 'Neuer Name / Rechnungsempfänger fehlt.' });
     }
+
+    // ----------- ADMIN PRÜFUNG + VALIDIERUNG customItems -----------
+    let customItems: Array<{item_name: string; quantity: number; price: number; color?: string|null; size?: string|null; item_number?: string|null; notes?: string|null;}> | null = null;
+    let newItemsJson: string | null = null;
+    if (customItemsRaw !== undefined) {
+      if (!createdByUserId) {
+        return res.status(401).json({ success: false, error: 'Für Positionsänderungen ist Anmeldung erforderlich.' });
+      }
+      const callerUser = db.prepare('SELECT role FROM users WHERE id = ?').get(createdByUserId) as any;
+      if (!callerUser || String(callerUser.role || '').toLowerCase() !== 'admin') {
+        return res.status(403).json({ success: false, error: 'Nur Administratoren dürfen Positionen / Preise in der Rechnungskorrektur ändern.' });
+      }
+
+      if (customItemsRaw.length === 0) {
+        return res.status(400).json({ success: false, error: 'Mindestens eine Position ist erforderlich (kann nicht leer sein).' });
+      }
+      customItems = [];
+      for (let i = 0; i < customItemsRaw.length; i++) {
+        const row: any = customItemsRaw[i];
+        const name = String(row?.item_name || '').trim();
+        const qty = Math.floor(Number(row?.quantity ?? 1));
+        const priceNum = Number(row?.price ?? 0);
+        if (!name) return res.status(400).json({ success: false, error: `Position ${i+1}: Artikelname ist erforderlich.` });
+        if (!isFinite(qty) || qty < 1) return res.status(400).json({ success: false, error: `Position ${i+1}: Menge muss mindestens 1 sein.` });
+        if (!isFinite(priceNum) || priceNum < 0) return res.status(400).json({ success: false, error: `Position ${i+1}: Preis muss eine Zahl ≥ 0 sein.` });
+        customItems.push({
+          item_name: name,
+          quantity: qty,
+          price: +(priceNum.toFixed(2)),
+          color: row?.color != null ? String(row.color) : null,
+          size: row?.size != null ? String(row.size) : null,
+          item_number: row?.item_number != null ? String(row.item_number) : null,
+          notes: row?.notes != null ? String(row.notes) : null,
+        });
+      }
+      newItemsJson = JSON.stringify(customItems);
+    }
+    // -----------------------------------------------------------------
+
     const newAddress = newAddressRaw.trim();
     const newName = newNameRaw.trim();
     const oldAddress = order.customer_address || '';
@@ -541,8 +583,9 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
 
     const addressChanged = newAddress !== oldAddress;
     const nameChanged = newName !== oldName;
-    if (!addressChanged && !nameChanged) {
-      return res.status(400).json({ success: false, error: 'Keine Änderungen: Name UND Adresse sind identisch mit der aktuellen.' });
+    const itemsChanged = !!customItems;
+    if (!addressChanged && !nameChanged && !itemsChanged) {
+      return res.status(400).json({ success: false, error: 'Keine Änderungen: Name, Adresse UND Positionen sind identisch mit der aktuellen.' });
     }
 
     if (!order.invoice_number) {
@@ -605,14 +648,18 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
     // damit die Haupt-Rechnung die korrigierte Adresse enthält.
     let newPdfPath: string | null = null;
     try {
-      newPdfPath = await generateInvoice(orderId, {
+      const genOpts: any = {
         forceRegenerate: true,
         newInvoiceNumber,
         overwriteInvoiceDate: nowIso,
         subjectSuffix,
         customFileName,
         doNotSaveToOrder: true
-      });
+      };
+      if (customItems && customItems.length > 0) {
+        genOpts.forceItems = customItems;
+      }
+      newPdfPath = await generateInvoice(orderId, genOpts);
     } catch (err: any) {
       console.error('[Invoice Correction] PDF failed:', err);
       newPdfPath = null;
@@ -637,7 +684,7 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
       WHERE id = ?
     `).run(newName, newAddress, newInvoiceNumber, nowIso, newPdfFileName, orderId);
 
-    // 4. Korrektur-Eintrag speichern (inkl. altem/neuem Namen)
+    // 4. Korrektur-Eintrag speichern (inkl. altem/neuem Namen + neuen Positionen)
     const insertCorrection = db.prepare(`
       INSERT INTO order_invoice_corrections (
         id, order_id, correction_number,
@@ -645,8 +692,9 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
         new_invoice_number, new_invoice_date, new_invoice_path,
         old_customer_name, new_customer_name,
         old_customer_address, new_customer_address,
+        new_items_json,
         created_by, note, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `);
     insertCorrection.run(
       correctionId, orderId, correctionNumber,
@@ -654,6 +702,7 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
       newInvoiceNumber, nowIso, newPdfFileName,
       oldName || null, newName,
       oldAddress, newAddress,
+      newItemsJson,
       createdBy, noteRaw || null
     );
 
@@ -662,6 +711,11 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
     const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
     const cancellations = db.prepare('SELECT * FROM order_cancellations WHERE order_id = ? ORDER BY created_at DESC').all(orderId);
     const corrections = db.prepare('SELECT * FROM order_invoice_corrections WHERE order_id = ? ORDER BY created_at DESC').all(orderId);
+
+    const parseItemsJson = (json: any) => {
+      if (!json) return undefined;
+      try { return JSON.parse(String(json)); } catch { return undefined; }
+    };
 
     res.json({
       success: true,
@@ -677,6 +731,7 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
           new_customer_name: newName,
           old_customer_address: oldAddress,
           new_customer_address: newAddress,
+          new_items: parseItemsJson(newItemsJson),
           download_url: `/api/shop-customers/${shopId}/admin/orders/${orderId}/corrections/${correctionId}/pdf`
         },
         order: {
@@ -686,7 +741,10 @@ router.post('/:shopId/admin/orders/:orderId/correct-invoice', async (req, res) =
             ...row,
             items: (() => { try { return JSON.parse(row.items_json || '[]'); } catch { return []; } })()
           })),
-          corrections
+          corrections: corrections.map((row: any) => ({
+            ...row,
+            new_items: parseItemsJson(row.new_items_json)
+          }))
         }
       }
     });
@@ -708,14 +766,50 @@ router.get('/:shopId/admin/orders/:orderId/corrections/:correctionId/pdf', async
       ? path.join(DATA_DIR, 'invoices', correction.new_invoice_path)
       : '';
 
+    // --- ADMIN FIX: Wenn PDF Datei fehlt, neu generieren (ggf. MIT customItems / forceItems) ---
     if (!filePath || !fs.existsSync(filePath)) {
+      try {
+        let customItems: any[] | undefined = undefined;
+        if (correction.new_items_json) {
+          try {
+            const parsed = JSON.parse(correction.new_items_json);
+            if (Array.isArray(parsed)) customItems = parsed;
+          } catch {}
+        }
+        const genOpts: any = {
+          forceRegenerate: true,
+          newInvoiceNumber: correction.new_invoice_number,
+          overwriteInvoiceDate: correction.new_invoice_date,
+          subjectSuffix: `Rechnungskorrektur aus RE.${correction.original_invoice_number}`,
+          customFileName: correction.new_invoice_number ? `Rechnungskorrektur_${String(correction.new_invoice_number).replace(/[^\w\-]/g, '_')}.pdf` : undefined,
+          doNotSaveToOrder: true
+        };
+        if (customItems && customItems.length > 0) {
+          genOpts.forceItems = customItems;
+        }
+        const freshPath = await generateInvoice(orderId, genOpts);
+        if (freshPath) {
+          db.prepare('UPDATE order_invoice_corrections SET new_invoice_path = ? WHERE id = ?').run(
+            path.basename(freshPath), correctionId
+          );
+          correction = db.prepare('SELECT * FROM order_invoice_corrections WHERE id = ? AND order_id = ?').get(correctionId, orderId);
+        }
+      } catch (regenErr: any) {
+        console.error('[Correction PDF Regenerate] failed:', regenErr);
+      }
+    }
+
+    const finalPath = correction.new_invoice_path
+      ? path.join(DATA_DIR, 'invoices', correction.new_invoice_path)
+      : '';
+    if (!finalPath || !fs.existsSync(finalPath)) {
       return res.status(404).json({ success: false, error: 'PDF Datei nicht mehr vorhanden.' });
     }
 
     const dlName = correction.new_invoice_number
       ? `Rechnungskorrektur_${String(correction.new_invoice_number).replace(/[^\w\-]/g, '_')}.pdf`
       : `Rechnungskorrektur_${correctionId}.pdf`;
-    res.download(filePath, dlName);
+    res.download(finalPath, dlName);
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -1505,6 +1505,7 @@ try {
           new_customer_name TEXT,
           old_customer_address TEXT,
           new_customer_address TEXT,
+          new_items_json TEXT,
           created_by TEXT,
           note TEXT,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -1512,13 +1513,15 @@ try {
       `);
       db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_order_invoice_corrections_number_unique ON order_invoice_corrections(correction_number)");
       db.exec("CREATE INDEX IF NOT EXISTS idx_order_invoice_corrections_order_id ON order_invoice_corrections(order_id)");
-      // Retro-Fill: Spalten old/new_customer_name nachträglich für bestehende Installationen
+      // Retro-Fill: Spalten old/new_customer_name + new_items_json nachträglich für bestehende Installationen
       try {
         const corrCols = db.prepare("PRAGMA table_info(order_invoice_corrections)").all() as any[];
         const hasOld = corrCols.some(c => c.name === 'old_customer_name');
         const hasNew = corrCols.some(c => c.name === 'new_customer_name');
+        const hasNewItems = corrCols.some(c => c.name === 'new_items_json');
         if (!hasOld) db.exec("ALTER TABLE order_invoice_corrections ADD COLUMN old_customer_name TEXT");
         if (!hasNew) db.exec("ALTER TABLE order_invoice_corrections ADD COLUMN new_customer_name TEXT");
+        if (!hasNewItems) db.exec("ALTER TABLE order_invoice_corrections ADD COLUMN new_items_json TEXT");
       } catch {}
   } catch (e) {
       console.error('Migration error (order_invoice_corrections):', e);

@@ -19,6 +19,8 @@ export const generateInvoice = async (
         overwriteInvoiceDate?: string;
         doNotSaveToOrder?: boolean;
         customFileName?: string;
+        forceItems?: Array<{item_name: string; quantity: number; price: number; color?: string|null; size?: string|null; item_number?: string|null; notes?: string|null;}>;
+        overwriteTotalAmount?: number; // Optional: Gesamtsumme der neuen Korrektur (wenn manuell geänderte Positionen)
     }
 ): Promise<string | null> => {
     try {
@@ -26,8 +28,29 @@ export const generateInvoice = async (
         const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
         if (!order) throw new Error('Order not found');
 
-        // Fetch Order Items
-        const rawItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+        // --- NEU: forceItems (Admin manuell geänderte Positionen in Korrektur) ---
+        // Wenn forceItems gesetzt → Komplett order_items ignorieren und diese verwenden!
+        const hasForceItems = Array.isArray(opts?.forceItems) && opts.forceItems.length > 0;
+        let rawItems: any[] = [];
+        if (hasForceItems) {
+          rawItems = opts.forceItems.map((fi, idx) => ({
+            id: `force-${orderId}-${idx}`,
+            order_id: orderId,
+            supplier_id: 'manual',
+            item_name: fi.item_name,
+            quantity: fi.quantity,
+            price: fi.price,
+            color: fi.color ?? null,
+            size: fi.size ?? null,
+            item_number: fi.item_number ?? null,
+            notes: fi.notes ?? null,
+            status: 'active',
+            created_at: new Date().toISOString()
+          }));
+        } else {
+          rawItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+        }
+        // --- Ende forceItems ---
 
         // ---- ROBUSTE NORMALISIERUNG (Fix für fehlende Spalten) ----
         // Sicherstellen dass JEDE Zeile IMMER item_name, quantity (≥1), price (Zahl) hat.

@@ -88,6 +88,9 @@ const ShopDashboard: React.FC = () => {
   const [correctionCity, setCorrectionCity] = useState('');
   const [correctionNote, setCorrectionNote] = useState('');
   const [isSavingCorrection, setIsSavingCorrection] = useState(false);
+  const [correctionItems, setCorrectionItems] = useState<Array<{_id: string; item_name: string; quantity: number; price: number; color?: string|null; size?: string|null; item_number?: string|null; notes?: string|null;}>>([]);
+  const [correctionItemsEnabled, setCorrectionItemsEnabled] = useState(false);
+  const isAdmin = currentUser?.role === 'admin';
   
   const categoryFormRef = useRef<HTMLDivElement>(null);
 
@@ -753,6 +756,50 @@ const ShopDashboard: React.FC = () => {
     setCorrectionZip(zip);
     setCorrectionCity(city);
     setCorrectionNote('');
+
+    // --------- ADMIN: Positionen initialisieren ---------
+    if (isAdmin) {
+      const baseItems = Array.isArray(selectedOrder?.items) && selectedOrder.items.length > 0
+        ? selectedOrder.items
+        : (Array.isArray(selectedOrder?.cancellations?.[0]?.items) ? selectedOrder.cancellations[0].items : []);
+      let initialItems: any[] = [];
+      if (baseItems.length > 0) {
+        initialItems = baseItems.map((it: any, idx: number) => {
+          const qtyRaw = Number(it.quantity ?? it.qty ?? it.anzahl ?? 1);
+          const priceRaw = Number(it.price ?? it.unit_price ?? it.einzelpreis ?? it.amount ?? (Number(it.item_total ?? it.line_total ?? 0) / (Number.isFinite(qtyRaw) && qtyRaw > 0 ? qtyRaw : 1)));
+          return {
+            _id: `init-${idx}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            item_name: String(it.item_name ?? it.name ?? it.product_name ?? it.title ?? `Produkt ${idx+1}`).trim(),
+            quantity: Math.max(1, Number.isFinite(qtyRaw) ? Math.floor(qtyRaw) : 1),
+            price: Number.isFinite(priceRaw) && priceRaw >= 0 ? +(priceRaw).toFixed(2) : 0,
+            color: it.color != null ? String(it.color) : null,
+            size: it.size != null ? String(it.size) : null,
+            item_number: it.item_number ?? it.sku ?? it.artikelnr ?? null,
+            notes: it.notes != null ? String(it.notes) : null
+          };
+        });
+      } else if (isAdmin) {
+        const total = Number(selectedOrder?.total_amount ?? 0);
+        const shipping = Number(selectedOrder?.shipping_costs ?? 0);
+        const netto = +(Math.max(0, total - shipping)).toFixed(2);
+        initialItems = [{
+          _id: `init-new-${Date.now()}`,
+          item_name: 'Position 1',
+          quantity: 1,
+          price: netto,
+          color: null,
+          size: null,
+          item_number: null,
+          notes: null
+        }];
+      }
+      setCorrectionItems(initialItems);
+      setCorrectionItemsEnabled(initialItems.length > 0 || isAdmin);
+    } else {
+      setCorrectionItems([]);
+      setCorrectionItemsEnabled(false);
+    }
+
     setShowCorrectionModal(true);
   };
 
@@ -766,20 +813,54 @@ const ShopDashboard: React.FC = () => {
       alert('Bitte Straße, PLZ und Ort ausfüllen.');
       return;
     }
+
+    let customItemsToSend: any[] | undefined = undefined;
+    if (isAdmin && correctionItemsEnabled && correctionItems.length > 0) {
+      const validated = correctionItems.map(it => ({
+        item_name: String(it.item_name || '').trim(),
+        quantity: Math.max(1, Number.isFinite(Number(it.quantity)) ? Math.floor(Number(it.quantity)) : 1),
+        price: Number.isFinite(Number(it.price)) && Number(it.price) >= 0 ? +(Number(it.price).toFixed(2)) : 0,
+        color: it.color ?? undefined,
+        size: it.size ?? undefined,
+        item_number: it.item_number ?? undefined,
+        notes: it.notes ?? undefined
+      }));
+      for (let i = 0; i < validated.length; i++) {
+        if (!validated[i].item_name) {
+          alert(`Position ${i+1}: Artikelname darf nicht leer sein.`);
+          return;
+        }
+        if (validated[i].quantity < 1) {
+          alert(`Position ${i+1}: Menge muss mindestens 1 sein.`);
+          return;
+        }
+        if (validated[i].price < 0) {
+          alert(`Position ${i+1}: Preis muss ≥ 0 sein.`);
+          return;
+        }
+      }
+      customItemsToSend = validated;
+    }
+
     const newAddress = `${correctionStreet.trim()}, ${correctionZip.trim()} ${correctionCity.trim()}`;
 
     setIsSavingCorrection(true);
     try {
       const createdBy = currentUser?.name || currentUser?.username || 'Unbekannt';
+      const payload: any = {
+        new_customer_name: correctionName.trim(),
+        new_address: newAddress,
+        created_by: createdBy,
+        note: correctionNote.trim() || undefined
+      };
+      if (customItemsToSend) {
+        payload.created_by_user_id = currentUser?.id || '';
+        payload.customItems = customItemsToSend;
+      }
       const res = await fetch(`/api/shop-customers/${shopId}/admin/orders/${selectedOrder.id}/correct-invoice`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          new_customer_name: correctionName.trim(),
-          new_address: newAddress,
-          created_by: createdBy,
-          note: correctionNote.trim() || undefined
-        })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (!data.success) {
@@ -797,9 +878,11 @@ const ShopDashboard: React.FC = () => {
       setCorrectionZip('');
       setCorrectionCity('');
       setCorrectionNote('');
+      setCorrectionItems([]);
+      setCorrectionItemsEnabled(false);
 
-      if (data.data?.downloadUrl) {
-        window.open(data.data.downloadUrl, '_blank');
+      if (data.data?.correction?.download_url) {
+        window.open(data.data.correction.download_url, '_blank');
       }
       alert('Rechnungskorrektur erfolgreich erstellt!');
     } catch (e) {
@@ -3159,6 +3242,154 @@ const ShopDashboard: React.FC = () => {
                             />
                         </div>
                     </div>
+
+                    {/* ============================================================
+                         ADMIN ONLY: Positionen manuell ändern
+                        ============================================================ */}
+                    {isAdmin && (
+                        <div className="border-2 border-indigo-200 rounded-2xl bg-indigo-50/40 overflow-hidden">
+                            <label className="flex items-center justify-between gap-3 px-5 py-4 cursor-pointer select-none">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-sm shadow-indigo-900/20">
+                                        <Edit2 size={18} />
+                                    </div>
+                                    <div>
+                                        <div className="font-black text-[13px] uppercase tracking-wider text-indigo-900">
+                                            Positionen / Preise manuell ändern <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-indigo-600 text-white ml-1">NUR ADMIN</span>
+                                        </div>
+                                        <div className="text-[11px] text-indigo-700 mt-0.5">
+                                            {correctionItemsEnabled
+                                                ? `${correctionItems.length} Position(en) werden auf der Korrektur-Rechnung angezeigt`
+                                                : 'Deaktiviert → Korrektur nutzt originale Positionen der Bestellung'}
+                                        </div>
+                                    </div>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    className="w-5 h-5 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500"
+                                    checked={correctionItemsEnabled}
+                                    onChange={(e) => {
+                                        setCorrectionItemsEnabled(e.target.checked);
+                                        if (e.target.checked && correctionItems.length === 0) {
+                                            const total = Number(selectedOrder?.total_amount ?? 0);
+                                            const shipping = Number(selectedOrder?.shipping_costs ?? 0);
+                                            const netto = +(Math.max(0, total - shipping)).toFixed(2);
+                                            setCorrectionItems([{
+                                                _id: `man-${Date.now()}`,
+                                                item_name: 'Position 1',
+                                                quantity: 1,
+                                                price: netto,
+                                                color: null,
+                                                size: null,
+                                                item_number: null,
+                                                notes: null
+                                            }]);
+                                        }
+                                    }}
+                                />
+                            </label>
+
+                            {correctionItemsEnabled && (
+                                <div className="border-t border-indigo-200 bg-white p-5 space-y-4">
+                                    {/* Spalten-Header */}
+                                    <div className="grid grid-cols-12 gap-3 px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                        <div className="col-span-5">Artikelname *</div>
+                                        <div className="col-span-2 text-center">Menge</div>
+                                        <div className="col-span-2 text-right">Einzelpreis</div>
+                                        <div className="col-span-2 text-right">Summe</div>
+                                        <div className="col-span-1"></div>
+                                    </div>
+
+                                    {correctionItems.map((it, idx) => {
+                                        const qty = Math.max(1, Number(it.quantity) || 1);
+                                        const price = Number(it.price) >= 0 ? Number(it.price) : 0;
+                                        const sum = +(qty * price).toFixed(2);
+                                        return (
+                                            <div key={it._id} className="grid grid-cols-12 gap-3 items-center bg-slate-50 hover:bg-slate-100 transition-colors rounded-xl px-3 py-3 border border-slate-200">
+                                                <div className="col-span-5">
+                                                    <input
+                                                        type="text"
+                                                        value={it.item_name}
+                                                        onChange={(e) => setCorrectionItems(prev => prev.map(x => x._id === it._id ? { ...x, item_name: e.target.value } : x))}
+                                                        placeholder="z.B. Trainerset Home"
+                                                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                    />
+                                                </div>
+                                                <div className="col-span-2 text-center">
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        step={1}
+                                                        value={it.quantity}
+                                                        onChange={(e) => setCorrectionItems(prev => prev.map(x => x._id === it._id ? { ...x, quantity: Math.max(1, Number(e.target.value) || 1) } : x))}
+                                                        className="w-full text-center border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                    />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <div className="relative">
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            step="0.01"
+                                                            value={it.price}
+                                                            onChange={(e) => setCorrectionItems(prev => prev.map(x => x._id === it._id ? { ...x, price: +(Number(e.target.value || 0).toFixed(2)) } : x))}
+                                                            className="w-full text-right border border-slate-300 rounded-lg px-3 py-2 pl-6 text-sm font-bold bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                        />
+                                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">€</span>
+                                                    </div>
+                                                </div>
+                                                <div className="col-span-2 text-right text-sm font-black text-indigo-900 pr-1">
+                                                    {sum.toFixed(2).replace('.', ',')} €
+                                                </div>
+                                                <div className="col-span-1 flex justify-end">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setCorrectionItems(prev => prev.length > 1 ? prev.filter(x => x._id !== it._id) : prev)}
+                                                        disabled={correctionItems.length <= 1}
+                                                        className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                                        title={correctionItems.length <= 1 ? 'Mindestens 1 Position erforderlich' : 'Position entfernen'}
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* Add Row + Summary */}
+                                    <div className="flex items-center justify-between gap-4 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCorrectionItems(prev => [...prev, {
+                                                _id: `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                                                item_name: '',
+                                                quantity: 1,
+                                                price: 0,
+                                                color: null,
+                                                size: null,
+                                                item_number: null,
+                                                notes: null
+                                            }])}
+                                            className="px-4 py-2 rounded-xl bg-white border border-indigo-300 text-indigo-700 font-bold uppercase tracking-widest text-[10px] hover:bg-indigo-50 transition-colors flex items-center"
+                                        >
+                                            <Plus size={14} className="mr-1.5" />
+                                            Position hinzufügen
+                                        </button>
+                                        <div className="text-right">
+                                            <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Summe Positionen (Netto)</div>
+                                            <div className="text-xl font-black text-indigo-900 mt-1">
+                                                {correctionItems.reduce((acc, it) => acc + (Math.max(1, Number(it.quantity) || 1) * (Number(it.price) >= 0 ? Number(it.price) : 0)), 0).toFixed(2).replace('.', ',')} €
+                                            </div>
+                                            <div className="text-[10px] text-slate-500 mt-0.5">
+                                                Versandkosten + MwSt werden automatisch aus Original-Bestellung übernommen
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <div>
                         <label className="block text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Notiz / Grund der Korrektur (optional)</label>
                         <textarea
