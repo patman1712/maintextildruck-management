@@ -27,7 +27,66 @@ export const generateInvoice = async (
         if (!order) throw new Error('Order not found');
 
         // Fetch Order Items
-        const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+        const rawItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+
+        // ---- ROBUSTE NORMALISIERUNG (Fix für fehlende Spalten) ----
+        // Sicherstellen dass JEDE Zeile IMMER item_name, quantity (≥1), price (Zahl) hat.
+        const items: any[] = rawItems.map((it, idx) => {
+          const safe: any = { ...it };
+
+          // --- Menge: Sicherstellen, mindestens 1 ---
+          let qty = Number(
+            safe.quantity ?? safe.qty ?? safe.menge ?? safe.count ?? (safe.item_total && safe.price ? safe.item_total / safe.price : 1)
+          );
+          if (!isFinite(qty) || qty <= 0 || isNaN(qty)) qty = 1;
+          safe.quantity = Math.round(qty);
+
+          // --- Einzelpreis: Sicherstellen (Zahl) ---
+          // Fallback-Reihenfolge: price → unit_price → einzelpreis → amount → item_total / Menge
+          const qtySafe = safe.quantity || 1;
+          let price = Number(
+            safe.price ?? safe.unit_price ?? safe.einzelpreis ?? safe.amount ??
+            ((safe.item_total ?? safe.total ?? safe.subtotal) / qtySafe) ?? 0
+          );
+          if (!isFinite(price) || isNaN(price)) price = 0;
+          // Zusätzlich: Wenn item_total gesetzt und price * qty != total, korrigiere price an total
+          if (safe.item_total != null || safe.total != null) {
+            const knownTotal = Number(safe.item_total ?? safe.total ?? safe.subtotal);
+            if (isFinite(knownTotal) && !isNaN(knownTotal) && knownTotal > 0 && knownTotal === knownTotal) {
+              const computedTotal = +(price * qtySafe).toFixed(2);
+              if (Math.abs(computedTotal - knownTotal) >= 0.01) {
+                price = +(knownTotal / qtySafe).toFixed(4);
+              }
+            }
+          }
+          safe.price = +price.toFixed(2);
+
+          // --- Artikel-Name: IMMER gesetzt (nie leer!) ---
+          // Fallback-Reihenfolge: item_name → name → product_name → title → artikel → description
+          let name = String(
+            safe.item_name ?? safe.name ?? safe.product_name ?? safe.title ?? safe.artikel ?? safe.description ?? ''
+          ).trim();
+          if (!name) {
+            name = `Artikel ${idx + 1}`;
+          }
+          safe.item_name = name;
+
+          // --- Optionale Meta-Felder normalisieren (Größe/Farbe/Nummer/Notes) ---
+          if (!safe.size && safe.size_name) safe.size = safe.size_name;
+          if (!safe.size && safe.variant_size) safe.size = safe.variant_size;
+          if (!safe.color && safe.color_name) safe.color = safe.color_name;
+          if (!safe.item_number && safe.sku) safe.item_number = safe.sku;
+          if (!safe.item_number && safe.variant_sku) safe.item_number = safe.variant_sku;
+          // Notes (für Personalisierung): wenn nicht gesetzt, Fallback auf options / extras / personalization
+          if (!safe.notes && typeof safe.options === 'string') safe.notes = safe.options;
+          if (!safe.notes && typeof safe.extras === 'string') safe.notes = safe.extras;
+          if (!safe.notes && typeof safe.personalization === 'string') safe.notes = safe.personalization;
+          if (!safe.notes && safe.options && typeof safe.options === 'object') safe.notes = JSON.stringify(safe.options);
+          if (!safe.notes && safe.personalization && typeof safe.personalization === 'object') safe.notes = JSON.stringify(safe.personalization);
+
+          return safe;
+        });
+        // -------------------------------------------------------------
 
         // Fetch Shop
         const shop = db.prepare('SELECT * FROM shops WHERE id = ?').get(order.shop_id) as any;
