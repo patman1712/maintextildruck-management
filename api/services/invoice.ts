@@ -44,9 +44,13 @@ export const generateInvoice = async (
           // --- Einzelpreis: Sicherstellen (Zahl) ---
           // Fallback-Reihenfolge: price → unit_price → einzelpreis → amount → item_total / Menge
           const qtySafe = safe.quantity || 1;
+          let totalDiv = 0;
+          const totalRaw = Number(safe.item_total ?? safe.total ?? safe.subtotal ?? NaN);
+          if (isFinite(totalRaw) && !isNaN(totalRaw) && qtySafe > 0) {
+            totalDiv = totalRaw / qtySafe;
+          }
           let price = Number(
-            safe.price ?? safe.unit_price ?? safe.einzelpreis ?? safe.amount ??
-            ((safe.item_total ?? safe.total ?? safe.subtotal) / qtySafe) ?? 0
+            safe.price ?? safe.unit_price ?? safe.einzelpreis ?? safe.amount ?? totalDiv
           );
           if (!isFinite(price) || isNaN(price)) price = 0;
           // Zusätzlich: Wenn item_total gesetzt und price * qty != total, korrigiere price an total
