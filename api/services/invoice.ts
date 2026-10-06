@@ -92,6 +92,52 @@ export const generateInvoice = async (
         });
         // -------------------------------------------------------------
 
+        // --- 🔴 FALLBACK: Wenn KEINE verwertbaren Items vorhanden sind ---
+        // (z.B. alte Shop-Bestellungen, bei denen order_items leer ist oder nur Dummies mit price=0 + Name=Artikel N)
+        // Dann automatisch 1 Summen-Position aus Order-Ebene bauen (Name aus Description/Title, Betrag = Total-Shipping)
+        const hasUsableItems = items.some((it) => {
+          const isDummyName = /^Artikel\s+\d+$/i.test(String(it.item_name || '').trim());
+          const hasRealPrice = Number(it.price) > 0.001;
+          const hasRealTotal = (Number(it.price) * Number(it.quantity || 1)) > 0.001;
+          return (!isDummyName) || hasRealPrice || hasRealTotal;
+        });
+
+        if (!hasUsableItems) {
+          const orderTotal = Number(order.total_amount || 0);
+          const shipping = Number(order.shipping_costs || 0);
+          const itemsTotal = +(orderTotal - shipping).toFixed(2);
+          const fallbackItems: any[] = [];
+
+          if (itemsTotal > 0) {
+            // Name: Description (falls lang/aussagekräftig) → sonst Title
+            let name = String(order.description || order.title || '').trim();
+            if (!name) name = `Bestellung ${order.order_number || order.id}`;
+            // Wenn Name zu generisch ist ("Shop Bestellung XXXX"), versuchen wir customer_name reinzuziehen
+            if (/^Shop\s+Bestellung/i.test(name) && order.customer_name) {
+              name = `${name.trim()} - ${order.customer_name.trim()}`;
+            }
+            fallbackItems.push({
+              id: `fb-${orderId}-0`,
+              order_id: orderId,
+              supplier_id: 'manual',
+              item_name: name,
+              quantity: 1,
+              price: +itemsTotal.toFixed(2),
+              color: null,
+              size: null,
+              notes: null,
+              item_number: null
+            });
+          }
+          // Versand-Zeile brauchen wir NICHT hier – die wird IMMER separat unten (Zeile 403+) hinzugefügt, wenn shipping>0
+
+          if (fallbackItems.length > 0) {
+            console.warn(`[generateInvoice] Order ${orderId} (${order.order_number}): Keine verwertbaren order_items gefunden! Nutze Fallback (${fallbackItems.length} Pos. aus Order-Ebene, total €${itemsTotal})`);
+            items.splice(0, items.length, ...fallbackItems);
+          }
+        }
+        // -----------------------------------------------------------------
+
         // Fetch Shop
         const shop = db.prepare('SELECT * FROM shops WHERE id = ?').get(order.shop_id) as any;
 
