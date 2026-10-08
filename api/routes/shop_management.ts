@@ -224,7 +224,8 @@ router.post('/:shopId/products', (req, res) => {
     );
 
     // Insert into junction table
-    if (category_ids && Array.isArray(category_ids)) {
+    let hasInsertedJunction = false;
+    if (category_ids && Array.isArray(category_ids) && category_ids.length > 0) {
         const insertCat = db.prepare('INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)');
         const transaction = db.transaction(() => {
             for (const catId of category_ids) {
@@ -232,8 +233,15 @@ router.post('/:shopId/products', (req, res) => {
             }
         });
         transaction();
+        hasInsertedJunction = true;
     } else if (category_id) {
         db.prepare('INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)').run(crypto.randomUUID(), id, category_id);
+        hasInsertedJunction = true;
+    }
+
+    // 🔴 SAFETY NET: Wenn wir eine primaryCategoryId haben, aber KEINEN Junction erstellt wurde, sicherheitshalber die Primär-Kategorie eintragen!
+    if (!hasInsertedJunction && primaryCategoryId) {
+        db.prepare('INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)').run(crypto.randomUUID(), id, primaryCategoryId);
     }
 
     const assignment = db.prepare('SELECT * FROM shop_product_assignments WHERE id = ?').get(id);
@@ -273,26 +281,37 @@ router.put('/:shopId/products/:id', (req, res) => {
     );
 
     // Update Category Junction Table
+    let hasUpdatedJunction = false;
     if (category_ids && Array.isArray(category_ids)) {
         // Delete old mappings
         db.prepare('DELETE FROM shop_product_assignment_categories WHERE shop_product_assignment_id = ?').run(id);
         
-        // Insert new mappings
-        const insertCat = db.prepare('INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)');
-        
-        // Use a transaction for better performance
-        const transaction = db.transaction(() => {
-            for (const catId of category_ids) {
-                insertCat.run(crypto.randomUUID(), id, catId);
-            }
-        });
-        transaction();
+        if (category_ids.length > 0) {
+            // Insert new mappings
+            const insertCat = db.prepare('INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)');
+            
+            // Use a transaction for better performance
+            const transaction = db.transaction(() => {
+                for (const catId of category_ids) {
+                    insertCat.run(crypto.randomUUID(), id, catId);
+                }
+            });
+            transaction();
+            hasUpdatedJunction = true;
+        }
     } else if (category_id) {
         // Fallback: If only category_id provided (legacy), ensure it's in the junction table
-        // First check if it matches the only entry? Or just reset?
-        // Let's reset to be safe
         db.prepare('DELETE FROM shop_product_assignment_categories WHERE shop_product_assignment_id = ?').run(id);
         db.prepare('INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)').run(crypto.randomUUID(), id, category_id);
+        hasUpdatedJunction = true;
+    }
+
+    // 🔴 SAFETY NET: PUT: Wenn primaryCategoryId gesetzt ist, aber Junction-Table leer, dann Primär-Kategorie eintragen!
+    if (!hasUpdatedJunction && primaryCategoryId) {
+        const existingCount = (db.prepare('SELECT COUNT(*) as c FROM shop_product_assignment_categories WHERE shop_product_assignment_id = ?').get(id) as any).c;
+        if (existingCount === 0) {
+            db.prepare('INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)').run(crypto.randomUUID(), id, primaryCategoryId);
+        }
     }
 
     console.log(`Updated product assignment ${id}: is_active=${req.body.is_active === false || req.body.is_active === 0 ? 0 : 1}`);
@@ -416,6 +435,10 @@ router.post('/:shopId/products/import', (req, res) => {
     // Variants usually just string JSON.
     // However, shop_product_images might reference file IDs.
     
+    const newCategoryId = (sourceAssignment.shop_id && String(sourceAssignment.shop_id) === String(shopId))
+        ? sourceAssignment.category_id
+        : null;
+
     db.prepare(`
       INSERT INTO shop_product_assignments (
         id, shop_id, product_id, category_id, price, is_featured, 
@@ -425,7 +448,7 @@ router.post('/:shopId/products/import', (req, res) => {
         newAssignmentId,
         shopId,
         newProductId,
-        String(sourceAssignment.shop_id || '') === String(shopId) ? sourceAssignment.category_id : null,
+        newCategoryId,
         sourceAssignment.price, // Sales price
         sourceAssignment.is_featured,
         sourceAssignment.personalization_enabled,
@@ -435,6 +458,28 @@ router.post('/:shopId/products/import', (req, res) => {
         1, // Active by default
         sourceAssignment.spa_supplier_id
     );
+
+    // 4b. 🔴 KRITISCH: Kategorie-Mehrfachzuordnungen (Junction-Table) KOPIEREN!
+    const sourceCategoryMappings = db.prepare(
+        'SELECT category_id FROM shop_product_assignment_categories WHERE shop_product_assignment_id = ?'
+    ).all(source_assignment_id) as any[];
+
+    if (sourceCategoryMappings && sourceCategoryMappings.length > 0) {
+        const insertCat = db.prepare(
+            'INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)'
+        );
+        const transaction = db.transaction(() => {
+            for (const m of sourceCategoryMappings) {
+                insertCat.run(crypto.randomUUID(), newAssignmentId, m.category_id);
+            }
+        });
+        transaction();
+    } else if (newCategoryId) {
+        // Safety: Wenn keine Mappings da, aber newCategoryId gesetzt, wenigstens die eine Kategorie eintragen!
+        db.prepare(
+            'INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)'
+        ).run(crypto.randomUUID(), newAssignmentId, newCategoryId);
+    }
 
     // 5. Duplicate Shop Product Images (Assignments)
     if (!skipFiles) {

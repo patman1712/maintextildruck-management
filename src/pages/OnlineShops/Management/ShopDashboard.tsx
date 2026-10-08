@@ -490,12 +490,16 @@ const ShopDashboard: React.FC = () => {
   const handleAssignProduct = async (product: Product) => {
     if (!shop) return;
     try {
+      // Default: Nimm die erste verfügbare Top-Level-Kategorie, falls vorhanden, sonst null
+      const defaultCategoryId = categories && categories.find(c => !c.parent_id)?.id || categories?.[0]?.id || null;
+      
       const res = await fetch(`/api/shop-management/${shop.id}/products`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             product_id: product.id,
-            category_id: null, // Explicitly send null or selected category if UI supported it
+            category_id: defaultCategoryId,
+            category_ids: defaultCategoryId ? [defaultCategoryId] : [],
             price: 0, 
             is_featured: false
         })

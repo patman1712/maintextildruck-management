@@ -251,6 +251,15 @@ router.get('/:id/products', (req, res) => {
                     p.category_slugs.push(p.category_slug);
                 }
             }
+
+            // 🔴 KRITISCHER FIX: Wenn Junction-Tabelle leer ist (myCategories.length === 0)
+            // ODER category_slugs trotzdem leer bleiben, dann Fallback aus spa.category_slug!
+            if (p.category_slugs.length === 0 && p.category_slug) {
+                p.category_slugs = [p.category_slug];
+            }
+            if (p.category_ids.length === 0 && p.category_id) {
+                p.category_ids = [p.category_id];
+            }
         });
     } else {
         products.forEach((p: any) => {

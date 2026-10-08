@@ -40,23 +40,31 @@ const ShopCategoryPage: React.FC = () => {
           // Filter by category slug
           // Also include products in subcategories? Usually yes.
           // Let's find all category IDs that match (current + children)
+          // Find all category IDs that match: current + children + PARENT(s) (bidirectional!)
           const categoryIds = new Set<string>();
           if (currentCategory) {
               categoryIds.add(currentCategory.id);
-              // Add direct children
+              // Children (Unterkategorien der aktuellen)
               categories.filter(c => c.parent_id === currentCategory.id).forEach(c => categoryIds.add(c.id));
+              // Parent (Überkategorie, falls aktuelle eine Unterkategorie ist)
+              if (currentCategory.parent_id) {
+                  categoryIds.add(currentCategory.parent_id);
+                  // Auch Geschwister (andere Unterkategorien derselben Eltern)? Nein, nur explizit aktuelle + Eltern + Kinder
+              }
           }
 
           const filtered = data.data.filter((p: any) => {
-            // Check if ANY of the product's category slugs match the current category slug
-            if (p.category_slugs && p.category_slugs.includes(categorySlug)) return true;
-            
-            // Check if ANY of the product's category IDs match the current category or its children
-            if (currentCategory && p.category_ids && p.category_ids.some((id: string) => categoryIds.has(id))) return true;
+            // 1. PRIORITÄT: ID-basierter Prüfung (zuverlässig!): Enthält das Produkt eine Kategorie-Id die in categoryIds ist?
+            const pCategoryIds: string[] = Array.isArray(p.category_ids) ? p.category_ids : (p.category_id ? [p.category_id] : []);
+            if (currentCategory && pCategoryIds.some((id: string) => categoryIds.has(id))) return true;
 
-            // Fallback to legacy single category check
-            return p.category_slug === categorySlug || 
-                   (currentCategory && p.category_id && categoryIds.has(p.category_id));
+            // 2. Fallback: Slug-basierter Prüfung (String-Vergleich)
+            const pCategorySlugs: string[] = Array.isArray(p.category_slugs) ? p.category_slugs : (p.category_slug ? [p.category_slug] : []);
+            if (categorySlug && pCategorySlugs.includes(categorySlug)) return true;
+
+            // 3. Ultima Ratio: Legazy Single-Field Check
+            return (currentCategory && p.category_id && categoryIds.has(p.category_id)) ||
+                   (categorySlug && p.category_slug === categorySlug);
           });
           setProducts(filtered);
         }

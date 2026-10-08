@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1579,6 +1580,40 @@ try {
       }
   } catch (e) {
       console.error('Error ensuring default global content row:', e);
+  }
+
+  // 🔴 KRITISCHE RETRO-MIGRATION: Shop-Produkte reparieren!
+  // Für alle shop_product_assignments mit category_id, ABER OHNE Eintrag in shop_product_assignment_categories,
+  // wird jetzt automatisch der Eintrag nachträglich erzeugt! Behebt alle importierten/duplizierten Produkte (wie Damenshirt BCTW04T-OSHFFM)
+  try {
+    console.log('Migration: Checking for shop_product_assignments with missing category mappings in junction table...');
+    const brokenAssignments = db.prepare(`
+      SELECT spa.id, spa.category_id
+      FROM shop_product_assignments spa
+      WHERE spa.category_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM shop_product_assignment_categories spac
+        WHERE spac.shop_product_assignment_id = spa.id
+      )
+    `).all() as { id: string; category_id: string }[];
+
+    if (brokenAssignments.length > 0) {
+      console.log(`Migration: Found ${brokenAssignments.length} broken assignments with missing category mappings! Fixing...`);
+      const insertFix = db.prepare(
+        'INSERT INTO shop_product_assignment_categories (id, shop_product_assignment_id, category_id) VALUES (?, ?, ?)'
+      );
+      const tx = db.transaction(() => {
+        for (const row of brokenAssignments) {
+          insertFix.run(crypto.randomUUID(), row.id, row.category_id);
+        }
+      });
+      tx();
+      console.log(`Migration: Successfully fixed ${brokenAssignments.length} assignments!`);
+    } else {
+      console.log('Migration: All shop product category mappings are consistent.');
+    }
+  } catch (e) {
+    console.error('Migration error (shop product category consistency check:', e);
   }
 } catch (error) {
   console.error('Migration error:', error);
