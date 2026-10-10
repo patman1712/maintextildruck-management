@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
-import { useOutletContext, Link } from 'react-router-dom';
+import { useOutletContext, Link, useNavigate } from 'react-router-dom';
 import { ShoppingCart, ChevronRight, Star, ChevronLeft } from 'lucide-react';
-import { Shop, ShopCategory, Product } from '../../store';
+import { Shop, ShopCategory, Product, HeroImage } from '../../store';
 import { ProductTile } from './components/ProductTile';
 import { toAbsoluteMediaUrl } from './mediaUrl';
 
@@ -15,8 +15,21 @@ interface ShopContext {
   shopKey: string;
 }
 
+// Helper: Holt die Bild-URL aus einem HeroImage (kompatibel mit altem String-Format)
+const getHeroUrl = (img: string | HeroImage): string => {
+  if (typeof img === 'string') return img;
+  return img?.url || '';
+};
+
+// Helper: Holt das HeroImage-Objekt (kompatibel mit altem String-Format)
+const getHeroObj = (img: string | HeroImage): HeroImage => {
+  if (typeof img === 'string') return { url: img, link_type: 'none', link_target: null };
+  return { url: img?.url || '', link_type: img?.link_type || 'none', link_target: img?.link_target ?? null };
+};
+
 const ShopHome: React.FC = () => {
-  const { shop, shopBaseUrl } = useOutletContext<ShopContext>();
+  const { shop, categories, shopBaseUrl } = useOutletContext<ShopContext>();
+  const navigate = useNavigate();
   const [products, setProducts] = useState<any[]>([]); // Using any for extended product interface
   const [loading, setLoading] = useState(true);
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -71,11 +84,32 @@ const ShopHome: React.FC = () => {
       setCurrentSlide(prev => (prev - 1 + shop.hero_images!.length) % shop.hero_images!.length);
   };
 
+  // Klick-Handler für Slider-Bild mit Link
+  const handleHeroClick = (img: HeroImage) => {
+    if (!img.link_type || img.link_type === 'none' || !img.link_target) return;
+
+    if (img.link_type === 'url') {
+      window.open(img.link_target, '_blank', 'noopener,noreferrer');
+    } else if (img.link_type === 'category') {
+      const cat = categories.find((c) => c.id === img.link_target);
+      if (cat?.slug) {
+        navigate(`${shopBaseUrl}/category/${cat.slug}`);
+      }
+    } else if (img.link_type === 'product') {
+      navigate(`${shopBaseUrl}/product/${img.link_target}`);
+    }
+  };
+
   const heroImages = heroEnabled
     ? (Array.isArray(shop.hero_images) && shop.hero_images.length > 0 
         ? shop.hero_images 
         : ['https://images.unsplash.com/photo-1518609878373-06d740f60d8b?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80'])
     : [];
+
+  const currentHero = heroImages[currentSlide] ? getHeroObj(heroImages[currentSlide]) : null;
+  const currentHeroUrl = currentHero
+    ? toAbsoluteMediaUrl(getHeroUrl(heroImages[currentSlide]).replace('_thumb', '').replace(/_thumb\.[a-z]+$/i, (match) => match.replace('_thumb', ''))) || ''
+    : '';
 
   return (
     <>
@@ -84,24 +118,40 @@ const ShopHome: React.FC = () => {
       <div className="relative w-full overflow-hidden group">
         {heroImages.length > 0 ? (
              <div className="relative w-full">
-                 <img 
-                    src={toAbsoluteMediaUrl(heroImages[currentSlide].replace('_thumb', '').replace(/_thumb\.[a-z]+$/i, (match) => match.replace('_thumb', ''))) || ''} 
-                    alt="Hero" 
-                    className="w-full h-auto object-cover" 
-                    loading="lazy"
-                    decoding="async"
-                 />
+                 {currentHero?.link_type && currentHero.link_type !== 'none' && currentHero.link_target ? (
+                    <button
+                        onClick={() => handleHeroClick(currentHero)}
+                        className="block w-full text-left"
+                        style={{ cursor: 'pointer' }}
+                    >
+                        <img 
+                            src={currentHeroUrl} 
+                            alt="Hero" 
+                            className="w-full h-auto object-cover" 
+                            loading="lazy"
+                            decoding="async"
+                        />
+                    </button>
+                 ) : (
+                    <img 
+                        src={currentHeroUrl} 
+                        alt="Hero" 
+                        className="w-full h-auto object-cover" 
+                        loading="lazy"
+                        decoding="async"
+                    />
+                 )}
                  
                  {heroImages.length > 1 && (
                     <>
                         <button 
-                            onClick={prevSlide}
+                            onClick={(e) => { e.stopPropagation(); prevSlide(); }}
                             className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/30 hover:bg-white/50 p-2 rounded-full text-slate-800 backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100"
                         >
                             <ChevronLeft size={32} />
                         </button>
                         <button 
-                            onClick={nextSlide}
+                            onClick={(e) => { e.stopPropagation(); nextSlide(); }}
                             className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/30 hover:bg-white/50 p-2 rounded-full text-slate-800 backdrop-blur-sm transition-all opacity-0 group-hover:opacity-100"
                         >
                             <ChevronRight size={32} />
@@ -111,7 +161,7 @@ const ShopHome: React.FC = () => {
                             {heroImages.map((_, idx) => (
                                 <button 
                                     key={idx}
-                                    onClick={() => setCurrentSlide(idx)}
+                                    onClick={(e) => { e.stopPropagation(); setCurrentSlide(idx); }}
                                     className={`w-2 h-2 rounded-full transition-all shadow-sm ${idx === currentSlide ? 'bg-white w-6' : 'bg-white/50 hover:bg-white/80'}`}
                                 />
                             ))}

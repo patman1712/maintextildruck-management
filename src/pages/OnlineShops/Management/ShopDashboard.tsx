@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical, Send, CreditCard, Bell } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical, Send, CreditCard, Bell, ChevronUp, ChevronDown } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
 
 const ShopDashboard: React.FC = () => {
@@ -1487,7 +1487,7 @@ const ShopDashboard: React.FC = () => {
 
                     <div className="pt-6 border-t border-slate-200">
                         <label className="block text-sm font-medium text-slate-700 mb-2">Hero Bilder (Slider)</label>
-                        <p className="text-xs text-slate-500 mb-4">Laden Sie hier Bilder für den Slider auf der Startseite hoch. Drag & Drop zum Sortieren (bald verfügbar).</p>
+                        <p className="text-xs text-slate-500 mb-4">Bilder per Drag &amp; Drop sortieren. Position 1 = erstes Bild. Jedem Bild kann ein Link (URL / Kategorie / Produkt) zugewiesen werden.</p>
 
                         <label className="flex items-center space-x-3 mb-3">
                             <input
@@ -1501,61 +1501,205 @@ const ShopDashboard: React.FC = () => {
                         <p className="text-xs text-slate-500 mb-4">
                             Wenn deaktiviert, wird auf der Startseite kein Slider angezeigt (auch kein Demo-Bild).
                         </p>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                            {shop.hero_images && shop.hero_images.map((img, idx) => (
-                                <div key={idx} className="relative group aspect-video bg-slate-100 rounded-lg overflow-hidden border border-slate-200">
-                                    <img src={img} alt={`Hero ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" decoding="async" />
-                                    <button 
-                                        onClick={() => {
-                                            const newImages = [...(shop.hero_images || [])];
-                                            newImages.splice(idx, 1);
-                                            setShop({ ...shop, hero_images: newImages });
-                                        }}
-                                        className="absolute top-2 right-2 p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
-                                </div>
-                            ))}
-                            
-                            <label className="border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center p-4 cursor-pointer hover:bg-slate-50 hover:border-slate-400 transition-all aspect-video">
-                                <Plus size={24} className="text-slate-400 mb-2" />
-                                <span className="text-xs text-slate-500 font-medium">Bild hinzufügen</span>
-                                <input 
-                                    type="file" 
-                                    className="hidden" 
-                                    accept="image/*"
-                                    multiple
-                                    onChange={async (e) => {
-                                        if (!e.target.files || e.target.files.length === 0) return;
-                                        
-                                        const formData = new FormData();
-                                        Array.from(e.target.files).forEach(file => {
-                                            formData.append('preview', file);
-                                        });
-                                        
-                                        try {
-                                            const res = await fetch('/api/upload', {
-                                                method: 'POST',
-                                                body: formData
-                                            });
-                                            const data = await res.json();
-                                            if (data.success && data.files && data.files.preview) {
-                                                const newUrls = data.files.preview.map((f: any) => f.path); // Use full path, not thumbnail
-                                                setShop({ 
-                                                    ...shop, 
-                                                    hero_images: [...(Array.isArray(shop.hero_images) ? shop.hero_images : []), ...newUrls] 
+
+                        {(() => {
+                            const heroList: any[] = (Array.isArray(shop.hero_images) ? shop.hero_images : [])
+                                .map((item: any, i: number) =>
+                                    typeof item === 'string'
+                                        ? { url: item, link_type: 'none', link_target: null, sort_order: i }
+                                        : { url: item?.url || '', link_type: item?.link_type || 'none', link_target: item?.link_target ?? null, sort_order: item?.sort_order ?? i }
+                                );
+
+                            const updateHeroItem = (idx: number, patch: any) => {
+                                const next = [...heroList];
+                                next[idx] = { ...next[idx], ...patch, sort_order: idx };
+                                setShop({ ...shop, hero_images: next.map((it, i) => ({ ...it, sort_order: i })) });
+                            };
+
+                            const removeHeroItem = (idx: number) => {
+                                const next = heroList.filter((_, i) => i !== idx).map((it, i) => ({ ...it, sort_order: i }));
+                                setShop({ ...shop, hero_images: next });
+                            };
+
+                            const moveHeroItem = (fromIdx: number, toIdx: number) => {
+                                if (toIdx < 0 || toIdx >= heroList.length) return;
+                                const next = [...heroList];
+                                const [moved] = next.splice(fromIdx, 1);
+                                next.splice(toIdx, 0, moved);
+                                setShop({ ...shop, hero_images: next.map((it, i) => ({ ...it, sort_order: i })) });
+                            };
+
+                            let dragFromIdx: number | null = null;
+
+                            return (
+                                <div className="space-y-3 mb-4">
+                                    {heroList.map((img, idx) => (
+                                        <div
+                                            key={idx}
+                                            className="flex flex-col md:flex-row gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:border-indigo-300 transition-colors"
+                                            draggable
+                                            onDragStart={(e) => { dragFromIdx = idx; e.dataTransfer.effectAllowed = 'move'; }}
+                                            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                                            onDrop={(e) => {
+                                                e.preventDefault();
+                                                if (dragFromIdx !== null && dragFromIdx !== idx) {
+                                                    moveHeroItem(dragFromIdx, idx);
+                                                }
+                                                dragFromIdx = null;
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-2 md:w-48 shrink-0">
+                                                <div className="cursor-grab text-slate-400 hover:text-indigo-500 active:cursor-grabbing" title="Zum Sortieren ziehen">
+                                                    <GripVertical size={20} />
+                                                </div>
+                                                <div className="relative w-40 aspect-video bg-slate-100 rounded-lg overflow-hidden border border-slate-200 shrink-0">
+                                                    <img src={img.url} alt={`Hero ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+                                                    <span className="absolute top-1.5 left-1.5 bg-indigo-600 text-white text-[11px] font-bold px-1.5 py-0.5 rounded">Pos {idx + 1}</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2 items-start">
+                                                <div className="lg:col-span-3">
+                                                    <label className="block text-xs font-medium text-slate-600 mb-1">Link-Typ</label>
+                                                    <select
+                                                        className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                                                        value={img.link_type || 'none'}
+                                                        onChange={(e) => updateHeroItem(idx, { link_type: e.target.value as any, link_target: null })}
+                                                    >
+                                                        <option value="none">Kein Link</option>
+                                                        <option value="url">Externe URL</option>
+                                                        <option value="category">Kategorie</option>
+                                                        <option value="product">Produkt</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="lg:col-span-7">
+                                                    {img.link_type === 'url' && (
+                                                        <>
+                                                            <label className="block text-xs font-medium text-slate-600 mb-1">URL (z.B. https://...)</label>
+                                                            <input
+                                                                type="url"
+                                                                className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                                                                placeholder="https://..."
+                                                                value={img.link_target || ''}
+                                                                onChange={(e) => updateHeroItem(idx, { link_target: e.target.value })}
+                                                            />
+                                                        </>
+                                                    )}
+                                                    {img.link_type === 'category' && (
+                                                        <>
+                                                            <label className="block text-xs font-medium text-slate-600 mb-1">Kategorie wählen</label>
+                                                            <select
+                                                                className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                                                                value={img.link_target || ''}
+                                                                onChange={(e) => updateHeroItem(idx, { link_target: e.target.value })}
+                                                            >
+                                                                <option value="">— Bitte wählen —</option>
+                                                                {categories.map((c) => (
+                                                                    <option key={c.id} value={c.id}>
+                                                                        {c.parent_id ? `↳ ` : ''}{c.name}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </>
+                                                    )}
+                                                    {img.link_type === 'product' && (
+                                                        <>
+                                                            <label className="block text-xs font-medium text-slate-600 mb-1">Produkt wählen</label>
+                                                            <select
+                                                                className="w-full border border-slate-300 rounded-lg p-2 text-sm"
+                                                                value={img.link_target || ''}
+                                                                onChange={(e) => updateHeroItem(idx, { link_target: e.target.value })}
+                                                            >
+                                                                <option value="">— Bitte wählen —</option>
+                                                                {shopProducts.map((p) => (
+                                                                    <option key={p.id} value={p.product_id}>
+                                                                        {p.product_number ? `[${p.product_number}] ` : ''}{p.product_name || 'Unbenanntes Produkt'}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </>
+                                                    )}
+                                                    {img.link_type === 'none' && (
+                                                        <div className="flex items-center h-[38px] text-xs text-slate-400">
+                                                            Kein Link zugewiesen
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="lg:col-span-2 flex items-end gap-1">
+                                                    <button
+                                                        onClick={() => moveHeroItem(idx, idx - 1)}
+                                                        disabled={idx === 0}
+                                                        className="p-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-slate-600"
+                                                        title="Nach oben"
+                                                    >
+                                                        <ChevronUp size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => moveHeroItem(idx, idx + 1)}
+                                                        disabled={idx === heroList.length - 1}
+                                                        className="p-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-slate-600"
+                                                        title="Nach unten"
+                                                    >
+                                                        <ChevronDown size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => removeHeroItem(idx)}
+                                                        className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg"
+                                                        title="Bild entfernen"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    <label className="border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center p-6 cursor-pointer hover:bg-slate-50 hover:border-indigo-400 hover:text-indigo-500 transition-all">
+                                        <Plus size={28} className="text-slate-400 mb-1" />
+                                        <span className="text-sm text-slate-500 font-medium">Bild hinzufügen</span>
+                                        <input
+                                            type="file"
+                                            className="hidden"
+                                            accept="image/*"
+                                            multiple
+                                            onChange={async (e) => {
+                                                if (!e.target.files || e.target.files.length === 0) return;
+
+                                                const formData = new FormData();
+                                                Array.from(e.target.files).forEach(file => {
+                                                    formData.append('preview', file);
                                                 });
-                                            }
-                                        } catch (err) {
-                                            console.error(err);
-                                            alert('Fehler beim Hochladen.');
-                                        }
-                                    }}
-                                />
-                            </label>
-                        </div>
+
+                                                try {
+                                                    const res = await fetch('/api/upload', {
+                                                        method: 'POST',
+                                                        body: formData
+                                                    });
+                                                    const data = await res.json();
+                                                    if (data.success && data.files && data.files.preview) {
+                                                        const newItems = data.files.preview.map((f: any, i: number) => ({
+                                                            url: f.path,
+                                                            link_type: 'none',
+                                                            link_target: null,
+                                                            sort_order: heroList.length + i
+                                                        }));
+                                                        setShop({
+                                                            ...shop,
+                                                            hero_images: [...heroList, ...newItems].map((it, i) => ({ ...it, sort_order: i }))
+                                                        });
+                                                    }
+                                                } catch (err) {
+                                                    console.error(err);
+                                                    alert('Fehler beim Hochladen.');
+                                                }
+                                            }}
+                                        />
+                                    </label>
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
             )}

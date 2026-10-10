@@ -142,6 +142,15 @@ export interface Product {
   created_at?: string;
 }
 
+export type HeroLinkType = 'none' | 'url' | 'category' | 'product';
+
+export interface HeroImage {
+  url: string;
+  link_type?: HeroLinkType;
+  link_target?: string | null;
+  sort_order?: number;
+}
+
 export interface Shop {
   id: string;
   customer_id: string;
@@ -162,7 +171,7 @@ export interface Shop {
   email_logo_url?: string; // New field for email logo
   hero_enabled?: boolean | number;
   guest_checkout_enabled?: boolean | number;
-  hero_images?: string[]; // New field for hero slider
+  hero_images?: (string | HeroImage)[]; // New field for hero slider
   welcome_text?: string; // New field for welcome text
   
   // Footer / Legal

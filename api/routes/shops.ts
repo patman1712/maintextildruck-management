@@ -5,6 +5,26 @@ import crypto from 'crypto';
 
 const router = Router();
 
+// 🔧 Helper: Normalisiert hero_images (Backward-Compat für alte String-Arrays)
+// Altes Format: ["url1", "url2"] → Neues Format: [{url, link_type, link_target, sort_order}, ...]
+function normalizeHeroImages(raw: any): any[] {
+  if (!raw || !Array.isArray(raw)) return [];
+  return raw.map((item: any, idx: number) => {
+    if (typeof item === 'string') {
+      return { url: item, link_type: 'none', link_target: null, sort_order: idx };
+    }
+    if (item && typeof item === 'object') {
+      return {
+        url: item.url || '',
+        link_type: item.link_type || 'none',
+        link_target: item.link_target ?? null,
+        sort_order: item.sort_order ?? idx,
+      };
+    }
+    return { url: '', link_type: 'none', link_target: null, sort_order: idx };
+  }).sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+}
+
 // List all shops
 router.get('/', (req, res) => {
   try {
@@ -14,7 +34,7 @@ router.get('/', (req, res) => {
     shops.forEach(shop => {
         if (shop.dhl_config) shop.dhl_config = JSON.parse(shop.dhl_config);
         if (shop.paypal_config) shop.paypal_config = JSON.parse(shop.paypal_config);
-        if (shop.hero_images) shop.hero_images = JSON.parse(shop.hero_images);
+        if (shop.hero_images) shop.hero_images = normalizeHeroImages(JSON.parse(shop.hero_images));
     });
 
     res.json({ success: true, data: shops });
@@ -460,7 +480,7 @@ router.post('/', (req, res) => {
     if (shop) {
         if (shop.dhl_config) shop.dhl_config = JSON.parse(shop.dhl_config);
         if (shop.paypal_config) shop.paypal_config = JSON.parse(shop.paypal_config);
-        if (shop.hero_images) shop.hero_images = JSON.parse(shop.hero_images);
+        if (shop.hero_images) shop.hero_images = normalizeHeroImages(JSON.parse(shop.hero_images));
     }
 
     res.json({ success: true, data: shop });
@@ -538,7 +558,7 @@ router.put('/:id', (req, res) => {
     if (shop) {
         if (shop.dhl_config) shop.dhl_config = JSON.parse(shop.dhl_config);
         if (shop.paypal_config) shop.paypal_config = JSON.parse(shop.paypal_config);
-        if (shop.hero_images) shop.hero_images = JSON.parse(shop.hero_images);
+        if (shop.hero_images) shop.hero_images = normalizeHeroImages(JSON.parse(shop.hero_images));
     }
 
     res.json({ success: true, data: shop });
