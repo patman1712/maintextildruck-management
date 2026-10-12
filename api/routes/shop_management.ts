@@ -312,6 +312,33 @@ router.post('/:shopId/products', (req, res) => {
   }
 });
 
+router.put('/:shopId/products/reorder', (req, res) => {
+  try {
+    const { shopId } = req.params;
+    const orderedIds = Array.isArray((req.body as any)?.ordered_ids) ? (req.body as any).ordered_ids : [];
+    const ids = orderedIds.filter((x: any) => typeof x === 'string' && x.trim()).map((x: string) => x.trim());
+
+    if (ids.length === 0) {
+      res.status(400).json({ success: false, error: 'ordered_ids fehlt.' });
+      return;
+    }
+
+    const updateStmt = db.prepare('UPDATE shop_product_assignments SET sort_order = ? WHERE id = ? AND shop_id = ?');
+
+    const run = db.transaction(() => {
+      for (let i = 0; i < ids.length; i++) {
+        updateStmt.run((i + 1) * 10, ids[i], shopId);
+      }
+    });
+    run();
+
+    const products = db.prepare('SELECT * FROM shop_product_assignments WHERE shop_id = ? ORDER BY sort_order ASC').all(shopId);
+    res.json({ success: true, data: products });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.put('/:shopId/products/:id', (req, res) => {
   try {
     const { id } = req.params;

@@ -38,7 +38,7 @@ const ShopHome: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await fetch(`/api/shops/${shop.id}/products?limit=8`, {
+        const res = await fetch(`/api/shops/${shop.id}/products?featured_only=true&limit=12`, {
             cache: 'no-store',
             headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
         });

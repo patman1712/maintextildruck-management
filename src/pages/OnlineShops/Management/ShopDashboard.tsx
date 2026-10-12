@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical, Send, CreditCard, Bell, ChevronUp, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical, Send, CreditCard, Bell, ChevronUp, ChevronDown, Star } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
 
 const ShopDashboard: React.FC = () => {
@@ -103,6 +103,7 @@ const ShopDashboard: React.FC = () => {
   const [isImporting, setIsImporting] = useState<string | null>(null); // ID of product being imported
   const [isDuplicating, setIsDuplicating] = useState<string | null>(null);
   const [draggingCategory, setDraggingCategory] = useState<{ id: string; parentId: string | null } | null>(null);
+  const [draggingProduct, setDraggingProduct] = useState<string | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelSelections, setCancelSelections] = useState<Record<string, number>>({});
   const [isCancellingOrder, setIsCancellingOrder] = useState(false);
@@ -511,6 +512,59 @@ const ShopDashboard: React.FC = () => {
 
   const handleCategoryDragEnd = () => {
     setDraggingCategory(null);
+  };
+
+  const reorderProducts = async (orderedIds: string[]) => {
+    if (!shopId) return;
+    setShopProducts(prev => prev.map(p => {
+      const idx = orderedIds.indexOf(p.id);
+      if (idx !== -1) return { ...p, sort_order: (idx + 1) * 10 };
+      return p;
+    }).sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0)));
+    try {
+      const res = await fetch(`/api/shop-management/${shopId}/products/reorder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ordered_ids: orderedIds })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Reorder fehlgeschlagen');
+    } catch (e) {
+      fetchShopProducts();
+    }
+  };
+
+  const handleProductDragStart = (id: string) => (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingProduct(id);
+  };
+
+  const handleProductDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleProductDrop = (targetId: string) => async (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!draggingProduct || draggingProduct === targetId) return;
+    const ordered = shopProducts
+      .slice()
+      .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
+    const fromIdx = ordered.findIndex(p => p.id === draggingProduct);
+    const toIdx = ordered.findIndex(p => p.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    const next = [...ordered];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    await reorderProducts(next.map(p => p.id));
+    setDraggingProduct(null);
+  };
+
+  const handleProductDragEnd = () => {
+    setDraggingProduct(null);
+  };
+
+  const toggleFeatured = async (id: string, current: boolean) => {
+    await handleUpdateProduct(id, { is_featured: !current });
   };
 
   const handleAssignProduct = async (product: Product) => {
@@ -1953,16 +2007,46 @@ const ShopDashboard: React.FC = () => {
                         </div>
                     </div>
 
+                    <p className="text-xs text-slate-500 mb-4 flex items-center gap-1">
+                        <Star size={12} className="text-amber-400" /> = Auf Startseite anzeigen
+                        <span className="mx-2">•</span>
+                        <GripVertical size={12} /> = Drag & Drop zum Sortieren der Reihenfolge
+                    </p>
+
                     <div className="space-y-4">
-                        {shopProducts.map(sp => (
-                            <div key={sp.id} className="bg-white border border-slate-200 rounded-lg p-4 flex items-center justify-between">
+                        {shopProducts.slice().sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0)).map(sp => {
+                            const isFeatured = !!sp.is_featured;
+                            return (
+                            <div
+                                key={sp.id}
+                                draggable
+                                onDragStart={handleProductDragStart(sp.id)}
+                                onDragOver={handleProductDragOver}
+                                onDrop={handleProductDrop(sp.id)}
+                                onDragEnd={handleProductDragEnd}
+                                className={`bg-white border border-slate-200 rounded-lg p-4 flex items-center justify-between ${draggingProduct === sp.id ? 'opacity-50' : ''}`}
+                            >
                                 <div className="flex items-center space-x-4">
+                                    <GripVertical size={18} className="text-slate-300 cursor-grab active:cursor-grabbing shrink-0" />
+                                    <button
+                                        onClick={() => toggleFeatured(sp.id, isFeatured)}
+                                        disabled={isShopOperator && !canEditProducts}
+                                        title={isFeatured ? 'Auf Startseite angezeigt' : 'Auf Startseite anzeigen'}
+                                        className={`shrink-0 ${isFeatured ? 'text-amber-400' : 'text-slate-300 hover:text-amber-300'} disabled:opacity-30 disabled:cursor-not-allowed`}
+                                    >
+                                        <Star size={18} fill={isFeatured ? 'currentColor' : 'none'} />
+                                    </button>
                                     <div className="h-12 w-12 bg-slate-100 rounded flex items-center justify-center">
                                         <ImageIcon size={20} className="text-slate-400" />
                                     </div>
                                     <div>
                                         <h4 className={`font-bold ${(sp.is_active === false || sp.is_active === 0) ? 'text-slate-400' : 'text-slate-800'}`}>
                                             {sp.product_name}
+                                            {isFeatured && (
+                                                <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold uppercase">
+                                                    Startseite
+                                                </span>
+                                            )}
                                             {(sp.is_active === false || sp.is_active === 0) && (
                                                 <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold uppercase">
                                                     Inaktiv
@@ -2027,7 +2111,8 @@ const ShopDashboard: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                         {shopProducts.length === 0 && <p className="text-center text-slate-500 py-8">Keine Produkte im Shop.</p>}
                     </div>
                 </div>

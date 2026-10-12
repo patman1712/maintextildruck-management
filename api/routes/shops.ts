@@ -127,6 +127,7 @@ router.get('/:id/products', (req, res) => {
     res.set('Pragma', 'no-cache');
     const { id } = req.params;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : null;
+    const featuredOnly = req.query.featured_only === 'true';
     let shopId = id;
 
     // Resolve slug if needed
@@ -163,6 +164,7 @@ router.get('/:id/products', (req, res) => {
       JOIN customer_products cp ON spa.product_id = cp.id
       LEFT JOIN shop_categories sc ON spa.category_id = sc.id
       WHERE spa.shop_id = ? AND (spa.is_active = 1 OR spa.is_active IS NULL)
+      ${featuredOnly ? 'AND spa.is_featured = 1' : ''}
       ORDER BY spa.sort_order ASC, cp.name ASC
     `;
 
