@@ -48,6 +48,27 @@ import UpdateNotification from "@/components/UpdateNotification";
 import OrdersTrash from "@/pages/OrdersTrash";
 import SampleOrders from "@/pages/SampleOrders";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import ShopOperatorLogin from "@/pages/ShopOperatorLogin";
+import ShopOperatorPanel from "@/pages/ShopOperatorPanel";
+
+// 🔐 Fetch-Interceptor für Shop-Betreiber: fügt automatisch x-user-id Header hinzu
+const originalFetch = window.fetch.bind(window);
+window.fetch = async (input: any, init?: RequestInit) => {
+  const userRaw = localStorage.getItem('currentUser');
+  if (userRaw) {
+    try {
+      const user = JSON.parse(userRaw);
+      if (user.role === 'shop_operator') {
+        init = init || {};
+        init.headers = {
+          ...(init.headers as Record<string, string>),
+          'x-user-id': user.id,
+        };
+      }
+    } catch { /* ignore */ }
+  }
+  return originalFetch(input, init);
+};
 
 export default function App() {
   const fetchData = useAppStore((state) => state.fetchData);
@@ -150,6 +171,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/shop-login" element={<ShopOperatorLogin />} />
+        <Route path="/shop-operator" element={<ShopOperatorPanel />} />
+        <Route path="/shop-operator/:shopId" element={<ShopOperatorPanel />} />
         <Route path="/proof/:token" element={<PublicOrderProof />} />
         <Route path="/donations/:token" element={<PublicDonations />} />
         <Route path="/shop/:shopId" element={<ErrorBoundary fallbackTitle="Shop-Bereich kann nicht angezeigt werden"><ShopLayout /></ErrorBoundary>}>

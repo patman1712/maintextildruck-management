@@ -88,4 +88,69 @@ router.delete('/:id', (req: Request, res: Response) => {
   }
 });
 
+// 🛒 GET: Shop-Zuordnungen + Rechte eines Users
+router.get('/:id/shops', (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const rows = db.prepare(`
+      SELECT so.shop_id, so.permissions_json, s.name AS shop_name
+      FROM shop_operators so
+      JOIN shops s ON s.id = so.shop_id
+      WHERE so.user_id = ?
+      ORDER BY s.name
+    `).all(id) as any[];
+
+    const shops = rows.map((r: any) => ({
+      shop_id: r.shop_id,
+      shop_name: r.shop_name,
+      permissions: (() => { try { return JSON.parse(r.permissions_json || '{}'); } catch { return {}; } })(),
+    }));
+
+    res.json({ success: true, data: shops });
+  } catch (error) {
+    console.error('Get user shops error:', error);
+    res.status(500).json({ success: false, error: 'Abfrage fehlgeschlagen' });
+  }
+});
+
+// 🛒 PUT: Shop-Zuordnungen + Rechte setzen (ersetzt alle vorhandenen)
+// Body: { shops: [{ shop_id, permissions: { products: {view,edit}, categories: {view,edit}, design: {view,edit} } }] }
+router.put('/:id/shops', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { shops } = req.body;
+
+  try {
+    const user = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
+    if (!user) {
+      res.status(404).json({ success: false, error: 'Benutzer nicht gefunden' });
+      return;
+    }
+
+    const tx = db.transaction(() => {
+      // Alle bestehenden Zuordnungen löschen
+      db.prepare('DELETE FROM shop_operators WHERE user_id = ?').run(id);
+
+      if (Array.isArray(shops)) {
+        const insert = db.prepare(
+          'INSERT INTO shop_operators (id, user_id, shop_id, permissions_json) VALUES (?, ?, ?, ?)'
+        );
+        for (const s of shops) {
+          insert.run(
+            Math.random().toString(36).substr(2, 12),
+            id,
+            s.shop_id,
+            JSON.stringify(s.permissions || {})
+          );
+        }
+      }
+    });
+    tx();
+
+    res.json({ success: true, message: 'Shop-Zuordnungen gespeichert' });
+  } catch (error) {
+    console.error('Update user shops error:', error);
+    res.status(500).json({ success: false, error: 'Speichern fehlgeschlagen' });
+  }
+});
+
 export default router;

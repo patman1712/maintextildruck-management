@@ -25,7 +25,7 @@ export interface User {
   id: string;
   username: string;
   name: string;
-  role: 'admin' | 'employee';
+  role: 'admin' | 'employee' | 'shop_operator';
   password?: string; // Only for creating/updating, usually not returned
   createdAt?: string;
 }
@@ -151,6 +151,23 @@ export interface HeroImage {
   sort_order?: number;
 }
 
+export interface ShopOperatorPermissions {
+  products?: { view: boolean; edit: boolean };
+  categories?: { view: boolean; edit: boolean };
+  design?: { view: boolean; edit: boolean };
+}
+
+export interface ShopOperatorShop {
+  id: string;
+  name: string;
+  domain_slug: string;
+  custom_domain?: string;
+  primary_color: string;
+  secondary_color: string;
+  template: string;
+  permissions: ShopOperatorPermissions;
+}
+
 export interface Shop {
   id: string;
   customer_id: string;
@@ -237,18 +254,24 @@ interface AppState {
   menuSettings: Record<string, boolean>;
   logoUrl: string | null;
   faviconUrl: string | null;
-  
+
+  // Shop-Betreiber
+  shopOperatorShops: ShopOperatorShop[];
+  shopOperatorSelectedShopId: string | null;
+
   fetchData: () => Promise<void>;
   fetchSettings: () => Promise<void>;
   updateMenuSettings: (settings: Record<string, boolean>) => Promise<void>;
   fetchUsers: () => Promise<void>;
-  
+
   login: (user: User) => void;
   logout: () => void;
+  shopOperatorLogin: (user: User, shops: ShopOperatorShop[]) => void;
+  shopOperatorSelectShop: (shopId: string) => void;
   
   addOrder: (order: Order) => Promise<void>;
   addCustomer: (customer: Customer) => Promise<void>;
-  addUser: (user: Partial<User>) => Promise<void>;
+  addUser: (user: Partial<User>) => Promise<User | null>;
   addSupplier: (supplier: Supplier) => Promise<void>;
   addShop: (shop: Partial<Shop>) => Promise<void>;
   
@@ -284,6 +307,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   faviconUrl: null,
   currentUser: JSON.parse(localStorage.getItem('currentUser') || 'null'),
   loading: false,
+
+  shopOperatorShops: JSON.parse(localStorage.getItem('shopOperatorShops') || '[]'),
+  shopOperatorSelectedShopId: localStorage.getItem('shopOperatorSelectedShopId'),
 
   fetchSettings: async () => {
     try {
@@ -480,6 +506,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   logout: () => {
     set({ currentUser: null });
     localStorage.removeItem('currentUser');
+  },
+
+  shopOperatorLogin: (user, shops) => {
+    set({ currentUser: user, shopOperatorShops: shops, shopOperatorSelectedShopId: shops.length === 1 ? shops[0].id : null });
+    localStorage.setItem('currentUser', JSON.stringify(user));
+    localStorage.setItem('shopOperatorShops', JSON.stringify(shops));
+    if (shops.length === 1) {
+      localStorage.setItem('shopOperatorSelectedShopId', shops[0].id);
+    } else {
+      localStorage.removeItem('shopOperatorSelectedShopId');
+    }
+  },
+
+  shopOperatorSelectShop: (shopId) => {
+    set({ shopOperatorSelectedShopId: shopId });
+    localStorage.setItem('shopOperatorSelectedShopId', shopId);
   },
 
   addOrder: async (order) => {
@@ -983,6 +1025,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const data = await res.json();
       if (data.success && data.user) {
         set((state) => ({ users: [...state.users, data.user] }));
+        return data.user;
       } else {
         throw new Error(data.error);
       }
@@ -990,6 +1033,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       console.error('Error adding user:', error);
       throw error;
     }
+    return null;
   },
 
   updateUser: async (id, updatedUser) => {

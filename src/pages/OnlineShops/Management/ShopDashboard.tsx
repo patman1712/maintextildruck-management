@@ -10,9 +10,35 @@ import ProductEditorModal from './ProductEditorModal';
 const ShopDashboard: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>();
   const navigate = useNavigate();
-  const { shops, updateShop, products, currentUser } = useAppStore();
+  const { shops, updateShop, products, currentUser, shopOperatorShops, logout } = useAppStore();
   const [shop, setShop] = useState<Shop | null>(null);
-  const [activeTab, setActiveTab] = useState<'general' | 'design' | 'categories' | 'products' | 'customers' | 'orders' | 'shipping' | 'legal' | 'donations'>('general');
+  const isShopOperator = currentUser?.role === 'shop_operator';
+  const currentShopPerms = shopOperatorShops.find((s) => s.id === shopId)?.permissions;
+  const canViewGeneral = !isShopOperator || currentShopPerms?.design?.view;
+  const canViewDesign = !isShopOperator || currentShopPerms?.design?.view;
+  const canViewCategories = !isShopOperator || currentShopPerms?.categories?.view;
+  const canViewProducts = !isShopOperator || currentShopPerms?.products?.view;
+  const canEditDesign = !isShopOperator || currentShopPerms?.design?.edit;
+  const canEditCategories = !isShopOperator || currentShopPerms?.categories?.edit;
+  const canEditProducts = !isShopOperator || currentShopPerms?.products?.edit;
+
+  const allowedTabs: string[] = [];
+  if (canViewGeneral) allowedTabs.push('general');
+  if (canViewDesign) allowedTabs.push('design');
+  if (canViewCategories) allowedTabs.push('categories');
+  if (canViewProducts) allowedTabs.push('products');
+  if (!isShopOperator) {
+    allowedTabs.push('customers', 'orders', 'donations', 'shipping', 'legal');
+  }
+
+  const [activeTab, setActiveTab] = useState<string>(allowedTabs[0] || 'general');
+
+  useEffect(() => {
+    if (isShopOperator && !allowedTabs.includes(activeTab) && allowedTabs.length > 0) {
+      setActiveTab(allowedTabs[0]);
+    }
+  }, [isShopOperator, activeTab, allowedTabs]);
+
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [shopProducts, setShopProducts] = useState<(ShopProductAssignment & { product_name?: string, product_number?: string, category_name?: string })[]>([]);
   const [shopCustomers, setShopCustomers] = useState<any[]>([]);
@@ -1084,9 +1110,16 @@ const ShopDashboard: React.FC = () => {
     <div className="p-8 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center">
-            <button onClick={() => navigate('/dashboard/shops')} className="mr-4 text-slate-400 hover:text-slate-600">
-                <ArrowLeft size={24} />
-            </button>
+            {!isShopOperator && (
+              <button onClick={() => navigate('/dashboard/shops')} className="mr-4 text-slate-400 hover:text-slate-600">
+                  <ArrowLeft size={24} />
+              </button>
+            )}
+            {isShopOperator && (
+              <button onClick={() => navigate('/shop-operator')} className="mr-4 text-slate-400 hover:text-slate-600" title="Shop wechseln">
+                  <ArrowLeft size={24} />
+              </button>
+            )}
             <div>
                 <h1 className="text-2xl font-bold text-slate-800">{shop.name}</h1>
                 <div className="flex items-center text-sm text-slate-500 mt-1">
@@ -1097,50 +1130,72 @@ const ShopDashboard: React.FC = () => {
                 </div>
             </div>
         </div>
-        <button onClick={handleSaveGeneral} className="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center hover:bg-slate-700">
-            <Save size={18} className="mr-2" /> Speichern
-        </button>
+        <div className="flex items-center gap-3">
+          {isShopOperator && (
+            <button
+              onClick={() => { logout(); navigate('/shop-login'); }}
+              className="text-slate-500 hover:text-red-600 px-3 py-2 text-sm flex items-center"
+            >
+              Abmelden
+            </button>
+          )}
+          <button onClick={handleSaveGeneral} disabled={isShopOperator && !canEditDesign} className="bg-slate-800 text-white px-4 py-2 rounded-lg flex items-center hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              <Save size={18} className="mr-2" /> Speichern
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="border-b border-slate-200 flex">
-            <button 
-                onClick={() => setActiveTab('general')}
-                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'general' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-                <ShoppingBag size={16} className="mr-2" /> Allgemein
-            </button>
-            <button 
-                onClick={() => setActiveTab('design')}
-                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'design' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-                <Layout size={16} className="mr-2" /> Design
-            </button>
-            <button 
-                onClick={() => setActiveTab('categories')}
-                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'categories' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-                <Layers size={16} className="mr-2" /> Kategorien
-            </button>
-            <button 
-                onClick={() => setActiveTab('products')}
-                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'products' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-                <ShoppingBag size={16} className="mr-2" /> Produkte
-            </button>
-            <button 
-                onClick={() => setActiveTab('customers')}
-                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'customers' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-                <Users size={16} className="mr-2" /> Kunden
-            </button>
-            <button 
-                onClick={() => setActiveTab('orders')}
-                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'orders' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-                <ShoppingBag size={16} className="mr-2" /> Bestellungen
-            </button>
-            {shop.donations_enabled && (
+            {(!isShopOperator || canViewGeneral) && (
+              <button 
+                  onClick={() => setActiveTab('general')}
+                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'general' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                  <ShoppingBag size={16} className="mr-2" /> Allgemein
+              </button>
+            )}
+            {(!isShopOperator || canViewDesign) && (
+              <button 
+                  onClick={() => setActiveTab('design')}
+                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'design' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                  <Layout size={16} className="mr-2" /> Design
+              </button>
+            )}
+            {(!isShopOperator || canViewCategories) && (
+              <button 
+                  onClick={() => setActiveTab('categories')}
+                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'categories' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                  <Layers size={16} className="mr-2" /> Kategorien
+              </button>
+            )}
+            {(!isShopOperator || canViewProducts) && (
+              <button 
+                  onClick={() => setActiveTab('products')}
+                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'products' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                  <ShoppingBag size={16} className="mr-2" /> Produkte
+              </button>
+            )}
+            {!isShopOperator && (
+              <button 
+                  onClick={() => setActiveTab('customers')}
+                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'customers' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                  <Users size={16} className="mr-2" /> Kunden
+              </button>
+            )}
+            {!isShopOperator && (
+              <button 
+                  onClick={() => setActiveTab('orders')}
+                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'orders' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                  <ShoppingBag size={16} className="mr-2" /> Bestellungen
+              </button>
+            )}
+            {!isShopOperator && shop.donations_enabled && (
                 <button 
                     onClick={() => setActiveTab('donations')}
                     className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'donations' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
@@ -1148,18 +1203,22 @@ const ShopDashboard: React.FC = () => {
                     <Heart size={16} className="mr-2" /> Spenden
                 </button>
             )}
-            <button 
-                onClick={() => setActiveTab('shipping')}
-                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'shipping' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-                <Truck size={16} className="mr-2" /> Versand
-            </button>
-            <button 
-                onClick={() => setActiveTab('legal')}
-                className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'legal' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            >
-                <FileText size={16} className="mr-2" /> Rechtliches
-            </button>
+            {!isShopOperator && (
+              <button 
+                  onClick={() => setActiveTab('shipping')}
+                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'shipping' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                  <Truck size={16} className="mr-2" /> Versand
+              </button>
+            )}
+            {!isShopOperator && (
+              <button 
+                  onClick={() => setActiveTab('legal')}
+                  className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'legal' ? 'border-red-600 text-red-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                  <FileText size={16} className="mr-2" /> Rechtliches
+              </button>
+            )}
         </div>
 
         <div className="p-8">
@@ -1771,7 +1830,7 @@ const ShopDashboard: React.FC = () => {
                             </div>
                         </div>
                         <div className="flex gap-2">
-                            <button onClick={handleSaveCategory} className="bg-slate-800 text-white px-4 py-2 h-10 rounded-lg hover:bg-slate-700 mb-0.5">
+                            <button onClick={handleSaveCategory} disabled={isShopOperator && !canEditCategories} className="bg-slate-800 text-white px-4 py-2 h-10 rounded-lg hover:bg-slate-700 mb-0.5 disabled:opacity-50 disabled:cursor-not-allowed">
                                 {editingCategoryId ? 'Speichern' : 'Hinzufügen'}
                             </button>
                             {editingCategoryId && (
@@ -1820,11 +1879,12 @@ const ShopDashboard: React.FC = () => {
                                                     setNewCategory({ name: cat.name, slug: cat.slug, parent_id: cat.parent_id || '', image_url: cat.image_url || '' });
                                                     categoryFormRef.current?.scrollIntoView({ behavior: 'smooth' });
                                                 }} 
-                                                className="text-slate-400 hover:text-blue-600 p-1"
+                                                disabled={isShopOperator && !canEditCategories}
+                                                className="text-slate-400 hover:text-blue-600 p-1 disabled:opacity-30 disabled:cursor-not-allowed"
                                             >
                                                 <Edit2 size={18} />
                                             </button>
-                                            <button onClick={() => handleDeleteCategory(cat.id)} className="text-slate-400 hover:text-red-600 p-1">
+                                            <button onClick={() => handleDeleteCategory(cat.id)} disabled={isShopOperator && !canEditCategories} className="text-slate-400 hover:text-red-600 p-1 disabled:opacity-30 disabled:cursor-not-allowed">
                                                 <Trash2 size={18} />
                                             </button>
                                         </div>
@@ -1860,11 +1920,12 @@ const ShopDashboard: React.FC = () => {
                                                             setNewCategory({ name: sub.name, slug: sub.slug, parent_id: sub.parent_id || '', image_url: sub.image_url || '' });
                                                             categoryFormRef.current?.scrollIntoView({ behavior: 'smooth' });
                                                         }} 
-                                                        className="text-slate-300 hover:text-blue-600 p-1"
+                                                        disabled={isShopOperator && !canEditCategories}
+                                                        className="text-slate-300 hover:text-blue-600 p-1 disabled:opacity-30 disabled:cursor-not-allowed"
                                                     >
                                                         <Edit2 size={16} />
                                                     </button>
-                                                    <button onClick={() => handleDeleteCategory(sub.id)} className="text-slate-300 hover:text-red-600 p-1">
+                                                    <button onClick={() => handleDeleteCategory(sub.id)} disabled={isShopOperator && !canEditCategories} className="text-slate-300 hover:text-red-600 p-1 disabled:opacity-30 disabled:cursor-not-allowed">
                                                         <Trash2 size={16} />
                                                     </button>
                                                 </div>
@@ -1883,10 +1944,10 @@ const ShopDashboard: React.FC = () => {
                     <div className="flex justify-between items-center mb-6">
                         <h3 className="font-bold text-lg">Shop Produkte ({shopProducts.length})</h3>
                         <div className="flex gap-2">
-                            <button onClick={() => setShowImportModal(true)} className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg flex items-center hover:bg-slate-50 transition-colors font-medium text-sm">
+                            <button onClick={() => setShowImportModal(true)} disabled={isShopOperator && !canEditProducts} className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg flex items-center hover:bg-slate-50 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed">
                                 <ExternalLink size={16} className="mr-2" /> Importieren
                             </button>
-                            <button onClick={() => setShowProductModal(true)} className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-red-700 font-medium text-sm">
+                            <button onClick={() => setShowProductModal(true)} disabled={isShopOperator && !canEditProducts} className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-red-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed">
                                 <Plus size={16} className="mr-2" /> Produkt hinzufügen
                             </button>
                         </div>
@@ -1929,9 +1990,10 @@ const ShopDashboard: React.FC = () => {
                                 </div>
                                 <div className="flex items-center space-x-6">
                                     <select 
-                                        className="border border-slate-300 rounded p-1 text-sm max-w-[150px]"
+                                        className="border border-slate-300 rounded p-1 text-sm max-w-[150px] disabled:bg-slate-50 disabled:text-slate-400"
                                         value={sp.category_id || ''}
                                         onChange={(e) => handleUpdateProduct(sp.id, { category_id: e.target.value || null })}
+                                        disabled={isShopOperator && !canEditProducts}
                                     >
                                         <option value="">Keine Kategorie</option>
                                         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -1941,25 +2003,26 @@ const ShopDashboard: React.FC = () => {
                                         <span className="text-slate-400 text-sm mr-1">€</span>
                                         <input 
                                             type="number" 
-                                            className="w-16 text-sm outline-none"
+                                            className="w-16 text-sm outline-none disabled:bg-slate-50"
                                             value={sp.price || ''}
                                             placeholder="0.00"
                                             onChange={(e) => handleUpdateProduct(sp.id, { price: parseFloat(e.target.value) })}
+                                            disabled={isShopOperator && !canEditProducts}
                                         />
                                     </div>
 
-                                    <button onClick={() => setEditorAssignment(sp)} className="text-slate-400 hover:text-blue-600">
+                                    <button onClick={() => setEditorAssignment(sp)} disabled={isShopOperator && !canEditProducts} className="text-slate-400 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed">
                                         <Edit2 size={18} />
                                     </button>
                                     <button
                                         onClick={() => handleDuplicateProduct(sp)}
-                                        disabled={isDuplicating === sp.id}
-                                        className={`text-slate-400 hover:text-slate-700 ${isDuplicating === sp.id ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                        disabled={isDuplicating === sp.id || (isShopOperator && !canEditProducts)}
+                                        className={`text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed ${isDuplicating === sp.id ? 'animate-spin' : ''}`}
                                         title="Duplizieren (ohne Druckdaten)"
                                     >
-                                        {isDuplicating === sp.id ? <RefreshCw size={18} className="animate-spin" /> : <Copy size={18} />}
+                                        {isDuplicating === sp.id ? <RefreshCw size={18} /> : <Copy size={18} />}
                                     </button>
-                                    <button onClick={() => handleRemoveProduct(sp.id)} className="text-slate-400 hover:text-red-600">
+                                    <button onClick={() => handleRemoveProduct(sp.id)} disabled={isShopOperator && !canEditProducts} className="text-slate-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed">
                                         <Trash2 size={18} />
                                     </button>
                                 </div>

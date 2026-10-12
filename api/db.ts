@@ -1615,6 +1615,26 @@ try {
   } catch (e) {
     console.error('Migration error (shop product category consistency check:', e);
   }
+
+  // 🛒 Shop-Betreiber Tabelle: Zuordnung von Usern (Rolle 'shop_operator') zu Shops + Rechte
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS shop_operators (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        shop_id TEXT NOT NULL,
+        permissions_json TEXT DEFAULT '{}',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, shop_id),
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE
+      );
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_shop_operators_user ON shop_operators(user_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_shop_operators_shop ON shop_operators(shop_id)');
+  } catch (e) {
+    console.error('Migration error (shop_operators):', e);
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }

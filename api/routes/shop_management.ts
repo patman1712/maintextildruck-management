@@ -15,6 +15,67 @@ const router = Router();
 const LABELS_DIR = path.join(DATA_DIR, 'shipping_labels');
 fs.ensureDirSync(LABELS_DIR);
 
+// 🔐 Shop-Betreiber Access-Control Middleware
+// Liest x-user-id Header. Bei shop_operator: nur eigener Shop + Permission-Check pro Modul.
+// Admin/Employee (kein Header oder Rolle != shop_operator) → vollen Zugriff (bestehendes Verhalten).
+function parsePermissions(json: string): Record<string, { view: boolean; edit: boolean }> {
+  try {
+    const parsed = JSON.parse(json || '{}');
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+function resolveModuleFromUrl(url: string): string {
+  if (url.includes('/categories')) return 'categories';
+  if (url.includes('/products')) return 'products';
+  // Alles andere (Einstellungen, Design, Bestellungen etc.) → 'design'
+  return 'design';
+}
+
+router.use('/:shopId', (req, res, next) => {
+  const userId = req.headers['x-user-id'] as string;
+  if (!userId) {
+    // Kein User-Header → bestehendes Verhalten (Admin/Employee Frontend ohne Header)
+    (req as any).shopOperatorPermissions = null;
+    return next();
+  }
+
+  const user = db.prepare('SELECT id, role FROM users WHERE id = ?').get(userId) as any;
+  if (!user || user.role !== 'shop_operator') {
+    (req as any).shopOperatorPermissions = null;
+    return next();
+  }
+
+  const shopId = req.params.shopId;
+  const assignment = db.prepare(
+    'SELECT permissions_json FROM shop_operators WHERE user_id = ? AND shop_id = ?'
+  ).get(userId, shopId) as any;
+
+  if (!assignment) {
+    return res.status(403).json({ success: false, error: 'Kein Zugriff auf diesen Shop.' });
+  }
+
+  const permissions = parsePermissions(assignment.permissions_json);
+  const module = resolveModuleFromUrl(req.url);
+  const modPerms = permissions[module] || { view: false, edit: false };
+
+  // View-Check: Lesezugriff muss immer gewährt sein
+  if (!modPerms.view) {
+    return res.status(403).json({ success: false, error: `Keine Berechtigung für Modul: ${module}` });
+  }
+
+  // Edit-Check: Bei schreibenden Methoden muss edit=true sein
+  const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  if (isWrite && !modPerms.edit) {
+    return res.status(403).json({ success: false, error: `Keine Bearbeitungsberechtigung für Modul: ${module}` });
+  }
+
+  (req as any).shopOperatorPermissions = permissions;
+  next();
+});
+
 // Helper to escape XML special characters
 const escapeXml = (unsafe: string) => {
     if (!unsafe) return '';
