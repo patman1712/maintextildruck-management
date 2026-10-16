@@ -18,6 +18,27 @@ interface ShopContext {
   templateContext?: Record<string, any>;
 }
 
+function collectDescendantCategoryIds(categories: ShopCategory[], rootId: string): Set<string> {
+  const ids = new Set<string>([rootId]);
+  const queue = [rootId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+    if (!currentId) continue;
+
+    categories
+      .filter(category => category.parent_id === currentId)
+      .forEach(category => {
+        if (!ids.has(category.id)) {
+          ids.add(category.id);
+          queue.push(category.id);
+        }
+      });
+  }
+
+  return ids;
+}
+
 const ShopCategoryPage: React.FC = () => {
   const { categorySlug } = useParams<{ shopId: string; categorySlug: string }>();
   const { shop, categories, primaryColor, shopBaseUrl, template, customTemplateActive, templateContext } = useOutletContext<ShopContext>();
@@ -41,34 +62,26 @@ const ShopCategoryPage: React.FC = () => {
         });
         const data = await res.json();
         if (data.success) {
-          // Filter by category slug
-          // Also include products in subcategories? Usually yes.
-          // Let's find all category IDs that match (current + children)
-          // Find all category IDs that match: current + children + PARENT(s) (bidirectional!)
-          const categoryIds = new Set<string>();
-          if (currentCategory) {
-              categoryIds.add(currentCategory.id);
-              // Children (Unterkategorien der aktuellen)
-              categories.filter(c => c.parent_id === currentCategory.id).forEach(c => categoryIds.add(c.id));
-              // Parent (Überkategorie, falls aktuelle eine Unterkategorie ist)
-              if (currentCategory.parent_id) {
-                  categoryIds.add(currentCategory.parent_id);
-                  // Auch Geschwister (andere Unterkategorien derselben Eltern)? Nein, nur explizit aktuelle + Eltern + Kinder
-              }
-          }
+          // Eltern-Kategorien dürfen Produkte ihrer Unterkategorien zeigen.
+          // Unterkategorien dürfen NICHT automatisch Produkte ihrer Eltern oder Geschwister erben.
+          const categoryIds = currentCategory
+            ? collectDescendantCategoryIds(categories, currentCategory.id)
+            : new Set<string>();
+          const categorySlugs = new Set(
+            categories
+              .filter(category => categoryIds.has(category.id))
+              .map(category => category.slug)
+          );
 
           const filtered = data.data.filter((p: any) => {
-            // 1. PRIORITÄT: ID-basierter Prüfung (zuverlässig!): Enthält das Produkt eine Kategorie-Id die in categoryIds ist?
             const pCategoryIds: string[] = Array.isArray(p.category_ids) ? p.category_ids : (p.category_id ? [p.category_id] : []);
             if (currentCategory && pCategoryIds.some((id: string) => categoryIds.has(id))) return true;
 
-            // 2. Fallback: Slug-basierter Prüfung (String-Vergleich)
             const pCategorySlugs: string[] = Array.isArray(p.category_slugs) ? p.category_slugs : (p.category_slug ? [p.category_slug] : []);
-            if (categorySlug && pCategorySlugs.includes(categorySlug)) return true;
+            if (pCategorySlugs.some((slug: string) => categorySlugs.has(slug))) return true;
 
-            // 3. Ultima Ratio: Legazy Single-Field Check
             return (currentCategory && p.category_id && categoryIds.has(p.category_id)) ||
-                   (categorySlug && p.category_slug === categorySlug);
+                   (p.category_slug && categorySlugs.has(p.category_slug));
           });
           setProducts(filtered);
         }
