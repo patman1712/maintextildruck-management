@@ -6,6 +6,7 @@ import 'react-quill/dist/quill.snow.css';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
 import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical, Send, CreditCard, Bell, ChevronUp, ChevronDown, Star } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
+import { SAMPLE_TEMPLATE } from '../template/templateEngine';
 
 const ShopDashboard: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>();
@@ -120,6 +121,50 @@ const ShopDashboard: React.FC = () => {
   const isAdmin = currentUser?.role === 'admin';
   
   const categoryFormRef = useRef<HTMLDivElement>(null);
+
+  // ---- Custom Design-Template (nur Admin) ----
+  const [templateHtml, setTemplateHtml] = useState('');
+  const [templateEnabled, setTemplateEnabled] = useState(false);
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateMsg, setTemplateMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeTab !== 'design' || !isAdmin || !shopId) return;
+    fetch(`/api/shops/${shopId}/template`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          setTemplateEnabled(!!d.data.enabled);
+          setTemplateHtml(d.data.html || '');
+        }
+      })
+      .catch(console.error);
+  }, [activeTab, isAdmin, shopId]);
+
+  const saveTemplate = async () => {
+    if (!shopId) return;
+    setTemplateSaving(true);
+    setTemplateMsg(null);
+    try {
+      const res = await fetch(`/api/shops/${shopId}/template`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: templateEnabled, html: templateHtml })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTemplateMsg('Gespeichert ✓');
+        setShop(prev => prev ? ({ ...prev, custom_template_enabled: templateEnabled ? 1 : 0, custom_template_html: templateHtml } as any) : prev);
+      } else {
+        setTemplateMsg(data.error || 'Fehler beim Speichern');
+      }
+    } catch (e) {
+      setTemplateMsg('Fehler beim Speichern');
+    } finally {
+      setTemplateSaving(false);
+      setTimeout(() => setTemplateMsg(null), 4000);
+    }
+  };
 
   useEffect(() => {
     if (shopId) {
@@ -1814,6 +1859,141 @@ const ShopDashboard: React.FC = () => {
                             );
                         })()}
                     </div>
+
+                    {/* Custom Design-Template (nur Admin) */}
+                    {isAdmin && (
+                        <div className="bg-white p-6 rounded-lg shadow-sm border-2 border-indigo-200 mt-6 md:col-span-2">
+                            <h2 className="text-lg font-semibold text-slate-800 mb-1 flex items-center gap-2">
+                                <Layout className="w-5 h-5 text-indigo-600" />
+                                Eigenes Design-Template
+                                <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">Nur Admin</span>
+                            </h2>
+                            <p className="text-xs text-slate-500 mb-4">
+                                Lade eine HTML-Datei mit Platzhaltern hoch, um das komplette Design des Online-Shops zu ersetzen (alle Seiten).
+                                Ist das Template deaktiviert, leer oder fehlerhaft, greift automatisch das Standard-Design.
+                            </p>
+
+                            {/* Toggle Standard / Custom */}
+                            <div className="flex items-center justify-between bg-slate-50 rounded-lg p-4 mb-4 border border-slate-200">
+                                <div>
+                                    <p className="font-bold text-slate-800 text-sm">{templateEnabled ? 'Custom Design aktiv' : 'Standard Design aktiv'}</p>
+                                    <p className="text-xs text-slate-500">{templateEnabled ? 'Der Shop verwendet das eigene Template.' : 'Der Shop verwendet das Standard-Design.'}</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setTemplateEnabled(v => !v)}
+                                    className={`relative w-14 h-8 rounded-full transition-colors flex-shrink-0 ${templateEnabled ? 'bg-indigo-600' : 'bg-slate-300'}`}
+                                    title="Zwischen Standard- und Custom-Design umschalten"
+                                >
+                                    <span className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-all ${templateEnabled ? 'left-7' : 'left-1'}`} />
+                                </button>
+                            </div>
+
+                            {/* Upload + Beispiel */}
+                            <div className="flex flex-wrap gap-3 mb-3">
+                                <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center text-sm font-medium">
+                                    <ImageIcon size={16} className="mr-2" />
+                                    HTML-Datei hochladen
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        accept=".html,.htm,text/html"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            const reader = new FileReader();
+                                            reader.onload = () => setTemplateHtml(String(reader.result || ''));
+                                            reader.onerror = () => alert('Datei konnte nicht gelesen werden.');
+                                            reader.readAsText(file);
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setTemplateHtml(SAMPLE_TEMPLATE)}
+                                    className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center text-sm font-medium"
+                                >
+                                    <FileText size={16} className="mr-2" />
+                                    Beispiel einfügen
+                                </button>
+                                {templateHtml && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { if (confirm('Template-Inhalt wirklich leeren?')) setTemplateHtml(''); }}
+                                        className="bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors flex items-center text-sm font-medium"
+                                    >
+                                        <Trash2 size={16} className="mr-2" />
+                                        Leeren
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Editor */}
+                            <textarea
+                                value={templateHtml}
+                                onChange={(e) => setTemplateHtml(e.target.value)}
+                                spellCheck={false}
+                                placeholder="<!DOCTYPE html> ... <template data-page=&quot;layout&quot;> ... </template>"
+                                className="w-full h-80 border border-slate-300 rounded-lg p-3 font-mono text-xs leading-relaxed bg-slate-50 focus:bg-white focus:border-indigo-400 outline-none"
+                            />
+
+                            {/* Platzhalter-Doku */}
+                            <details className="mt-3 bg-slate-50 rounded-lg border border-slate-200 p-3">
+                                <summary className="cursor-pointer text-sm font-bold text-slate-700">Verfügbare Platzhalter &amp; Seiten-Blöcke</summary>
+                                <div className="mt-3 space-y-3 text-xs text-slate-600">
+                                    <div>
+                                        <p className="font-bold text-slate-800 mb-1">Seiten-Blöcke (&lt;template data-page="…"&gt;)</p>
+                                        <p className="font-mono">layout (Rahmen mit {`{{content}}`}) · home · category · product · cart · checkout · content</p>
+                                        <p className="italic text-slate-500 mt-1">Ohne Blöcke wird die ganze Datei als Layout verwendet.</p>
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-800 mb-1">Werte</p>
+                                        <p className="font-mono">{`{{shop_name}} {{logo_url}} {{primary_color}} {{secondary_color}} {{shop_url}} {{year}}`}</p>
+                                        <p className="font-mono">{`{{welcome_text}} {{contact_phone}} {{contact_email}} {{contact_address}} {{opening_hours}}`}</p>
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-800 mb-1">Standard-Inhalt &amp; Widgets</p>
+                                        <p className="font-mono">{`{{content}}`} – Standard-Inhalt der Seite (inkl. Warenkorb/Checkout-Logik)</p>
+                                        <p className="font-mono">{`{{widget:products}}`} – fertiges Produktraster</p>
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-800 mb-1">Listen</p>
+                                        <p className="font-mono">{`{{#products}}…{{/products}}`} (Felder: name, price, url, image, product_number)</p>
+                                        <p className="font-mono">{`{{#categories}}…{{/categories}}`} (Felder: name, url)</p>
+                                        <p className="font-mono">{`{{#cart_items}}…{{/cart_items}}`} (Felder: name, price, quantity, image, size, color)</p>
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-800 mb-1">Format-Notation</p>
+                                        <p className="font-mono">{`{{key}}`} = HTML-sicher (escaped) · {`{{{key}}}`} = Roh-HTML erlaubt</p>
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-800 mb-1">Aktionen (Buttons/Links)</p>
+                                        <p className="font-mono">data-shop-action="open-cart" · "open-search"</p>
+                                    </div>
+                                </div>
+                            </details>
+
+                            {/* Speichern */}
+                            <div className="flex items-center gap-3 mt-4">
+                                <button
+                                    type="button"
+                                    onClick={saveTemplate}
+                                    disabled={templateSaving || (templateEnabled && !templateHtml.trim())}
+                                    className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                                >
+                                    <Save size={16} className="mr-2" />
+                                    {templateSaving ? 'Speichern...' : 'Template speichern'}
+                                </button>
+                                {templateMsg && (
+                                    <span className={`text-sm font-bold ${templateMsg.includes('✓') ? 'text-green-600' : 'text-red-600'}`}>{templateMsg}</span>
+                                )}
+                                {templateEnabled && !templateHtml.trim() && (
+                                    <span className="text-xs text-amber-600">Bitte zuerst ein Template einfügen oder das Custom-Design deaktivieren.</span>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 

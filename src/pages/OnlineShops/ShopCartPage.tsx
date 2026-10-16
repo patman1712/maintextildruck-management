@@ -4,16 +4,20 @@ import { useOutletContext, Link } from 'react-router-dom';
 import { Trash2, Plus, Minus, ArrowLeft, ArrowRight, ShoppingCart, ShoppingBag } from 'lucide-react';
 import { Shop } from '../../store';
 import { useShopStore } from '../../shopStore';
+import { ShopTemplate } from './template/templateEngine';
 
 interface ShopContext {
   shop: Shop;
   primaryColor: string;
   shopBaseUrl: string;
   shopKey: string;
+  template?: any;
+  customTemplateActive?: boolean;
+  templateContext?: Record<string, any>;
 }
 
 const ShopCartPage: React.FC = () => {
-  const { shop, primaryColor, shopBaseUrl } = useOutletContext<ShopContext>();
+  const { shop, primaryColor, shopBaseUrl, template, customTemplateActive, templateContext } = useOutletContext<ShopContext>();
   const { cart, removeFromCart, updateQuantity } = useShopStore();
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -41,7 +45,7 @@ const ShopCartPage: React.FC = () => {
     );
   }
 
-  return (
+  const standardBody = (
     <div className="container mx-auto px-4 py-12">
       <h1 className="text-4xl font-black uppercase italic tracking-tighter mb-12 flex items-center">
         <ShoppingBag className="mr-4" size={36} />
@@ -202,6 +206,34 @@ const ShopCartPage: React.FC = () => {
       </div>
     </div>
   );
+
+  const pageContext = {
+    ...(templateContext || {}),
+    cart_total: cartTotal,
+    cart_count: cart.reduce((s, i) => s + i.quantity, 0),
+    cart_items: cart.map((i: any) => ({
+      name: i.name,
+      price: i.price,
+      quantity: i.quantity,
+      image: i.image || '',
+      size: i.size || '',
+      color: i.color || '',
+    })),
+  };
+
+  if (customTemplateActive && template?.blocks?.['cart']) {
+    return (
+      <ShopTemplate
+        template={template}
+        page="cart"
+        context={pageContext}
+        widgets={{ content: standardBody }}
+        fallback={standardBody}
+      />
+    );
+  }
+
+  return standardBody;
 };
 
 export default ShopCartPage;

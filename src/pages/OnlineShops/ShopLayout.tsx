@@ -1,9 +1,10 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, Outlet, Link, useLocation } from 'react-router-dom';
 import { ShoppingCart, Search, Menu, User, ChevronDown, LogOut, X, Trash2, ArrowRight, ShoppingBag as BagIcon, ShoppingBag } from 'lucide-react';
 import { Shop, ShopCategory } from '../../store';
 import { useShopStore } from '../../shopStore';
+import { parseTemplate, ShopTemplate, buildBaseContext } from './template/templateEngine';
 
 const ShopLayout: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>();
@@ -140,6 +141,57 @@ const ShopLayout: React.FC = () => {
     }
   }, [cart, shippingConfig]);
 
+  // ---- Custom Design-Template ----
+  const parsedTemplate = useMemo(() => {
+    const rawHtml = (shop as any)?.custom_template_html;
+    if (!rawHtml || typeof rawHtml !== 'string') return null;
+    try {
+      return parseTemplate(rawHtml);
+    } catch (e) {
+      console.error('Template parse error:', e);
+      return null;
+    }
+  }, [shop]);
+
+  const customLayoutActive = !!(shop as any)?.custom_template_enabled && !!parsedTemplate?.blocks?.['layout'];
+
+  const navCategories = useMemo(
+    () => categories
+      .filter(c => !c.parent_id)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map(c => ({ name: c.name, url: `${shopBaseUrl}/category/${c.slug}`, id: c.id, slug: c.slug })),
+    [categories, shopBaseUrl]
+  );
+
+  const outletContext = useMemo(() => ({
+    shop,
+    categories,
+    primaryColor: shop?.primary_color || '#000000',
+    secondaryColor: shop?.secondary_color || '#ffffff',
+    shopBaseUrl,
+    shopKey: shop?.id,
+    template: parsedTemplate,
+    customTemplateActive: !!(shop as any)?.custom_template_enabled,
+    templateContext: {
+      ...buildBaseContext(shop, shopBaseUrl),
+      categories: navCategories,
+    },
+  }), [shop, categories, shopBaseUrl, parsedTemplate, navCategories]);
+
+  // Aktionen aus dem Custom-Template (Buttons/Links mit data-shop-action)
+  useEffect(() => {
+    if (!customLayoutActive) return;
+    const handler = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement | null)?.closest('[data-shop-action]');
+      if (!target) return;
+      const action = target.getAttribute('data-shop-action');
+      if (action === 'open-cart') { e.preventDefault(); setCartOpen(true); }
+      else if (action === 'close-cart') { e.preventDefault(); setCartOpen(false); }
+      else if (action === 'open-search') { e.preventDefault(); setSearchOpen(true); }
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [customLayoutActive, setCartOpen]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Lade Shop...</div>;
   if (error || !shop) return <div className="min-h-screen flex items-center justify-center text-red-600">{error || 'Shop nicht gefunden'}</div>;
@@ -160,6 +212,8 @@ const ShopLayout: React.FC = () => {
         .shop-hover-bg:hover { background-color: ${primaryColor}10 !important; }
         .group:hover .group-hover-shop-text { color: ${primaryColor} !important; }
       `}</style>
+      {!customLayoutActive && (
+      <>
       {/* Announcement Bar */}
       <div style={{ backgroundColor: primaryColor }} className="text-white text-xs font-bold py-2 text-center tracking-wider uppercase">
         Offizieller Fanshop
@@ -356,6 +410,8 @@ const ShopLayout: React.FC = () => {
           </div>
         </div>
       </header>
+      </>
+      )}
 
       {/* Search Overlay */}
       {searchOpen && (
@@ -651,8 +707,19 @@ const ShopLayout: React.FC = () => {
         </div>
       )}
 
-      <Outlet context={{ shop, categories, primaryColor, secondaryColor, shopBaseUrl, shopKey: shop.id }} />
+      {customLayoutActive ? (
+        <ShopTemplate
+          template={parsedTemplate}
+          page="layout"
+          context={outletContext.templateContext}
+          widgets={{ content: <Outlet context={outletContext} /> }}
+        />
+      ) : (
+        <Outlet context={outletContext} />
+      )}
 
+      {!customLayoutActive && (
+      <>
       {/* Footer */}
       <footer style={{ backgroundColor: primaryColor }} className="text-white pt-16 pb-8 mt-auto">
         <div className="container mx-auto px-4">
@@ -727,6 +794,8 @@ const ShopLayout: React.FC = () => {
           </div>
         </div>
       </footer>
+      </>
+      )}
     </div>
   );
 };

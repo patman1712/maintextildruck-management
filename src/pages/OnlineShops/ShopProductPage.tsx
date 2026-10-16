@@ -5,6 +5,7 @@ import { ShoppingCart, Heart, ChevronRight, Info, Plus, Minus, Check, Shirt, Use
 import { Shop, ShopCategory, Product } from '../../store';
 import { useShopStore, CartItem } from '../../shopStore';
 import { toAbsoluteMediaUrl } from './mediaUrl';
+import { ShopTemplate } from './template/templateEngine';
 
 interface ShopContext {
   shop: Shop;
@@ -13,11 +14,14 @@ interface ShopContext {
   secondaryColor: string;
   shopBaseUrl: string;
   shopKey: string;
+  template?: any;
+  customTemplateActive?: boolean;
+  templateContext?: Record<string, any>;
 }
 
 const ShopProductPage: React.FC = () => {
   const { productId } = useParams<{ shopId: string; productId: string }>();
-  const { shop, primaryColor, shopBaseUrl } = useOutletContext<ShopContext>();
+  const { shop, primaryColor, shopBaseUrl, template, customTemplateActive, templateContext } = useOutletContext<ShopContext>();
   const [product, setProduct] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState<string | null>(null);
@@ -678,7 +682,7 @@ const ShopProductPage: React.FC = () => {
     // For now, let's just add it.
   };
 
-  return (
+  const standardBody = (
     <div className="container mx-auto px-4 py-8">
       {/* Breadcrumbs */}
       <div className="flex items-center text-xs uppercase tracking-wider text-slate-500 mb-8">
@@ -1079,6 +1083,30 @@ const ShopProductPage: React.FC = () => {
       </div>
     </div>
   );
+
+  const pageContext = {
+    ...(templateContext || {}),
+    product_name: product?.name || '',
+    product_price: product?.price,
+    product_number: product?.product_number || '',
+    product_description: product?.description || '',
+    product_url: `${shopBaseUrl}/product/${productId}`,
+    product_image: activeImage || product?.files?.[0]?.file_url || '',
+  };
+
+  if (customTemplateActive && template?.blocks?.['product']) {
+    return (
+      <ShopTemplate
+        template={template}
+        page="product"
+        context={pageContext}
+        widgets={{ content: standardBody }}
+        fallback={standardBody}
+      />
+    );
+  }
+
+  return standardBody;
 };
 
 export default ShopProductPage;

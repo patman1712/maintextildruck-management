@@ -4,6 +4,7 @@ import { useOutletContext, useParams, Link } from 'react-router-dom';
 import { ChevronRight, Heart, ChevronLeft, ChevronDown, Eye } from 'lucide-react';
 import { Shop, ShopCategory } from '../../store';
 import { ProductTile } from './components/ProductTile';
+import { ShopTemplate } from './template/templateEngine';
 
 interface ShopContext {
   shop: Shop;
@@ -12,11 +13,14 @@ interface ShopContext {
   secondaryColor: string;
   shopBaseUrl: string;
   shopKey: string;
+  template?: any;
+  customTemplateActive?: boolean;
+  templateContext?: Record<string, any>;
 }
 
 const ShopCategoryPage: React.FC = () => {
   const { categorySlug } = useParams<{ shopId: string; categorySlug: string }>();
-  const { shop, categories, primaryColor, shopBaseUrl } = useOutletContext<ShopContext>();
+  const { shop, categories, primaryColor, shopBaseUrl, template, customTemplateActive, templateContext } = useOutletContext<ShopContext>();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -86,7 +90,21 @@ const ShopCategoryPage: React.FC = () => {
 
   if (!currentCategory && !loading) return <div className="container mx-auto p-8">Kategorie nicht gefunden.</div>;
 
-  return (
+  const productGrid = (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+        {loading ? (
+            <div className="col-span-full py-20 text-center text-slate-400">Lade Produkte...</div>
+        ) : products.length === 0 ? (
+            <div className="col-span-full py-20 text-center text-slate-400">Keine Produkte in dieser Kategorie gefunden.</div>
+        ) : (
+            products.map(product => (
+                <ProductTile key={product.assignment_id} product={product} shopId={shop.id} shopBaseUrl={shopBaseUrl} />
+            ))
+        )}
+    </div>
+  );
+
+  const standardBody = (
     <div className="container mx-auto px-4 py-8">
       {/* Breadcrumbs */}
       <div className="flex items-center text-xs uppercase tracking-wider text-slate-500 mb-8">
@@ -172,21 +190,38 @@ const ShopCategoryPage: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                {loading ? (
-                    <div className="col-span-full py-20 text-center text-slate-400">Lade Produkte...</div>
-                ) : products.length === 0 ? (
-                    <div className="col-span-full py-20 text-center text-slate-400">Keine Produkte in dieser Kategorie gefunden.</div>
-                ) : (
-                    products.map(product => (
-                        <ProductTile key={product.assignment_id} product={product} shopId={shop.id} shopBaseUrl={shopBaseUrl} />
-                    ))
-                )}
-            </div>
+            {productGrid}
         </div>
       </div>
     </div>
   );
+
+  const pageContext = {
+    ...(templateContext || {}),
+    category_name: currentCategory?.name || '',
+    category_slug: categorySlug || '',
+    products: products.map((p: any) => ({
+      name: p.name,
+      price: p.price,
+      url: `${shopBaseUrl}/product/${p.product_id}`,
+      image: p.files?.[0]?.thumbnail_url || p.files?.[0]?.file_url || '',
+      product_number: p.product_number || '',
+    })),
+  };
+
+  if (customTemplateActive && template?.blocks?.['category']) {
+    return (
+      <ShopTemplate
+        template={template}
+        page="category"
+        context={pageContext}
+        widgets={{ content: standardBody, products: productGrid }}
+        fallback={standardBody}
+      />
+    );
+  }
+
+  return standardBody;
 };
 
 export default ShopCategoryPage;

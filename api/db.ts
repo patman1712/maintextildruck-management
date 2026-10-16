@@ -1148,6 +1148,17 @@ try {
     db.exec('ALTER TABLE shops ADD COLUMN welcome_text TEXT');
   }
 
+  // Migration for Custom Design Template (nur Admin kann aktivieren)
+  const shopColsTemplate = db.prepare("PRAGMA table_info(shops)").all() as any[];
+  if (!shopColsTemplate.some(col => col.name === 'custom_template_enabled')) {
+    console.log('Migrating database: Adding custom_template_enabled to shops table');
+    db.exec('ALTER TABLE shops ADD COLUMN custom_template_enabled INTEGER DEFAULT 0');
+  }
+  if (!shopColsTemplate.some(col => col.name === 'custom_template_html')) {
+    console.log('Migrating database: Adding custom_template_html to shops table');
+    db.exec('ALTER TABLE shops ADD COLUMN custom_template_html TEXT');
+  }
+
   // Migration for Customer Numbers
   try {
     const shopCustomerCols = db.prepare("PRAGMA table_info(shop_customers)").all() as any[];

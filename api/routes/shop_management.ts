@@ -76,6 +76,50 @@ router.use('/:shopId', (req, res, next) => {
   next();
 });
 
+// 🔐 Custom Design-Template ist NUR für Administratoren (Shop-Betreiber dürfen das nicht ändern)
+function requireAdminForTemplate(req: any, res: any): boolean {
+  const userId = req.headers['x-user-id'] as string;
+  if (!userId) return true; // internes Admin/Employee-Frontend ohne Header
+  const user = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as any;
+  if (!user || user.role !== 'admin') {
+    res.status(403).json({ success: false, error: 'Nur Administratoren dürfen Design-Templates verwalten.' });
+    return false;
+  }
+  return true;
+}
+
+// --- Custom Design Template (pro Shop) ---
+router.get('/:shopId/template', (req, res) => {
+  try {
+    const { shopId } = req.params;
+    const row = db.prepare('SELECT custom_template_enabled, custom_template_html FROM shops WHERE id = ?').get(shopId) as any;
+    if (!row) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+    res.json({
+      success: true,
+      data: {
+        enabled: !!row.custom_template_enabled,
+        html: row.custom_template_html || ''
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.put('/:shopId/template', (req, res) => {
+  try {
+    if (!requireAdminForTemplate(req, res)) return;
+    const { shopId } = req.params;
+    const enabled = req.body?.enabled ? 1 : 0;
+    const html = typeof req.body?.html === 'string' ? req.body.html : '';
+    const result = db.prepare('UPDATE shops SET custom_template_enabled = ?, custom_template_html = ? WHERE id = ?').run(enabled, html, shopId);
+    if (result.changes === 0) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+    res.json({ success: true, data: { enabled: !!enabled } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Helper to escape XML special characters
 const escapeXml = (unsafe: string) => {
     if (!unsafe) return '';

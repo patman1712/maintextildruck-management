@@ -5,6 +5,7 @@ import { ShoppingCart, ChevronRight, Star, ChevronLeft } from 'lucide-react';
 import { Shop, ShopCategory, Product, HeroImage } from '../../store';
 import { ProductTile } from './components/ProductTile';
 import { toAbsoluteMediaUrl } from './mediaUrl';
+import { ShopTemplate } from './template/templateEngine';
 
 interface ShopContext {
   shop: Shop;
@@ -13,6 +14,9 @@ interface ShopContext {
   secondaryColor: string;
   shopBaseUrl: string;
   shopKey: string;
+  template?: any;
+  customTemplateActive?: boolean;
+  templateContext?: Record<string, any>;
 }
 
 // Helper: Holt die Bild-URL aus einem HeroImage (kompatibel mit altem String-Format)
@@ -28,7 +32,7 @@ const getHeroObj = (img: string | HeroImage): HeroImage => {
 };
 
 const ShopHome: React.FC = () => {
-  const { shop, categories, shopBaseUrl } = useOutletContext<ShopContext>();
+  const { shop, categories, shopBaseUrl, template, customTemplateActive, templateContext } = useOutletContext<ShopContext>();
   const navigate = useNavigate();
   const [products, setProducts] = useState<any[]>([]); // Using any for extended product interface
   const [loading, setLoading] = useState(true);
@@ -111,7 +115,19 @@ const ShopHome: React.FC = () => {
     ? toAbsoluteMediaUrl(getHeroUrl(heroImages[currentSlide]).replace('_thumb', '').replace(/_thumb\.[a-z]+$/i, (match) => match.replace('_thumb', ''))) || ''
     : '';
 
-  return (
+  const productGrid = (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+        {products.length > 0 ? products.map(product => (
+            <ProductTile key={product.assignment_id} product={product} shopId={shop.id} shopBaseUrl={shopBaseUrl} />
+        )) : (
+            <div className="col-span-full text-center py-20 text-slate-400">
+                <p>{loading ? 'Lade Produkte...' : 'Keine Produkte gefunden.'}</p>
+            </div>
+        )}
+    </div>
+  );
+
+  const standardBody = (
     <>
       {/* Hero Section */}
       {heroEnabled && (
@@ -197,18 +213,38 @@ const ShopHome: React.FC = () => {
           </Link> */}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {products.length > 0 ? products.map(product => (
-                <ProductTile key={product.assignment_id} product={product} shopId={shop.id} shopBaseUrl={shopBaseUrl} />
-            )) : (
-                <div className="col-span-full text-center py-20 text-slate-400">
-                    <p>{loading ? 'Lade Produkte...' : 'Keine Produkte gefunden.'}</p>
-                </div>
-            )}
-        </div>
+        {productGrid}
       </main>
     </>
   );
+
+  const pageContext = {
+    ...(templateContext || {}),
+    hero_image: currentHeroUrl,
+    welcome_text: shop.welcome_text || '',
+    products: products.map((p: any) => ({
+      name: p.name,
+      price: p.price,
+      url: `${shopBaseUrl}/product/${p.product_id}`,
+      image: p.files?.[0]?.thumbnail_url || p.files?.[0]?.file_url || '',
+      product_number: p.product_number || '',
+      description: p.description || '',
+    })),
+  };
+
+  if (customTemplateActive && template?.blocks?.['home']) {
+    return (
+      <ShopTemplate
+        template={template}
+        page="home"
+        context={pageContext}
+        widgets={{ content: standardBody, products: productGrid }}
+        fallback={standardBody}
+      />
+    );
+  }
+
+  return standardBody;
 };
 
 export default ShopHome;

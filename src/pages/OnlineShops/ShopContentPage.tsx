@@ -2,10 +2,18 @@
 import React from 'react';
 import { useParams, useOutletContext } from 'react-router-dom';
 import { Shop } from '../../store';
+import { ShopTemplate } from './template/templateEngine';
+
+interface ShopContext {
+    shop: Shop;
+    template?: any;
+    customTemplateActive?: boolean;
+    templateContext?: Record<string, any>;
+}
 
 const ShopContentPage: React.FC = () => {
     const { pageSlug } = useParams<{ pageSlug: string }>();
-    const { shop } = useOutletContext<{ shop: Shop }>();
+    const { shop, template, customTemplateActive, templateContext } = useOutletContext<ShopContext>();
 
     if (!shop) return null;
 
@@ -45,7 +53,7 @@ const ShopContentPage: React.FC = () => {
             return <div className="container mx-auto px-4 py-12 text-center">Seite nicht gefunden</div>;
     }
 
-    return (
+    const standardBody = (
         <div className="container mx-auto px-4 py-12 max-w-4xl">
             <h1 className="text-3xl font-bold mb-8 text-slate-900">{title}</h1>
             
@@ -98,6 +106,27 @@ const ShopContentPage: React.FC = () => {
             )}
         </div>
     );
+
+    const pageContext = {
+        ...(templateContext || {}),
+        content_title: title,
+        content_slug: pageSlug || '',
+        content_body: content,
+    };
+
+    if (customTemplateActive && template?.blocks?.['content']) {
+        return (
+            <ShopTemplate
+                template={template}
+                page="content"
+                context={pageContext}
+                widgets={{ content: standardBody }}
+                fallback={standardBody}
+            />
+        );
+    }
+
+    return standardBody;
 };
 
 export default ShopContentPage;

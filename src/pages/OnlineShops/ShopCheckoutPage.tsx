@@ -5,17 +5,21 @@ import { CreditCard, Truck, MapPin, CheckCircle, ArrowLeft, ArrowRight, ShieldCh
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import { Shop } from '../../store';
 import { useShopStore } from '../../shopStore';
+import { ShopTemplate } from './template/templateEngine';
 
 interface ShopContext {
   shop: Shop;
   primaryColor: string;
   shopBaseUrl: string;
   shopKey: string;
+  template?: any;
+  customTemplateActive?: boolean;
+  templateContext?: Record<string, any>;
 }
 
 const ShopCheckoutPage: React.FC = () => {
   const navigate = useNavigate();
-  const { shop, primaryColor, shopBaseUrl } = useOutletContext<ShopContext>();
+  const { shop, primaryColor, shopBaseUrl, template, customTemplateActive, templateContext } = useOutletContext<ShopContext>();
   const { cart, currentCustomer, clearCart } = useShopStore();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const guestCheckoutEnabled = (shop as any).guest_checkout_enabled === undefined || (shop as any).guest_checkout_enabled === null ? true : !!(shop as any).guest_checkout_enabled;
@@ -216,7 +220,7 @@ const ShopCheckoutPage: React.FC = () => {
     );
   }
 
-  return (
+  const standardBody = (
     <div className="container mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-12 border-b border-slate-100 pb-8">
         <h1 className="text-4xl font-black uppercase italic tracking-tighter flex items-center">
@@ -613,6 +617,25 @@ const ShopCheckoutPage: React.FC = () => {
       </div>
     </div>
   );
+
+  const pageContext = {
+    ...(templateContext || {}),
+    cart_count: cart.reduce((s: number, i: any) => s + i.quantity, 0),
+  };
+
+  if (customTemplateActive && template?.blocks?.['checkout']) {
+    return (
+      <ShopTemplate
+        template={template}
+        page="checkout"
+        context={pageContext}
+        widgets={{ content: standardBody }}
+        fallback={standardBody}
+      />
+    );
+  }
+
+  return standardBody;
 };
 
 export default ShopCheckoutPage;
