@@ -23,6 +23,7 @@ import { createPortal } from 'react-dom';
 
 export interface ParsedTemplate {
   css: string;
+  links: string[];
   blocks: Record<string, string>;
   hasBlocks: boolean;
 }
@@ -30,15 +31,25 @@ export interface ParsedTemplate {
 /** Zerlegt das hochgeladene HTML in CSS + Seiten-Blöcke. */
 export function parseTemplate(raw: string): ParsedTemplate {
   const cssParts: string[] = [];
+  const links: string[] = [];
   let html = String(raw || '');
 
-  // 1. CSS extrahieren
+  // 1. Externe Stylesheets (<link rel="stylesheet" href="...">) einsammeln.
+  //    Bei dangerouslySetInnerHTML lädt der Browser <link> nicht → wir rendern sie selbst.
+  html = html.replace(/<link\b[^>]*>/gi, (tag: string) => {
+    if (!/rel\s*=\s*["']?[^"'>]*stylesheet/i.test(tag)) return tag;
+    const hrefMatch = tag.match(/href\s*=\s*["']([^"']+)["']/i);
+    if (hrefMatch && hrefMatch[1]) links.push(hrefMatch[1].trim());
+    return '';
+  });
+
+  // 2. CSS extrahieren
   html = html.replace(/<style[^>]*>([\s\S]*?)<\/style>/gi, (_m, css) => {
     cssParts.push(css);
     return '';
   });
 
-  // 2. Doctype / html / head / body Hüllen entfernen (falls komplettes Dokument hochgeladen wurde)
+  // 3. Doctype / html / head / body Hüllen entfernen (falls komplettes Dokument hochgeladen wurde)
   html = html.replace(/<!DOCTYPE[^>]*>/gi, '');
   html = html.replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '');
   html = html.replace(/<\/?(html|body|main)[^>]*>/gi, '');
@@ -61,7 +72,7 @@ export function parseTemplate(raw: string): ParsedTemplate {
     hasBlocks = false;
   }
 
-  return { css: cssParts.join('\n'), blocks, hasBlocks };
+  return { css: cssParts.join('\n'), links, blocks, hasBlocks };
 }
 
 function escapeHtml(value: any): string {
@@ -75,11 +86,30 @@ function escapeHtml(value: any): string {
 }
 
 /**
+ * Löst relative Asset-Pfade gegen den Asset-Basis-Pfad des Shops auf.
+ * Absolute URLs, absolute Pfade, Daten-URLs und Anker bleiben unverändert.
+ */
+export function resolveAssetUrl(value: string, assetBase?: string): string {
+  const v = String(value || '').trim();
+  if (!v) return v;
+  if (/^(https?:)?\/\//i.test(v)) return v;
+  if (/^(data:|blob:|mailto:|tel:|#)/i.test(v)) return v;
+  if (v.startsWith('/')) return v;
+  if (!assetBase) return v;
+  return assetBase.replace(/\/+$/, '') + '/' + v.replace(/^\.?\//, '');
+}
+
+/**
  * Ersetzt Platzhalter + Schleifen und gibt einen HTML-String zurück.
  * Widgets ({{content}}, {{widget:x}}) werden zu Marker-<div>s, in die React
  * später per Portal die fertigen Komponenten rendert.
  */
-export function renderTemplateToString(templateHtml: string, context: Record<string, any>): string {
+export function renderTemplateToString(
+  templateHtml: string,
+  context: Record<string, any>,
+  assetBase?: string
+): string {
+  const base = assetBase !== undefined ? assetBase : (context?.asset_base || '');
   let html = String(templateHtml || '');
 
   // a) Widgets → Marker (vor den Skalaren, damit {{content}} nicht als Skalar gilt)
@@ -90,18 +120,29 @@ export function renderTemplateToString(templateHtml: string, context: Record<str
     return `<div data-shop-widget="content"></div>`;
   });
 
-  // b) Schleifen {{#key}} ... {{/key}} (mehrere Durchläufe für verschachtelte Listen)
+  // b) Schleifen/Bedingungen (mehrere Durchläufe für verschachtelte Listen)
   for (let pass = 0; pass < 5; pass++) {
     let changed = false;
+
+    // b1) Invertierte Bedingung {{^key}} ... {{/key}} (rendert, wenn leer/falsy)
+    html = html.replace(/\{\{\s*\^\s*([\w-]+)\s*\}\}([\s\S]*?)\{\{\s*\/\s*\1\s*\}\}/g, (_m, key: string, inner: string) => {
+      changed = true;
+      const value = context[key];
+      const isEmpty = Array.isArray(value) ? value.length === 0 : !value;
+      return isEmpty ? renderTemplateToString(inner, context, base) : '';
+    });
+
+    // b2) Schleife/Bedingung {{#key}} ... {{/key}}
     html = html.replace(/\{\{\s*#\s*([\w-]+)\s*\}\}([\s\S]*?)\{\{\s*\/\s*\1\s*\}\}/g, (_m, key: string, inner: string) => {
       const list = context[key];
       changed = true;
       if (Array.isArray(list)) {
-        return list.map((item: any) => renderTemplateToString(inner, { ...context, ...item })).join('');
+        return list.map((item: any) => renderTemplateToString(inner, { ...context, ...item }, base)).join('');
       }
       // Nicht-Array: als Bedingung nutzen (truthy → einmal rendern, falsy → nichts)
-      return list ? renderTemplateToString(inner, context) : '';
+      return list ? renderTemplateToString(inner, context, base) : '';
     });
+
     if (!changed) break;
   }
 
@@ -116,6 +157,13 @@ export function renderTemplateToString(templateHtml: string, context: Record<str
     return escapeHtml(context[key]);
   });
 
+  // e) Relative Asset-Pfade (Bilder, Stylesheets) gegen /shop-assets/<shopId>/ auflösen
+  if (base) {
+    html = html.replace(/\b(href|src|poster|data-src)\s*=\s*"([^"]*)"/gi, (_m, attr: string, val: string) => {
+      return `${attr}="${resolveAssetUrl(val, base)}"`;
+    });
+  }
+
   return html;
 }
 
@@ -125,26 +173,31 @@ interface ShopTemplateProps {
   context: Record<string, any>;
   widgets?: Record<string, React.ReactNode>;
   fallback?: React.ReactNode;
+  /** Basis-Pfad für relative Assets, z.B. /shop-assets/<shopId>/ */
+  assetBase?: string;
 }
 
 /**
  * Rendert einen Template-Block. Ist kein Block vorhanden oder schlägt das
  * Rendern fehl, wird automatisch der Standard-Inhalt (fallback) angezeigt.
  */
-export function ShopTemplate({ template, page, context, widgets = {}, fallback = null }: ShopTemplateProps) {
+export function ShopTemplate({ template, page, context, widgets = {}, fallback = null, assetBase }: ShopTemplateProps) {
   const blockHtml = template?.blocks?.[page] || '';
   const containerRef = useRef<HTMLDivElement>(null);
   const [targets, setTargets] = useState<Record<string, HTMLElement>>({});
 
+  const base = assetBase !== undefined ? assetBase : (context?.asset_base || '');
+  const links = template?.links || [];
+
   const html = useMemo(() => {
     if (!blockHtml) return '';
     try {
-      return renderTemplateToString(blockHtml, context || {});
+      return renderTemplateToString(blockHtml, context || {}, base);
     } catch (e) {
       console.error('Template render error:', e);
       return '';
     }
-  }, [blockHtml, context]);
+  }, [blockHtml, context, base]);
 
   useEffect(() => {
     const root = containerRef.current;
@@ -162,6 +215,9 @@ export function ShopTemplate({ template, page, context, widgets = {}, fallback =
   return (
     <div style={{ display: 'contents' }}>
       {template?.css ? <style>{template.css}</style> : null}
+      {links.map((href) => (
+        <link key={href} rel="stylesheet" href={resolveAssetUrl(href, base)} />
+      ))}
       <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />
       {Object.entries(targets).map(([name, el]) =>
         widgets[name] ? createPortal(<React.Fragment key={name}>{widgets[name]}</React.Fragment>, el) : null
@@ -176,6 +232,7 @@ export function buildBaseContext(shop: any, shopBaseUrl: string) {
     shop_name: shop?.name || '',
     logo_url: shop?.logo_url || '',
     footer_logo_url: shop?.footer_logo_url || '',
+    asset_base: shop?.id ? `/shop-assets/${shop.id}/` : '',
     primary_color: shop?.primary_color || '#000000',
     secondary_color: shop?.secondary_color || '#ffffff',
     shop_url: shopBaseUrl || '/',

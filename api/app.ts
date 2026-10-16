@@ -63,7 +63,7 @@ import downloadsRoutes, { DOWNLOADS_DIR } from './routes/downloads.js'
 import backupRoutes from './routes/backup.js'
 import adminRoutes from './routes/admin.js'
 import shopRoutes from './routes/shops.js'
-import shopManagementRoutes from './routes/shop_management.js'
+import shopManagementRoutes, { SHOP_TEMPLATES_DIR } from './routes/shop_management.js'
 import shopCustomerRoutes from './routes/shop_customers.js'
 import variableRoutes from './routes/variables.js'
 import personalizationRoutes from './routes/personalization.js'
@@ -263,6 +263,25 @@ app.get('/api/debug/shopware-list', async (req, res) => {
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '30d', immutable: true }))
 app.use('/downloads', express.static(DOWNLOADS_DIR))
 app.use('/labels', express.static(path.join(path.dirname(UPLOAD_DIR), 'shipping_labels')))
+
+// Serve Custom-Design-Template-Assets (nur statische Dateien, kein HTML/JS ausführbar)
+const ALLOWED_TEMPLATE_ASSET_EXT = new Set([
+  '.css', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.ico',
+  '.woff', '.woff2', '.ttf', '.otf', '.eot', '.json', '.txt', '.md'
+])
+app.use('/shop-assets', (req: Request, res: Response, next: NextFunction) => {
+  const ext = path.extname(req.path).toLowerCase()
+  if (!ALLOWED_TEMPLATE_ASSET_EXT.has(ext)) {
+    res.status(404).end()
+    return
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  // SVG kann Skripte enthalten → beim Direktaufruf neutralisieren
+  if (ext === '.svg') {
+    res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:")
+  }
+  next()
+}, express.static(SHOP_TEMPLATES_DIR, { maxAge: '7d' }))
 
 app.get(['/media/*', '/media'], (req: Request, res: Response, next: NextFunction) => {
   try {

@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
-import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical, Send, CreditCard, Bell, ChevronUp, ChevronDown, Star } from 'lucide-react';
+import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical, Send, CreditCard, Bell, ChevronUp, ChevronDown, Star, Upload, Download } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
 import { SAMPLE_TEMPLATE } from '../template/templateEngine';
 
@@ -127,10 +127,20 @@ const ShopDashboard: React.FC = () => {
   const [templateEnabled, setTemplateEnabled] = useState(false);
   const [templateSaving, setTemplateSaving] = useState(false);
   const [templateMsg, setTemplateMsg] = useState<string | null>(null);
+  const [templateFiles, setTemplateFiles] = useState<Array<{ path: string; size: number; url: string }>>([]);
+  const [zipUploading, setZipUploading] = useState(false);
+
+  const loadTemplateFiles = () => {
+    if (!shopId) return;
+    fetch(`/api/shop-management/${shopId}/template/files`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setTemplateFiles(d.data.files || []); })
+      .catch(console.error);
+  };
 
   useEffect(() => {
     if (activeTab !== 'design' || !isAdmin || !shopId) return;
-    fetch(`/api/shops/${shopId}/template`)
+    fetch(`/api/shop-management/${shopId}/template`)
       .then(r => r.json())
       .then(d => {
         if (d.success) {
@@ -139,6 +149,7 @@ const ShopDashboard: React.FC = () => {
         }
       })
       .catch(console.error);
+    loadTemplateFiles();
   }, [activeTab, isAdmin, shopId]);
 
   const saveTemplate = async () => {
@@ -146,7 +157,7 @@ const ShopDashboard: React.FC = () => {
     setTemplateSaving(true);
     setTemplateMsg(null);
     try {
-      const res = await fetch(`/api/shops/${shopId}/template`, {
+      const res = await fetch(`/api/shop-management/${shopId}/template`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: templateEnabled, html: templateHtml })
@@ -162,6 +173,50 @@ const ShopDashboard: React.FC = () => {
       setTemplateMsg('Fehler beim Speichern');
     } finally {
       setTemplateSaving(false);
+      setTimeout(() => setTemplateMsg(null), 4000);
+    }
+  };
+
+  const uploadTemplateZip = async (file: File) => {
+    if (!shopId) return;
+    setZipUploading(true);
+    setTemplateMsg(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`/api/shop-management/${shopId}/template/zip`, { method: 'POST', body: form });
+      const data = await res.json();
+      if (data.success) {
+        setTemplateHtml(data.data.html || '');
+        loadTemplateFiles();
+        const skipped = data.data.skipped?.length || 0;
+        setTemplateMsg(`Paket hochgeladen ✓ (${data.data.files?.length || 0} Dateien${skipped ? `, ${skipped} übersprungen` : ''})`);
+      } else {
+        setTemplateMsg(data.error || 'Upload fehlgeschlagen');
+      }
+    } catch (e) {
+      setTemplateMsg('Upload fehlgeschlagen');
+    } finally {
+      setZipUploading(false);
+      setTimeout(() => setTemplateMsg(null), 6000);
+    }
+  };
+
+  const deleteTemplatePackage = async () => {
+    if (!shopId) return;
+    if (!confirm('Hochgeladenes Paket (CSS, Bilder, Fonts) wirklich löschen?')) return;
+    try {
+      const res = await fetch(`/api/shop-management/${shopId}/template/zip`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        setTemplateFiles([]);
+        setTemplateMsg('Paket gelöscht ✓');
+      } else {
+        setTemplateMsg(data.error || 'Löschen fehlgeschlagen');
+      }
+    } catch (e) {
+      setTemplateMsg('Löschen fehlgeschlagen');
+    } finally {
       setTimeout(() => setTemplateMsg(null), 4000);
     }
   };
@@ -1889,11 +1944,69 @@ const ShopDashboard: React.FC = () => {
                                 </button>
                             </div>
 
-                            {/* Upload + Beispiel */}
+                            {/* Paket-Upload (ZIP) */}
+                            <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-4">
+                                <p className="text-sm font-bold text-slate-800 mb-1">ZIP-Paket hochladen</p>
+                                <p className="text-xs text-slate-600 mb-3">
+                                    Empfohlen: <span className="font-mono">index.html</span> + <span className="font-mono">assets/style.css</span> + Bilder/Fonts als ZIP.
+                                    Relative Pfade wie <span className="font-mono">assets/bild.png</span> werden automatisch aufgelöst.
+                                    JavaScript wird nicht ausgeführt.
+                                </p>
+                                <div className="flex flex-wrap gap-3">
+                                    <label className={`cursor-pointer text-white px-4 py-2 rounded-lg transition-colors flex items-center text-sm font-bold ${zipUploading ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+                                        <Upload size={16} className="mr-2" />
+                                        {zipUploading ? 'Wird hochgeladen...' : 'ZIP-Paket wählen'}
+                                        <input
+                                            type="file"
+                                            className="hidden"
+                                            accept=".zip,application/zip"
+                                            disabled={zipUploading}
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) uploadTemplateZip(file);
+                                                e.target.value = '';
+                                            }}
+                                        />
+                                    </label>
+                                    <a
+                                        href={`/api/shop-management/${shopId}/template/standard.zip`}
+                                        className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center text-sm font-medium"
+                                    >
+                                        <Download size={16} className="mr-2" />
+                                        Standard-Vorlage herunterladen
+                                    </a>
+                                </div>
+
+                                {templateFiles.length > 0 && (
+                                    <div className="mt-3 pt-3 border-t border-indigo-200">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <p className="text-xs font-bold text-slate-700">Paket-Inhalt ({templateFiles.length} Dateien)</p>
+                                            <button
+                                                type="button"
+                                                onClick={deleteTemplatePackage}
+                                                className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center"
+                                            >
+                                                <Trash2 size={13} className="mr-1" />
+                                                Paket löschen
+                                            </button>
+                                        </div>
+                                        <div className="max-h-32 overflow-y-auto space-y-1">
+                                            {templateFiles.map(f => (
+                                                <div key={f.path} className="flex items-center justify-between text-[11px] font-mono text-slate-600 bg-white rounded px-2 py-1">
+                                                    <span className="truncate">{f.path}</span>
+                                                    <span className="text-slate-400 ml-2 flex-shrink-0">{Math.max(1, Math.round(f.size / 1024))} KB</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Einzeldatei + Beispiel */}
                             <div className="flex flex-wrap gap-3 mb-3">
                                 <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center text-sm font-medium">
                                     <ImageIcon size={16} className="mr-2" />
-                                    HTML-Datei hochladen
+                                    Einzelne HTML-Datei
                                     <input
                                         type="file"
                                         className="hidden"
@@ -1949,8 +2062,9 @@ const ShopDashboard: React.FC = () => {
                                     </div>
                                     <div>
                                         <p className="font-bold text-slate-800 mb-1">Werte</p>
-                                        <p className="font-mono">{`{{shop_name}} {{logo_url}} {{primary_color}} {{secondary_color}} {{shop_url}} {{year}}`}</p>
+                                        <p className="font-mono">{`{{shop_name}} {{logo_url}} {{footer_logo_url}} {{primary_color}} {{secondary_color}} {{shop_url}} {{asset_base}} {{year}} {{cart_count}}`}</p>
                                         <p className="font-mono">{`{{welcome_text}} {{contact_phone}} {{contact_email}} {{contact_address}} {{opening_hours}}`}</p>
+                                        <p className="font-mono">{`{{social_instagram}} {{social_tiktok}} {{social_whatsapp}}`}</p>
                                     </div>
                                     <div>
                                         <p className="font-bold text-slate-800 mb-1">Standard-Inhalt &amp; Widgets</p>
@@ -1958,14 +2072,20 @@ const ShopDashboard: React.FC = () => {
                                         <p className="font-mono">{`{{widget:products}}`} – fertiges Produktraster</p>
                                     </div>
                                     <div>
-                                        <p className="font-bold text-slate-800 mb-1">Listen</p>
+                                        <p className="font-bold text-slate-800 mb-1">Listen &amp; Bedingungen</p>
                                         <p className="font-mono">{`{{#products}}…{{/products}}`} (Felder: name, price, url, image, product_number)</p>
                                         <p className="font-mono">{`{{#categories}}…{{/categories}}`} (Felder: name, url)</p>
                                         <p className="font-mono">{`{{#cart_items}}…{{/cart_items}}`} (Felder: name, price, quantity, image, size, color)</p>
+                                        <p className="font-mono">{`{{^logo_url}}…{{/logo_url}}`} – wird angezeigt, wenn der Wert leer ist</p>
                                     </div>
                                     <div>
                                         <p className="font-bold text-slate-800 mb-1">Format-Notation</p>
                                         <p className="font-mono">{`{{key}}`} = HTML-sicher (escaped) · {`{{{key}}}`} = Roh-HTML erlaubt</p>
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-800 mb-1">Bilder &amp; Dateien aus dem ZIP-Paket</p>
+                                        <p className="font-mono">{`<img src="assets/logo.png">`} – relative Pfade werden automatisch aufgelöst</p>
+                                        <p className="font-mono">{`<link rel="stylesheet" href="assets/style.css">`} – wird eingebunden</p>
                                     </div>
                                     <div>
                                         <p className="font-bold text-slate-800 mb-1">Aktionen (Buttons/Links)</p>

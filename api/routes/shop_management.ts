@@ -1,5 +1,7 @@
 
 import { Router } from 'express';
+import multer from 'multer';
+import AdmZip from 'adm-zip';
 import db from '../db.js';
 import crypto from 'crypto';
 import fs from 'fs-extra';
@@ -8,6 +10,7 @@ import { DATA_DIR } from '../db.js';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DhlClient } from '../services/dhl.js';
 import { sendShipmentNotification, sendPickupReady } from '../services/email.js';
+import { STANDARD_TEMPLATE_ENTRY, STANDARD_TEMPLATE_CSS, STANDARD_TEMPLATE_README } from '../templates/standardTemplate.js';
 
 const router = Router();
 
@@ -115,6 +118,165 @@ router.put('/:shopId/template', (req, res) => {
     const result = db.prepare('UPDATE shops SET custom_template_enabled = ?, custom_template_html = ? WHERE id = ?').run(enabled, html, shopId);
     if (result.changes === 0) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
     res.json({ success: true, data: { enabled: !!enabled } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================
+// Custom Design-Template: ZIP-Paket (HTML + CSS + Bilder/Fonts)
+// ============================================================
+export const SHOP_TEMPLATES_DIR = path.join(DATA_DIR, 'shop_templates');
+fs.ensureDirSync(SHOP_TEMPLATES_DIR);
+
+// Erlaubte Dateitypen im Paket. JavaScript ist bewusst NICHT erlaubt (wird nicht ausgeführt).
+const ALLOWED_PACKAGE_EXT = new Set([
+  '.html', '.htm', '.css', '.json', '.svg', '.png', '.jpg', '.jpeg', '.webp',
+  '.gif', '.ico', '.woff', '.woff2', '.ttf', '.otf', '.eot', '.txt', '.md'
+]);
+
+const packageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 }
+});
+
+/** Verhindert Pfad-Traversal beim Entpacken. Liefert null bei unsicheren Pfaden. */
+function safeTemplatePath(root: string, relative: string): string | null {
+  const rel = relative.replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!rel || rel.includes('\0')) return null;
+  const rootResolved = path.resolve(root);
+  const target = path.resolve(rootResolved, rel);
+  if (target !== rootResolved && !target.startsWith(rootResolved + path.sep)) return null;
+  return target;
+}
+
+// Dateiliste des aktuell installierten Pakets
+router.get('/:shopId/template/files', (req, res) => {
+  try {
+    const { shopId } = req.params;
+    const dir = path.join(SHOP_TEMPLATES_DIR, shopId);
+    const files: Array<{ path: string; size: number; url: string }> = [];
+    if (fs.existsSync(dir)) {
+      const walk = (current: string, prefix: string) => {
+        for (const entry of fs.readdirSync(current)) {
+          const full = path.join(current, entry);
+          const rel = prefix ? `${prefix}/${entry}` : entry;
+          const stat = fs.statSync(full);
+          if (stat.isDirectory()) walk(full, rel);
+          else files.push({ path: rel, size: stat.size, url: `/shop-assets/${shopId}/${rel}` });
+        }
+      };
+      walk(dir, '');
+    }
+    res.json({ success: true, data: { files } });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ZIP-Paket hochladen und entpacken
+router.post('/:shopId/template/zip', (req, res, next) => {
+  // Admin-Check VOR dem Einlesen der Datei
+  if (!requireAdminForTemplate(req, res)) return;
+  next();
+}, packageUpload.single('file'), (req, res) => {
+  try {
+    const { shopId } = req.params;
+
+    const shopRow = db.prepare('SELECT id FROM shops WHERE id = ?').get(shopId) as any;
+    if (!shopRow) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+
+    const file = (req as any).file as { buffer: Buffer } | undefined;
+    if (!file) return res.status(400).json({ success: false, error: 'Keine ZIP-Datei empfangen.' });
+
+    let zip: InstanceType<typeof AdmZip>;
+    try {
+      zip = new AdmZip(file.buffer);
+    } catch {
+      return res.status(400).json({ success: false, error: 'ZIP-Datei konnte nicht gelesen werden.' });
+    }
+
+    const targetDir = path.join(SHOP_TEMPLATES_DIR, shopId);
+    fs.removeSync(targetDir);
+    fs.ensureDirSync(targetDir);
+
+    const written: string[] = [];
+    const skipped: string[] = [];
+
+    for (const entry of zip.getEntries()) {
+      if (entry.isDirectory) continue;
+      const name = entry.entryName.replace(/\\/g, '/');
+      if (/^__MACOSX\//i.test(name) || /(^|\/)\.DS_Store$/i.test(name) || /(^|\/)\._/.test(name)) continue;
+
+      const ext = path.extname(name).toLowerCase();
+      if (!ALLOWED_PACKAGE_EXT.has(ext)) { skipped.push(name); continue; }
+
+      const target = safeTemplatePath(targetDir, name);
+      if (!target) { skipped.push(name); continue; }
+
+      fs.ensureDirSync(path.dirname(target));
+      fs.writeFileSync(target, entry.getData());
+      written.push(name);
+    }
+
+    // Einstiegs-HTML bestimmen: index.html > template.html > flachste HTML-Datei
+    const htmlFiles = written.filter((n) => /\.html?$/i.test(n));
+    const entryName =
+      htmlFiles.find((n) => n.toLowerCase() === 'index.html') ||
+      htmlFiles.find((n) => n.toLowerCase() === 'template.html') ||
+      htmlFiles.slice().sort((a, b) => a.split('/').length - b.split('/').length)[0];
+
+    if (!entryName) {
+      fs.removeSync(targetDir);
+      return res.status(400).json({
+        success: false,
+        error: 'Keine HTML-Datei im Paket gefunden. Bitte eine index.html im Wurzelverzeichnis mitliefern.'
+      });
+    }
+
+    const html = fs.readFileSync(path.join(targetDir, entryName), 'utf8');
+    db.prepare('UPDATE shops SET custom_template_html = ? WHERE id = ?').run(html, shopId);
+
+    res.json({
+      success: true,
+      data: {
+        entry: entryName,
+        html,
+        files: written,
+        skipped
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Paket-Assets wieder entfernen
+router.delete('/:shopId/template/zip', (req, res) => {
+  try {
+    if (!requireAdminForTemplate(req, res)) return;
+    const { shopId } = req.params;
+    fs.removeSync(path.join(SHOP_TEMPLATES_DIR, shopId));
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Standard-Vorlage als ZIP herunterladen (Bearbeitungsgrundlage)
+router.get('/:shopId/template/standard.zip', (req, res) => {
+  try {
+    if (!requireAdminForTemplate(req, res)) return;
+    const zip = new AdmZip();
+    zip.addFile('index.html', Buffer.from(STANDARD_TEMPLATE_ENTRY, 'utf8'));
+    zip.addFile('assets/style.css', Buffer.from(STANDARD_TEMPLATE_CSS, 'utf8'));
+    zip.addFile('README.txt', Buffer.from(STANDARD_TEMPLATE_README, 'utf8'));
+    const buffer = zip.toBuffer();
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="shop-standard-template.zip"');
+    res.setHeader('Content-Length', String(buffer.length));
+    res.send(buffer);
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -175,8 +175,9 @@ const ShopLayout: React.FC = () => {
     templateContext: {
       ...buildBaseContext(shop, shopBaseUrl),
       categories: navCategories,
+      cart_count: cartCount,
     },
-  }), [shop, categories, shopBaseUrl, parsedTemplate, navCategories]);
+  }), [shop, categories, shopBaseUrl, parsedTemplate, navCategories, cartCount]);
 
   // Aktionen aus dem Custom-Template (Buttons/Links mit data-shop-action)
   useEffect(() => {
