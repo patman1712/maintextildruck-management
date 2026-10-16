@@ -148,6 +148,64 @@ const sendEmailWithInvoice = async (opts: {
     }
 };
 
+// Fallback-Empfänger, wenn im Shop keine eigene Kontakt-E-Mail hinterlegt ist
+export const DEFAULT_SHOP_CONTACT_RECIPIENT = 'info@maintextildruck.com';
+
+// Kontaktformular eines Onlineshops: leitet die Nachricht an die im Shop hinterlegte
+// E-Mail-Adresse weiter (oder an die Firmen-Standardadresse als Fallback).
+export const sendShopContactMessage = async (opts: {
+    to: string;
+    shopName: string;
+    firstName?: string;
+    lastName?: string;
+    email: string;
+    subject?: string;
+    message: string;
+}): Promise<boolean> => {
+    const fullName = [opts.firstName, opts.lastName].filter(Boolean).join(' ').trim();
+    const subject = `[Shop-Kontakt] ${opts.subject || 'Neue Nachricht'} – ${opts.shopName}`;
+
+    const text = [
+        `Neue Nachricht über das Kontaktformular des Shops "${opts.shopName}".`,
+        '',
+        `Name:    ${fullName || '-'}`,
+        `E-Mail:  ${opts.email}`,
+        `Betreff: ${opts.subject || '-'}`,
+        '',
+        'Nachricht:',
+        opts.message,
+    ].join('\n');
+
+    const esc = (value: string) => String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br />');
+
+    const html = `
+        <div style="font-family: Arial, Helvetica, sans-serif; color: #0f172a; line-height: 1.6;">
+            <h2 style="margin: 0 0 12px;">Neue Kontaktanfrage</h2>
+            <p style="margin: 0 0 16px; color: #475569;">
+                Über das Kontaktformular des Shops <strong>${esc(opts.shopName)}</strong> ist eine neue Nachricht eingegangen.
+            </p>
+            <table style="border-collapse: collapse; margin-bottom: 16px;">
+                <tr><td style="padding: 4px 12px 4px 0; color: #64748b;">Name</td><td style="padding: 4px 0;">${esc(fullName) || '-'}</td></tr>
+                <tr><td style="padding: 4px 12px 4px 0; color: #64748b;">E-Mail</td><td style="padding: 4px 0;">${esc(opts.email)}</td></tr>
+                <tr><td style="padding: 4px 12px 4px 0; color: #64748b;">Betreff</td><td style="padding: 4px 0;">${esc(opts.subject || '-')}</td></tr>
+            </table>
+            <div style="border-left: 3px solid #0f172a; padding: 4px 0 4px 12px; white-space: pre-wrap;">${esc(opts.message)}</div>
+        </div>
+    `;
+
+    return await sendEmailWithInvoice({
+        to: [opts.to],
+        subject,
+        text,
+        html,
+        invoicePath: null,
+    });
+};
+
 export const sendOrderConfirmation = async (orderId: string, invoicePath: string) => {
     const config = getEmailConfig();
     if (!config) {

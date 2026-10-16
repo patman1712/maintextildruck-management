@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import db from '../db.js';
 import crypto from 'crypto';
+import { sendShopContactMessage, DEFAULT_SHOP_CONTACT_RECIPIENT } from '../services/email.js';
 
 const router = Router();
 
@@ -449,6 +450,66 @@ router.get('/:id/shipping-config', (req, res) => {
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Kontaktformular: sendet eine Nachricht an die Shop-E-Mail (Fallback: Firmenadresse)
+const contactRateLimit = new Map<string, number>();
+const CONTACT_RATE_LIMIT_MS = 30 * 1000;
+
+router.post('/:id/contact', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const shopId = id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)
+      ? db.prepare('SELECT id, name, contact_email FROM shops WHERE id = ?').get(id)
+      : db.prepare('SELECT id, name, contact_email FROM shops WHERE domain_slug = ? OR custom_domain = ?').get(id, id);
+
+    const shop = shopId as any;
+    if (!shop) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+
+    const body = req.body as any;
+    const firstName = String(body?.firstName || '').trim().slice(0, 100);
+    const lastName = String(body?.lastName || '').trim().slice(0, 100);
+    const email = String(body?.email || '').trim().slice(0, 200);
+    const subject = String(body?.subject || '').trim().slice(0, 200);
+    const message = String(body?.message || '').trim().slice(0, 5000);
+
+    if (!message) {
+      return res.status(400).json({ success: false, error: 'Bitte gib eine Nachricht ein.' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, error: 'Bitte gib eine gültige E-Mail-Adresse ein.' });
+    }
+
+    // Einfaches Rate-Limit gegen Spam (pro IP)
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
+    const lastSent = contactRateLimit.get(ip) || 0;
+    if (Date.now() - lastSent < CONTACT_RATE_LIMIT_MS) {
+      return res.status(429).json({ success: false, error: 'Bitte warte einen Moment, bevor du erneut sendest.' });
+    }
+
+    const recipient = (shop.contact_email || '').trim() || DEFAULT_SHOP_CONTACT_RECIPIENT;
+
+    const sent = await sendShopContactMessage({
+      to: recipient,
+      shopName: shop.name || 'Onlineshop',
+      firstName,
+      lastName,
+      email,
+      subject,
+      message,
+    });
+
+    if (!sent) {
+      return res.status(500).json({ success: false, error: 'Die Nachricht konnte nicht versendet werden. Bitte später erneut versuchen.' });
+    }
+
+    contactRateLimit.set(ip, Date.now());
+    res.json({ success: true, data: { recipient } });
+  } catch (error: any) {
+    console.error('Shop contact form error:', error);
+    res.status(500).json({ success: false, error: 'Die Nachricht konnte nicht versendet werden.' });
   }
 });
 
