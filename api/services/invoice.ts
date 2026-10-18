@@ -562,9 +562,11 @@ export const generateInvoice = async (
         };
 
         let logoAdded = false;
-        const headerY = 15;
-        const headerLogoX = 20;
-        const headerLogoWidth = 42;
+        const headerY = 16;
+        const senderBlockX = 20;
+        const senderBlockWidth = 80;
+        const headerLogoWidth = 36;
+        const headerLogoX = senderBlockX + ((senderBlockWidth - headerLogoWidth) / 2);
 
         // Im Rechnungskopf immer nur EIN Logo:
         // 1. Shop-Logo, 2. Fallback auf Main-Textildruck-Logo.
