@@ -87,6 +87,7 @@ const sendEmailWithInvoice = async (opts: {
                 } as any);
 
                 if (error) {
+                    console.error('Resend send failed:', error.message || error);
                     const { data: fallbackData, error: fallbackError } = await resend.emails.send({
                         from: 'onboarding@resend.dev',
                         to: toList,
@@ -96,14 +97,18 @@ const sendEmailWithInvoice = async (opts: {
                         attachments: attachments.length ? attachments : undefined
                     } as any);
 
-                    if (fallbackError) return false;
+                    if (fallbackError) {
+                        console.error('Resend fallback failed:', fallbackError.message || fallbackError);
+                        return false;
+                    }
                     console.log('Resend Email sent (Fallback):', fallbackData?.id);
                     return true;
                 }
 
                 console.log('Resend Email sent:', data?.id);
                 return true;
-            } catch {
+            } catch (e: any) {
+                console.error('Resend exception:', e?.message || e);
                 return false;
             }
         }

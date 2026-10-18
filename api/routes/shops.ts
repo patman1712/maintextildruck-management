@@ -462,8 +462,8 @@ router.post('/:id/contact', async (req, res) => {
     const { id } = req.params;
 
     const shopId = id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)
-      ? db.prepare('SELECT id, name, contact_email FROM shops WHERE id = ?').get(id)
-      : db.prepare('SELECT id, name, contact_email FROM shops WHERE domain_slug = ? OR custom_domain = ?').get(id, id);
+      ? db.prepare('SELECT id, name, notification_email FROM shops WHERE id = ?').get(id)
+      : db.prepare('SELECT id, name, notification_email FROM shops WHERE domain_slug = ? OR custom_domain = ?').get(id, id);
 
     const shop = shopId as any;
     if (!shop) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
@@ -489,7 +489,13 @@ router.post('/:id/contact', async (req, res) => {
       return res.status(429).json({ success: false, error: 'Bitte warte einen Moment, bevor du erneut sendest.' });
     }
 
-    const recipient = (shop.contact_email || '').trim() || DEFAULT_SHOP_CONTACT_RECIPIENT;
+    // Empfänger: Shop-eigene E-Mail → globale Shop-Kontaktadresse → Firmen-Fallback
+    const globalContent = db.prepare("SELECT contact_email, order_notification_email FROM global_shop_content WHERE id = 'main'").get() as any;
+    const recipient =
+      (shop.notification_email || '').trim() ||
+      (globalContent?.contact_email || '').trim() ||
+      (globalContent?.order_notification_email || '').trim() ||
+      DEFAULT_SHOP_CONTACT_RECIPIENT;
 
     const sent = await sendShopContactMessage({
       to: recipient,

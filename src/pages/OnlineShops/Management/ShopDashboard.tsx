@@ -1415,6 +1415,20 @@ const ShopDashboard: React.FC = () => {
                         </p>
                     </div>
 
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Kontakt-E-Mail für das Kontaktformular</label>
+                        <input 
+                            type="email" 
+                            className="w-full border border-slate-300 rounded-lg p-2"
+                            value={(shop as any).notification_email || ''}
+                            onChange={(e) => setShop({ ...(shop as any), notification_email: e.target.value } as any)}
+                            placeholder="z.B. kontakt@mein-verein.de"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                            Nachrichten aus dem Kontaktformular des Shops gehen an diese Adresse. Bleibt das Feld leer, wird die globale Shop-Kontaktadresse bzw. info@maintextildruck.com verwendet.
+                        </p>
+                    </div>
+
                     <div className="pt-6 border-t border-slate-200">
                         <h4 className="font-bold text-slate-700 mb-4">Spenden</h4>
                         <label className="flex items-center space-x-3">
