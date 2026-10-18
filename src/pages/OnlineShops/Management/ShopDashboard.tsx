@@ -236,7 +236,11 @@ const ShopDashboard: React.FC = () => {
         const extras: string[] = [];
         if (data.data.hasEmailTemplate) extras.push('E-Mail-Vorlage');
         if (data.data.hasInvoiceDesign) extras.push('Rechnungs-Design');
-        setTemplateMsg(`Paket hochgeladen ✓ (${data.data.files?.length || 0} Dateien${skipped ? `, ${skipped} übersprungen` : ''}${extras.length ? ` · ${extras.join(' + ')} übernommen` : ''})`);
+        const warnings: string[] = data.data.warnings || [];
+        setTemplateMsg(
+          `Paket hochgeladen ✓ (${data.data.files?.length || 0} Dateien${skipped ? `, ${skipped} übersprungen` : ''}${extras.length ? ` · ${extras.join(' + ')} übernommen` : ''})` +
+          (warnings.length ? ` — Hinweis: ${warnings.join(' ')}` : '')
+        );
       } else {
         setTemplateMsg(data.error || 'Upload fehlgeschlagen');
       }
@@ -2211,6 +2215,7 @@ const ShopDashboard: React.FC = () => {
                                         <p className="font-mono mt-1">logo_url · primary_color · muted_color · text_color · font_size_title · font_size_footer</p>
                                         <p className="font-mono">background_color · background_image · font_family (helvetica/times/courier)</p>
                                         <p className="font-mono">font_file · font_file_bold (eigene .ttf aus dem ZIP, z.B. assets/fonts/Inter-Regular.ttf)</p>
+                                        <p className="font-mono">title_font_file · title_font_family (Display-Schrift nur für den Rechnungstitel, z.B. assets/fonts/Anton-Regular.ttf; .ttf erforderlich)</p>
                                         <p className="font-mono">header_company_name · intro_text · payment_note · footer_note · footer_website</p>
                                         <p className="mt-1 text-slate-500">„Test-Rechnung (PDF)" zeigt sofort das aktuelle Design.</p>
                                     </div>

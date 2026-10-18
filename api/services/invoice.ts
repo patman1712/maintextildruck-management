@@ -308,6 +308,10 @@ export const generateInvoice = async (
             font_family?: string;
             font_file?: string;
             font_file_bold?: string;
+            // Optionale Display-Schrift nur für die Überschrift (Rechnungstitel).
+            // title_font_file = TTF aus dem ZIP, title_font_family = Name der Schrift.
+            title_font_family?: string;
+            title_font_file?: string;
             font_size_title?: number;
             font_size_footer?: number;
             header_company_name?: string;
@@ -385,6 +389,46 @@ export const generateInvoice = async (
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
 
+        // jsPDF arbeitet hier in Millimetern, Schriftgrößen aber in Punkten.
+        // Alle Zeilenhöhen werden deshalb explizit umgerechnet (nie Punkt/mm mischen).
+        const MM_PER_PT = 25.4 / 72;
+        const lineHeightFor = (pt: number, factor = 1.2) => pt * factor * MM_PER_PT;
+
+        // Textumbruch mit der TATSÄCHLICH aktiven Schrift und Schriftgröße.
+        // Zu lange Einzelwörter (z.B. eine IBAN ohne Leerzeichen) werden zeichenweise
+        // umbrochen – es wird niemals Text abgeschnitten.
+        const wrapText = (text: string, maxWidth: number): string[] => {
+            const raw = String(text ?? '');
+            if (!raw.trim() || maxWidth <= 0) return [];
+            const out: string[] = [];
+            for (const paragraph of raw.split(/\r?\n/)) {
+                const para = paragraph.trim();
+                if (!para) continue;
+                const segments = doc.splitTextToSize(para, maxWidth) as string[];
+                for (const segment of segments) {
+                    if (doc.getTextWidth(segment) <= maxWidth) {
+                        out.push(segment);
+                        continue;
+                    }
+                    let current = '';
+                    for (const word of segment.split(' ')) {
+                        const candidate = current ? `${current} ${word}` : word;
+                        if (doc.getTextWidth(candidate) <= maxWidth) { current = candidate; continue; }
+                        if (current) { out.push(current); current = ''; }
+                        if (doc.getTextWidth(word) <= maxWidth) { current = word; continue; }
+                        let chunk = '';
+                        for (const ch of word) {
+                            if (doc.getTextWidth(chunk + ch) <= maxWidth) chunk += ch;
+                            else { if (chunk) out.push(chunk); chunk = ch; }
+                        }
+                        current = chunk;
+                    }
+                    if (current) out.push(current);
+                }
+            }
+            return out;
+        };
+
         // --- Schriftart ---
         // Optional: eigene TTF-Schriftart aus dem Design-Paket (invoice.json: font_file / font_file_bold).
         // Fallback: die in jsPDF eingebauten Schriften helvetica / times / courier.
@@ -412,6 +456,37 @@ export const generateInvoice = async (
             } catch (e) {
                 console.warn('[generateInvoice] Schriftart konnte nicht eingebettet werden:', e);
             }
+        }
+
+        // --- Display-Schrift NUR für die Überschrift ---
+        // Aus invoice.json: title_font_file (TTF aus dem ZIP) bzw. title_font_family.
+        // Ohne Angabe bleibt für den Titel die normale Rechnungsschrift aktiv.
+        let titleFont = baseFont;
+        if (invoiceDesign.title_font_file) {
+            try {
+                const titleFontPath = resolvePackageAsset(invoiceDesign.title_font_file);
+                if (titleFontPath && fs.existsSync(titleFontPath)) {
+                    if (titleFontPath.toLowerCase().endsWith('.ttf')) {
+                        const titleFontName = 'ShopTitleFont';
+                        const titleFontData = fs.readFileSync(titleFontPath).toString('base64');
+                        doc.addFileToVFS('ShopTitleFont.ttf', titleFontData);
+                        doc.addFont('ShopTitleFont.ttf', titleFontName, 'normal');
+                        // Display-Schriften haben oft nur einen Schnitt -> beide Stile auf dieselbe Datei legen
+                        doc.addFont('ShopTitleFont.ttf', titleFontName, 'bold');
+                        titleFont = titleFontName;
+                    } else {
+                        console.warn('[generateInvoice] title_font_file ist keine .ttf – jsPDF kann nur TTF einbetten. Titel nutzt Standard-Schrift.');
+                    }
+                } else {
+                    console.warn('[generateInvoice] title_font_file nicht gefunden – Titel nutzt Standard-Schrift.');
+                }
+            } catch (e) {
+                console.warn('[generateInvoice] Titel-Schriftart konnte nicht eingebettet werden:', e);
+            }
+        }
+        if (titleFont === baseFont && invoiceDesign.title_font_family) {
+            const fam = String(invoiceDesign.title_font_family).toLowerCase();
+            if (['helvetica', 'times', 'courier'].includes(fam)) titleFont = fam;
         }
 
         // --- Hintergrund ---
@@ -522,27 +597,38 @@ export const generateInvoice = async (
         doc.setFontSize(8); 
         doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
         const companyX = 140;
+        const companyMaxWidth = pageWidth - 20 - companyX;
         let companyY = 25;
-        
+
+        // Firmierung und Adresse umbrechen, damit lange Angaben nicht aus der Seite laufen
         doc.setFont(baseFont, "bold");
-        doc.text(designCompanyName, companyX, companyY);
+        for (const line of wrapText(designCompanyName, companyMaxWidth)) {
+            doc.text(line, companyX, companyY);
+            companyY += 4;
+        }
         doc.setFont(baseFont, "normal");
-        companyY += 4;
         
         // Handle multiline address
         const companyAddr = globalContent.company_address || '';
         const companyAddrLines = companyAddr.split('\n').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
         
         companyAddrLines.forEach((line: string) => {
-            doc.text(line, companyX, companyY);
-            companyY += 4;
+            for (const wrapped of wrapText(line, companyMaxWidth)) {
+                doc.text(wrapped, companyX, companyY);
+                companyY += 4;
+            }
         });
 
-        doc.text(`Telefon ${globalContent.contact_phone || ''}`, companyX, companyY);
-        companyY += 4;
-        doc.text(globalContent.contact_email || '', companyX, companyY);
+        for (const line of wrapText(`Telefon ${globalContent.contact_phone || ''}`, companyMaxWidth)) {
+            doc.text(line, companyX, companyY);
+            companyY += 4;
+        }
+        for (const line of wrapText(globalContent.contact_email || '', companyMaxWidth)) {
+            doc.text(line, companyX, companyY);
+            companyY += 4;
+        }
         
-        companyY += 8;
+        companyY += 4;
         doc.text(`Kunden-Nr. ${customer?.customer_number || '-'}`, companyX, companyY);
         companyY += 4;
         doc.text(`Bestell-Nr. ${order.order_number}`, companyX, companyY);
@@ -559,7 +645,17 @@ export const generateInvoice = async (
         doc.setFontSize(7);
         // Flatten address for single line display
         const flatAddress = (globalContent.company_address || '').replace(/\n/g, ', ').replace(/\r/g, '');
-        doc.text(`${globalContent.company_name || 'Main Textildruck GmbH'} - ${flatAddress}`, 20, 60);
+        // Absenderzeile auf die linke Spalte begrenzen und – falls nötig – mehrzeilig
+        // oberhalb der Trennlinie zeichnen (kein Überlauf in die rechte Firmenspalte).
+        const senderLineH = lineHeightFor(7, 1.2);
+        const senderLines = wrapText(`${globalContent.company_name || 'Main Textildruck GmbH'} - ${flatAddress}`, companyX - 20 - 6);
+        const senderLastY = 60;
+        let senderY = Math.max(senderLastY - (senderLines.length - 1) * senderLineH, 46);
+        for (const line of senderLines) {
+            if (senderY > senderLastY) break;
+            doc.text(line, 20, senderY);
+            senderY += senderLineH;
+        }
         
         // Line under sender address
         doc.setLineWidth(0.1);
@@ -567,52 +663,141 @@ export const generateInvoice = async (
 
         // Delivery Address
         doc.setFontSize(10);
-        const addressLines = (order.customer_address || '').split(',').map((s: string) => s.trim());
+        // Anschrift auf Druckbreite umbrechen, damit auch lange Adressen vollständig erscheinen.
+        const addressMaxWidth = pageWidth - 40;
+        const addressLines = (order.customer_address || '').split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
         let addrY = 70; // Moved up from 75
-        
+
         if (order.company) {
-            doc.text(order.company, 20, addrY);
+            for (const line of wrapText(order.company, addressMaxWidth)) {
+                doc.text(line, 20, addrY);
+                addrY += 5;
+            }
+        }
+        for (const line of wrapText(order.customer_name, addressMaxWidth)) {
+            doc.text(line, 20, addrY);
             addrY += 5;
         }
-        doc.text(order.customer_name, 20, addrY);
-        addrY += 5;
-        // Split address nicely
-        if (addressLines.length > 0) doc.text(addressLines[0], 20, addrY); // Street
-        if (addressLines.length > 1) {
-            addrY += 5;
-            doc.text(addressLines[1], 20, addrY); // City
-        }
-        addrY += 5;
+        // Split address nicely – alle Teile ausgeben (Straße, PLZ/Ort, …)
+        addressLines.forEach((part, idx) => {
+            if (idx > 0) addrY += 5;
+            for (const line of wrapText(part, addressMaxWidth)) {
+                doc.text(line, 20, addrY);
+                addrY += 5;
+            }
+        });
         doc.text('Deutschland', 20, addrY);
 
-        // Title
-        doc.setFontSize(designTitleSize);
-        doc.setFont(baseFont, "bold");
-        doc.setTextColor(accentRgb[0], accentRgb[1], accentRgb[2]);
+        // --- Titel: Display-Schrift NUR hier aktiv, danach zurück zur Rechnungsschrift ---
         const titleText = opts?.subjectSuffix
             ? `${opts.subjectSuffix}`
             : `Rechnung Nr. ${invoiceNumber}`;
-        doc.text(titleText, 20, 110);
+        doc.setTextColor(accentRgb[0], accentRgb[1], accentRgb[2]);
+        doc.setFont(titleFont, "bold");
+        doc.setFontSize(designTitleSize);
+        const titleLineH = lineHeightFor(designTitleSize, 1.15);
+        // Titel beginnt unterhalb des Anschriftblocks (auch bei mehrzeiligen Adressen)
+        let titleY = Math.max(110, addrY + 10);
+        for (const line of wrapText(titleText, pageWidth - 40)) {
+            doc.text(line, 20, titleY);
+            titleY += titleLineH;
+        }
+        // Zurück zur normalen Rechnungsschrift
+        doc.setFont(baseFont, "normal");
         doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
 
+        // --- Einleitungstext auf Druckbreite umbrechen ---
         doc.setFontSize(10);
-        doc.setFont(baseFont, "normal");
+        const introLineH = lineHeightFor(10, 1.25);
+        let introY = titleY + 2;
         if (opts?.subjectSuffix) {
-            doc.text(`Rechnungs-Nr. ${invoiceNumber}`, 20, 120);
-            doc.text("Aufgrund der geänderten Rechnungsadresse stellen wir Ihnen die korrigierte Rechnung wie folgt zu:", 20, 128);
+            doc.text(`Rechnungs-Nr. ${invoiceNumber}`, 20, introY);
+            introY += introLineH;
+            for (const line of wrapText("Aufgrund der geänderten Rechnungsadresse stellen wir Ihnen die korrigierte Rechnung wie folgt zu:", pageWidth - 40)) {
+                doc.text(line, 20, introY);
+                introY += introLineH;
+            }
         } else {
-            doc.text(invoiceDesign.intro_text || "Wir erlauben uns, Ihnen folgende Leistungen in Rechnung zu stellen:", 20, 120);
+            const introText = invoiceDesign.intro_text || "Wir erlauben uns, Ihnen folgende Leistungen in Rechnung zu stellen:";
+            for (const line of wrapText(introText, pageWidth - 40)) {
+                doc.text(line, 20, introY);
+                introY += introLineH;
+            }
         }
 
-        // --- Table ---
-        let y = 130;
+        // --- Fußzeile: Blöcke VORAB umbrechen, damit die benötigte Höhe bekannt ist ---
+        // So kann der Bereich auf jeder Seite reserviert und von Tabelle/Summen/
+        // Zahlungsdaten freigehalten werden.
+        const footerLineH = lineHeightFor(designFooterSize, 1.25);
+        const footerGap = 8;            // Mindestabstand zwischen Inhalt und Fußzeile
+        const footerPageNoLine = 5;     // reservierte Höhe der Seitenzahl-Zeile
+        const footerBottomMargin = 10;  // Abstand der Seitenzahl zum unteren Seitenrand
 
-        const footerY = pageHeight - 27;
-        const bottomLimit = footerY - 8;
-        const col1 = 20;
-        const col2 = 65;
-        const col3 = 110;
-        const col4 = 155;
+        // Spaltenpositionen wie bisher, Breite = Abstand zur nächsten Spalte minus Spaltenabstand.
+        const footerColGap = 4;
+        const footerCols = [
+            { x: 20, width: 45 - footerColGap },
+            { x: 65, width: 45 - footerColGap },
+            { x: 110, width: 45 - footerColGap },
+            { x: 155, width: (pageWidth - 15) - 155 }
+        ];
+
+        // IBAN in 4er-Gruppen mit Leerzeichen -> Umbruch an Leerzeichen möglich.
+        const formatIban = (value: string) =>
+            String(value || '').replace(/\s+/g, '').replace(/(.{4})/g, '$1 ').trim();
+
+        type FooterLine = { text: string; bold: boolean };
+        const buildFooterColumn = (
+            col: { x: number; width: number },
+            title: string,
+            blocks: Array<string | null | undefined>
+        ): FooterLine[] => {
+            const lines: FooterLine[] = [];
+            if (title) {
+                doc.setFont(baseFont, "bold");
+                wrapText(title, col.width).forEach((t) => lines.push({ text: t, bold: true }));
+            }
+            doc.setFont(baseFont, "normal");
+            for (const block of blocks) {
+                const value = String(block ?? '').trim();
+                if (!value) continue;
+                if (value === 'IBAN:') continue;
+                wrapText(value, col.width).forEach((t) => lines.push({ text: t, bold: false }));
+            }
+            return lines;
+        };
+
+        doc.setFontSize(designFooterSize);
+        doc.setFont(baseFont, "normal");
+        const footerColumns: FooterLine[][] = [
+            buildFooterColumn(footerCols[0], '', [
+                globalContent?.company_name || shop?.name || '',
+                globalContent?.company_address || '',
+                globalContent?.ceo_name ? `GF: ${globalContent.ceo_name}` : ''
+            ]),
+            buildFooterColumn(footerCols[1], 'Kontakt', [
+                globalContent?.contact_email || '',
+                globalContent?.contact_phone || '',
+                invoiceDesign.footer_website || 'www.maintextildruck.com'
+            ]),
+            buildFooterColumn(footerCols[2], 'Bankverbindung', [
+                globalContent?.bank_name || '',
+                globalContent?.bank_iban ? `IBAN: ${formatIban(globalContent.bank_iban)}` : '',
+                globalContent?.bank_bic ? `BIC: ${globalContent.bank_bic}` : ''
+            ]),
+            buildFooterColumn(footerCols[3], 'Register & Steuer', [
+                globalContent?.tax_number ? `Steuer-Nr: ${globalContent.tax_number}` : '',
+                globalContent?.vat_id ? `USt-ID: ${globalContent.vat_id}` : '',
+                globalContent?.commercial_register ? `HRB: ${globalContent.commercial_register}` : ''
+            ])
+        ];
+        // Höchste Spalte bestimmt den Anfang der Fußzeile.
+        const footerHeight = footerColumns.reduce((max, lines) => Math.max(max, lines.length * footerLineH), 0);
+        const footerY = pageHeight - footerBottomMargin - footerPageNoLine - footerHeight;
+        const bottomLimit = Math.max(footerY - footerGap, 100);
+
+        // --- Table ---
+        let y = Math.max(introY + 5, 130);
 
         const drawTableHeader = (yPos: number) => {
             doc.setFontSize(9);
@@ -631,7 +816,8 @@ export const generateInvoice = async (
 
         const drawContinuationHeader = () => {
             doc.setFontSize(10);
-            doc.setFont(baseFont, "bold");
+            // Der Rechnungstitel bleibt auch auf Folgeseiten in der Display-Schrift.
+            doc.setFont(titleFont, "bold");
             doc.text(
                 opts?.subjectSuffix ? opts.subjectSuffix : `Rechnung Nr. ${invoiceNumber}`,
                 20, 18
@@ -837,41 +1023,32 @@ export const generateInvoice = async (
              y += 5;
         }
         
-        doc.text(invoiceDesign.footer_note || "Die Ware bleibt bis zur vollständigen Bezahlung unser Eigentum.", 20, y);
+        const footerNoteLines = wrapText(invoiceDesign.footer_note || "Die Ware bleibt bis zur vollständigen Bezahlung unser Eigentum.", 175);
+        ensureSpace(footerNoteLines.length * 5 + 2, false);
+        for (const line of footerNoteLines) {
+            doc.text(line, 20, y);
+            y += 5;
+        }
 
         const drawFooter = (pageNo: number, totalPages: number) => {
             doc.setFontSize(designFooterSize);
             doc.setTextColor(mutedRgb[0], mutedRgb[1], mutedRgb[2]);
 
-            doc.setFont(baseFont, "bold");
-            doc.text(globalContent.company_name || shop.name || '', col1, footerY);
-            doc.setFont(baseFont, "normal");
-            doc.text(globalContent.company_address || '', col1, footerY + 3);
-            if (globalContent.ceo_name) doc.text(`GF: ${globalContent.ceo_name}`, col1, footerY + 6);
+            // Jeder Block startet unter der tatsächlichen Höhe des vorherigen Blocks.
+            footerColumns.forEach((lines, idx) => {
+                const col = footerCols[idx];
+                let lineY = footerY;
+                for (const line of lines) {
+                    doc.setFont(baseFont, line.bold ? 'bold' : 'normal');
+                    doc.text(line.text, col.x, lineY);
+                    lineY += footerLineH;
+                }
+            });
 
-            doc.setFont(baseFont, "bold");
-            doc.text('Kontakt', col2, footerY);
-            doc.setFont(baseFont, "normal");
-            doc.text(globalContent.contact_email || '', col2, footerY + 3);
-            doc.text(globalContent.contact_phone || '', col2, footerY + 6);
-            doc.text(invoiceDesign.footer_website || 'www.maintextildruck.com', col2, footerY + 9);
-
-            doc.setFont(baseFont, "bold");
-            doc.text('Bankverbindung', col3, footerY);
-            doc.setFont(baseFont, "normal");
-            doc.text(globalContent.bank_name || '', col3, footerY + 3);
-            doc.text(`IBAN: ${globalContent.bank_iban || ''}`, col3, footerY + 6);
-            doc.text(`BIC: ${globalContent.bank_bic || ''}`, col3, footerY + 9);
-
-            doc.setFont(baseFont, "bold");
-            doc.text('Register & Steuer', col4, footerY);
-            doc.setFont(baseFont, "normal");
-            doc.text(`Steuer-Nr: ${globalContent.tax_number || ''}`, col4, footerY + 3);
-            doc.text(`USt-ID: ${globalContent.vat_id || ''}`, col4, footerY + 6);
-            if (globalContent.commercial_register) doc.text(`HRB: ${globalContent.commercial_register}`, col4, footerY + 9);
-
+            // Seitenzahl separat unterhalb der Fußzeilen-Blöcke
+            doc.setFont(baseFont, 'normal');
             doc.setTextColor(150);
-            doc.text(`Seite ${pageNo} / ${totalPages}`, pageWidth - 20, footerY + 12, { align: 'right' });
+            doc.text(`Seite ${pageNo} / ${totalPages}`, pageWidth - 20, pageHeight - footerBottomMargin + 3, { align: 'right' });
             doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
         };
 

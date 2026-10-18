@@ -396,6 +396,10 @@ export const STANDARD_EMAIL_TEMPLATE = `<!DOCTYPE html>
 //   font_family         -> eingebaute Schrift: "helvetica" | "times" | "courier"
 //   font_file           -> eigene TTF-Schrift aus dem ZIP, z.B. "assets/fonts/Inter-Regular.ttf"
 //   font_file_bold      -> passende fette TTF (optional; sonst wird font_file für fett genutzt)
+//   title_font_family   -> Name der Überschrift-Schrift (Standard: wie font_family bzw. "helvetica")
+//   title_font_file     -> Display-Schrift NUR für die Überschrift (TTF aus dem ZIP,
+//                          z.B. "assets/fonts/Anton-Regular.ttf"); hat Vorrang vor
+//                          title_font_family. Der Rest der Rechnung nutzt weiter font_family.
 //   font_size_title     -> Schriftgröße der Überschrift (Standard 16)
 //   font_size_footer    -> Schriftgröße der Fußzeile (Standard 6)
 //   header_company_name -> Firmenname im Kopf (rechts oben)
@@ -413,6 +417,8 @@ export const STANDARD_INVOICE_DESIGN = `{
   "font_family": "helvetica",
   "font_file": "",
   "font_file_bold": "",
+  "title_font_family": "",
+  "title_font_file": "assets/fonts/Anton-Regular.ttf",
   "font_size_title": 16,
   "font_size_footer": 6,
   "header_company_name": "",
@@ -428,8 +434,10 @@ export const STANDARD_TEMPLATE_README = `Standard-Vorlage für ein Custom-Design
 Inhalt:
   index.html          -> Einstiegsdatei mit den Seiten-Blöcken <template data-page="...">
   assets/style.css    -> Stylesheet (wird per <link rel="stylesheet"> eingebunden)
+  assets/fonts/Anton-Regular.ttf -> Display-Schrift für den Rechnungstitel
+  assets/fonts/OFL.txt           -> Lizenz der mitgelieferten Schrift (SIL Open Font License 1.1)
   email.html          -> Vorlage für alle Kunden-Mails (Rahmen um {{content}})
-  invoice.json        -> Design-Daten für die Rechnung (Logo, Farben, Texte)
+  invoice.json        -> Design-Daten für die Rechnung (Logo, Farben, Schriften, Texte)
   README.txt          -> diese Datei
 
 Vorgehen:
@@ -492,6 +500,10 @@ Rechnung (invoice.json):
     font_family         eingebaute Schrift: "helvetica" | "times" | "courier"
     font_file           eigene TTF-Schrift aus dem ZIP (z.B. assets/fonts/Inter-Regular.ttf)
     font_file_bold      passende fette TTF (optional)
+    title_font_family   Name der Ueberschrift-Schrift (Standard: wie font_family)
+    title_font_file     Display-Schrift NUR fuer die Ueberschrift (TTF aus dem ZIP,
+                        z.B. assets/fonts/Anton-Regular.ttf). Der uebrige Rechnungstext
+                        bleibt in font_family. Ohne Angabe: normale Rechnungsschrift.
     font_size_title     Schriftgröße der Überschrift (Standard 16)
     font_size_footer    Schriftgröße der Fußzeile (Standard 6)
     header_company_name Firmenname im Kopf (rechts oben)

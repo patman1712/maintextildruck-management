@@ -152,6 +152,10 @@ const packageUpload = multer({
   limits: { fileSize: 25 * 1024 * 1024 }
 });
 
+// Schrift-Assets, die in jedem Standard-Paket mitgeliefert werden (inkl. Lizenzdatei).
+const STANDARD_PACKAGE_FONT_DIR = path.join(process.cwd(), 'assets', 'fonts');
+const STANDARD_PACKAGE_FONTS = ['Anton-Regular.ttf', 'OFL.txt'];
+
 /** Verhindert Pfad-Traversal beim Entpacken. Liefert null bei unsicheren Pfaden. */
 function safeTemplatePath(root: string, relative: string): string | null {
   const rel = relative.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -274,6 +278,27 @@ router.post('/:shopId/template/zip', (req, res, next) => {
       }
     }
 
+    // Validierung: verweist invoice.json auf Dateien, die im Paket fehlen?
+    const warnings: string[] = [];
+    if (invoiceDesign) {
+      try {
+        const design = JSON.parse(invoiceDesign);
+        const assetKeys = ['logo_url', 'background_image', 'font_file', 'font_file_bold', 'title_font_file'];
+        for (const key of assetKeys) {
+          const value = design?.[key];
+          if (typeof value !== 'string' || !value.trim()) continue;
+          const ref = value.trim();
+          if (ref.startsWith('http') || ref.startsWith('/')) continue; // URL bzw. absoluter Pfad
+          if (!written.includes(ref)) {
+            warnings.push(`invoice.json: "${key}" verweist auf "${ref}", diese Datei ist nicht im Paket enthalten.`);
+          }
+          if (key === 'title_font_file' && !ref.toLowerCase().endsWith('.ttf')) {
+            warnings.push(`invoice.json: "title_font_file" muss eine .ttf sein (jsPDF kann OTF nicht einbetten) – "${ref}" wird ignoriert.`);
+          }
+        }
+      } catch { /* JSON wurde oben bereits geprüft */ }
+    }
+
     db.prepare(`
       UPDATE shops
       SET custom_template_html = ?,
@@ -292,7 +317,8 @@ router.post('/:shopId/template/zip', (req, res, next) => {
         hasEmailTemplate: !!emailHtml,
         hasInvoiceDesign: !!invoiceDesign,
         files: written,
-        skipped
+        skipped,
+        warnings
       }
     });
   } catch (error: any) {
@@ -321,6 +347,13 @@ router.get('/:shopId/template/standard.zip', (req, res) => {
     const zip = new AdmZip();
     zip.addFile('index.html', Buffer.from(STANDARD_TEMPLATE_ENTRY, 'utf8'));
     zip.addFile('assets/style.css', Buffer.from(STANDARD_TEMPLATE_CSS, 'utf8'));
+    // Display-Schrift für den Rechnungstitel samt Lizenz (SIL Open Font License 1.1)
+    for (const fontFile of STANDARD_PACKAGE_FONTS) {
+      const fontPath = path.join(STANDARD_PACKAGE_FONT_DIR, fontFile);
+      if (fs.existsSync(fontPath)) {
+        zip.addFile(`assets/fonts/${fontFile}`, fs.readFileSync(fontPath));
+      }
+    }
     zip.addFile('email.html', Buffer.from(STANDARD_EMAIL_TEMPLATE, 'utf8'));
     zip.addFile('invoice.json', Buffer.from(STANDARD_INVOICE_DESIGN, 'utf8'));
     zip.addFile('README.txt', Buffer.from(STANDARD_TEMPLATE_README, 'utf8'));
