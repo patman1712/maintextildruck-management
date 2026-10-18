@@ -300,6 +300,7 @@ export const generateInvoice = async (
         // Optionale Design-Daten. Fehlt etwas, bleibt das bewährte Standard-Layout aktiv.
         type InvoiceDesign = {
             logo_url?: string;
+            logo_width_mm?: number;
             primary_color?: string;
             muted_color?: string;
             text_color?: string;
@@ -342,6 +343,7 @@ export const generateInvoice = async (
         const designTitleSize = Number(invoiceDesign.font_size_title) || 16;
         const designFooterSize = Number(invoiceDesign.font_size_footer) || 6;
         const designCompanyName = invoiceDesign.header_company_name || globalContent?.company_name || shop?.name || 'Main Textildruck GmbH';
+        const configuredLogoWidth = Number(invoiceDesign.logo_width_mm);
 
         // Datei aus dem Design-Paket des Shops (oder /uploads, /shop-assets, URL) auflösen.
         const resolvePackageAsset = (rel: string): string => {
@@ -545,11 +547,15 @@ export const generateInvoice = async (
 
         const tryAddLogo = async (logoUrl: string, x: number, y: number, width: number) => {
             const absolutePath = resolveLocalPath(logoUrl);
-            if (!absolutePath) return false;
-            if (!fs.existsSync(absolutePath)) return false;
+            if (!absolutePath) return 0;
+            if (!fs.existsSync(absolutePath)) return 0;
             const input = fs.readFileSync(absolutePath);
             const targetDpi = 200;
             const targetWidthPx = Math.max(1, Math.round((width / 25.4) * targetDpi));
+            const meta = await sharp(input, { density: 300 }).metadata();
+            const sourceWidth = Number(meta.width) || targetWidthPx;
+            const sourceHeight = Number(meta.height) || targetWidthPx;
+            const height = Math.max(8, width * (sourceHeight / sourceWidth));
 
             const jpegBuffer = await sharp(input, { density: 300 })
                 .resize({ width: targetWidthPx, fit: 'inside', withoutEnlargement: true })
@@ -557,24 +563,29 @@ export const generateInvoice = async (
                 .jpeg({ quality: 80, mozjpeg: true })
                 .toBuffer();
 
-            doc.addImage(jpegBuffer, 'JPEG', x, y, width, 0, undefined, 'FAST');
-            return true;
+            doc.addImage(jpegBuffer, 'JPEG', x, y, width, height, undefined, 'FAST');
+            return height;
         };
 
         let logoAdded = false;
+        const companyX = 140;
         const headerY = 16;
         const senderBlockX = 20;
-        const senderBlockWidth = 80;
-        const headerLogoWidth = 36;
-        const headerLogoX = senderBlockX + ((senderBlockWidth - headerLogoWidth) / 2);
+        const leftColumnWidth = companyX - senderBlockX - 8;
+        const headerLogoWidth = Math.max(20, Math.min(leftColumnWidth, configuredLogoWidth > 0 ? configuredLogoWidth : 90));
+        const headerLogoX = senderBlockX;
+        const senderBlockWidth = headerLogoWidth;
+        let logoHeight = 0;
 
         // Im Rechnungskopf immer nur EIN Logo:
         // 1. Shop-Logo, 2. Fallback auf Main-Textildruck-Logo.
         if (shopLogoUrl) {
-            logoAdded = await tryAddLogo(shopLogoUrl, headerLogoX, headerY, headerLogoWidth);
+            logoHeight = await tryAddLogo(shopLogoUrl, headerLogoX, headerY, headerLogoWidth);
+            logoAdded = logoHeight > 0;
         }
         if (!logoAdded && mainLogoUrl) {
-            logoAdded = await tryAddLogo(mainLogoUrl, headerLogoX, headerY, headerLogoWidth);
+            logoHeight = await tryAddLogo(mainLogoUrl, headerLogoX, headerY, headerLogoWidth);
+            logoAdded = logoHeight > 0;
         }
 
         if (!logoAdded) {
@@ -583,12 +594,12 @@ export const generateInvoice = async (
             doc.text("MAIN", 20, 30);
             doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
             doc.text("TEXTILDRUCK", 50, 30);
+            logoHeight = 16;
         }
 
         // Company Info (Right)
         doc.setFontSize(8); 
         doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
-        const companyX = 140;
         const companyMaxWidth = pageWidth - 20 - companyX;
         let companyY = 25;
 
@@ -640,25 +651,24 @@ export const generateInvoice = async (
         // Absenderzeile auf die linke Spalte begrenzen und – falls nötig – mehrzeilig
         // oberhalb der Trennlinie zeichnen (kein Überlauf in die rechte Firmenspalte).
         const senderLineH = lineHeightFor(7, 1.2);
-        const senderLines = wrapText(`${globalContent.company_name || 'Main Textildruck GmbH'} - ${flatAddress}`, companyX - 20 - 6);
-        const senderLastY = 60;
-        let senderY = Math.max(senderLastY - (senderLines.length - 1) * senderLineH, 46);
+        const senderLines = wrapText(`${globalContent.company_name || 'Main Textildruck GmbH'} - ${flatAddress}`, senderBlockWidth);
+        let senderY = headerY + logoHeight + 4;
         for (const line of senderLines) {
-            if (senderY > senderLastY) break;
-            doc.text(line, 20, senderY);
+            doc.text(line, senderBlockX, senderY);
             senderY += senderLineH;
         }
+        const senderLineY = senderY + 1;
         
         // Line under sender address
         doc.setLineWidth(0.1);
-        doc.line(20, 62, 100, 62); // Made slightly longer
+        doc.line(senderBlockX, senderLineY, senderBlockX + senderBlockWidth, senderLineY);
 
         // Delivery Address
         doc.setFontSize(10);
-        // Anschrift auf Druckbreite umbrechen, damit auch lange Adressen vollständig erscheinen.
-        const addressMaxWidth = pageWidth - 40;
+        // Anschrift auf die linke Kopfspalte begrenzen, damit sie nie in den Firmenblock läuft.
+        const addressMaxWidth = leftColumnWidth;
         const addressLines = (order.customer_address || '').split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
-        let addrY = 70; // Moved up from 75
+        let addrY = Math.max(70, senderLineY + 8, companyY + 4);
 
         if (order.company) {
             for (const line of wrapText(order.company, addressMaxWidth)) {

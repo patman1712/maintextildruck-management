@@ -387,6 +387,7 @@ export const STANDARD_EMAIL_TEMPLATE = `<!DOCTYPE html>
 // Wird als "invoice.json" ins ZIP gelegt. Alle Felder sind OPTIONAL –
 // fehlt ein Feld, bleibt der bewährte Standard der Rechnung erhalten.
 //   logo_url            -> eigenes Rechnungslogo (URL oder /shop-assets/<shopId>/logo.png)
+//   logo_width_mm       -> Breite des Rechnungslogos im Kopf in mm (Standard 90)
 //   primary_color       -> Akzentfarbe für Überschrift/Tabellenlinie (#rrggbb)
 //   muted_color         -> Farbe der Fußzeile (#rrggbb)
 //   text_color          -> Standard-Textfarbe (#rrggbb)
@@ -409,6 +410,7 @@ export const STANDARD_EMAIL_TEMPLATE = `<!DOCTYPE html>
 //   footer_website      -> Webseite in der Fußzeile
 export const STANDARD_INVOICE_DESIGN = `{
   "logo_url": "",
+  "logo_width_mm": 90,
   "primary_color": "#c00000",
   "muted_color": "#646464",
   "text_color": "#000000",
@@ -492,6 +494,7 @@ Rechnung (invoice.json):
   Legt man eine "invoice.json" ins ZIP, wird das Rechnungs-Layout daran angepasst.
   Alle Felder sind optional; fehlt eines, bleibt der Standard:
     logo_url            eigenes Rechnungslogo (URL oder /shop-assets/<shopId>/logo.png)
+    logo_width_mm       Breite des Rechnungslogos im Kopf in mm (Standard 90)
     primary_color       Akzentfarbe für Überschrift/Tabellenlinie (#rrggbb)
     muted_color         Farbe der Fußzeile (#rrggbb)
     text_color          Standard-Textfarbe (#rrggbb)

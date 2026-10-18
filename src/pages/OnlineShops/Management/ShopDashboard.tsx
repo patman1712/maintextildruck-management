@@ -2212,7 +2212,7 @@ const ShopDashboard: React.FC = () => {
                                     <div>
                                         <p className="font-bold text-slate-800 mb-1">Rechnung (<span className="font-mono">invoice.json</span>)</p>
                                         <p>Eine <span className="font-mono">invoice.json</span> im ZIP passt das Rechnungs-Layout an. Alle Felder optional.</p>
-                                        <p className="font-mono mt-1">logo_url · primary_color · muted_color · text_color · font_size_title · font_size_footer</p>
+                                        <p className="font-mono mt-1">logo_url · logo_width_mm · primary_color · muted_color · text_color · font_size_title · font_size_footer</p>
                                         <p className="font-mono">background_color · background_image · font_family (helvetica/times/courier)</p>
                                         <p className="font-mono">font_file · font_file_bold (eigene .ttf aus dem ZIP, z.B. assets/fonts/Inter-Regular.ttf)</p>
                                         <p className="font-mono">title_font_file · title_font_family (Display-Schrift nur für den Rechnungstitel, z.B. assets/fonts/Anton-Regular.ttf; .ttf erforderlich)</p>

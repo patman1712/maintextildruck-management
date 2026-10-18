@@ -296,6 +296,12 @@ router.post('/:shopId/template/zip', (req, res, next) => {
             warnings.push(`invoice.json: "title_font_file" muss eine .ttf sein (jsPDF kann OTF nicht einbetten) – "${ref}" wird ignoriert.`);
           }
         }
+        if (design?.logo_width_mm !== undefined) {
+          const logoWidth = Number(design.logo_width_mm);
+          if (!Number.isFinite(logoWidth) || logoWidth <= 0) {
+            warnings.push('invoice.json: "logo_width_mm" muss eine positive Zahl in Millimetern sein.');
+          }
+        }
       } catch { /* JSON wurde oben bereits geprüft */ }
     }
 
