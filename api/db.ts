@@ -1158,6 +1158,15 @@ try {
     console.log('Migrating database: Adding custom_template_html to shops table');
     db.exec('ALTER TABLE shops ADD COLUMN custom_template_html TEXT');
   }
+  // Custom E-Mail-Template (Rahmen für alle Kunden-Mails) + Rechnungs-Design (JSON)
+  if (!shopColsTemplate.some(col => col.name === 'custom_email_html')) {
+    console.log('Migrating database: Adding custom_email_html to shops table');
+    db.exec('ALTER TABLE shops ADD COLUMN custom_email_html TEXT');
+  }
+  if (!shopColsTemplate.some(col => col.name === 'custom_invoice_design')) {
+    console.log('Migrating database: Adding custom_invoice_design to shops table');
+    db.exec('ALTER TABLE shops ADD COLUMN custom_invoice_design TEXT');
+  }
 
   // Migration for Customer Numbers
   try {

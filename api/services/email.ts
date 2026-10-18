@@ -45,6 +45,51 @@ const normalizeRecipientList = (value: string | string[]) => {
         .filter(s => s.includes('@'));
 };
 
+// ============================================
+// Kundenspezifische E-Mail-Vorlage (pro Shop)
+// ============================================
+// Über das Design-Template-Paket kann ein Shop eine eigene "email.html" mitliefern.
+// Diese wird als Rahmen um alle Kunden-Mails gelegt (Header/Footer/Farben/Schrift).
+// Platzhalter: {{content}}, {{shop_name}}, {{customer_name}}, {{order_number}},
+// {{subject}}, {{year}}, {{logo_url}}, {{email_logo_url}}, {{primary_color}},
+// {{secondary_color}}, {{footer_text}}. Ohne eigene Vorlage bleibt alles unverändert.
+const extractBodyInner = (html: string): string => {
+    const m = String(html || '').match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    return m ? m[1] : String(html || '');
+};
+
+const getShopEmailFrame = (shopId: string | null | undefined): string | null => {
+    if (!shopId) return null;
+    try {
+        const row = db.prepare('SELECT custom_email_html FROM shops WHERE id = ?').get(shopId) as any;
+        const frame = (row?.custom_email_html || '').trim();
+        return frame || null;
+    } catch {
+        return null;
+    }
+};
+
+export const applyShopEmailFrame = (
+    shopId: string | null | undefined,
+    vars: Record<string, string>,
+    contentHtml: string
+): string => {
+    const frame = getShopEmailFrame(shopId);
+    if (!frame) return contentHtml;
+    // Fertiges Logo-Markup (Bild oder Shopname), damit die Vorlage kein eigenes Markup braucht.
+    const logoUrl = (vars.logo_url || vars.email_logo_url || '').trim();
+    const shopName = vars.shop_name || '';
+    const logoHtml = logoUrl
+        ? `<img src="${logoUrl}" alt="${shopName}" style="max-height:64px; max-width:220px;">`
+        : `<div style="font-size:20px; font-weight:800; color:#ffffff;">${shopName}</div>`;
+    const allVars: Record<string, string> = {
+        ...vars,
+        logo_html: logoHtml,
+        content: extractBodyInner(contentHtml)
+    };
+    return frame.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_m, key) => (key in allVars ? String(allVars[key]) : ''));
+};
+
 const sendEmailWithInvoice = async (opts: {
     to: string[];
     subject: string;
@@ -281,7 +326,7 @@ export const sendOrderConfirmation = async (orderId: string, invoicePath: string
         }
 
         // Professional HTML Template
-        const html = `
+        const contentHtml = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -332,7 +377,21 @@ export const sendOrderConfirmation = async (orderId: string, invoicePath: string
 </body>
 </html>
 `;
-        
+
+        // Eigene Shop-E-Mail-Vorlage (email.html aus dem Design-Paket) anwenden, sonst Standard.
+        const html = applyShopEmailFrame(order.shop_id, {
+            shop_name: branding.company_name,
+            customer_name: order.customer_name || '',
+            order_number: order.order_number || order.id,
+            subject,
+            year: String(new Date().getFullYear()),
+            logo_url: branding.logo_url,
+            email_logo_url: branding.email_logo_url,
+            primary_color: branding.primary_color,
+            secondary_color: branding.secondary_color,
+            footer_text: branding.footer_text
+        }, contentHtml);
+
         // Plain text fallback
         const text = `Guten Tag ${order.customer_name},
 
@@ -519,7 +578,7 @@ export const sendShipmentNotification = async (orderId: string, trackingNumber?:
             logosHtml = `<h1>${branding.company_name}</h1>`;
         }
 
-        const html = `
+        const contentHtml = `
         <div style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 24px;">
           <div style="max-width: 640px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
             <div style="padding: 22px; background: linear-gradient(90deg, ${branding.primary_color}, ${branding.secondary_color}); color: white;">
@@ -552,6 +611,19 @@ export const sendShipmentNotification = async (orderId: string, trackingNumber?:
           </div>
         </div>
         `;
+
+        const html = applyShopEmailFrame(order.shop_id, {
+            shop_name: branding.company_name,
+            customer_name: order.customer_name || '',
+            order_number: order.order_number || order.id,
+            subject,
+            year: String(new Date().getFullYear()),
+            logo_url: branding.logo_url,
+            email_logo_url: branding.email_logo_url,
+            primary_color: branding.primary_color,
+            secondary_color: branding.secondary_color,
+            footer_text: branding.footer_text
+        }, contentHtml);
 
         const text = tn
             ? `Ihre Bestellung #${order.order_number} ist jetzt im Versand. Sendungsnummer: ${tn}\n${trackingUrl ? `Sendung verfolgen: ${trackingUrl}\n` : ''}`
@@ -757,7 +829,7 @@ export const sendPickupConfirmation = async (orderId: string) => {
       `<h1 style="margin:0; color:white;">${branding.company_name}</h1>`;
 
     const subject = `Bestellbestätigung #${order.order_number} – Abholung Packstation`;
-    const html = `
+    const contentHtml = `
     <div style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 24px;">
       <div style="max-width: 620px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
         <div style="padding: 22px; background: linear-gradient(90deg, ${branding.primary_color}, ${branding.secondary_color}); color: white;">
@@ -783,6 +855,21 @@ export const sendPickupConfirmation = async (orderId: string) => {
         ${branding.footer_text ? `<div style="padding: 16px 22px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px;">${branding.footer_text}</div>` : ''}
       </div>
     </div>`;
+
+    const html = applyShopEmailFrame(order.shop_id, {
+      shop_name: branding.company_name,
+      customer_name: order.customer_name || '',
+      order_number: order.order_number || order.id,
+      subject,
+      pickup_code: order.pickup_code || '',
+      pickup_compartment: order.pickup_compartment || '',
+      year: String(new Date().getFullYear()),
+      logo_url: branding.logo_url,
+      email_logo_url: branding.email_logo_url,
+      primary_color: branding.primary_color,
+      secondary_color: branding.secondary_color,
+      footer_text: branding.footer_text
+    }, contentHtml);
 
     const text = renderedText + `\n\n--\nNächster Schritt: Du erhältst bald eine weitere E-Mail mit Abholcode und Fachnummer.`;
 
@@ -843,7 +930,7 @@ export const sendPickupReady = async (orderId: string, code: string, compartment
       `<h1 style="margin:0; color:white;">${branding.company_name}</h1>`;
 
     const subject = `✅ Bereit zur Abholung! Bestellung #${order.order_number} – Code ${code}`;
-    const html = `
+    const contentHtml = `
     <div style="font-family: Arial, sans-serif; background-color: #f0fdf4; padding: 24px;">
       <div style="max-width: 620px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; border: 2px solid #16a34a; box-shadow: 0 8px 30px rgba(22,163,74,.12);">
         <div style="padding: 22px; background: linear-gradient(90deg, #16a34a, #15803d); color: white;">
@@ -883,6 +970,21 @@ export const sendPickupReady = async (orderId: string, code: string, compartment
         ${branding.footer_text ? `<div style="padding: 16px 22px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px;">${branding.footer_text}</div>` : ''}
       </div>
     </div>`;
+
+    const html = applyShopEmailFrame(order.shop_id, {
+      shop_name: branding.company_name,
+      customer_name: order.customer_name || '',
+      order_number: order.order_number || order.id,
+      subject,
+      pickup_code: code,
+      pickup_compartment: compartment,
+      year: String(new Date().getFullYear()),
+      logo_url: branding.logo_url,
+      email_logo_url: branding.email_logo_url,
+      primary_color: branding.primary_color,
+      secondary_color: branding.secondary_color,
+      footer_text: branding.footer_text
+    }, contentHtml);
 
     return await sendEmailWithInvoice({ to: [order.customer_email], subject, text: renderedText, html });
   } catch (e) {
@@ -1019,7 +1121,7 @@ export const sendVorkassePaymentReminder = async (orderId: string, customNote?: 
 
     // --- Subject / HTML / TEXT ---
     const subject = `💰 Zahlungserinnerung – Bestellung #${orderNumber} (${branding.company_name})`;
-    const html = `
+    const contentHtml = `
     <div style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 24px;">
       <div style="max-width: 620px; margin: 0 auto; background: white; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
         <div style="padding: 22px; background: linear-gradient(90deg, ${branding.primary_color}, ${branding.secondary_color}); color: white;">
@@ -1044,6 +1146,19 @@ export const sendVorkassePaymentReminder = async (orderId: string, customNote?: 
         ${branding.footer_text ? `<div style="padding: 16px 22px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px;">${branding.footer_text}</div>` : ''}
       </div>
     </div>`;
+
+    const html = applyShopEmailFrame(order.shop_id, {
+      shop_name: branding.company_name,
+      customer_name: customerName,
+      order_number: orderNumber,
+      subject,
+      year: String(new Date().getFullYear()),
+      logo_url: branding.logo_url,
+      email_logo_url: branding.email_logo_url,
+      primary_color: branding.primary_color,
+      secondary_color: branding.secondary_color,
+      footer_text: branding.footer_text
+    }, contentHtml);
 
     const textLines = [
       `Zahlungserinnerung – Bestellung #${orderNumber} (${branding.company_name})`,

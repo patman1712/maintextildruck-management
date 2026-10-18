@@ -270,6 +270,41 @@ export const generateInvoice = async (
         // Fetch Global Content (Company Info)
         const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
 
+        // --- Rechnungs-Design (pro Shop, aus invoice.json des Design-Pakets) ---
+        // Optionale Design-Daten. Fehlt etwas, bleibt das bewährte Standard-Layout aktiv.
+        type InvoiceDesign = {
+            logo_url?: string;
+            primary_color?: string;
+            muted_color?: string;
+            font_size_title?: number;
+            font_size_footer?: number;
+            header_company_name?: string;
+            intro_text?: string;
+            payment_note?: string;
+            footer_note?: string;
+            footer_website?: string;
+        };
+        let invoiceDesign: InvoiceDesign = {};
+        if (shop?.custom_invoice_design) {
+            try {
+                const parsed = JSON.parse(shop.custom_invoice_design);
+                if (parsed && typeof parsed === 'object') invoiceDesign = parsed;
+            } catch {
+                console.warn('[generateInvoice] custom_invoice_design ist kein gültiges JSON – Standard-Design wird verwendet.');
+            }
+        }
+        const hexToRgb = (hex: string | undefined, fallback: [number, number, number]): [number, number, number] => {
+            const m = String(hex || '').trim().match(/^#?([0-9a-f]{6})$/i);
+            if (!m) return fallback;
+            const int = parseInt(m[1], 16);
+            return [(int >> 16) & 255, (int >> 8) & 255, int & 255];
+        };
+        const accentRgb = hexToRgb(invoiceDesign.primary_color, [0, 0, 0]);
+        const mutedRgb = hexToRgb(invoiceDesign.muted_color, [100, 100, 100]);
+        const designTitleSize = Number(invoiceDesign.font_size_title) || 16;
+        const designFooterSize = Number(invoiceDesign.font_size_footer) || 6;
+        const designCompanyName = invoiceDesign.header_company_name || globalContent?.company_name || shop?.name || 'Main Textildruck GmbH';
+
         // Check if invoice number is already set
         const orderCheck = db.prepare('SELECT invoice_number, invoice_date FROM orders WHERE id = ?').get(orderId) as any;
 
@@ -310,13 +345,17 @@ export const generateInvoice = async (
             const p = String(urlOrPath || '');
             if (!p || p.startsWith('http')) return '';
             if (p.startsWith('/uploads/')) return path.join(UPLOAD_DIR, p.replace(/^\/uploads\//, ''));
+            // Assets aus dem Design-Paket (ZIP) eines Shops: /shop-assets/<shopId>/...
+            if (p.startsWith('/shop-assets/')) {
+                return path.join(DATA_DIR, 'shop_templates', p.replace(/^\/shop-assets\//, ''));
+            }
             if (p.startsWith('/')) return path.join(process.cwd(), p);
             return path.join(process.cwd(), p);
         };
 
         const mainLogoSetting = db.prepare("SELECT value FROM settings WHERE key = 'logo'").get() as any;
         const mainLogoUrl = mainLogoSetting?.value || '';
-        const shopLogoUrl = shop?.email_logo_url || shop?.logo_url || '';
+        const shopLogoUrl = invoiceDesign.logo_url || shop?.email_logo_url || shop?.logo_url || '';
 
         const tryAddLogo = async (logoUrl: string, x: number, y: number, width: number) => {
             const absolutePath = resolveLocalPath(logoUrl);
@@ -375,7 +414,7 @@ export const generateInvoice = async (
         let companyY = 25;
         
         doc.setFont("helvetica", "bold");
-        doc.text(globalContent.company_name || 'Main Textildruck GmbH', companyX, companyY);
+        doc.text(designCompanyName, companyX, companyY);
         doc.setFont("helvetica", "normal");
         companyY += 4;
         
@@ -436,12 +475,14 @@ export const generateInvoice = async (
         doc.text('Deutschland', 20, addrY);
 
         // Title
-        doc.setFontSize(16);
+        doc.setFontSize(designTitleSize);
         doc.setFont("helvetica", "bold");
+        doc.setTextColor(accentRgb[0], accentRgb[1], accentRgb[2]);
         const titleText = opts?.subjectSuffix
             ? `${opts.subjectSuffix}`
             : `Rechnung Nr. ${invoiceNumber}`;
         doc.text(titleText, 20, 110);
+        doc.setTextColor(0, 0, 0);
 
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
@@ -449,7 +490,7 @@ export const generateInvoice = async (
             doc.text(`Rechnungs-Nr. ${invoiceNumber}`, 20, 120);
             doc.text("Aufgrund der geänderten Rechnungsadresse stellen wir Ihnen die korrigierte Rechnung wie folgt zu:", 20, 128);
         } else {
-            doc.text("Wir erlauben uns, Ihnen folgende Leistungen in Rechnung zu stellen:", 20, 120);
+            doc.text(invoiceDesign.intro_text || "Wir erlauben uns, Ihnen folgende Leistungen in Rechnung zu stellen:", 20, 120);
         }
 
         // --- Table ---
@@ -470,7 +511,9 @@ export const generateInvoice = async (
             doc.text("Menge", 130, yPos, { align: 'right' });
             doc.text("Einzelpreis", 160, yPos, { align: 'right' });
             doc.text("Gesamtpreis", 195, yPos, { align: 'right' });
+            doc.setDrawColor(accentRgb[0], accentRgb[1], accentRgb[2]);
             doc.line(20, yPos + 2, 195, yPos + 2);
+            doc.setDrawColor(0, 0, 0);
             doc.setFont("helvetica", "normal");
             return yPos + 8;
         };
@@ -671,7 +714,7 @@ export const generateInvoice = async (
 
         // Payment Info
         ensureSpace(30, false);
-        doc.text("Bitte bei Zahlung angeben!", 20, y);
+        doc.text(invoiceDesign.payment_note || "Bitte bei Zahlung angeben!", 20, y);
         y += 5;
         doc.text(`Verwendungszweck: ${invoiceNumber}`, 20, y);
         y += 10;
@@ -681,11 +724,11 @@ export const generateInvoice = async (
              y += 5;
         }
         
-        doc.text("Die Ware bleibt bis zur vollständigen Bezahlung unser Eigentum.", 20, y);
+        doc.text(invoiceDesign.footer_note || "Die Ware bleibt bis zur vollständigen Bezahlung unser Eigentum.", 20, y);
 
         const drawFooter = (pageNo: number, totalPages: number) => {
-            doc.setFontSize(6);
-            doc.setTextColor(100, 100, 100);
+            doc.setFontSize(designFooterSize);
+            doc.setTextColor(mutedRgb[0], mutedRgb[1], mutedRgb[2]);
 
             doc.setFont("helvetica", "bold");
             doc.text(globalContent.company_name || shop.name || '', col1, footerY);
@@ -698,7 +741,7 @@ export const generateInvoice = async (
             doc.setFont("helvetica", "normal");
             doc.text(globalContent.contact_email || '', col2, footerY + 3);
             doc.text(globalContent.contact_phone || '', col2, footerY + 6);
-            doc.text('www.maintextildruck.com', col2, footerY + 9);
+            doc.text(invoiceDesign.footer_website || 'www.maintextildruck.com', col2, footerY + 9);
 
             doc.setFont("helvetica", "bold");
             doc.text('Bankverbindung', col3, footerY);

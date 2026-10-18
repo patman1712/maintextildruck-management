@@ -329,12 +329,94 @@ img { max-width: 100%; display: block; }
 }
 `;
 
+// ============================================================
+// Beispiel: E-Mail-Vorlage für ALLE Kunden-Mails eines Shops
+// ============================================================
+// Wird als "email.html" ins ZIP gelegt. Sie bildet den Rahmen um jede Kunden-Mail
+// (Bestellbestätigung, Versand, Abholbereit, Zahlungserinnerung, ...).
+// Verfügbare Platzhalter (einfache {{name}}-Ersetzung):
+//   {{content}}        -> Inhalt der jeweiligen Mail (NICHT entfernen!)
+//   {{logo_html}}      -> fertiges Logo (Bild oder Shopname, weiß für den Header)
+//   {{shop_name}}      -> Name des Shops
+//   {{customer_name}}  -> Name des Kunden
+//   {{order_number}}   -> Bestellnummer
+//   {{subject}}        -> Betreff der Mail
+//   {{year}}           -> aktuelles Jahr
+//   {{primary_color}}  -> Hauptfarbe des Shops (z.B. #3b82f6)
+//   {{secondary_color}}-> Sekundärfarbe des Shops
+//   {{logo_url}} {{email_logo_url}} {{footer_text}}
+export const STANDARD_EMAIL_TEMPLATE = `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{subject}}</title>
+</head>
+<body style="margin:0; padding:0; background:#f4f4f5; font-family:'Helvetica Neue', Helvetica, Arial, sans-serif; color:#0f172a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5; padding:24px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; width:100%; background:#ffffff; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0;">
+          <tr>
+            <td style="background:{{primary_color}}; padding:24px; text-align:center;">
+              {{logo_html}}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 24px;">
+              {{content}}
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#0f172a; color:#e5e7eb; padding:18px 24px; font-size:12px; text-align:center; line-height:1.5;">
+              <div>&copy; {{year}} {{shop_name}}</div>
+              <div style="margin-top:6px; opacity:.85;">{{footer_text}}</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+`;
+
+// ============================================================
+// Beispiel: Rechnungs-Design für einen Shop
+// ============================================================
+// Wird als "invoice.json" ins ZIP gelegt. Alle Felder sind OPTIONAL –
+// fehlt ein Feld, bleibt der bewährte Standard der Rechnung erhalten.
+//   logo_url            -> eigenes Rechnungslogo (URL oder /shop-assets/<shopId>/logo.png)
+//   primary_color       -> Akzentfarbe für Überschrift/Tabellenlinie (#rrggbb)
+//   muted_color         -> Farbe der Fußzeile (#rrggbb)
+//   font_size_title     -> Schriftgröße der Überschrift (Standard 16)
+//   font_size_footer    -> Schriftgröße der Fußzeile (Standard 6)
+//   header_company_name -> Firmenname im Kopf (rechts oben)
+//   intro_text          -> Einleitungssatz über der Tabelle
+//   payment_note        -> Hinweiszeile über dem Verwendungszweck
+//   footer_note         -> Hinweis unter dem Gesamtbetrag
+//   footer_website      -> Webseite in der Fußzeile
+export const STANDARD_INVOICE_DESIGN = `{
+  "logo_url": "",
+  "primary_color": "#c00000",
+  "muted_color": "#646464",
+  "font_size_title": 16,
+  "font_size_footer": 6,
+  "header_company_name": "",
+  "intro_text": "Wir erlauben uns, Ihnen folgende Leistungen in Rechnung zu stellen:",
+  "payment_note": "Bitte bei Zahlung angeben!",
+  "footer_note": "Die Ware bleibt bis zur vollständigen Bezahlung unser Eigentum.",
+  "footer_website": "www.maintextildruck.com"
+}
+`;
+
 export const STANDARD_TEMPLATE_README = `Standard-Vorlage für ein Custom-Design-Template
 ===============================================
-
 Inhalt:
   index.html          -> Einstiegsdatei mit den Seiten-Blöcken <template data-page="...">
   assets/style.css    -> Stylesheet (wird per <link rel="stylesheet"> eingebunden)
+  email.html          -> Vorlage für alle Kunden-Mails (Rahmen um {{content}})
+  invoice.json        -> Design-Daten für die Rechnung (Logo, Farben, Texte)
   README.txt          -> diese Datei
 
 Vorgehen:
@@ -374,6 +456,30 @@ Listen:
 Inhaltsseiten:
   {{content_title}}  Titel der Seite (z.B. "Impressum")
   {{{content_body}}}  Inhalt als HTML
+
+Kunden-Mails (email.html):
+  Legt man eine "email.html" ins ZIP, wird sie als Rahmen um ALLE Kunden-Mails
+  gelegt (Bestellbestätigung, Versandbestätigung, Abholbereit, Zahlungserinnerung).
+  Platzhalter (einfache {{name}}-Ersetzung, KEINE Schleifen):
+    {{content}}         Inhalt der jeweiligen Mail – muss erhalten bleiben!
+    {{logo_html}}       fertiges Logo (Bild oder Shopname, weiß für den Header)
+    {{shop_name}} {{customer_name}} {{order_number}} {{subject}} {{year}}
+    {{primary_color}} {{secondary_color}} {{logo_url}} {{email_logo_url}} {{footer_text}}
+  Fehlt die Datei, werden die Mails wie bisher im Standard-Design versendet.
+
+Rechnung (invoice.json):
+  Legt man eine "invoice.json" ins ZIP, wird das Rechnungs-Layout daran angepasst.
+  Alle Felder sind optional; fehlt eines, bleibt der Standard:
+    logo_url            eigenes Rechnungslogo (URL oder /shop-assets/<shopId>/logo.png)
+    primary_color       Akzentfarbe für Überschrift/Tabellenlinie (#rrggbb)
+    muted_color         Farbe der Fußzeile (#rrggbb)
+    font_size_title     Schriftgröße der Überschrift (Standard 16)
+    font_size_footer    Schriftgröße der Fußzeile (Standard 6)
+    header_company_name Firmenname im Kopf (rechts oben)
+    intro_text          Einleitungssatz über der Tabelle
+    payment_note        Hinweiszeile über dem Verwendungszweck
+    footer_note         Hinweis unter dem Gesamtbetrag
+    footer_website      Webseite in der Fußzeile
 
 Wichtig:
   - {{content}} in cart/checkout/product MUSS erhalten bleiben, sonst funktionieren

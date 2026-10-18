@@ -10,7 +10,7 @@ import { DATA_DIR } from '../db.js';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DhlClient } from '../services/dhl.js';
 import { sendShipmentNotification, sendPickupReady } from '../services/email.js';
-import { STANDARD_TEMPLATE_ENTRY, STANDARD_TEMPLATE_CSS, STANDARD_TEMPLATE_README } from '../templates/standardTemplate.js';
+import { STANDARD_TEMPLATE_ENTRY, STANDARD_TEMPLATE_CSS, STANDARD_TEMPLATE_README, STANDARD_EMAIL_TEMPLATE, STANDARD_INVOICE_DESIGN } from '../templates/standardTemplate.js';
 
 const router = Router();
 
@@ -95,13 +95,15 @@ function requireAdminForTemplate(req: any, res: any): boolean {
 router.get('/:shopId/template', (req, res) => {
   try {
     const { shopId } = req.params;
-    const row = db.prepare('SELECT custom_template_enabled, custom_template_html FROM shops WHERE id = ?').get(shopId) as any;
+    const row = db.prepare('SELECT custom_template_enabled, custom_template_html, custom_email_html, custom_invoice_design FROM shops WHERE id = ?').get(shopId) as any;
     if (!row) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
     res.json({
       success: true,
       data: {
         enabled: !!row.custom_template_enabled,
-        html: row.custom_template_html || ''
+        html: row.custom_template_html || '',
+        emailHtml: row.custom_email_html || '',
+        invoiceDesign: row.custom_invoice_design || ''
       }
     });
   } catch (error: any) {
@@ -115,7 +117,16 @@ router.put('/:shopId/template', (req, res) => {
     const { shopId } = req.params;
     const enabled = req.body?.enabled ? 1 : 0;
     const html = typeof req.body?.html === 'string' ? req.body.html : '';
-    const result = db.prepare('UPDATE shops SET custom_template_enabled = ?, custom_template_html = ? WHERE id = ?').run(enabled, html, shopId);
+    const emailHtml = typeof req.body?.emailHtml === 'string' ? req.body.emailHtml : null;
+    const invoiceDesign = typeof req.body?.invoiceDesign === 'string' ? req.body.invoiceDesign : null;
+    const result = db.prepare(`
+      UPDATE shops
+      SET custom_template_enabled = ?,
+          custom_template_html = ?,
+          custom_email_html = COALESCE(?, custom_email_html),
+          custom_invoice_design = COALESCE(?, custom_invoice_design)
+      WHERE id = ?
+    `).run(enabled, html, emailHtml, invoiceDesign, shopId);
     if (result.changes === 0) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
     res.json({ success: true, data: { enabled: !!enabled } });
   } catch (error: any) {
@@ -235,13 +246,50 @@ router.post('/:shopId/template/zip', (req, res, next) => {
     }
 
     const html = fs.readFileSync(path.join(targetDir, entryName), 'utf8');
-    db.prepare('UPDATE shops SET custom_template_html = ? WHERE id = ?').run(html, shopId);
+
+    // Optional: E-Mail-Vorlage (email.html) und Rechnungs-Design (invoice.json) aus dem Paket übernehmen.
+    // Bevorzugt im Wurzelverzeichnis, sonst irgendwo im Paket.
+    const findFile = (matcher: (n: string) => boolean) =>
+      written.find((n) => matcher(n) && !n.includes('/')) || written.find(matcher);
+
+    let emailHtml: string | null = null;
+    let invoiceDesign: string | null = null;
+
+    const emailName = findFile((n) => n.toLowerCase() === 'email.html' || n.toLowerCase() === 'email.htm');
+    if (emailName) {
+      try {
+        emailHtml = fs.readFileSync(path.join(targetDir, emailName), 'utf8');
+      } catch { /* ignorieren */ }
+    }
+
+    const invoiceName = findFile((n) => n.toLowerCase() === 'invoice.json');
+    if (invoiceName) {
+      try {
+        const raw = fs.readFileSync(path.join(targetDir, invoiceName), 'utf8');
+        JSON.parse(raw); // Validierung – nur gültiges JSON speichern
+        invoiceDesign = raw;
+      } catch {
+        // Ungültiges JSON: Paket bleibt gültig, nur Rechnungs-Design wird ignoriert
+      }
+    }
+
+    db.prepare(`
+      UPDATE shops
+      SET custom_template_html = ?,
+          custom_email_html = COALESCE(?, custom_email_html),
+          custom_invoice_design = COALESCE(?, custom_invoice_design)
+      WHERE id = ?
+    `).run(html, emailHtml, invoiceDesign, shopId);
 
     res.json({
       success: true,
       data: {
         entry: entryName,
         html,
+        emailHtml: emailHtml || '',
+        invoiceDesign: invoiceDesign || '',
+        hasEmailTemplate: !!emailHtml,
+        hasInvoiceDesign: !!invoiceDesign,
         files: written,
         skipped
       }
@@ -257,6 +305,8 @@ router.delete('/:shopId/template/zip', (req, res) => {
     if (!requireAdminForTemplate(req, res)) return;
     const { shopId } = req.params;
     fs.removeSync(path.join(SHOP_TEMPLATES_DIR, shopId));
+    // E-Mail-Vorlage und Rechnungs-Design stammen aus dem Paket -> ebenfalls zurücksetzen
+    db.prepare('UPDATE shops SET custom_email_html = NULL, custom_invoice_design = NULL WHERE id = ?').run(shopId);
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -270,6 +320,8 @@ router.get('/:shopId/template/standard.zip', (req, res) => {
     const zip = new AdmZip();
     zip.addFile('index.html', Buffer.from(STANDARD_TEMPLATE_ENTRY, 'utf8'));
     zip.addFile('assets/style.css', Buffer.from(STANDARD_TEMPLATE_CSS, 'utf8'));
+    zip.addFile('email.html', Buffer.from(STANDARD_EMAIL_TEMPLATE, 'utf8'));
+    zip.addFile('invoice.json', Buffer.from(STANDARD_INVOICE_DESIGN, 'utf8'));
     zip.addFile('README.txt', Buffer.from(STANDARD_TEMPLATE_README, 'utf8'));
     const buffer = zip.toBuffer();
 

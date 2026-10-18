@@ -129,6 +129,8 @@ const ShopDashboard: React.FC = () => {
   const [templateMsg, setTemplateMsg] = useState<string | null>(null);
   const [templateFiles, setTemplateFiles] = useState<Array<{ path: string; size: number; url: string }>>([]);
   const [zipUploading, setZipUploading] = useState(false);
+  const [emailHtml, setEmailHtml] = useState('');
+  const [invoiceDesign, setInvoiceDesign] = useState('');
 
   const loadTemplateFiles = () => {
     if (!shopId) return;
@@ -146,6 +148,8 @@ const ShopDashboard: React.FC = () => {
         if (d.success) {
           setTemplateEnabled(!!d.data.enabled);
           setTemplateHtml(d.data.html || '');
+          setEmailHtml(d.data.emailHtml || '');
+          setInvoiceDesign(d.data.invoiceDesign || '');
         }
       })
       .catch(console.error);
@@ -160,7 +164,7 @@ const ShopDashboard: React.FC = () => {
       const res = await fetch(`/api/shop-management/${shopId}/template`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: templateEnabled, html: templateHtml })
+        body: JSON.stringify({ enabled: templateEnabled, html: templateHtml, emailHtml, invoiceDesign })
       });
       const data = await res.json();
       if (data.success) {
@@ -189,8 +193,21 @@ const ShopDashboard: React.FC = () => {
       if (data.success) {
         setTemplateHtml(data.data.html || '');
         loadTemplateFiles();
+        // E-Mail-Vorlage und Rechnungs-Design aus dem Paket neu laden (falls enthalten)
+        fetch(`/api/shop-management/${shopId}/template`)
+          .then(r => r.json())
+          .then(d => {
+            if (d.success) {
+              setEmailHtml(d.data.emailHtml || '');
+              setInvoiceDesign(d.data.invoiceDesign || '');
+            }
+          })
+          .catch(console.error);
         const skipped = data.data.skipped?.length || 0;
-        setTemplateMsg(`Paket hochgeladen ✓ (${data.data.files?.length || 0} Dateien${skipped ? `, ${skipped} übersprungen` : ''})`);
+        const extras: string[] = [];
+        if (data.data.hasEmailTemplate) extras.push('E-Mail-Vorlage');
+        if (data.data.hasInvoiceDesign) extras.push('Rechnungs-Design');
+        setTemplateMsg(`Paket hochgeladen ✓ (${data.data.files?.length || 0} Dateien${skipped ? `, ${skipped} übersprungen` : ''}${extras.length ? ` · ${extras.join(' + ')} übernommen` : ''})`);
       } else {
         setTemplateMsg(data.error || 'Upload fehlgeschlagen');
       }
@@ -210,6 +227,8 @@ const ShopDashboard: React.FC = () => {
       const data = await res.json();
       if (data.success) {
         setTemplateFiles([]);
+        setEmailHtml('');
+        setInvoiceDesign('');
         setTemplateMsg('Paket gelöscht ✓');
       } else {
         setTemplateMsg(data.error || 'Löschen fehlgeschlagen');
@@ -1963,9 +1982,25 @@ const ShopDashboard: React.FC = () => {
                                 <p className="text-sm font-bold text-slate-800 mb-1">ZIP-Paket hochladen</p>
                                 <p className="text-xs text-slate-600 mb-3">
                                     Empfohlen: <span className="font-mono">index.html</span> + <span className="font-mono">assets/style.css</span> + Bilder/Fonts als ZIP.
+                                    Optional dazu: <span className="font-mono">email.html</span> (Rahmen für alle Kunden-Mails) und
+                                    <span className="font-mono"> invoice.json</span> (Design der Rechnung).
                                     Relative Pfade wie <span className="font-mono">assets/bild.png</span> werden automatisch aufgelöst.
                                     JavaScript wird nicht ausgeführt.
                                 </p>
+                                {(emailHtml.trim() || invoiceDesign.trim()) && (
+                                    <div className="flex flex-wrap gap-2 mb-3">
+                                        {emailHtml.trim() && (
+                                            <span className="inline-flex items-center text-[11px] font-bold bg-emerald-100 text-emerald-700 rounded-full px-2 py-1">
+                                                ✓ E-Mail-Vorlage aktiv
+                                            </span>
+                                        )}
+                                        {invoiceDesign.trim() && (
+                                            <span className="inline-flex items-center text-[11px] font-bold bg-emerald-100 text-emerald-700 rounded-full px-2 py-1">
+                                                ✓ Rechnungs-Design aktiv
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="flex flex-wrap gap-3">
                                     <label className={`cursor-pointer text-white px-4 py-2 rounded-lg transition-colors flex items-center text-sm font-bold ${zipUploading ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
                                         <Upload size={16} className="mr-2" />
@@ -2100,6 +2135,19 @@ const ShopDashboard: React.FC = () => {
                                         <p className="font-bold text-slate-800 mb-1">Bilder &amp; Dateien aus dem ZIP-Paket</p>
                                         <p className="font-mono">{`<img src="assets/logo.png">`} – relative Pfade werden automatisch aufgelöst</p>
                                         <p className="font-mono">{`<link rel="stylesheet" href="assets/style.css">`} – wird eingebunden</p>
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-800 mb-1">Kunden-Mails (<span className="font-mono">email.html</span>)</p>
+                                        <p>Eine <span className="font-mono">email.html</span> im ZIP wird als Rahmen um alle Kunden-Mails gelegt (Bestellbestätigung, Versand, Abholbereit, Zahlungserinnerung).</p>
+                                        <p className="font-mono mt-1">{`{{content}}`} – Inhalt der jeweiligen Mail (muss erhalten bleiben!)</p>
+                                        <p className="font-mono">{`{{logo_html}} {{shop_name}} {{customer_name}} {{order_number}} {{subject}} {{year}}`}</p>
+                                        <p className="font-mono">{`{{primary_color}} {{secondary_color}} {{logo_url}} {{email_logo_url}} {{footer_text}}`}</p>
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-slate-800 mb-1">Rechnung (<span className="font-mono">invoice.json</span>)</p>
+                                        <p>Eine <span className="font-mono">invoice.json</span> im ZIP passt das Rechnungs-Layout an. Alle Felder optional.</p>
+                                        <p className="font-mono mt-1">logo_url · primary_color · muted_color · font_size_title · font_size_footer</p>
+                                        <p className="font-mono">header_company_name · intro_text · payment_note · footer_note · footer_website</p>
                                     </div>
                                     <div>
                                         <p className="font-bold text-slate-800 mb-1">Aktionen (Buttons/Links)</p>
