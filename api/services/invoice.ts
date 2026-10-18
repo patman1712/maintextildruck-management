@@ -21,19 +21,45 @@ export const generateInvoice = async (
         customFileName?: string;
         forceItems?: Array<{item_name: string; quantity: number; price: number; color?: string|null; size?: string|null; item_number?: string|null; notes?: string|null;}>;
         overwriteTotalAmount?: number; // Optional: Gesamtsumme der neuen Korrektur (wenn manuell geänderte Positionen)
+        // Vorschau/Test: statt einer echten Bestellung werden die übergebenen Daten verwendet.
+        // Es wird NICHTS in der Datenbank gespeichert.
+        previewData?: {
+            order: any;
+            items: Array<{item_name: string; quantity: number; price: number; color?: string|null; size?: string|null; item_number?: string|null; notes?: string|null;}>;
+        };
     }
 ): Promise<string | null> => {
     try {
-        // Fetch Order
-        const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
+        const isPreview = !!opts?.previewData?.order;
+
+        // Fetch Order (oder Vorschau-Daten verwenden)
+        const order = isPreview
+            ? opts!.previewData!.order
+            : (db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any);
         if (!order) throw new Error('Order not found');
 
-        // --- NEU: forceItems (Admin manuell geänderte Positionen in Korrektur) ---
-        // Wenn forceItems gesetzt → Komplett order_items ignorieren und diese verwenden!
+        // --- forceItems (Admin manuell geänderte Positionen in Korrektur) ---
+        // Wenn forceItems/previewData gesetzt → Komplett order_items ignorieren und diese verwenden!
         const hasForceItems = Array.isArray(opts?.forceItems) && opts.forceItems.length > 0;
+        const hasPreviewItems = Array.isArray(opts?.previewData?.items) && opts!.previewData!.items.length > 0;
         let rawItems: any[] = [];
-        if (hasForceItems) {
-          rawItems = opts.forceItems.map((fi, idx) => ({
+        if (hasPreviewItems) {
+          rawItems = opts!.previewData!.items.map((fi, idx) => ({
+            id: `preview-${idx}`,
+            order_id: orderId,
+            supplier_id: 'manual',
+            item_name: fi.item_name,
+            quantity: fi.quantity,
+            price: fi.price,
+            color: fi.color ?? null,
+            size: fi.size ?? null,
+            item_number: fi.item_number ?? null,
+            notes: fi.notes ?? null,
+            status: 'active',
+            created_at: new Date().toISOString()
+          }));
+        } else if (hasForceItems) {
+          rawItems = opts!.forceItems!.map((fi, idx) => ({
             id: `force-${orderId}-${idx}`,
             order_id: orderId,
             supplier_id: 'manual',
@@ -276,6 +302,12 @@ export const generateInvoice = async (
             logo_url?: string;
             primary_color?: string;
             muted_color?: string;
+            text_color?: string;
+            background_color?: string;
+            background_image?: string;
+            font_family?: string;
+            font_file?: string;
+            font_file_bold?: string;
             font_size_title?: number;
             font_size_footer?: number;
             header_company_name?: string;
@@ -301,9 +333,26 @@ export const generateInvoice = async (
         };
         const accentRgb = hexToRgb(invoiceDesign.primary_color, [0, 0, 0]);
         const mutedRgb = hexToRgb(invoiceDesign.muted_color, [100, 100, 100]);
+        const textRgb = hexToRgb(invoiceDesign.text_color, [0, 0, 0]);
+        const bgRgb = invoiceDesign.background_color ? hexToRgb(invoiceDesign.background_color, [255, 255, 255]) : null;
         const designTitleSize = Number(invoiceDesign.font_size_title) || 16;
         const designFooterSize = Number(invoiceDesign.font_size_footer) || 6;
         const designCompanyName = invoiceDesign.header_company_name || globalContent?.company_name || shop?.name || 'Main Textildruck GmbH';
+
+        // Datei aus dem Design-Paket des Shops (oder /uploads, /shop-assets, URL) auflösen.
+        const resolvePackageAsset = (rel: string): string => {
+            const s = String(rel || '').trim();
+            if (!s || s.startsWith('http')) return '';
+            if (s.startsWith('/uploads/')) return path.join(UPLOAD_DIR, s.replace(/^\/uploads\//, ''));
+            if (s.startsWith('/shop-assets/')) return path.join(DATA_DIR, 'shop_templates', s.replace(/^\/shop-assets\//, ''));
+            if (s.startsWith('/')) return path.join(process.cwd(), s);
+            if (!shop?.id) return '';
+            const root = path.join(DATA_DIR, 'shop_templates', shop.id);
+            const target = path.resolve(root, s);
+            // Pfad-Traversal-Schutz
+            if (target !== path.resolve(root) && !target.startsWith(path.resolve(root) + path.sep)) return '';
+            return target;
+        };
 
         // Check if invoice number is already set
         const orderCheck = db.prepare('SELECT invoice_number, invoice_date FROM orders WHERE id = ?').get(orderId) as any;
@@ -323,8 +372,8 @@ export const generateInvoice = async (
 
             console.log(`Assigning Invoice Number ${invoiceNumber} to Order ${orderId} (forceRegen=${forceRegen})`);
 
-            // Update Order
-            if (!opts?.doNotSaveToOrder) {
+            // Update Order (im Vorschau-/Test-Modus nicht speichern)
+            if (!opts?.doNotSaveToOrder && !isPreview) {
                 db.prepare('UPDATE orders SET invoice_number = ?, invoice_date = ? WHERE id = ?').run(invoiceNumber, invoiceDate, orderId);
             }
         } else {
@@ -335,9 +384,71 @@ export const generateInvoice = async (
         const doc = new jsPDF({ compress: true });
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
-        
-        // Fonts
-        doc.setFont('helvetica');
+
+        // --- Schriftart ---
+        // Optional: eigene TTF-Schriftart aus dem Design-Paket (invoice.json: font_file / font_file_bold).
+        // Fallback: die in jsPDF eingebauten Schriften helvetica / times / courier.
+        let baseFont = ['helvetica', 'times', 'courier'].includes(String(invoiceDesign.font_family || '').toLowerCase())
+            ? String(invoiceDesign.font_family).toLowerCase()
+            : 'helvetica';
+        if (invoiceDesign.font_file) {
+            try {
+                const fontPath = resolvePackageAsset(invoiceDesign.font_file);
+                if (fontPath && fs.existsSync(fontPath) && fontPath.toLowerCase().endsWith('.ttf')) {
+                    const fontName = 'ShopFont';
+                    doc.addFileToVFS('ShopFont.ttf', fs.readFileSync(fontPath).toString('base64'));
+                    doc.addFont('ShopFont.ttf', fontName, 'normal');
+                    // Fette Variante: eigene Datei, sonst dieselbe Datei
+                    const boldPath = invoiceDesign.font_file_bold ? resolvePackageAsset(invoiceDesign.font_file_bold) : '';
+                    const boldData = (boldPath && fs.existsSync(boldPath))
+                        ? fs.readFileSync(boldPath).toString('base64')
+                        : fs.readFileSync(fontPath).toString('base64');
+                    doc.addFileToVFS('ShopFont-Bold.ttf', boldData);
+                    doc.addFont('ShopFont-Bold.ttf', fontName, 'bold');
+                    baseFont = fontName;
+                } else {
+                    console.warn('[generateInvoice] font_file nicht gefunden oder kein .ttf – Standard-Schrift wird verwendet.');
+                }
+            } catch (e) {
+                console.warn('[generateInvoice] Schriftart konnte nicht eingebettet werden:', e);
+            }
+        }
+
+        // --- Hintergrund ---
+        // Vorab als JPEG aufbereiten, damit er synchron vor jedem Seiteninhalt gezeichnet werden kann.
+        let bgImageBuffer: Buffer | null = null;
+        if (invoiceDesign.background_image) {
+            try {
+                const bgPath = resolvePackageAsset(invoiceDesign.background_image);
+                if (bgPath && fs.existsSync(bgPath)) {
+                    bgImageBuffer = await sharp(fs.readFileSync(bgPath))
+                        .resize({ width: Math.round(pageWidth * 4), withoutEnlargement: false })
+                        .flatten({ background: '#ffffff' })
+                        .jpeg({ quality: 82 })
+                        .toBuffer();
+                }
+            } catch (e) {
+                console.warn('[generateInvoice] Hintergrundbild konnte nicht geladen werden:', e);
+            }
+        }
+        const drawPageBackground = () => {
+            if (bgImageBuffer) {
+                try {
+                    doc.addImage(bgImageBuffer, 'JPEG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
+                    return true;
+                } catch { /* Fallback auf Farbe */ }
+            }
+            if (bgRgb) {
+                doc.setFillColor(bgRgb[0], bgRgb[1], bgRgb[2]);
+                doc.rect(0, 0, pageWidth, pageHeight, 'F');
+                return true;
+            }
+            return false;
+        };
+
+        // Fonts + Hintergrund für Seite 1
+        doc.setFont(baseFont);
+        drawPageBackground();
 
         // --- Header ---
         
@@ -403,19 +514,19 @@ export const generateInvoice = async (
             doc.setFontSize(20);
             doc.setTextColor(200, 0, 0);
             doc.text("MAIN", 20, 30);
-            doc.setTextColor(0, 0, 0);
+            doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
             doc.text("TEXTILDRUCK", 50, 30);
         }
 
         // Company Info (Right)
         doc.setFontSize(8); 
-        doc.setTextColor(0, 0, 0);
+        doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
         const companyX = 140;
         let companyY = 25;
         
-        doc.setFont("helvetica", "bold");
+        doc.setFont(baseFont, "bold");
         doc.text(designCompanyName, companyX, companyY);
-        doc.setFont("helvetica", "normal");
+        doc.setFont(baseFont, "normal");
         companyY += 4;
         
         // Handle multiline address
@@ -476,16 +587,16 @@ export const generateInvoice = async (
 
         // Title
         doc.setFontSize(designTitleSize);
-        doc.setFont("helvetica", "bold");
+        doc.setFont(baseFont, "bold");
         doc.setTextColor(accentRgb[0], accentRgb[1], accentRgb[2]);
         const titleText = opts?.subjectSuffix
             ? `${opts.subjectSuffix}`
             : `Rechnung Nr. ${invoiceNumber}`;
         doc.text(titleText, 20, 110);
-        doc.setTextColor(0, 0, 0);
+        doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
 
         doc.setFontSize(10);
-        doc.setFont("helvetica", "normal");
+        doc.setFont(baseFont, "normal");
         if (opts?.subjectSuffix) {
             doc.text(`Rechnungs-Nr. ${invoiceNumber}`, 20, 120);
             doc.text("Aufgrund der geänderten Rechnungsadresse stellen wir Ihnen die korrigierte Rechnung wie folgt zu:", 20, 128);
@@ -505,7 +616,7 @@ export const generateInvoice = async (
 
         const drawTableHeader = (yPos: number) => {
             doc.setFontSize(9);
-            doc.setFont("helvetica", "bold");
+            doc.setFont(baseFont, "bold");
             doc.text("Pos.", 20, yPos);
             doc.text("Bezeichnung", 40, yPos);
             doc.text("Menge", 130, yPos, { align: 'right' });
@@ -514,24 +625,25 @@ export const generateInvoice = async (
             doc.setDrawColor(accentRgb[0], accentRgb[1], accentRgb[2]);
             doc.line(20, yPos + 2, 195, yPos + 2);
             doc.setDrawColor(0, 0, 0);
-            doc.setFont("helvetica", "normal");
+            doc.setFont(baseFont, "normal");
             return yPos + 8;
         };
 
         const drawContinuationHeader = () => {
             doc.setFontSize(10);
-            doc.setFont("helvetica", "bold");
+            doc.setFont(baseFont, "bold");
             doc.text(
                 opts?.subjectSuffix ? opts.subjectSuffix : `Rechnung Nr. ${invoiceNumber}`,
                 20, 18
             );
-            doc.setFont("helvetica", "normal");
+            doc.setFont(baseFont, "normal");
             doc.setFontSize(8);
             doc.text(`Bestell-Nr. ${order.order_number}`, 195, 18, { align: 'right' });
         };
 
         const addPageForTable = () => {
             doc.addPage();
+            drawPageBackground();
             drawContinuationHeader();
             y = 28;
             y = drawTableHeader(y);
@@ -543,6 +655,7 @@ export const generateInvoice = async (
                 addPageForTable();
             } else {
                 doc.addPage();
+                drawPageBackground();
                 drawContinuationHeader();
                 y = 28;
             }
@@ -554,9 +667,9 @@ export const generateInvoice = async (
         let subtotal = 0;
 
         items.forEach((item, index) => {
-            doc.setFont("helvetica", "normal");
+            doc.setFont(baseFont, "normal");
             doc.setFontSize(9);
-            doc.setTextColor(0);
+            doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
 
             const price = item.price || 0;
             const total = price * item.quantity;
@@ -663,7 +776,7 @@ export const generateInvoice = async (
                     doc.text(splitLine, 40, extraY + 2);
                     extraY += (splitLine.length * 3.5);
                 });
-                doc.setTextColor(0);
+                doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
                 doc.setFontSize(9);
             }
 
@@ -705,10 +818,10 @@ export const generateInvoice = async (
         doc.text(`${vatTotal.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
         y += 5;
 
-        doc.setFont("helvetica", "bold");
+        doc.setFont(baseFont, "bold");
         doc.text("Gesamtbetrag:", 160, y, { align: 'right' });
         doc.text(`${grossTotal.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
-        doc.setFont("helvetica", "normal");
+        doc.setFont(baseFont, "normal");
         
         y += 15;
 
@@ -730,36 +843,36 @@ export const generateInvoice = async (
             doc.setFontSize(designFooterSize);
             doc.setTextColor(mutedRgb[0], mutedRgb[1], mutedRgb[2]);
 
-            doc.setFont("helvetica", "bold");
+            doc.setFont(baseFont, "bold");
             doc.text(globalContent.company_name || shop.name || '', col1, footerY);
-            doc.setFont("helvetica", "normal");
+            doc.setFont(baseFont, "normal");
             doc.text(globalContent.company_address || '', col1, footerY + 3);
             if (globalContent.ceo_name) doc.text(`GF: ${globalContent.ceo_name}`, col1, footerY + 6);
 
-            doc.setFont("helvetica", "bold");
+            doc.setFont(baseFont, "bold");
             doc.text('Kontakt', col2, footerY);
-            doc.setFont("helvetica", "normal");
+            doc.setFont(baseFont, "normal");
             doc.text(globalContent.contact_email || '', col2, footerY + 3);
             doc.text(globalContent.contact_phone || '', col2, footerY + 6);
             doc.text(invoiceDesign.footer_website || 'www.maintextildruck.com', col2, footerY + 9);
 
-            doc.setFont("helvetica", "bold");
+            doc.setFont(baseFont, "bold");
             doc.text('Bankverbindung', col3, footerY);
-            doc.setFont("helvetica", "normal");
+            doc.setFont(baseFont, "normal");
             doc.text(globalContent.bank_name || '', col3, footerY + 3);
             doc.text(`IBAN: ${globalContent.bank_iban || ''}`, col3, footerY + 6);
             doc.text(`BIC: ${globalContent.bank_bic || ''}`, col3, footerY + 9);
 
-            doc.setFont("helvetica", "bold");
+            doc.setFont(baseFont, "bold");
             doc.text('Register & Steuer', col4, footerY);
-            doc.setFont("helvetica", "normal");
+            doc.setFont(baseFont, "normal");
             doc.text(`Steuer-Nr: ${globalContent.tax_number || ''}`, col4, footerY + 3);
             doc.text(`USt-ID: ${globalContent.vat_id || ''}`, col4, footerY + 6);
             if (globalContent.commercial_register) doc.text(`HRB: ${globalContent.commercial_register}`, col4, footerY + 9);
 
             doc.setTextColor(150);
             doc.text(`Seite ${pageNo} / ${totalPages}`, pageWidth - 20, footerY + 12, { align: 'right' });
-            doc.setTextColor(0);
+            doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
         };
 
         const totalPages = doc.getNumberOfPages();
@@ -779,8 +892,8 @@ export const generateInvoice = async (
         const pdfOutput = doc.output('arraybuffer');
         fs.writeFileSync(filePath, Buffer.from(pdfOutput));
 
-        // Update Order with path
-        if (!opts?.doNotSaveToOrder) {
+        // Update Order with path (im Vorschau-/Test-Modus nicht speichern)
+        if (!opts?.doNotSaveToOrder && !isPreview) {
             db.prepare('UPDATE orders SET invoice_path = ? WHERE id = ?').run(fileName, orderId);
         }
 

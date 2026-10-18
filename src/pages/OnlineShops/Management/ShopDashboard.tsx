@@ -131,6 +131,35 @@ const ShopDashboard: React.FC = () => {
   const [zipUploading, setZipUploading] = useState(false);
   const [emailHtml, setEmailHtml] = useState('');
   const [invoiceDesign, setInvoiceDesign] = useState('');
+  const [testEmailTo, setTestEmailTo] = useState('');
+  const [testEmailSending, setTestEmailSending] = useState(false);
+  const [testEmailMsg, setTestEmailMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  const sendTestEmail = async () => {
+    if (!shopId || !testEmailTo.includes('@')) {
+      setTestEmailMsg({ type: 'err', text: 'Bitte eine gültige E-Mail-Adresse angeben.' });
+      return;
+    }
+    setTestEmailSending(true);
+    setTestEmailMsg(null);
+    try {
+      const res = await fetch(`/api/shop-management/${shopId}/template/test-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: testEmailTo })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTestEmailMsg({ type: 'ok', text: `Test-Mail an ${data.data?.recipient || testEmailTo} gesendet ✓` });
+      } else {
+        setTestEmailMsg({ type: 'err', text: data.error || 'Versand fehlgeschlagen.' });
+      }
+    } catch {
+      setTestEmailMsg({ type: 'err', text: 'Netzwerkfehler beim Versand.' });
+    } finally {
+      setTestEmailSending(false);
+    }
+  };
 
   const loadTemplateFiles = () => {
     if (!shopId) return;
@@ -2024,6 +2053,39 @@ const ShopDashboard: React.FC = () => {
                                         <Download size={16} className="mr-2" />
                                         Standard-Vorlage herunterladen
                                     </a>
+                                    <a
+                                        href={`/api/shop-management/${shopId}/template/test-invoice.pdf`}
+                                        className="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center text-sm font-medium"
+                                    >
+                                        <Download size={16} className="mr-2" />
+                                        Test-Rechnung (PDF)
+                                    </a>
+                                </div>
+
+                                <div className="mt-3 pt-3 border-t border-indigo-200">
+                                    <p className="text-xs font-bold text-slate-700 mb-2">Test-Mail (wie eine echte Bestellbestätigung)</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        <input
+                                            type="email"
+                                            value={testEmailTo}
+                                            onChange={(e) => setTestEmailTo(e.target.value)}
+                                            placeholder="empfaenger@beispiel.de"
+                                            className="flex-1 min-w-[220px] border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={sendTestEmail}
+                                            disabled={testEmailSending}
+                                            className={`text-white px-4 py-2 rounded-lg text-sm font-bold ${testEmailSending ? 'bg-slate-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                                        >
+                                            {testEmailSending ? 'Sendet...' : 'Test-Mail senden'}
+                                        </button>
+                                    </div>
+                                    {testEmailMsg && (
+                                        <p className={`text-xs mt-2 ${testEmailMsg.type === 'ok' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                            {testEmailMsg.text}
+                                        </p>
+                                    )}
                                 </div>
 
                                 {templateFiles.length > 0 && (
@@ -2146,8 +2208,11 @@ const ShopDashboard: React.FC = () => {
                                     <div>
                                         <p className="font-bold text-slate-800 mb-1">Rechnung (<span className="font-mono">invoice.json</span>)</p>
                                         <p>Eine <span className="font-mono">invoice.json</span> im ZIP passt das Rechnungs-Layout an. Alle Felder optional.</p>
-                                        <p className="font-mono mt-1">logo_url · primary_color · muted_color · font_size_title · font_size_footer</p>
+                                        <p className="font-mono mt-1">logo_url · primary_color · muted_color · text_color · font_size_title · font_size_footer</p>
+                                        <p className="font-mono">background_color · background_image · font_family (helvetica/times/courier)</p>
+                                        <p className="font-mono">font_file · font_file_bold (eigene .ttf aus dem ZIP, z.B. assets/fonts/Inter-Regular.ttf)</p>
                                         <p className="font-mono">header_company_name · intro_text · payment_note · footer_note · footer_website</p>
+                                        <p className="mt-1 text-slate-500">„Test-Rechnung (PDF)" zeigt sofort das aktuelle Design.</p>
                                     </div>
                                     <div>
                                         <p className="font-bold text-slate-800 mb-1">Aktionen (Buttons/Links)</p>

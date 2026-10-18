@@ -9,7 +9,8 @@ import path from 'path';
 import { DATA_DIR } from '../db.js';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DhlClient } from '../services/dhl.js';
-import { sendShipmentNotification, sendPickupReady } from '../services/email.js';
+import { sendShipmentNotification, sendPickupReady, sendShopTestEmail } from '../services/email.js';
+import { generateInvoice } from '../services/invoice.js';
 import { STANDARD_TEMPLATE_ENTRY, STANDARD_TEMPLATE_CSS, STANDARD_TEMPLATE_README, STANDARD_EMAIL_TEMPLATE, STANDARD_INVOICE_DESIGN } from '../templates/standardTemplate.js';
 
 const router = Router();
@@ -329,6 +330,71 @@ router.get('/:shopId/template/standard.zip', (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="shop-standard-template.zip"');
     res.setHeader('Content-Length', String(buffer.length));
     res.send(buffer);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Test-Rechnung mit dem aktuellen Design als PDF (Admin only)
+router.get('/:shopId/template/test-invoice.pdf', async (req, res) => {
+  if (!requireAdminForTemplate(req, res)) return;
+  const { shopId } = req.params;
+  try {
+    const year = new Date().getFullYear();
+    const previewOrder = {
+      id: `preview-${shopId}`,
+      order_number: `TEST-${year}-0001`,
+      shop_id: shopId,
+      shop_customer_id: null,
+      customer_name: 'Max Mustermann',
+      customer_address: 'Musterstraße 12, 12345 Musterstadt',
+      company: null,
+      created_at: new Date().toISOString(),
+      payment_method: 'Vorkasse',
+      total_amount: 84.70,
+      shipping_costs: 0,
+      status: 'preview',
+      invoice_number: `TEST-${year}-0001`,
+      invoice_date: new Date().toISOString()
+    };
+    const previewItems = [
+      { item_name: 'Beispiel T-Shirt (Motiv: Testmotiv)', quantity: 2, price: 19.90, color: 'Schwarz', size: 'L', item_number: 'TS-001', notes: null },
+      { item_name: 'Beispiel Hoodie (Motiv: Testmotiv)', quantity: 1, price: 44.90, color: 'Grau', size: 'XL', item_number: 'HD-002', notes: null }
+    ];
+    const fileName = `TEST_Rechnung_${shopId}.pdf`;
+    const filePath = await generateInvoice(previewOrder.id, {
+      previewData: { order: previewOrder, items: previewItems },
+      doNotSaveToOrder: true,
+      customFileName: fileName
+    });
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(500).json({ success: false, error: 'Test-Rechnung konnte nicht erstellt werden.' });
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="test-rechnung.pdf"');
+    const stream = fs.createReadStream(filePath);
+    stream.pipe(res);
+    stream.on('close', () => { fs.remove(filePath).catch(() => { /* egal */ }); });
+    stream.on('error', () => { if (!res.headersSent) res.status(500).end(); });
+  } catch (error: any) {
+    if (!res.headersSent) res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Test-E-Mail (sieht aus wie eine echte Bestellbestätigung) an eine Adresse senden (Admin only)
+router.post('/:shopId/template/test-email', async (req, res) => {
+  if (!requireAdminForTemplate(req, res)) return;
+  const { shopId } = req.params;
+  const to = String(req.body?.to || '').trim();
+  if (!to || !to.includes('@')) {
+    return res.status(400).json({ success: false, error: 'Bitte eine gültige Empfänger-Adresse angeben.' });
+  }
+  try {
+    const result = await sendShopTestEmail(shopId, to);
+    if (!result.success) {
+      return res.status(500).json({ success: false, error: result.error || 'Versand fehlgeschlagen.' });
+    }
+    res.json({ success: true, data: { recipient: result.recipient } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }

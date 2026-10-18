@@ -1192,3 +1192,121 @@ export const sendVorkassePaymentReminder = async (orderId: string, customNote?: 
     return { success: false, recipient: null, error: e.message || 'Interner Fehler.' };
   }
 };
+
+// ============================================
+// Test-E-Mail: sieht aus wie eine echte Bestellbestätigung eines Shops
+// ============================================
+export const sendShopTestEmail = async (
+    shopId: string,
+    to: string
+): Promise<{ success: boolean; recipient: string | null; error?: string }> => {
+    const config = getEmailConfig();
+    if (!config) {
+        return { success: false, recipient: null, error: 'E-Mail-Konfiguration fehlt.' };
+    }
+    if (!to || !to.includes('@')) {
+        return { success: false, recipient: null, error: 'Ungültige Empfängeradresse.' };
+    }
+
+    try {
+        const shop = db.prepare('SELECT * FROM shops WHERE id = ?').get(shopId) as any;
+        if (!shop) return { success: false, recipient: null, error: 'Shop nicht gefunden.' };
+
+        const branding = {
+            logo_url: shop.logo_url?.startsWith('http') ? shop.logo_url : '',
+            email_logo_url: shop.email_logo_url?.startsWith('http') ? shop.email_logo_url : '',
+            primary_color: shop.primary_color || '#3b82f6',
+            secondary_color: shop.secondary_color || '#1e40af',
+            company_name: shop.name || config.sender_name,
+            footer_text: ''
+        };
+        const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
+        if (globalContent) {
+            const parts = [];
+            if (globalContent.company_name) parts.push(globalContent.company_name);
+            if (globalContent.company_address) parts.push(globalContent.company_address);
+            if (globalContent.contact_email) parts.push(globalContent.contact_email);
+            branding.footer_text = parts.join(' | ');
+        }
+
+        const orderNumber = `TEST-${new Date().getFullYear()}-0001`;
+        const customerName = 'Max Mustermann';
+        const subject = `[TEST] Ihre Bestellung #${orderNumber} bei ${branding.company_name}`;
+
+        // Inhalt – gleiche Struktur wie die echte Bestellbestätigung
+        const contentHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bestellbestätigung (Test)</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+        .container { max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .content { padding: 40px 30px; }
+        .order-info { background-color: #f8f9fa; padding: 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid ${branding.primary_color}; }
+        .order-info p { margin: 5px 0; }
+        table.items { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        table.items th, table.items td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #eee; font-size: 14px; }
+        table.items td.num, table.items th.num { text-align: right; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="content">
+            <h2 style="color: ${branding.secondary_color || '#333'}">Vielen Dank für Ihre Bestellung!</h2>
+            <p>Guten Tag ${customerName},</p>
+            <p>wir haben Ihre Bestellung erhalten und freuen uns, diese für Sie produzieren zu dürfen.</p>
+
+            <div class="order-info">
+                <p><strong>Bestellnummer:</strong> ${orderNumber}</p>
+                <p><strong>Bestelldatum:</strong> ${new Date().toLocaleDateString('de-DE')}</p>
+                <p><strong>Status:</strong> In Bearbeitung</p>
+            </div>
+
+            <table class="items">
+                <thead>
+                    <tr>
+                        <th>Artikel</th>
+                        <th class="num">Menge</th>
+                        <th class="num">Preis</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Beispiel T-Shirt (Motiv: Testmotiv)</td><td class="num">2</td><td class="num">19,90 €</td></tr>
+                    <tr><td>Beispiel Hoodie (Motiv: Testmotiv)</td><td class="num">1</td><td class="num">44,90 €</td></tr>
+                </tbody>
+            </table>
+
+            <p>Ihre Rechnung finden Sie als PDF-Anhang an dieser E-Mail.</p>
+            <p>Bei Rückfragen stehen wir Ihnen gerne zur Verfügung.</p>
+            <p>Mit freundlichen Grüßen<br>${branding.company_name}</p>
+        </div>
+    </div>
+</body>
+</html>
+`;
+
+        const html = applyShopEmailFrame(shopId, {
+            shop_name: branding.company_name,
+            customer_name: customerName,
+            order_number: orderNumber,
+            subject,
+            year: String(new Date().getFullYear()),
+            logo_url: branding.logo_url,
+            email_logo_url: branding.email_logo_url,
+            primary_color: branding.primary_color,
+            secondary_color: branding.secondary_color,
+            footer_text: branding.footer_text
+        }, contentHtml);
+
+        const text = `Guten Tag ${customerName},\n\nwir haben Ihre Test-Bestellung #${orderNumber} erhalten.\n\nMit freundlichen Grüßen\n${branding.company_name}`;
+
+        const ok = await sendEmailWithInvoice({ to: [to], subject, text, html });
+        return { success: !!ok, recipient: to, error: ok ? undefined : 'E-Mail Versand fehlgeschlagen (siehe Logs).' };
+    } catch (e: any) {
+        console.error('[Test Email] Error:', e);
+        return { success: false, recipient: null, error: e.message || 'Interner Fehler.' };
+    }
+};

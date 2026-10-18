@@ -389,6 +389,13 @@ export const STANDARD_EMAIL_TEMPLATE = `<!DOCTYPE html>
 //   logo_url            -> eigenes Rechnungslogo (URL oder /shop-assets/<shopId>/logo.png)
 //   primary_color       -> Akzentfarbe für Überschrift/Tabellenlinie (#rrggbb)
 //   muted_color         -> Farbe der Fußzeile (#rrggbb)
+//   text_color          -> Standard-Textfarbe (#rrggbb)
+//   background_color    -> Seitenhintergrund als Farbe (#rrggbb)
+//   background_image    -> Seitenhintergrund als Bild (URL oder Datei aus dem ZIP,
+//                          z.B. "assets/rechnung-bg.png"); hat Vorrang vor background_color
+//   font_family         -> eingebaute Schrift: "helvetica" | "times" | "courier"
+//   font_file           -> eigene TTF-Schrift aus dem ZIP, z.B. "assets/fonts/Inter-Regular.ttf"
+//   font_file_bold      -> passende fette TTF (optional; sonst wird font_file für fett genutzt)
 //   font_size_title     -> Schriftgröße der Überschrift (Standard 16)
 //   font_size_footer    -> Schriftgröße der Fußzeile (Standard 6)
 //   header_company_name -> Firmenname im Kopf (rechts oben)
@@ -400,6 +407,12 @@ export const STANDARD_INVOICE_DESIGN = `{
   "logo_url": "",
   "primary_color": "#c00000",
   "muted_color": "#646464",
+  "text_color": "#000000",
+  "background_color": "",
+  "background_image": "",
+  "font_family": "helvetica",
+  "font_file": "",
+  "font_file_bold": "",
   "font_size_title": 16,
   "font_size_footer": 6,
   "header_company_name": "",
@@ -473,6 +486,12 @@ Rechnung (invoice.json):
     logo_url            eigenes Rechnungslogo (URL oder /shop-assets/<shopId>/logo.png)
     primary_color       Akzentfarbe für Überschrift/Tabellenlinie (#rrggbb)
     muted_color         Farbe der Fußzeile (#rrggbb)
+    text_color          Standard-Textfarbe (#rrggbb)
+    background_color    Seitenhintergrund als Farbe (#rrggbb)
+    background_image    Seitenhintergrund als Bild (Datei aus dem ZIP, z.B. assets/rechnung-bg.png)
+    font_family         eingebaute Schrift: "helvetica" | "times" | "courier"
+    font_file           eigene TTF-Schrift aus dem ZIP (z.B. assets/fonts/Inter-Regular.ttf)
+    font_file_bold      passende fette TTF (optional)
     font_size_title     Schriftgröße der Überschrift (Standard 16)
     font_size_footer    Schriftgröße der Fußzeile (Standard 6)
     header_company_name Firmenname im Kopf (rechts oben)
