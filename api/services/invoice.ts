@@ -563,26 +563,16 @@ export const generateInvoice = async (
 
         let logoAdded = false;
         const headerY = 15;
-        let x = 20;
-        const shopLogoWidth = 42;
-        const mainLogoWidth = 42;
+        const headerLogoX = 20;
+        const headerLogoWidth = 42;
 
-        const shopLogoAdded = !!shopLogoUrl && (await tryAddLogo(shopLogoUrl, x, headerY, shopLogoWidth));
-        if (shopLogoAdded) {
-            logoAdded = true;
-            x += shopLogoWidth + 6;
+        // Im Rechnungskopf immer nur EIN Logo:
+        // 1. Shop-Logo, 2. Fallback auf Main-Textildruck-Logo.
+        if (shopLogoUrl) {
+            logoAdded = await tryAddLogo(shopLogoUrl, headerLogoX, headerY, headerLogoWidth);
         }
-
-        const mainLogoAdded = !!mainLogoUrl && (await tryAddLogo(mainLogoUrl, x + (shopLogoAdded ? 6 : 0), headerY, mainLogoWidth));
-        if (shopLogoAdded && mainLogoAdded) {
-            const lineX = 20 + shopLogoWidth + 3;
-            doc.setDrawColor(180, 180, 180);
-            doc.setLineWidth(0.4);
-            doc.line(lineX, headerY, lineX, headerY + 18);
-            x += 6;
-        }
-        if (mainLogoAdded) {
-            logoAdded = true;
+        if (!logoAdded && mainLogoUrl) {
+            logoAdded = await tryAddLogo(mainLogoUrl, headerLogoX, headerY, headerLogoWidth);
         }
 
         if (!logoAdded) {
