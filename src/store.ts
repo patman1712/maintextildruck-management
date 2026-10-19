@@ -181,6 +181,7 @@ export interface Shop {
   dhl_config?: any;
   paypal_config?: any;
   donations_enabled?: boolean;
+  vouchers_enabled?: boolean | number;
   order_number_circle?: string;
   next_order_number?: number;
   invoice_number_circle?: string;

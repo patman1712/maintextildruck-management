@@ -1655,6 +1655,53 @@ try {
   } catch (e) {
     console.error('Migration error (shop_operators):', e);
   }
+
+  // 🎟️ Gutschein-Codes: Freigabe pro Shop + Codes
+  try {
+    const voucherShopCols = db.prepare("PRAGMA table_info(shops)").all() as any[];
+    if (!voucherShopCols.some(col => col.name === 'vouchers_enabled')) {
+      console.log('Migrating database: Adding vouchers_enabled to shops table');
+      db.exec('ALTER TABLE shops ADD COLUMN vouchers_enabled INTEGER DEFAULT 0');
+    }
+  } catch (e) {
+    console.error('Migration error (vouchers_enabled):', e);
+  }
+
+  try {
+    const voucherOrderCols = db.prepare("PRAGMA table_info(orders)").all() as any[];
+    if (!voucherOrderCols.some(col => col.name === 'voucher_code')) {
+      console.log('Migrating database: Adding voucher_code to orders table');
+      db.exec('ALTER TABLE orders ADD COLUMN voucher_code TEXT');
+    }
+    if (!voucherOrderCols.some(col => col.name === 'discount_amount')) {
+      console.log('Migrating database: Adding discount_amount to orders table');
+      db.exec('ALTER TABLE orders ADD COLUMN discount_amount DECIMAL(10, 2) DEFAULT 0');
+    }
+  } catch (e) {
+    console.error('Migration error (orders voucher columns):', e);
+  }
+
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS shop_vouchers (
+        id TEXT PRIMARY KEY,
+        shop_id TEXT NOT NULL,
+        code TEXT NOT NULL,
+        discount_type TEXT NOT NULL DEFAULT 'percent',
+        discount_value DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        active INTEGER DEFAULT 1,
+        valid_until TEXT,
+        min_order_value DECIMAL(10, 2),
+        once_per_customer INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(shop_id) REFERENCES shops(id) ON DELETE CASCADE
+      );
+    `);
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_shop_vouchers_code ON shop_vouchers(shop_id, code)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_shop_vouchers_shop ON shop_vouchers(shop_id)');
+  } catch (e) {
+    console.error('Migration error (shop_vouchers):', e);
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useOutletContext, Link, useNavigate } from 'react-router-dom';
-import { CreditCard, Truck, MapPin, CheckCircle, ArrowLeft, ArrowRight, ShieldCheck, ShoppingBag, ShoppingCart } from 'lucide-react';
+import { CreditCard, Truck, MapPin, CheckCircle, ArrowLeft, ArrowRight, ShieldCheck, ShoppingBag, ShoppingCart, Ticket, X, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import { Shop } from '../../store';
 import { useShopStore } from '../../shopStore';
@@ -20,13 +20,18 @@ interface ShopContext {
 const ShopCheckoutPage: React.FC = () => {
   const navigate = useNavigate();
   const { shop, primaryColor, shopBaseUrl, template, customTemplateActive, templateContext } = useOutletContext<ShopContext>();
-  const { cart, currentCustomer, clearCart } = useShopStore();
+  const { cart, currentCustomer, clearCart, voucher, setVoucher } = useShopStore();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const guestCheckoutEnabled = (shop as any).guest_checkout_enabled === undefined || (shop as any).guest_checkout_enabled === null ? true : !!(shop as any).guest_checkout_enabled;
   const [shippingConfig, setShippingConfig] = useState<any>(null);
   const [shippingCost, setShippingCost] = useState(5.95);
   const [paypalConfig, setPaypalConfig] = useState<{ clientId: string, mode: string } | null>(null);
   const [selectedShippingMethod, setSelectedShippingMethod] = useState<'dhl' | 'pickup'>('dhl');
+
+  const [voucherInput, setVoucherInput] = useState('');
+  const [voucherChecking, setVoucherChecking] = useState(false);
+  const [voucherError, setVoucherError] = useState('');
+  const vouchersEnabled = !!(shop as any)?.vouchers_enabled;
 
   useEffect(() => {
     // Fetch PayPal Config
@@ -105,7 +110,61 @@ const ShopCheckoutPage: React.FC = () => {
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const shipping = shippingCost;
-  const total = cartTotal + shipping;
+
+  // Rabatt nur auf den Warenwert (cartTotal), niemals auf die Versandkosten.
+  const voucherDiscount = voucher
+    ? Math.round(
+        Math.min(
+          voucher.discountType === 'fixed'
+            ? voucher.discountValue
+            : (cartTotal * voucher.discountValue) / 100,
+          cartTotal
+        ) * 100
+      ) / 100
+    : 0;
+  const total = Math.max(0, cartTotal - voucherDiscount) + shipping;
+
+  const handleApplyVoucher = async () => {
+    const code = voucherInput.trim();
+    if (!code) return;
+    setVoucherChecking(true);
+    setVoucherError('');
+    try {
+      const res = await fetch(`/api/shops/${shop.id}/voucher/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          subtotal: cartTotal,
+          email: address.email || currentCustomer?.email || null,
+          customerId: currentCustomer?.id || null,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.valid) {
+        setVoucher({
+          code: data.code,
+          discountType: data.discount_type,
+          discountValue: Number(data.discount_value) || 0,
+        });
+        setVoucherInput('');
+      } else {
+        setVoucher(null);
+        setVoucherError(data?.error || 'Der Gutscheincode ist ungültig.');
+      }
+    } catch {
+      setVoucher(null);
+      setVoucherError('Der Gutscheincode konnte nicht geprüft werden.');
+    } finally {
+      setVoucherChecking(false);
+    }
+  };
+
+  const handleRemoveVoucher = () => {
+    setVoucher(null);
+    setVoucherError('');
+    setVoucherInput('');
+  };
 
   const [orderComplete, setOrderComplete] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -157,7 +216,8 @@ const ShopCheckoutPage: React.FC = () => {
           transactionId,
           totalAmount: total,
           shippingCosts: shipping,
-          shipping_method: selectedShippingMethod
+          shipping_method: selectedShippingMethod,
+          voucherCode: voucher?.code || null
         })
       });
       const data = await res.json();
@@ -511,6 +571,7 @@ const ShopCheckoutPage: React.FC = () => {
                                                 amount: total.toFixed(2),
                                                 currency: "EUR",
                                                 shipping: shipping.toFixed(2),
+                                                discount: voucherDiscount.toFixed(2),
                                                 items: cart.map(i => ({
                                                     name: i.name,
                                                     quantity: i.quantity,
@@ -587,6 +648,12 @@ const ShopCheckoutPage: React.FC = () => {
                 <span>Warenwert</span>
                 <span>{cartTotal.toFixed(2).replace('.', ',')} €*</span>
               </div>
+              {voucherDiscount > 0 && (
+                <div className="flex justify-between text-emerald-400 font-bold uppercase tracking-widest text-[10px]">
+                  <span>Gutschein ({voucher?.code})</span>
+                  <span>−{voucherDiscount.toFixed(2).replace('.', ',')} €*</span>
+                </div>
+              )}
               <div className="flex justify-between text-slate-400 font-bold uppercase tracking-widest text-[10px] pb-4 border-b border-slate-800">
                 <span>{isPickupSelected ? 'Abholgebühr' : 'Versandkosten'}</span>
                 <span>{shipping.toFixed(2).replace('.', ',')} €*</span>
@@ -599,6 +666,59 @@ const ShopCheckoutPage: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* 🎟️ Gutscheincode */}
+            {vouchersEnabled && (
+              <div className="pb-6 mb-6 border-b border-slate-800">
+                {voucher ? (
+                  <div className="flex items-center justify-between bg-emerald-950/60 border border-emerald-800/60 rounded-xl px-4 py-3">
+                    <div className="flex items-center text-emerald-400 text-sm font-bold">
+                      <CheckCircle2 size={16} className="mr-2 flex-shrink-0" />
+                      <span className="truncate">Gutschein {voucher.code} aktiv</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRemoveVoucher}
+                      className="text-emerald-400 hover:text-emerald-200 transition-colors flex-shrink-0"
+                      aria-label="Gutschein entfernen"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Ticket size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input
+                          type="text"
+                          value={voucherInput}
+                          onChange={(e) => { setVoucherInput(e.target.value); setVoucherError(''); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyVoucher(); } }}
+                          placeholder="Gutscheincode"
+                          className="w-full pl-9 pr-3 py-3 rounded-xl bg-slate-800 border border-slate-700 text-sm font-medium uppercase tracking-wider text-white placeholder-slate-500 focus:outline-none focus:border-slate-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleApplyVoucher}
+                        disabled={voucherChecking || !voucherInput.trim()}
+                        className="px-4 rounded-xl text-xs font-black uppercase tracking-widest text-white disabled:opacity-50 transition-opacity flex items-center"
+                        style={{ backgroundColor: primaryColor }}
+                      >
+                        {voucherChecking ? <Loader2 size={16} className="animate-spin" /> : 'Einlösen'}
+                      </button>
+                    </div>
+                    {voucherError && (
+                      <p className="mt-2 flex items-center text-xs font-bold text-red-400">
+                        <AlertCircle size={14} className="mr-1 flex-shrink-0" />
+                        {voucherError}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-4 pt-4 border-t border-slate-800">
               <div className="flex items-center space-x-3 text-slate-400">

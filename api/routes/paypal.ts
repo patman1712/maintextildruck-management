@@ -67,7 +67,7 @@ router.get('/config', (req, res) => {
 // Create Order
 router.post('/create-order', async (req, res) => {
     try {
-        const { amount, currency, items, shipping } = req.body;
+        const { amount, currency, items, shipping, discount } = req.body;
 
         const config = db.prepare("SELECT * FROM global_payment_config WHERE id = 'main'").get() as any;
         if (!config || !config.paypal_client_id || !config.paypal_client_secret) {
@@ -84,6 +84,7 @@ router.post('/create-order', async (req, res) => {
         const normalizedItems = Array.isArray(items) ? items : [];
         const parsedShipping = Number.parseFloat(String(shipping ?? '0')) || 0;
         const parsedAmount = Number.parseFloat(String(amount ?? '0')) || 0;
+        const parsedDiscount = Math.max(0, Number.parseFloat(String(discount ?? '0')) || 0);
 
         const toCents = (v: number) => Math.round(v * 100);
         const itemTotalCents = normalizedItems.reduce((sum: number, it: any) => {
@@ -92,7 +93,8 @@ router.post('/create-order', async (req, res) => {
             return sum + toCents(unit) * Math.max(1, qty);
         }, 0);
         const shippingCents = toCents(parsedShipping);
-        const computedTotalCents = itemTotalCents + shippingCents;
+        const discountCents = toCents(parsedDiscount);
+        const computedTotalCents = itemTotalCents + shippingCents - discountCents;
         const providedTotalCents = toCents(parsedAmount);
 
         if (normalizedItems.length > 0 && Math.abs(computedTotalCents - providedTotalCents) > 1) {
@@ -107,7 +109,8 @@ router.post('/create-order', async (req, res) => {
                     value: (normalizedItems.length > 0 ? (computedTotalCents / 100) : parsedAmount).toFixed(2),
                     breakdown: normalizedItems.length > 0 ? {
                         item_total: { currency_code: currencyCode, value: (itemTotalCents / 100).toFixed(2) },
-                        shipping: { currency_code: currencyCode, value: (shippingCents / 100).toFixed(2) }
+                        shipping: { currency_code: currencyCode, value: (shippingCents / 100).toFixed(2) },
+                        ...(discountCents > 0 ? { discount: { currency_code: currencyCode, value: (discountCents / 100).toFixed(2) } } : {})
                     } : undefined
                 }
             }],

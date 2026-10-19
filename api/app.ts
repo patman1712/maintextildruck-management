@@ -70,6 +70,7 @@ import personalizationRoutes from './routes/personalization.js'
 import colorRoutes from './routes/colors.js'
 import paypalRoutes from './routes/paypal.js'
 import donationRoutes from './routes/donations.js'
+import voucherRoutes from './routes/vouchers.js'
 
 
 const app: express.Application = express()
@@ -104,6 +105,7 @@ app.use('/api/personalization', personalizationRoutes)
 app.use('/api/colors', colorRoutes)
 app.use('/api/paypal', paypalRoutes)
 app.use('/api/donations', donationRoutes)
+app.use('/api/vouchers', voucherRoutes)
 
 // --- DEBUG ROUTE (Temporary) ---
 app.get('/api/debug/shopware-orders', (req, res) => {

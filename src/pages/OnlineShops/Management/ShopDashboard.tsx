@@ -1497,6 +1497,24 @@ const ShopDashboard: React.FC = () => {
                         </p>
                     </div>
 
+                    {isAdmin && (
+                        <div className="pt-6 border-t border-slate-200">
+                            <h4 className="font-bold text-slate-700 mb-4">Gutscheine</h4>
+                            <label className="flex items-center space-x-3">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4"
+                                    checked={!!(shop as any).vouchers_enabled}
+                                    onChange={(e) => setShop({ ...(shop as any), vouchers_enabled: e.target.checked } as any)}
+                                />
+                                <span className="text-sm text-slate-700 font-medium">Gutscheincodes erlauben</span>
+                            </label>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Nur ein Administrator kann diese Freigabe setzen. Wenn aktiv, können im Menüpunkt „Gutscheine" Codes für diesen Shop angelegt und im Warenkorb eingelöst werden.
+                            </p>
+                        </div>
+                    )}
+
                     <div className="pt-6 border-t border-slate-200">
                         <h4 className="font-bold text-slate-700 mb-4">Checkout</h4>
                         <label className="flex items-center space-x-3">

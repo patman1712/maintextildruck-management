@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle, ChevronDown, ChevronRight, Image as ImageIcon, Shirt, RefreshCw, ShoppingBag, ExternalLink, Palette, Heart, Trash2 } from "lucide-react";
+import { LayoutDashboard, FileText, ShoppingCart, Archive, Users, Folder, LogOut, Menu, X, Shield, User, Printer, Zap, HelpCircle, ChevronDown, ChevronRight, Image as ImageIcon, Shirt, RefreshCw, ShoppingBag, ExternalLink, Palette, Heart, Trash2, Ticket } from "lucide-react";
 import { useAppStore } from "@/store";
 
 interface MenuItem {
@@ -197,6 +197,15 @@ export default function DashboardLayout() {
                             onClick={() => setMobileMenuOpen(false)} 
                             menuSettings={{}}
                         />
+
+                        {currentUser?.role === 'admin' && (
+                            <NavItem 
+                                item={{ id: 'vouchers', label: 'Gutscheine', to: '/dashboard/vouchers', icon: Ticket }} 
+                                isOpen={sidebarOpen || mobileMenuOpen} 
+                                onClick={() => setMobileMenuOpen(false)} 
+                                menuSettings={{}}
+                            />
+                        )}
                     </>
                 )}
                 

@@ -8,6 +8,7 @@ import fs from 'fs-extra';
 import { generateInvoice } from '../services/invoice.js';
 import { generateCancellationInvoice } from '../services/cancellation_invoice.js';
 import { sendOrderConfirmation, sendShopOrderNotification, sendPickupConfirmation, sendVorkassePaymentReminder } from '../services/email.js';
+import { validateVoucherForShop } from '../services/vouchers.js';
 
 const router = Router();
 
@@ -903,7 +904,8 @@ router.post('/:shopId/orders', async (req, res) => {
       transactionId,
       totalAmount,
       shippingCosts,
-      shipping_method
+      shipping_method,
+      voucherCode
     } = req.body;
 
     console.log(`[Order] Data: Customer=${customerId}, Items=${items?.length}, Total=${totalAmount}`);
@@ -924,6 +926,36 @@ router.post('/:shopId/orders', async (req, res) => {
         if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
             return res.status(400).json({ success: false, error: 'Bitte geben Sie eine gültige E-Mail-Adresse an.' });
         }
+    }
+
+    // 🎟️ Gutscheincode serverseitig prüfen. Der Rabatt gilt nur auf den Warenwert
+    // (nicht auf Versandkosten) und die Gesamtsumme wird hier neu berechnet,
+    // damit ein Rabatt nicht über den Client manipuliert werden kann.
+    let appliedVoucherCode: string | null = null;
+    let discountAmount = 0;
+    let finalTotalAmount = Number(totalAmount) || 0;
+    const itemsSubtotal = (Array.isArray(items) ? items : []).reduce(
+        (sum: number, it: any) => sum + (Number(it?.price) || 0) * (Number(it?.quantity) || 0),
+        0
+    );
+
+    if (voucherCode && String(voucherCode).trim()) {
+        const voucherCheck = validateVoucherForShop({
+            shopId,
+            code: String(voucherCode),
+            subtotal: itemsSubtotal,
+            customerEmail: address?.email || null,
+            customerId: customerId || null,
+        });
+        if (!voucherCheck.ok) {
+            return res.status(400).json({ success: false, error: voucherCheck.error });
+        }
+        appliedVoucherCode = voucherCheck.voucher.code;
+        discountAmount = voucherCheck.discount;
+        finalTotalAmount = Math.max(
+            0,
+            +(itemsSubtotal - discountAmount + (Number(shippingCosts) || 0)).toFixed(2)
+        );
     }
 
     const orderId = crypto.randomUUID();
@@ -978,8 +1010,9 @@ router.post('/:shopId/orders', async (req, res) => {
           customer_name, customer_email, customer_phone, customer_address,
           order_number, total_amount, shipping_costs, payment_method,
           payment_status, transaction_id,
-          status, deadline, shipping_method, pickup_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          status, deadline, shipping_method, pickup_status,
+          voucher_code, discount_amount
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         orderId,
         `Shop Bestellung ${orderNumber}`,
@@ -992,7 +1025,7 @@ router.post('/:shopId/orders', async (req, res) => {
         // customer_address: IMMER echte Rechnungsadresse vom Kunden (auch bei Pickup!)
         `${address.street}, ${address.zip} ${address.city}`,
         orderNumber,
-        totalAmount,
+        finalTotalAmount,
         shippingCosts,
         paymentMethod,
         paymentStatus || 'open',
@@ -1000,7 +1033,9 @@ router.post('/:shopId/orders', async (req, res) => {
         initialStatus,
         new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
         finalShippingMethod,
-        finalPickupStatus
+        finalPickupStatus,
+        appliedVoucherCode,
+        discountAmount
       );
 
       // 2. Create Order Items

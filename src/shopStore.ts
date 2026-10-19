@@ -31,10 +31,17 @@ export interface CartItem {
   supplierId?: string;
 }
 
+export interface AppliedVoucher {
+  code: string;
+  discountType: 'percent' | 'fixed';
+  discountValue: number;
+}
+
 interface ShopState {
   activeShopId: string | null;
   currentCustomer: ShopCustomer | null;
   cart: CartItem[];
+  voucher: AppliedVoucher | null;
   isCartOpen: boolean;
   setActiveShop: (shopId: string) => void;
   login: (customer: ShopCustomer) => void;
@@ -43,6 +50,7 @@ interface ShopState {
   removeFromCart: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
+  setVoucher: (voucher: AppliedVoucher | null) => void;
   setCartOpen: (open: boolean) => void;
 }
 
@@ -57,11 +65,13 @@ const safeJsonParse = <T,>(value: string | null, fallback: T): T => {
 
 const cartKeyForShop = (shopId: string | null) => (shopId ? `shopCart:${shopId}` : 'shopCart');
 const customerKeyForShop = (shopId: string | null) => (shopId ? `shopCustomer:${shopId}` : 'shopCustomer');
+const voucherKeyForShop = (shopId: string | null) => (shopId ? `shopVoucher:${shopId}` : 'shopVoucher');
 
 export const useShopStore = create<ShopState>((set) => ({
   activeShopId: null,
   currentCustomer: safeJsonParse(localStorage.getItem('shopCustomer'), null),
   cart: safeJsonParse(localStorage.getItem('shopCart'), []),
+  voucher: null,
   isCartOpen: false,
 
   setActiveShop: (shopId) => {
@@ -70,6 +80,7 @@ export const useShopStore = create<ShopState>((set) => ({
 
     let cart = safeJsonParse<CartItem[]>(localStorage.getItem(scopedCartKey), []);
     let customer = safeJsonParse<ShopCustomer | null>(localStorage.getItem(scopedCustomerKey), null);
+    const voucher = safeJsonParse<AppliedVoucher | null>(localStorage.getItem(voucherKeyForShop(shopId)), null);
 
     const legacyCart = safeJsonParse<CartItem[]>(localStorage.getItem('shopCart'), []);
     if (cart.length === 0 && legacyCart.length > 0 && !localStorage.getItem(scopedCartKey)) {
@@ -85,7 +96,7 @@ export const useShopStore = create<ShopState>((set) => ({
       localStorage.removeItem('shopCustomer');
     }
 
-    set({ activeShopId: shopId, cart, currentCustomer: customer, isCartOpen: false });
+    set({ activeShopId: shopId, cart, currentCustomer: customer, voucher, isCartOpen: false });
   },
   
   login: (customer) => {
@@ -145,7 +156,20 @@ export const useShopStore = create<ShopState>((set) => ({
     set((state) => {
       localStorage.removeItem(cartKeyForShop(state.activeShopId));
       localStorage.removeItem('shopCart');
-      return { cart: [] };
+      localStorage.removeItem(voucherKeyForShop(state.activeShopId));
+      return { cart: [], voucher: null };
+    });
+  },
+
+  setVoucher: (voucher) => {
+    set((state) => {
+      const key = voucherKeyForShop(state.activeShopId);
+      if (voucher) {
+        localStorage.setItem(key, JSON.stringify(voucher));
+      } else {
+        localStorage.removeItem(key);
+      }
+      return { voucher };
     });
   },
 }));

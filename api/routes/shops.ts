@@ -3,6 +3,7 @@ import { Router } from 'express';
 import db from '../db.js';
 import crypto from 'crypto';
 import { sendShopContactMessage, DEFAULT_SHOP_CONTACT_RECIPIENT } from '../services/email.js';
+import { validateVoucherForShop } from '../services/vouchers.js';
 
 const router = Router();
 
@@ -453,6 +454,43 @@ router.get('/:id/shipping-config', (req, res) => {
   }
 });
 
+// 🎟️ Gutscheincode prüfen (öffentlich, für Warenkorb/Checkout).
+// Der Rabatt bezieht sich nur auf den Warenwert (subtotal), nie auf die Versandkosten.
+router.post('/:id/voucher/validate', (req, res) => {
+  try {
+    const { id } = req.params;
+    const shopRow = id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)
+      ? db.prepare('SELECT id FROM shops WHERE id = ?').get(id)
+      : db.prepare('SELECT id FROM shops WHERE domain_slug = ? OR custom_domain = ?').get(id, id);
+    const shop = shopRow as any;
+    if (!shop) return res.status(404).json({ success: false, valid: false, error: 'Shop nicht gefunden.' });
+
+    const subtotal = Math.max(0, Number(req.body?.subtotal) || 0);
+    const result = validateVoucherForShop({
+      shopId: shop.id,
+      code: String(req.body?.code || ''),
+      subtotal,
+      customerEmail: req.body?.email || null,
+      customerId: req.body?.customerId || null,
+    });
+
+    if (!result.ok) {
+      return res.json({ success: true, valid: false, error: result.error });
+    }
+
+    res.json({
+      success: true,
+      valid: true,
+      code: result.voucher.code,
+      discount_type: result.voucher.discount_type === 'fixed' ? 'fixed' : 'percent',
+      discount_value: Number(result.voucher.discount_value || 0),
+      discount: Math.min(result.discount, subtotal),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, valid: false, error: error.message });
+  }
+});
+
 // Kontaktformular: sendet eine Nachricht an die Shop-E-Mail (Fallback: Firmenadresse)
 const contactRateLimit = new Map<string, number>();
 const CONTACT_RATE_LIMIT_MS = 30 * 1000;
@@ -569,6 +607,7 @@ router.put('/:id', (req, res) => {
         primary_color, secondary_color, template, 
         dhl_config, paypal_config,
         donations_enabled,
+        vouchers_enabled,
         order_number_circle, next_order_number,
         invoice_number_circle, next_invoice_number,
         hero_enabled,
@@ -580,6 +619,19 @@ router.put('/:id', (req, res) => {
         impressum_text, privacy_text, agb_text, revocation_text, shipping_info_text, about_us_text, contact_text
     } = body;
 
+    // 🎟️ Gutschein-Freigabe darf NUR ein Administrator ändern.
+    // Ohne x-user-id Header (internes Admin-Frontend) bleibt die Änderung erlaubt.
+    const voucherRequesterId = req.headers['x-user-id'] as string | undefined;
+    let canEditVouchers = true;
+    if (voucherRequesterId) {
+        const requester = db.prepare('SELECT role FROM users WHERE id = ?').get(voucherRequesterId) as any;
+        canEditVouchers = !!requester && requester.role === 'admin';
+    }
+    const existingShop = db.prepare('SELECT vouchers_enabled FROM shops WHERE id = ?').get(id) as any;
+    const resolvedVouchersEnabled = canEditVouchers
+        ? (vouchers_enabled ? 1 : 0)
+        : Number(existingShop?.vouchers_enabled || 0);
+
     const query = `
       UPDATE shops 
       SET name = ?, domain_slug = ?, custom_domain = ?, logo_url = ?, email_logo_url = ?,
@@ -587,6 +639,7 @@ router.put('/:id', (req, res) => {
           primary_color = ?, secondary_color = ?, template = ?, 
           dhl_config = ?, paypal_config = ?,
           donations_enabled = ?,
+          vouchers_enabled = ?,
           order_number_circle = ?, next_order_number = ?,
           invoice_number_circle = ?, next_invoice_number = ?,
           hero_enabled = ?,
@@ -610,6 +663,7 @@ router.put('/:id', (req, res) => {
       dhl_config ? JSON.stringify(dhl_config) : null,
       paypal_config ? JSON.stringify(paypal_config) : null,
       donations_enabled ? 1 : 0,
+      resolvedVouchersEnabled,
       order_number_circle || null,
       next_order_number || 1,
       invoice_number_circle || null,

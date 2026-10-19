@@ -157,7 +157,8 @@ export const generateInvoice = async (
         // =========================================================================
         const orderTotal = Number(order.total_amount || 0);
         const orderShipping = Number(order.shipping_costs || 0);
-        const itemsTotal = +(orderTotal - orderShipping).toFixed(2);
+        const orderDiscount = Number(order.discount_amount || 0);
+        const itemsTotal = +(orderTotal - orderShipping + orderDiscount).toFixed(2);
 
         let sdRows: any[] = [];
         try {
@@ -971,12 +972,30 @@ export const generateInvoice = async (
             y = extraY + 6;
         });
 
+        // 🎟️ Gutschein als eigener Posten. Der Rabatt gilt nur auf den Warenwert,
+        // nicht auf die Versandkosten, und wird hier sichtbar abgezogen.
+        const voucherCode = String(order.voucher_code || '').trim();
+        const voucherDiscount = voucherCode ? Math.min(Number(order.discount_amount || 0), subtotal) : 0;
+        let tablePosition = items.length;
+        if (voucherCode && voucherDiscount > 0) {
+            tablePosition += 1;
+            ensureSpace(10, true);
+            doc.text(tablePosition.toString(), 20, y);
+            doc.text(`Gutschein ${voucherCode}`, 40, y);
+            doc.text("1", 130, y, { align: 'right' });
+            doc.text(`-${voucherDiscount.toFixed(2).replace('.', ',')} €`, 160, y, { align: 'right' });
+            doc.text(`-${voucherDiscount.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
+            y += 8;
+            subtotal = +(subtotal - voucherDiscount).toFixed(2);
+        }
+
         // Shipping
         const shipping = order.shipping_costs || 0;
         if (shipping > 0) {
             subtotal += shipping;
+            tablePosition += 1;
             ensureSpace(10, true);
-            doc.text((items.length + 1).toString(), 20, y);
+            doc.text(tablePosition.toString(), 20, y);
             doc.text("Versandkosten", 40, y);
             doc.text("1", 130, y, { align: 'right' });
             doc.text(`${shipping.toFixed(2).replace('.', ',')} €`, 160, y, { align: 'right' });
@@ -997,6 +1016,16 @@ export const generateInvoice = async (
         const grossTotal = subtotal; 
         const netTotal = grossTotal / 1.19;
         const vatTotal = grossTotal - netTotal;
+
+        // Abzug durch Gutschein explizit ausweisen (nur auf den Warenwert)
+        if (voucherCode && voucherDiscount > 0) {
+            doc.text("Zwischensumme (Warenwert):", 160, y, { align: 'right' });
+            doc.text(`${(grossTotal + voucherDiscount).toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
+            y += 5;
+            doc.text(`Gutschein ${voucherCode}:`, 160, y, { align: 'right' });
+            doc.text(`-${voucherDiscount.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
+            y += 5;
+        }
 
         doc.text("Netto-Betrag:", 160, y, { align: 'right' });
         doc.text(`${netTotal.toFixed(2).replace('.', ',')} €`, 195, y, { align: 'right' });
