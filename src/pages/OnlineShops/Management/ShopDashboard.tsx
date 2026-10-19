@@ -62,10 +62,12 @@ const ShopDashboard: React.FC = () => {
     sender_city: '',
     sender_country: 'DEU',
     packaging_weight: 0,
+    shipping_tiers: [],
     pickup_enabled: false,
     pickup_fee: 0,
     pickup_email_template: ''
   });
+  const [isSavingShipping, setIsSavingShipping] = useState(false);
 
   // Pickup Ready Modal
   const [showPickupReadyModal, setShowPickupReadyModal] = useState(false);
@@ -423,6 +425,39 @@ const ShopDashboard: React.FC = () => {
         alert('Fehler beim Speichern: ' + data.error);
       }
     } catch (e) { console.error(e); }
+  };
+
+  // 🚚 Eigene Versandkosten + "versandkostenfrei ab X €" speichern.
+  // Die Freigabe/der Freibetrag liegen am Shop, die Staffelpreise in der Versandkonfiguration.
+  const handleSaveShippingSettings = async () => {
+    if (!shop) return;
+    setIsSavingShipping(true);
+    try {
+      const shopRes = await fetch(`/api/shops/${shop.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(shop)
+      });
+      const shopData = await shopRes.json();
+      if (!shopData.success) throw new Error(shopData.error || 'Einstellungen konnten nicht gespeichert werden');
+
+      const configRes = await fetch(`/api/shop-management/${shop.id}/shipping-config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(shippingConfig)
+      });
+      const configData = await configRes.json();
+      if (!configData.success) throw new Error(configData.error || 'Staffelpreise konnten nicht gespeichert werden');
+
+      await updateShop(shop.id, shopData.data);
+      setShop(shopData.data);
+      alert('Versandkosten gespeichert!');
+    } catch (e: any) {
+      console.error(e);
+      alert('Fehler: ' + e.message);
+    } finally {
+      setIsSavingShipping(false);
+    }
   };
 
   const handleTestDHLConnection = async () => {
@@ -1512,6 +1547,147 @@ const ShopDashboard: React.FC = () => {
                             <p className="text-xs text-slate-500 mt-1">
                                 Nur ein Administrator kann diese Freigabe setzen. Wenn aktiv, können im Menüpunkt „Gutscheine" Codes für diesen Shop angelegt und im Warenkorb eingelöst werden.
                             </p>
+                        </div>
+                    )}
+
+                    {isAdmin && (
+                        <div className="pt-6 border-t border-slate-200">
+                            <h4 className="font-bold text-slate-700 mb-4">Versandkosten</h4>
+                            <label className="flex items-center space-x-3">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4"
+                                    checked={!!(shop as any).custom_shipping_enabled}
+                                    onChange={(e) => setShop({ ...(shop as any), custom_shipping_enabled: e.target.checked } as any)}
+                                />
+                                <span className="text-sm text-slate-700 font-medium">Eigene Versandkosten für diesen Shop verwenden</span>
+                            </label>
+                            <p className="text-xs text-slate-500 mt-1">
+                                Nur ein Administrator kann das setzen. Wenn aktiv, gelten die hier hinterlegten Staffelpreise – nicht die globalen Standardpreise.
+                            </p>
+
+                            {(shop as any).custom_shipping_enabled && (
+                                <div className="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">Gewichtsstaffel (Gesamtgewicht)</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShippingConfig({
+                                                ...shippingConfig,
+                                                shipping_tiers: [...(shippingConfig.shipping_tiers || []), { min_weight: 0, max_weight: 1, price: 0 }]
+                                            })}
+                                            className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center"
+                                        >
+                                            <Plus size={14} className="mr-1" /> Staffel hinzufügen
+                                        </button>
+                                    </div>
+
+                                    {(shippingConfig.shipping_tiers || []).length === 0 && (
+                                        <p className="text-xs text-slate-400 italic">Noch keine Staffel angelegt – es würden keine Versandkosten berechnet.</p>
+                                    )}
+
+                                    {(shippingConfig.shipping_tiers || []).map((tier: any, idx: number) => (
+                                        <div key={idx} className="grid grid-cols-12 gap-2 items-end">
+                                            <div className="col-span-4">
+                                                <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">von kg</label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white"
+                                                    value={tier.min_weight}
+                                                    onChange={(e) => {
+                                                        const tiers = [...(shippingConfig.shipping_tiers || [])];
+                                                        tiers[idx] = { ...tiers[idx], min_weight: parseFloat(e.target.value) || 0 };
+                                                        setShippingConfig({ ...shippingConfig, shipping_tiers: tiers });
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="col-span-4">
+                                                <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">bis kg</label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white"
+                                                    value={tier.max_weight}
+                                                    onChange={(e) => {
+                                                        const tiers = [...(shippingConfig.shipping_tiers || [])];
+                                                        tiers[idx] = { ...tiers[idx], max_weight: parseFloat(e.target.value) || 0 };
+                                                        setShippingConfig({ ...shippingConfig, shipping_tiers: tiers });
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="col-span-3">
+                                                <label className="block text-[10px] text-slate-500 font-bold uppercase mb-1">Preis €</label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="w-full border border-slate-300 rounded-lg p-2 text-sm bg-white"
+                                                    value={tier.price}
+                                                    onChange={(e) => {
+                                                        const tiers = [...(shippingConfig.shipping_tiers || [])];
+                                                        tiers[idx] = { ...tiers[idx], price: parseFloat(e.target.value) || 0 };
+                                                        setShippingConfig({ ...shippingConfig, shipping_tiers: tiers });
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="col-span-1 flex justify-center pb-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const tiers = [...(shippingConfig.shipping_tiers || [])];
+                                                        tiers.splice(idx, 1);
+                                                        setShippingConfig({ ...shippingConfig, shipping_tiers: tiers });
+                                                    }}
+                                                    className="text-slate-400 hover:text-red-600 transition-colors"
+                                                    aria-label="Staffel entfernen"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 uppercase tracking-widest mb-1">Verpackungsgewicht (kg)</label>
+                                        <input
+                                            type="number"
+                                            step="0.001"
+                                            className="w-full md:w-40 border border-slate-300 rounded-lg p-2 text-sm bg-white"
+                                            value={shippingConfig.packaging_weight || 0}
+                                            onChange={(e) => setShippingConfig({ ...shippingConfig, packaging_weight: parseFloat(e.target.value) || 0 })}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4">
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Versandkostenfrei ab einem Warenwert von (€)</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    className="w-full md:w-64 border border-slate-300 rounded-lg p-2 bg-white"
+                                    value={(shop as any).free_shipping_threshold ?? ''}
+                                    onChange={(e) => setShop({
+                                        ...(shop as any),
+                                        free_shipping_threshold: e.target.value === '' ? null : parseFloat(e.target.value)
+                                    } as any)}
+                                    placeholder="z. B. 50 (leer = deaktiviert)"
+                                />
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Bezogen auf den Warenwert nach Gutscheinabzug. Ab diesem Wert entfallen die Versandkosten – Abholgebühren bleiben unberührt.
+                                </p>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={handleSaveShippingSettings}
+                                disabled={isSavingShipping}
+                                className={`mt-4 px-4 py-2 rounded-lg font-bold text-sm flex items-center text-white ${isSavingShipping ? 'bg-slate-300 cursor-not-allowed' : 'bg-slate-800 hover:bg-slate-700'}`}
+                            >
+                                <Save size={16} className="mr-2" />
+                                {isSavingShipping ? 'Speichert...' : 'Versandkosten speichern'}
+                            </button>
                         </div>
                     )}
 

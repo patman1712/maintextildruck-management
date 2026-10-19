@@ -1702,6 +1702,21 @@ try {
   } catch (e) {
     console.error('Migration error (shop_vouchers):', e);
   }
+
+  // 🚚 Eigene Versandkosten pro Shop + "Versandkostenfrei ab X €"
+  try {
+    const shippingShopCols = db.prepare("PRAGMA table_info(shops)").all() as any[];
+    if (!shippingShopCols.some(col => col.name === 'custom_shipping_enabled')) {
+      console.log('Migrating database: Adding custom_shipping_enabled to shops table');
+      db.exec('ALTER TABLE shops ADD COLUMN custom_shipping_enabled INTEGER DEFAULT 0');
+    }
+    if (!shippingShopCols.some(col => col.name === 'free_shipping_threshold')) {
+      console.log('Migrating database: Adding free_shipping_threshold to shops table');
+      db.exec('ALTER TABLE shops ADD COLUMN free_shipping_threshold DECIMAL(10, 2)');
+    }
+  } catch (e) {
+    console.error('Migration error (shop shipping settings):', e);
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }

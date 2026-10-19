@@ -33,6 +33,28 @@ const ShopCheckoutPage: React.FC = () => {
   const [voucherError, setVoucherError] = useState('');
   const vouchersEnabled = !!(shop as any)?.vouchers_enabled;
 
+  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const shipping = shippingCost;
+
+  // Rabatt nur auf den Warenwert (cartTotal), niemals auf die Versandkosten.
+  const voucherDiscount = voucher
+    ? Math.round(
+        Math.min(
+          voucher.discountType === 'fixed'
+            ? voucher.discountValue
+            : (cartTotal * voucher.discountValue) / 100,
+          cartTotal
+        ) * 100
+      ) / 100
+    : 0;
+  // Grundlage für "versandkostenfrei ab X €" ist der Warenwert NACH Gutscheinabzug.
+  const netSubtotal = Math.max(0, cartTotal - voucherDiscount);
+  const total = netSubtotal + shipping;
+
+  const freeShippingThreshold = Number(shippingConfig?.free_shipping_threshold) > 0 ? Number(shippingConfig.free_shipping_threshold) : null;
+  const freeShippingReached = freeShippingThreshold !== null && netSubtotal >= freeShippingThreshold;
+  const freeShippingRemaining = freeShippingThreshold !== null && !freeShippingReached ? freeShippingThreshold - netSubtotal : null;
+
   useEffect(() => {
     // Fetch PayPal Config
     fetch('/api/paypal/config')
@@ -62,6 +84,12 @@ const ShopCheckoutPage: React.FC = () => {
     if (selectedShippingMethod === 'pickup') {
         const fee = parseFloat(shippingConfig?.pickup_fee || 0);
         setShippingCost(isNaN(fee) ? 0 : fee);
+        return;
+    }
+    // 🚚 Versandkostenfrei ab X € (bezogen auf den Warenwert nach Gutscheinabzug)
+    const freeThreshold = shippingConfig?.free_shipping_threshold;
+    if (freeThreshold !== null && freeThreshold !== undefined && Number(freeThreshold) > 0 && netSubtotal >= Number(freeThreshold)) {
+        setShippingCost(0);
         return;
     }
     if (shippingConfig && shippingConfig.shipping_tiers && Array.isArray(shippingConfig.shipping_tiers) && shippingConfig.shipping_tiers.length > 0) {
@@ -106,23 +134,7 @@ const ShopCheckoutPage: React.FC = () => {
             }
         }
     }
-  }, [cart, shippingConfig, selectedShippingMethod]);
-
-  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const shipping = shippingCost;
-
-  // Rabatt nur auf den Warenwert (cartTotal), niemals auf die Versandkosten.
-  const voucherDiscount = voucher
-    ? Math.round(
-        Math.min(
-          voucher.discountType === 'fixed'
-            ? voucher.discountValue
-            : (cartTotal * voucher.discountValue) / 100,
-          cartTotal
-        ) * 100
-      ) / 100
-    : 0;
-  const total = Math.max(0, cartTotal - voucherDiscount) + shipping;
+  }, [cart, shippingConfig, selectedShippingMethod, netSubtotal]);
 
   const handleApplyVoucher = async () => {
     const code = voucherInput.trim();
@@ -656,8 +668,13 @@ const ShopCheckoutPage: React.FC = () => {
               )}
               <div className="flex justify-between text-slate-400 font-bold uppercase tracking-widest text-[10px] pb-4 border-b border-slate-800">
                 <span>{isPickupSelected ? 'Abholgebühr' : 'Versandkosten'}</span>
-                <span>{shipping.toFixed(2).replace('.', ',')} €*</span>
+                <span>{!isPickupSelected && shipping === 0 ? 'kostenlos' : `${shipping.toFixed(2).replace('.', ',')} €*`}</span>
               </div>
+              {!isPickupSelected && freeShippingRemaining !== null && (
+                <p className="text-[10px] text-amber-400 font-bold -mt-2">
+                  Noch {freeShippingRemaining.toFixed(2).replace('.', ',')} € bis zur versandkostenfreien Lieferung
+                </p>
+              )}
               <div className="flex justify-between items-baseline pt-2">
                 <span className="font-black uppercase tracking-widest text-xs">Gesamtbetrag</span>
                 <div className="text-right">

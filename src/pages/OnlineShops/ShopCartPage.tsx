@@ -11,13 +11,15 @@ interface ShopContext {
   primaryColor: string;
   shopBaseUrl: string;
   shopKey: string;
+  shippingConfig?: any;
+  shippingCost?: number;
   template?: any;
   customTemplateActive?: boolean;
   templateContext?: Record<string, any>;
 }
 
 const ShopCartPage: React.FC = () => {
-  const { shop, primaryColor, shopBaseUrl, template, customTemplateActive, templateContext } = useOutletContext<ShopContext>();
+  const { shop, primaryColor, shopBaseUrl, template, customTemplateActive, templateContext, shippingConfig, shippingCost: contextShippingCost } = useOutletContext<ShopContext>();
   const { cart, removeFromCart, updateQuantity, voucher, setVoucher, currentCustomer } = useShopStore();
 
   const [voucherInput, setVoucherInput] = useState('');
@@ -27,7 +29,8 @@ const ShopCartPage: React.FC = () => {
   const vouchersEnabled = !!(shop as any)?.vouchers_enabled;
 
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  const shipping = 5.95;
+  // Versandkosten kommen aus dem Shop-Layout (inkl. Gewichtsstaffel und "versandkostenfrei ab X €").
+  const shipping = typeof contextShippingCost === 'number' ? contextShippingCost : 5.95;
 
   // Rabatt nur auf den Warenwert (cartTotal), niemals auf die Versandkosten.
   const voucherDiscount = voucher
@@ -41,6 +44,11 @@ const ShopCartPage: React.FC = () => {
       ) / 100
     : 0;
   const total = Math.max(0, cartTotal - voucherDiscount) + shipping;
+
+  // 🚚 "Versandkostenfrei ab X €" – bezogen auf den Warenwert nach Gutscheinabzug.
+  const freeShippingThreshold = Number(shippingConfig?.free_shipping_threshold) > 0 ? Number(shippingConfig.free_shipping_threshold) : null;
+  const netSubtotal = Math.max(0, cartTotal - voucherDiscount);
+  const freeShippingRemaining = freeShippingThreshold !== null && netSubtotal < freeShippingThreshold ? freeShippingThreshold - netSubtotal : null;
 
   const handleApplyVoucher = async () => {
     const code = voucherInput.trim();
@@ -243,8 +251,13 @@ const ShopCartPage: React.FC = () => {
               )}
               <div className="flex justify-between text-slate-600 font-medium pb-4 border-b border-slate-50">
                 <span>Versandkosten</span>
-                <span>{shipping.toFixed(2).replace('.', ',')} €*</span>
+                <span>{shipping === 0 ? 'kostenlos' : `${shipping.toFixed(2).replace('.', ',')} €*`}</span>
               </div>
+              {freeShippingRemaining !== null && (
+                <p className="text-[11px] text-amber-600 font-bold -mt-2">
+                  Noch {freeShippingRemaining.toFixed(2).replace('.', ',')} € bis zur versandkostenfreien Lieferung
+                </p>
+              )}
               <div className="flex justify-between items-baseline pt-2">
                 <span className="font-black text-slate-900">Gesamtsumme</span>
                 <div className="text-right">

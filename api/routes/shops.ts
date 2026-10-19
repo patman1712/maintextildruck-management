@@ -396,6 +396,13 @@ router.get('/:id/shipping-config', (req, res) => {
 
     const config = db.prepare('SELECT packaging_weight, shipping_tiers, pickup_enabled, pickup_fee FROM shop_shipping_config WHERE shop_id = ?').get(shopId) as any;
     
+    // 🚚 Eigene Versandkosten für diesen Shop? Dann keine Standardpreise verwenden.
+    const shippingSettings = db.prepare('SELECT custom_shipping_enabled, free_shipping_threshold FROM shops WHERE id = ?').get(shopId) as any;
+    const customShippingEnabled = Number(shippingSettings?.custom_shipping_enabled || 0) === 1;
+    const freeShippingThreshold = (shippingSettings?.free_shipping_threshold === null || shippingSettings?.free_shipping_threshold === undefined)
+        ? null
+        : Number(shippingSettings.free_shipping_threshold);
+
     // Parse shop tiers
     let shopTiers = [];
     if (config && config.shipping_tiers) {
@@ -417,25 +424,31 @@ router.get('/:id/shipping-config', (req, res) => {
         }
     }
 
-    // Determine final tiers: Shop tiers take precedence if they exist and are not empty.
-    // However, if shop tiers are empty, we fallback to global tiers.
-    const finalTiers = (shopTiers.length > 0) ? shopTiers : globalTiers;
+    // Determine final tiers.
+    // Eigene Versandkosten aktiv → ausschließlich die Shop-Staffel (kein Fallback auf Standard).
+    // Sonst: Shop-Staffel hat Vorrang, ansonsten gelten die globalen Standardpreise.
+    const finalTiers = customShippingEnabled
+        ? shopTiers
+        : ((shopTiers.length > 0) ? shopTiers : globalTiers);
 
-    // Also determine packaging weight: if shop has 0, fallback to global?
-    // Current logic in create-label: if shop > 0 use shop, else global.
     let packagingWeight = 0;
-    if (config && config.packaging_weight && parseFloat(config.packaging_weight) > 0) {
+    if (customShippingEnabled) {
+        packagingWeight = config && config.packaging_weight ? (parseFloat(config.packaging_weight) || 0) : 0;
+    } else if (config && config.packaging_weight && parseFloat(config.packaging_weight) > 0) {
         packagingWeight = parseFloat(config.packaging_weight);
     } else if (globalConfig && globalConfig.packaging_weight) {
         packagingWeight = parseFloat(globalConfig.packaging_weight);
     }
 
+    const shopPickupOn = !!(config && (config.pickup_enabled === true || config.pickup_enabled === 1 || Number(config.pickup_enabled) > 0));
+    const globalPickupOn = !!(globalConfig && (globalConfig.pickup_enabled === true || globalConfig.pickup_enabled === 1 || Number(globalConfig.pickup_enabled) > 0));
+
     let pickupEnabled = false;
     let pickupFee = 0;
-    if (config && (config.pickup_enabled === true || config.pickup_enabled === 1 || Number(config.pickup_enabled) > 0)) {
+    if (shopPickupOn) {
         pickupEnabled = true;
-        pickupFee = Number(config.pickup_fee || globalConfig?.pickup_fee || 0);
-    } else if (globalConfig && (globalConfig.pickup_enabled === true || globalConfig.pickup_enabled === 1 || Number(globalConfig.pickup_enabled) > 0)) {
+        pickupFee = Number(config.pickup_fee || (customShippingEnabled ? 0 : globalConfig?.pickup_fee) || 0);
+    } else if (!customShippingEnabled && globalPickupOn) {
         pickupEnabled = true;
         pickupFee = Number(globalConfig.pickup_fee || 0);
     }
@@ -446,7 +459,9 @@ router.get('/:id/shipping-config', (req, res) => {
             packaging_weight: packagingWeight,
             shipping_tiers: finalTiers,
             pickup_enabled: pickupEnabled,
-            pickup_fee: pickupFee
+            pickup_fee: pickupFee,
+            custom_shipping_enabled: customShippingEnabled,
+            free_shipping_threshold: freeShippingThreshold
         } 
     });
   } catch (error: any) {
@@ -608,6 +623,8 @@ router.put('/:id', (req, res) => {
         dhl_config, paypal_config,
         donations_enabled,
         vouchers_enabled,
+        custom_shipping_enabled,
+        free_shipping_threshold,
         order_number_circle, next_order_number,
         invoice_number_circle, next_invoice_number,
         hero_enabled,
@@ -627,10 +644,20 @@ router.put('/:id', (req, res) => {
         const requester = db.prepare('SELECT role FROM users WHERE id = ?').get(voucherRequesterId) as any;
         canEditVouchers = !!requester && requester.role === 'admin';
     }
-    const existingShop = db.prepare('SELECT vouchers_enabled FROM shops WHERE id = ?').get(id) as any;
+    const existingShop = db.prepare('SELECT vouchers_enabled, custom_shipping_enabled, free_shipping_threshold FROM shops WHERE id = ?').get(id) as any;
     const resolvedVouchersEnabled = canEditVouchers
         ? (vouchers_enabled ? 1 : 0)
         : Number(existingShop?.vouchers_enabled || 0);
+
+    // 🚚 Eigene Versandkosten + "versandkostenfrei ab" darf ebenfalls NUR ein Administrator ändern.
+    const resolvedCustomShipping = canEditVouchers
+        ? (custom_shipping_enabled ? 1 : 0)
+        : Number(existingShop?.custom_shipping_enabled || 0);
+    const resolvedFreeShippingThreshold = canEditVouchers
+        ? (free_shipping_threshold === null || free_shipping_threshold === undefined || free_shipping_threshold === ''
+            ? null
+            : Number(free_shipping_threshold))
+        : (existingShop?.free_shipping_threshold ?? null);
 
     const query = `
       UPDATE shops 
@@ -640,6 +667,8 @@ router.put('/:id', (req, res) => {
           dhl_config = ?, paypal_config = ?,
           donations_enabled = ?,
           vouchers_enabled = ?,
+          custom_shipping_enabled = ?,
+          free_shipping_threshold = ?,
           order_number_circle = ?, next_order_number = ?,
           invoice_number_circle = ?, next_invoice_number = ?,
           hero_enabled = ?,
@@ -664,6 +693,8 @@ router.put('/:id', (req, res) => {
       paypal_config ? JSON.stringify(paypal_config) : null,
       donations_enabled ? 1 : 0,
       resolvedVouchersEnabled,
+      resolvedCustomShipping,
+      resolvedFreeShippingThreshold,
       order_number_circle || null,
       next_order_number || 1,
       invoice_number_circle || null,

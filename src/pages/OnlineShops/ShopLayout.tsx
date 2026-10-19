@@ -9,7 +9,7 @@ import { parseTemplate, ShopTemplate, buildBaseContext } from './template/templa
 const ShopLayout: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>();
   const location = useLocation();
-  const { currentCustomer, logout, cart, removeFromCart, updateQuantity, isCartOpen: cartOpen, setCartOpen, setActiveShop } = useShopStore();
+  const { currentCustomer, logout, cart, removeFromCart, updateQuantity, isCartOpen: cartOpen, setCartOpen, setActiveShop, voucher } = useShopStore();
   const [shop, setShop] = useState<Shop | null>(null);
   
   // Determine if we are on a custom domain or subdomain route
@@ -38,6 +38,19 @@ const ShopLayout: React.FC = () => {
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+  // Rabatt nur auf den Warenwert – Grundlage für "versandkostenfrei ab X €" ist der Warenwert NACH Gutscheinabzug.
+  const voucherDiscount = voucher
+    ? Math.round(
+        Math.min(
+          voucher.discountType === 'fixed'
+            ? voucher.discountValue
+            : (cartTotal * voucher.discountValue) / 100,
+          cartTotal
+        ) * 100
+      ) / 100
+    : 0;
+  const netSubtotal = Math.max(0, cartTotal - voucherDiscount);
 
   useEffect(() => {
     if (searchQuery.length >= 2) {
@@ -118,14 +131,21 @@ const ShopLayout: React.FC = () => {
   }, [identifier, logout, setActiveShop]);
 
   useEffect(() => {
-    if (shippingConfig && shippingConfig.shipping_tiers && Array.isArray(shippingConfig.shipping_tiers) && shippingConfig.shipping_tiers.length > 0) {
+    // 🚚 Versandkostenfrei ab X € (bezogen auf den Warenwert nach Gutscheinabzug)
+    const freeThreshold = shippingConfig?.free_shipping_threshold;
+    if (freeThreshold !== null && freeThreshold !== undefined && Number(freeThreshold) > 0 && netSubtotal >= Number(freeThreshold)) {
+        setShippingCost(0);
+        return;
+    }
+
+    if (shippingConfig && Array.isArray(shippingConfig.shipping_tiers) && shippingConfig.shipping_tiers.length > 0) {
         let totalWeight = 0;
         cart.forEach(item => {
              if (item.weight) totalWeight += (item.weight * item.quantity);
         });
         if (shippingConfig.packaging_weight) totalWeight += parseFloat(shippingConfig.packaging_weight);
 
-        const tiers = shippingConfig.shipping_tiers.sort((a: any, b: any) => a.min_weight - b.min_weight);
+        const tiers = [...shippingConfig.shipping_tiers].sort((a: any, b: any) => a.min_weight - b.min_weight);
         const tier = tiers.find((t: any) => totalWeight >= t.min_weight && totalWeight < t.max_weight);
         
         if (tier) {
@@ -139,7 +159,7 @@ const ShopLayout: React.FC = () => {
             }
         }
     }
-  }, [cart, shippingConfig]);
+  }, [cart, shippingConfig, netSubtotal]);
 
   // ---- Custom Design-Template ----
   const parsedTemplate = useMemo(() => {
@@ -170,6 +190,8 @@ const ShopLayout: React.FC = () => {
     secondaryColor: shop?.secondary_color || '#ffffff',
     shopBaseUrl,
     shopKey: shop?.id,
+    shippingConfig,
+    shippingCost,
     template: parsedTemplate,
     customTemplateActive: !!(shop as any)?.custom_template_enabled,
     templateContext: {
@@ -177,7 +199,7 @@ const ShopLayout: React.FC = () => {
       categories: navCategories,
       cart_count: cartCount,
     },
-  }), [shop, categories, shopBaseUrl, parsedTemplate, navCategories, cartCount]);
+  }), [shop, categories, shopBaseUrl, parsedTemplate, navCategories, cartCount, shippingConfig, shippingCost]);
 
   // Aktionen aus dem Custom-Template (Buttons/Links mit data-shop-action)
   useEffect(() => {
@@ -570,7 +592,7 @@ const ShopLayout: React.FC = () => {
                     </div>
                     <div className="flex justify-between text-sm text-slate-500 font-medium">
                       <span>Versandkosten</span>
-                      <span>{shippingCost.toFixed(2).replace('.', ',')} €*</span>
+                      <span>{shippingCost === 0 ? 'kostenlos' : `${shippingCost.toFixed(2).replace('.', ',')} €*`}</span>
                     </div>
                     <div className="flex justify-between text-lg font-black text-slate-900 pt-2">
                       <span>Gesamtbetrag</span>
