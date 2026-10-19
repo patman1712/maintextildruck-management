@@ -93,46 +93,36 @@ const ShopCheckoutPage: React.FC = () => {
         return;
     }
     if (shippingConfig && shippingConfig.shipping_tiers && Array.isArray(shippingConfig.shipping_tiers) && shippingConfig.shipping_tiers.length > 0) {
-        // Calculate total weight
+        // Gesamtgewicht = Summe (Stückgewicht × Menge) aller Artikel + Verpackungsgewicht.
         let totalWeight = 0;
-        
-        // Items weight
         cart.forEach(item => {
-             if (item.weight) {
-                 totalWeight += (item.weight * item.quantity);
-             }
+             const unitWeight = Number(item.weight);
+             const quantity = Number(item.quantity);
+             if (!isNaN(unitWeight) && !isNaN(quantity)) totalWeight += unitWeight * quantity;
         });
-
-        // Packaging weight
-        if (shippingConfig.packaging_weight) {
-            totalWeight += parseFloat(shippingConfig.packaging_weight);
-        }
+        const packaging = parseFloat(String(shippingConfig.packaging_weight).replace(',', '.'));
+        if (!isNaN(packaging)) totalWeight += packaging;
 
         console.log(`Checkout Weight Calculation: Items + Pkg = ${totalWeight}kg`);
 
-        // Find tier
-        // Tiers should be sorted by min_weight
-        const tiers = shippingConfig.shipping_tiers.sort((a: any, b: any) => a.min_weight - b.min_weight);
-        
-        const tier = tiers.find((t: any) => totalWeight >= t.min_weight && totalWeight < t.max_weight);
-        
-        if (tier) {
-            setShippingCost(parseFloat(tier.price));
-        } else {
-            // Check if we are above the highest tier
-            const maxTier = tiers[tiers.length - 1];
-            if (maxTier && totalWeight >= maxTier.max_weight) {
-                 // Use the price of the highest tier? Or fallback?
-                 // Usually highest tier covers "everything above"
-                 setShippingCost(parseFloat(maxTier.price));
-            } else {
-                 // Below lowest tier? Or gap?
-                 // If below lowest, use lowest?
-                 if (tiers.length > 0 && totalWeight < tiers[0].min_weight) {
-                     setShippingCost(parseFloat(tiers[0].price));
-                 }
-            }
+        // Staffeln kopieren (nicht das Context-Objekt in-place sortieren) und numerisch normalisieren.
+        const tiers = shippingConfig.shipping_tiers
+            .map((t: any) => ({
+                min_weight: Number(t.min_weight) || 0,
+                max_weight: Number(t.max_weight) || 0,
+                price: Number(t.price) || 0,
+            }))
+            .sort((a: any, b: any) => a.min_weight - b.min_weight);
+
+        // Passende Staffel bestimmen. Wichtig: Es wird IMMER ein Preis gesetzt.
+        // Liegt das Gewicht in einer Lücke oder über der letzten Staffel, greift die oberste Staffel;
+        // liegt es unter der ersten Staffel, greift die erste. So bleiben die Versandkosten
+        // beim Erhöhen der Menge nie auf einem alten Wert "hängen".
+        let tier = tiers.find((t: any) => totalWeight >= t.min_weight && totalWeight < t.max_weight);
+        if (!tier) {
+            tier = (totalWeight < tiers[0].min_weight) ? tiers[0] : tiers[tiers.length - 1];
         }
+        setShippingCost(tier.price);
     }
   }, [cart, shippingConfig, selectedShippingMethod, netSubtotal]);
 
