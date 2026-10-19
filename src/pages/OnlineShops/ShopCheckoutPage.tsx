@@ -178,6 +178,44 @@ const ShopCheckoutPage: React.FC = () => {
     setVoucherInput('');
   };
 
+  // 🎟️ Gutschein erneut prüfen – z. B. wenn er zwischenzeitlich deaktiviert oder abgelaufen ist.
+  const revalidateVoucher = async (): Promise<boolean> => {
+    if (!voucher) return true;
+    try {
+      const res = await fetch(`/api/shops/${shop.id}/voucher/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: voucher.code,
+          subtotal: cartTotal,
+          email: address?.email || currentCustomer?.email || null,
+          customerId: currentCustomer?.id || null,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.valid) {
+        setVoucher({
+          code: data.code,
+          discountType: data.discount_type,
+          discountValue: Number(data.discount_value) || 0,
+        });
+        return true;
+      }
+      setVoucher(null);
+      setVoucherError(`${voucher.code}: ${data?.error || 'Der Gutscheincode ist nicht mehr gültig.'}`);
+      return false;
+    } catch {
+      // Bei Netzwerkfehlern nicht blockieren – der Server prüft beim Bestellen erneut.
+      return true;
+    }
+  };
+
+  // Beim Aufruf der Kasse einmalig prüfen, ob der hinterlegte Code noch gültig ist.
+  useEffect(() => {
+    if (voucher) revalidateVoucher();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [orderComplete, setOrderComplete] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

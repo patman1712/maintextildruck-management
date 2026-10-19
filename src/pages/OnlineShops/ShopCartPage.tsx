@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { useOutletContext, Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useOutletContext, useNavigate, Link } from 'react-router-dom';
 import { Trash2, Plus, Minus, ArrowLeft, ArrowRight, ShoppingCart, ShoppingBag, Ticket, X, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Shop } from '../../store';
 import { useShopStore } from '../../shopStore';
@@ -21,6 +21,7 @@ interface ShopContext {
 const ShopCartPage: React.FC = () => {
   const { shop, primaryColor, shopBaseUrl, template, customTemplateActive, templateContext, shippingConfig, shippingCost: contextShippingCost } = useOutletContext<ShopContext>();
   const { cart, removeFromCart, updateQuantity, voucher, setVoucher, currentCustomer } = useShopStore();
+  const navigate = useNavigate();
 
   const [voucherInput, setVoucherInput] = useState('');
   const [voucherChecking, setVoucherChecking] = useState(false);
@@ -91,6 +92,47 @@ const ShopCartPage: React.FC = () => {
     setVoucherError('');
     setVoucherInput('');
   };
+
+  // 🎟️ Gutschein erneut prüfen – z. B. wenn er zwischenzeitlich deaktiviert oder abgelaufen ist.
+  // Gibt true zurück, wenn der Code weiterhin gültig ist (oder kein Code aktiv ist).
+  const revalidateVoucher = async (): Promise<boolean> => {
+    if (!voucher) return true;
+    try {
+      const res = await fetch(`/api/shops/${shop.id}/voucher/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: voucher.code,
+          subtotal: cartTotal,
+          email: currentCustomer?.email || null,
+          customerId: currentCustomer?.id || null,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.valid) {
+        setVoucher({
+          code: data.code,
+          discountType: data.discount_type,
+          discountValue: Number(data.discount_value) || 0,
+        });
+        return true;
+      }
+      setVoucher(null);
+      setVoucherError(
+        `${voucher.code}: ${data?.error || 'Der Gutscheincode ist nicht mehr gültig.'}`
+      );
+      return false;
+    } catch {
+      // Bei Netzwerkfehlern nicht blockieren – der Server prüft beim Bestellen erneut.
+      return true;
+    }
+  };
+
+  // Beim Öffnen des Warenkorbs einmalig prüfen, ob der hinterlegte Code noch gültig ist.
+  useEffect(() => {
+    if (voucher) revalidateVoucher();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (cart.length === 0) {
     return (
@@ -322,6 +364,15 @@ const ShopCartPage: React.FC = () => {
 
             <Link 
               to={`${shopBaseUrl}/checkout`}
+              onClick={async (e) => {
+                // 🎟️ Bei jedem Klick auf "Zur Kasse" prüfen, ob der Gutschein noch aktiv ist.
+                if (!voucher) return;
+                e.preventDefault();
+                setVoucherChecking(true);
+                const stillValid = await revalidateVoucher();
+                setVoucherChecking(false);
+                if (stillValid) navigate(`${shopBaseUrl}/checkout`);
+              }}
               className="w-full flex items-center justify-center py-5 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-[1.02] active:scale-98 transition-all group mb-4"
               style={{ backgroundColor: primaryColor }}
             >
