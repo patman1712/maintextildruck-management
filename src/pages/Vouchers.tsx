@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAppStore } from '@/store'
 import { Ticket, Plus, Edit, Trash2, X, Save, AlertCircle, Loader2, Percent, Euro } from 'lucide-react'
 
@@ -40,9 +41,10 @@ const EMPTY_FORM: VoucherForm = {
 
 export default function Vouchers() {
   const shops = useAppStore((s) => s.shops)
+  const [searchParams, setSearchParams] = useSearchParams()
   const [vouchers, setVouchers] = useState<Voucher[]>([])
   const [loading, setLoading] = useState(true)
-  const [filterShopId, setFilterShopId] = useState('')
+  const [filterShopId, setFilterShopId] = useState(searchParams.get('shop') || '')
   const [error, setError] = useState('')
 
   const [showModal, setShowModal] = useState(false)
@@ -73,6 +75,12 @@ export default function Vouchers() {
   useEffect(() => {
     fetchVouchers()
   }, [])
+
+  // Shop-Filter mit der URL (/?shop=<id>) synchron halten,
+  // damit der Sprung über das Shop-Menü den richtigen Shop vorselektiert.
+  useEffect(() => {
+    setFilterShopId(searchParams.get('shop') || '')
+  }, [searchParams])
 
   const visibleVouchers = useMemo(
     () => (filterShopId ? vouchers.filter((v) => v.shop_id === filterShopId) : vouchers),
@@ -193,7 +201,10 @@ export default function Vouchers() {
         <label className="text-xs font-black uppercase tracking-widest text-slate-400">Shop</label>
         <select
           value={filterShopId}
-          onChange={(e) => setFilterShopId(e.target.value)}
+          onChange={(e) => {
+            const value = e.target.value
+            setSearchParams(value ? { shop: value } : {}, { replace: true })
+          }}
           className="px-4 py-2 rounded-lg border border-slate-200 text-sm font-medium bg-white"
         >
           <option value="">Alle Shops</option>

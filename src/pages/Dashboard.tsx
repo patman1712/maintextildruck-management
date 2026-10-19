@@ -197,29 +197,32 @@ export default function DashboardLayout() {
                             onClick={() => setMobileMenuOpen(false)} 
                             menuSettings={{}}
                         />
-
-                        {currentUser?.role === 'admin' && (
-                            <NavItem 
-                                item={{ id: 'vouchers', label: 'Gutscheine', to: '/dashboard/vouchers', icon: Ticket }} 
-                                isOpen={sidebarOpen || mobileMenuOpen} 
-                                onClick={() => setMobileMenuOpen(false)} 
-                                menuSettings={{}}
-                            />
-                        )}
                     </>
                 )}
                 
                 {onlineShopsOpen && (currentUser?.role === 'admin' || menuSettings['shops_list'] !== false) && shops.map(shop => (
-                     <Link
-                        key={shop.id}
-                        to={`/dashboard/shops/${shop.id}`}
-                        onClick={() => setMobileMenuOpen(false)}
-                        className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group text-red-100 hover:bg-white/10 hover:text-white`}
-                        title={!sidebarOpen && !mobileMenuOpen ? shop.name : undefined}
-                    >
-                        <span className="text-red-300 group-hover:text-white min-w-[24px]"><ShoppingBag size={20} /></span>
-                        {(sidebarOpen || mobileMenuOpen) && <span className="font-medium whitespace-nowrap text-sm truncate">{shop.name}</span>}
-                    </Link>
+                     <div key={shop.id}>
+                        <Link
+                           to={`/dashboard/shops/${shop.id}`}
+                           onClick={() => setMobileMenuOpen(false)}
+                           className={`flex items-center space-x-3 p-3 rounded-lg transition-all duration-200 group text-red-100 hover:bg-white/10 hover:text-white`}
+                           title={!sidebarOpen && !mobileMenuOpen ? shop.name : undefined}
+                        >
+                            <span className="text-red-300 group-hover:text-white min-w-[24px]"><ShoppingBag size={20} /></span>
+                            {(sidebarOpen || mobileMenuOpen) && <span className="font-medium whitespace-nowrap text-sm truncate">{shop.name}</span>}
+                        </Link>
+                        {currentUser?.role === 'admin' && (
+                            <Link
+                               to={`/dashboard/vouchers?shop=${shop.id}`}
+                               onClick={() => setMobileMenuOpen(false)}
+                               className={`flex items-center space-x-3 py-2 mb-1 rounded-lg transition-all duration-200 group text-red-200/80 hover:bg-white/10 hover:text-white ${sidebarOpen || mobileMenuOpen ? 'pl-9 pr-3' : 'justify-center'}`}
+                               title={!sidebarOpen && !mobileMenuOpen ? `Gutscheine – ${shop.name}` : undefined}
+                            >
+                                <span className="text-red-300/70 group-hover:text-white min-w-[20px]"><Ticket size={16} /></span>
+                                {(sidebarOpen || mobileMenuOpen) && <span className="font-medium whitespace-nowrap text-xs truncate">Gutscheine</span>}
+                            </Link>
+                        )}
+                     </div>
                 ))}
             </div>
           )}
