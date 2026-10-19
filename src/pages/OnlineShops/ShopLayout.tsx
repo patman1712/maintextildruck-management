@@ -52,6 +52,10 @@ const ShopLayout: React.FC = () => {
     : 0;
   const netSubtotal = Math.max(0, cartTotal - voucherDiscount);
 
+  // 🚚 "Versandkostenfrei ab X €" – bezogen auf den Warenwert nach Gutscheinabzug.
+  const freeShippingThreshold = Number(shippingConfig?.free_shipping_threshold) > 0 ? Number(shippingConfig.free_shipping_threshold) : null;
+  const freeShippingRemaining = freeShippingThreshold !== null && netSubtotal < freeShippingThreshold ? freeShippingThreshold - netSubtotal : null;
+
   useEffect(() => {
     if (searchQuery.length >= 2) {
         const timeoutId = setTimeout(async () => {
@@ -604,6 +608,11 @@ const ShopLayout: React.FC = () => {
                       <span>Versandkosten</span>
                       <span>{shippingCost === 0 ? 'kostenlos' : `${shippingCost.toFixed(2).replace('.', ',')} €*`}</span>
                     </div>
+                    {freeShippingRemaining !== null && (
+                      <p className="text-[11px] text-amber-600 font-bold text-right">
+                        Noch {freeShippingRemaining.toFixed(2).replace('.', ',')} € bis zur versandkostenfreien Lieferung
+                      </p>
+                    )}
                     <div className="flex justify-between text-lg font-black text-slate-900 pt-2">
                       <span>Gesamtbetrag</span>
                       <span>{(cartTotal + shippingCost).toFixed(2).replace('.', ',')} €*</span>
