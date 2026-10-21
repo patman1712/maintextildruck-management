@@ -1132,29 +1132,78 @@ router.post('/:shopId/products/:assignmentId/images', (req, res) => {
             return res.status(404).json({ success: false, error: 'File not found in product files or global files' });
         }
 
+        const maxSort = db.prepare(`
+            SELECT MAX(sort_order) as maxSort
+            FROM shop_product_images
+            WHERE shop_product_assignment_id = ?
+        `).get(assignmentId) as { maxSort?: number | null };
+        const nextSortOrder = Number.isFinite(Number(maxSort?.maxSort)) ? Number(maxSort.maxSort) + 1 : 0;
+
         // Insert new assignment
         db.prepare(`
             INSERT INTO shop_product_images (id, shop_product_assignment_id, customer_product_file_id, sort_order, personalization_option_ids)
-            VALUES (?, ?, ?, 0, '[]')
-        `).run(id, assignmentId, file_id);
+            VALUES (?, ?, ?, ?, '[]')
+        `).run(id, assignmentId, file_id, nextSortOrder);
         
         // Return the newly created assignment object so frontend can add it
         // We need to fetch the file details to return a complete object similar to what GET returns
         const fileDetails = db.prepare('SELECT * FROM customer_product_files WHERE id = ?').get(file_id) as any;
         
         const newAssignment = {
-            id: id, // The ID of the LINK
+            ...(fileDetails || {}),
+            id: file_id,
+            assignment_image_id: id, // Die eindeutige ID des Links in shop_product_images
             shop_product_assignment_id: assignmentId,
             customer_product_file_id: file_id,
-            sort_order: 0,
+            sort_order: nextSortOrder,
             personalization_option_ids: [], // default
             variant_ids: [],
             size_restrictions: [],
             attribute_restrictions: {}, // default
-            ...(fileDetails || {}) // Merge file details (url, name, etc.)
         };
 
         res.json({ success: true, data: newAssignment });
+    } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/:shopId/products/:assignmentId/images/reorder', (req, res) => {
+    try {
+        const { assignmentId } = req.params;
+        const { image_ids } = req.body;
+
+        if (!Array.isArray(image_ids)) {
+            return res.status(400).json({ success: false, error: 'image_ids muss ein Array sein' });
+        }
+
+        const existingRows = db.prepare(`
+            SELECT id
+            FROM shop_product_images
+            WHERE shop_product_assignment_id = ?
+            ORDER BY sort_order ASC, created_at ASC
+        `).all(assignmentId) as Array<{ id: string }>;
+
+        const existingIds = existingRows.map(row => row.id);
+        const validProvidedIds = image_ids.filter((id: string) => existingIds.includes(id));
+        const missingIds = existingIds.filter(id => !validProvidedIds.includes(id));
+        const finalOrder = [...validProvidedIds, ...missingIds];
+
+        const updateSortStmt = db.prepare(`
+            UPDATE shop_product_images
+            SET sort_order = ?
+            WHERE id = ? AND shop_product_assignment_id = ?
+        `);
+
+        const reorderTransaction = db.transaction((ids: string[]) => {
+            ids.forEach((id, index) => {
+                updateSortStmt.run(index, id, assignmentId);
+            });
+        });
+
+        reorderTransaction(finalOrder);
+
+        res.json({ success: true, data: { image_ids: finalOrder } });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }

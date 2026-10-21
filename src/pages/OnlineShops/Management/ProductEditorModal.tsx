@@ -295,6 +295,34 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
   // Files (Images & Print Files)
   const [currentFiles, setCurrentFiles] = useState<any[]>([]);
   const [availableFiles, setAvailableFiles] = useState<any[]>([]);
+  const [draggedImageId, setDraggedImageId] = useState<string | null>(null);
+  const [dragOverImageId, setDragOverImageId] = useState<string | null>(null);
+
+  const getAssignmentImageId = (file: any) => file.assignment_image_id || file.id;
+  const isViewFile = (file: any) => file.type === 'view' || file.type === 'preview' || (!file.type && file.thumbnail_url);
+  const isPrintFile = (file: any) => ['print', 'vector', 'photoshop', 'internal'].includes(file.type) || (file.type !== 'view' && file.type !== 'preview');
+
+  const reorderViewFilesInList = (files: any[], sourceId: string, targetId: string) => {
+      const viewFiles = files.filter(isViewFile);
+      const fromIdx = viewFiles.findIndex(file => getAssignmentImageId(file) === sourceId);
+      const toIdx = viewFiles.findIndex(file => getAssignmentImageId(file) === targetId);
+
+      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) {
+          return files;
+      }
+
+      const reorderedViewFiles = [...viewFiles];
+      const [moved] = reorderedViewFiles.splice(fromIdx, 1);
+      reorderedViewFiles.splice(toIdx, 0, moved);
+
+      let nextViewIdx = 0;
+      return files.map(file => {
+          if (!isViewFile(file)) return file;
+          const replacement = reorderedViewFiles[nextViewIdx];
+          nextViewIdx += 1;
+          return replacement;
+      });
+  };
   
   useEffect(() => {
       if (assignment?.id) {
@@ -309,7 +337,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                           personalization_option_ids: typeof img.personalization_option_ids === 'string' ? JSON.parse(img.personalization_option_ids) : (img.personalization_option_ids || []),
                           size_restrictions: typeof img.size_restrictions === 'string' ? JSON.parse(img.size_restrictions) : (img.size_restrictions || []),
                           attribute_restrictions: typeof img.attribute_restrictions === 'string' ? JSON.parse(img.attribute_restrictions) : (img.attribute_restrictions || {})
-                      }));
+                      })).sort((a: any, b: any) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
                       setCurrentFiles(parsedAssigned);
                       setAvailableFiles(data.data.available);
                   }
@@ -359,7 +387,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
           const data = await res.json();
           if (data.success) {
               // Only remove the specific assignment (link) from the list, not all instances of the file
-              setCurrentFiles(prev => prev.filter(img => img.id !== assignmentId));
+              setCurrentFiles(prev => prev.filter(img => getAssignmentImageId(img) !== assignmentId));
           }
       } catch (e) { console.error(e); }
   };
@@ -400,7 +428,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
           const data = await res.json();
           if (data.success) {
               setCurrentFiles(prev => prev.map(img => 
-                  img.id === fileId ? { ...img, personalization_option_ids: optionIds } : img
+                  getAssignmentImageId(img) === fileId ? { ...img, personalization_option_ids: optionIds } : img
               ));
           }
       } catch (e) { console.error(e); }
@@ -419,7 +447,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       try {
           // Optimistic update
           setCurrentFiles(prev => prev.map(img => 
-              img.id === fileId ? { ...img, variant_ids: variantIds } : img
+              getAssignmentImageId(img) === fileId ? { ...img, variant_ids: variantIds } : img
           ));
 
           const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
@@ -450,7 +478,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       try {
           // Optimistic update
           setCurrentFiles(prev => prev.map(img => 
-              img.id === fileId ? { ...img, size_restrictions: sizes } : img
+              getAssignmentImageId(img) === fileId ? { ...img, size_restrictions: sizes } : img
           ));
 
           const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/${fileId}`, {
@@ -481,8 +509,8 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
           // Optimistic update
           setCurrentFiles(prev => prev.map(img => 
               (assignmentImageId && img.assignment_image_id === assignmentImageId) 
-                  ? { ...img, attribute_restrictions: attributes } 
-                  : (!assignmentImageId && img.id === fileId) ? { ...img, attribute_restrictions: attributes } : img
+                  ? { ...img, attribute_restrictions: attributes }
+                  : (!assignmentImageId && getAssignmentImageId(img) === fileId) ? { ...img, attribute_restrictions: attributes } : img
           ));
 
           const targetId = assignmentImageId || fileId;
@@ -512,6 +540,48 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
       if (newValues.length === 0) delete newAttributes[varId];
       
       handleAssignImageToAttributes(fileId, newAttributes, assignmentImageId);
+  };
+
+  const persistImageOrder = async (orderedFiles: any[]) => {
+      if (!assignment) return true;
+
+      try {
+          const imageIds = orderedFiles
+              .map(file => file.assignment_image_id)
+              .filter((id: string | undefined) => !!id);
+
+          const res = await fetch(`/api/shop-management/${shopId}/products/${assignment.id}/images/reorder`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image_ids: imageIds })
+          });
+          const data = await res.json();
+          return !!data.success;
+      } catch (error) {
+          console.error(error);
+          return false;
+      }
+  };
+
+  const handleViewImageDrop = async (targetId: string) => {
+      if (!draggedImageId || draggedImageId === targetId) {
+          setDraggedImageId(null);
+          setDragOverImageId(null);
+          return;
+      }
+
+      const previousFiles = currentFiles;
+      const reorderedFiles = reorderViewFilesInList(currentFiles, draggedImageId, targetId);
+
+      setCurrentFiles(reorderedFiles);
+      setDraggedImageId(null);
+      setDragOverImageId(null);
+
+      const success = await persistImageOrder(reorderedFiles);
+      if (!success) {
+          setCurrentFiles(previousFiles);
+          alert('Die Bildreihenfolge konnte nicht gespeichert werden.');
+      }
   };
 
   // Helper to get grouped available sizes (ONLY type='size' or standard)
@@ -589,11 +659,11 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
   const filteredCurrentFiles = currentFiles.filter(f => {
       if (activeTab === 'view') {
           // View tab: Show view, preview, or images (by extension/thumbnail) unless explicitly print/vector
-          return f.type === 'view' || f.type === 'preview' || (!f.type && f.thumbnail_url); 
+          return isViewFile(f);
       } else {
           // Print tab: Show print, vector, photoshop, internal, OR anything that is NOT view/preview
           // This includes files with thumbnails that are not explicitly marked as view/preview
-          return ['print', 'vector', 'photoshop', 'internal'].includes(f.type) || (f.type !== 'view' && f.type !== 'preview');
+          return isPrintFile(f);
       }
   });
 
@@ -601,9 +671,9 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     // 1. Filter by type
     const rawFiltered = availableFiles.filter(f => {
         if (activeTab === 'view') {
-            return f.type === 'view' || f.type === 'preview' || (!f.type && f.thumbnail_url);
+            return isViewFile(f);
         } else {
-            return ['print', 'vector', 'photoshop', 'internal'].includes(f.type) || (f.type !== 'view' && f.type !== 'preview');
+            return isPrintFile(f);
         }
     });
 
@@ -637,7 +707,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
     return Array.from(uniqueMap.values());
   }, [availableFiles, activeTab]); // Removed currentFiles from dependency to avoid re-filtering when adding
 
-  const mainImage = currentFiles.find(f => f.type === 'view' || f.type === 'preview' || f.thumbnail_url)?.file_url;
+  const mainImage = currentFiles.find(isViewFile)?.file_url;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 overflow-y-auto">
@@ -720,15 +790,55 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                            <p className="text-xs font-bold uppercase text-slate-500">
                                Aktive {activeTab === 'view' ? 'Bilder' : 'Dateien'} (Shop)
                            </p>
+                           {activeTab === 'view' && (
+                               <p className="text-xs text-slate-400 italic">
+                                   Ziehen Sie die aktiven Bilder per Drag-and-Drop. Das erste Bild ist automatisch das Startbild im Shop.
+                               </p>
+                           )}
                            
                            {activeTab === 'view' ? (
                                // Grid View for Images
                                <div className="grid grid-cols-4 gap-2">
                                   {filteredCurrentFiles.map((img: any, idx: number) => (
-                                      <div key={img.id || idx} className="relative group aspect-square bg-slate-50 border border-slate-200 rounded hover:z-[100] hover:shadow-lg transition-shadow">
+                                      <div
+                                          key={img.assignment_image_id || img.id || idx}
+                                          draggable
+                                          onDragStart={(e) => {
+                                              setDraggedImageId(getAssignmentImageId(img));
+                                              e.dataTransfer.effectAllowed = 'move';
+                                          }}
+                                          onDragOver={(e) => {
+                                              e.preventDefault();
+                                              if (dragOverImageId !== getAssignmentImageId(img)) {
+                                                  setDragOverImageId(getAssignmentImageId(img));
+                                              }
+                                          }}
+                                          onDragLeave={() => {
+                                              if (dragOverImageId === getAssignmentImageId(img)) {
+                                                  setDragOverImageId(null);
+                                              }
+                                          }}
+                                          onDrop={(e) => {
+                                              e.preventDefault();
+                                              handleViewImageDrop(getAssignmentImageId(img));
+                                          }}
+                                          onDragEnd={() => {
+                                              setDraggedImageId(null);
+                                              setDragOverImageId(null);
+                                          }}
+                                          className={`relative group aspect-square bg-slate-50 border rounded hover:z-[100] hover:shadow-lg transition-shadow cursor-move ${
+                                              dragOverImageId === getAssignmentImageId(img) ? 'border-slate-900 ring-2 ring-slate-900/15' : 'border-slate-200'
+                                          } ${draggedImageId === getAssignmentImageId(img) ? 'opacity-60' : ''}`}
+                                      >
                                           <div className="w-full h-full rounded overflow-hidden">
                                               <img src={img.thumbnail_url || img.file_url} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                                           </div>
+
+                                          {idx === 0 && (
+                                              <div className="absolute top-1 left-1 bg-slate-900/90 text-white text-[9px] font-bold px-1.5 py-0.5 rounded z-30">
+                                                  Startbild
+                                              </div>
+                                          )}
                                           
                                           {/* Personalization & Variant Badges */}
                                           <div className="absolute bottom-0 left-0 right-0 flex flex-col gap-0.5 pointer-events-none">
@@ -745,7 +855,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                           </div>
 
                                           <button 
-                                              onClick={() => handleRemoveFile(img.id)}
+                                              onClick={() => handleRemoveFile(getAssignmentImageId(img))}
                                               className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700 z-30 cursor-pointer"
                                               title="Entfernen"
                                           >
@@ -764,7 +874,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                               <input 
                                                                   type="checkbox" 
                                                                   checked={isSelected}
-                                                                  onChange={() => toggleImageOption(img.id, opt.id, img.personalization_option_ids || [])}
+                                                                  onChange={() => toggleImageOption(getAssignmentImageId(img), opt.id, img.personalization_option_ids || [])}
                                                                   className="h-3 w-3 rounded text-blue-500 focus:ring-0"
                                                               />
                                                               <span className="truncate">{opt.name}</span>
@@ -795,7 +905,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                               <input 
                                                                   type="checkbox" 
                                                                   checked={isAssigned}
-                                                                  onChange={() => toggleImageVariant(img.id, varId, img.variant_ids || [])}
+                                                                  onChange={() => toggleImageVariant(getAssignmentImageId(img), varId, img.variant_ids || [])}
                                                                   className="h-3 w-3 rounded text-green-500 focus:ring-0"
                                                               />
                                                               <span className="truncate flex-1">{variable.name}</span>
@@ -816,7 +926,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                                                     const newValues = allSelected ? [] : attributeGroup!.values;
                                                                                     const newAttributes = { ...(img.attribute_restrictions || {}), [varId]: newValues };
                                                                                     if (newValues.length === 0) delete newAttributes[varId];
-                                                                                    handleAssignImageToAttributes(img.id, newAttributes, img.assignment_image_id);
+                                                                                    handleAssignImageToAttributes(getAssignmentImageId(img), newAttributes, img.assignment_image_id);
                                                                                 }}
                                                                                 className="text-[9px] text-blue-300 hover:text-white hover:underline"
                                                                             >
@@ -830,7 +940,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                                                     <input 
                                                                                         type="checkbox" 
                                                                                         checked={isSelected}
-                                                                                        onChange={() => toggleImageAttribute(img.id, varId, val, img.attribute_restrictions || {}, img.assignment_image_id)}
+                                                                                        onChange={() => toggleImageAttribute(getAssignmentImageId(img), varId, val, img.attribute_restrictions || {}, img.assignment_image_id)}
                                                                                         className="h-3 w-3 rounded text-blue-500 focus:ring-0 bg-slate-700 border-slate-500"
                                                                                     />
                                                                                     <span className="text-[10px] text-slate-200 font-mono">{val}</span>
@@ -856,7 +966,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                // List View for Print Files
     <div className="space-y-2">
         {filteredCurrentFiles.map((file: any) => (
-            <div key={file.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded hover:shadow-sm">
+            <div key={file.assignment_image_id || file.id} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded hover:shadow-sm">
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
                     <div className="h-10 w-10 bg-slate-100 rounded flex items-center justify-center text-slate-500 flex-shrink-0 overflow-hidden border border-slate-200">
                         {file.thumbnail_url ? (
@@ -892,7 +1002,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                             <button 
                                                 onClick={() => {
                                                     // Standard toggle behavior for "is assigned to this variant group"
-                                                    toggleImageVariant(file.id, varId, file.variant_ids || [])
+                                                    toggleImageVariant(getAssignmentImageId(file), varId, file.variant_ids || [])
                                                 }}
                                                 className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors flex items-center ${isAssigned ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-300'}`}
                                             >
@@ -915,7 +1025,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                                     const newValues = allSelected ? [] : attributeGroup!.values;
                                                                     const newAttributes = { ...(file.attribute_restrictions || {}), [varId]: newValues };
                                                                     if (newValues.length === 0) delete newAttributes[varId];
-                                                                    handleAssignImageToAttributes(file.id, newAttributes, file.assignment_image_id);
+                                                                    handleAssignImageToAttributes(getAssignmentImageId(file), newAttributes, file.assignment_image_id);
                                                                 }}
                                                                 className="text-[9px] text-blue-600 hover:underline"
                                                             >
@@ -929,7 +1039,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                                     <input 
                                                                         type="checkbox" 
                                                                         checked={isSelected}
-                                                                        onChange={() => toggleImageAttribute(file.id, varId, val, file.attribute_restrictions || {}, file.assignment_image_id)}
+                                                                        onChange={() => toggleImageAttribute(getAssignmentImageId(file), varId, val, file.attribute_restrictions || {}, file.assignment_image_id)}
                                                                         className="h-3 w-3 rounded text-blue-600 focus:ring-0 border-slate-300"
                                                                     />
                                                                     <span className="text-[10px] text-slate-600 font-mono">{val}</span>
@@ -972,7 +1082,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                                                            const newSizes = allGroupSizesSelected
                                                                                                ? currentRestrictions.filter((s: string) => !group.sizes.includes(s))
                                                                                                : [...new Set([...currentRestrictions, ...group.sizes])];
-                                                                                           handleAssignImageToSizes(file.id, newSizes);
+                                                                                           handleAssignImageToSizes(getAssignmentImageId(file), newSizes);
                                                                                        }}
                                                                                        className="text-[9px] text-blue-600 hover:text-blue-800 hover:underline cursor-pointer bg-transparent border-0 p-0"
                                                                                    >
@@ -990,7 +1100,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                                                                    <input 
                                                                                                        type="checkbox" 
                                                                                                        checked={isSelected}
-                                                                                                       onChange={() => toggleImageSize(file.id, size, currentRestrictions)}
+                                                                                                       onChange={() => toggleImageSize(getAssignmentImageId(file), size, currentRestrictions)}
                                                                                                        className="h-3 w-3 rounded text-purple-600 focus:ring-0"
                                                                                                    />
                                                                                                    <span className="text-xs text-slate-700 font-mono">{size}</span>
@@ -1012,7 +1122,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                                <a href={file.file_url} target="_blank" rel="noreferrer" className="p-1 text-slate-400 hover:text-blue-600">
                                                    <Download size={16} />
                                                </a>
-                                               <button onClick={() => handleRemoveFile(file.id)} className="p-1 text-slate-400 hover:text-red-600">
+                                               <button onClick={() => handleRemoveFile(getAssignmentImageId(file))} className="p-1 text-slate-400 hover:text-red-600">
                                                    <Trash2 size={16} />
                                                </button>
                                            </div>
