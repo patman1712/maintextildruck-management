@@ -531,8 +531,8 @@ router.post('/:id/contact', async (req, res) => {
     const { id } = req.params;
 
     const shopId = id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/)
-      ? db.prepare('SELECT id, name, notification_email FROM shops WHERE id = ?').get(id)
-      : db.prepare('SELECT id, name, notification_email FROM shops WHERE domain_slug = ? OR custom_domain = ?').get(id, id);
+      ? db.prepare('SELECT id, name, notification_email, logo_url, email_logo_url, primary_color, secondary_color FROM shops WHERE id = ?').get(id)
+      : db.prepare('SELECT id, name, notification_email, logo_url, email_logo_url, primary_color, secondary_color FROM shops WHERE domain_slug = ? OR custom_domain = ?').get(id, id);
 
     const shop = shopId as any;
     if (!shop) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
@@ -559,21 +559,36 @@ router.post('/:id/contact', async (req, res) => {
     }
 
     // Empfänger: Shop-eigene E-Mail → globale Shop-Kontaktadresse → Firmen-Fallback
-    const globalContent = db.prepare("SELECT contact_email, order_notification_email FROM global_shop_content WHERE id = 'main'").get() as any;
+    const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
     const recipient =
       (shop.notification_email || '').trim() ||
       (globalContent?.contact_email || '').trim() ||
       (globalContent?.order_notification_email || '').trim() ||
       DEFAULT_SHOP_CONTACT_RECIPIENT;
 
+    // Branding für die optionale Shop-Mailvorlage (email.html)
+    const footerParts: string[] = [];
+    if (globalContent?.company_name) footerParts.push(globalContent.company_name);
+    if (globalContent?.company_address) footerParts.push(globalContent.company_address);
+    if (globalContent?.contact_email) footerParts.push(globalContent.contact_email);
+
     const sent = await sendShopContactMessage({
       to: recipient,
+      shopId: shop.id,
       shopName: shop.name || 'Onlineshop',
       firstName,
       lastName,
       email,
       subject,
       message,
+      replyTo: email,
+      branding: {
+        logo_url: (shop.logo_url || '').startsWith('http') ? shop.logo_url : '',
+        email_logo_url: (shop.email_logo_url || '').startsWith('http') ? shop.email_logo_url : '',
+        primary_color: shop.primary_color || '',
+        secondary_color: shop.secondary_color || '',
+        footer_text: footerParts.join(' | '),
+      },
     });
 
     if (!sent) {

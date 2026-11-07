@@ -97,6 +97,7 @@ const sendEmailWithInvoice = async (opts: {
     html: string;
     invoicePath?: string | null;
     invoiceFilename?: string;
+    replyTo?: string | null;
 }) => {
     const config = getEmailConfig();
     if (!config) {
@@ -128,6 +129,7 @@ const sendEmailWithInvoice = async (opts: {
                     subject: opts.subject,
                     text: opts.text,
                     html: opts.html,
+                    replyTo: opts.replyTo || undefined,
                     attachments: attachments.length ? attachments : undefined
                 } as any);
 
@@ -139,6 +141,7 @@ const sendEmailWithInvoice = async (opts: {
                         subject: opts.subject,
                         text: opts.text,
                         html: opts.html,
+                        replyTo: opts.replyTo || undefined,
                         attachments: attachments.length ? attachments : undefined
                     } as any);
 
@@ -186,6 +189,7 @@ const sendEmailWithInvoice = async (opts: {
                 subject: opts.subject,
                 text: opts.text,
                 html: opts.html,
+                replyTo: opts.replyTo || undefined,
                 attachments: attachments.length ? attachments : undefined
             });
             return true;
@@ -203,14 +207,25 @@ export const DEFAULT_SHOP_CONTACT_RECIPIENT = 'info@maintextildruck.com';
 
 // Kontaktformular eines Onlineshops: leitet die Nachricht an die im Shop hinterlegte
 // E-Mail-Adresse weiter (oder an die Firmen-Standardadresse als Fallback).
+// Wird mit der optionalen Shop-E-Mail-Vorlage (email.html) umrahmt; die Kontaktdaten
+// und die Nachricht landen im Platzhalter {{content}}.
 export const sendShopContactMessage = async (opts: {
     to: string;
+    shopId?: string | null;
     shopName: string;
     firstName?: string;
     lastName?: string;
     email: string;
     subject?: string;
     message: string;
+    replyTo?: string;
+    branding?: {
+        logo_url?: string;
+        email_logo_url?: string;
+        primary_color?: string;
+        secondary_color?: string;
+        footer_text?: string;
+    };
 }): Promise<boolean> => {
     const fullName = [opts.firstName, opts.lastName].filter(Boolean).join(' ').trim();
     const subject = `[Shop-Kontakt] ${opts.subject || 'Neue Nachricht'} – ${opts.shopName}`;
@@ -232,7 +247,7 @@ export const sendShopContactMessage = async (opts: {
         .replace(/>/g, '&gt;')
         .replace(/\n/g, '<br />');
 
-    const html = `
+    const contentHtml = `
         <div style="font-family: Arial, Helvetica, sans-serif; color: #0f172a; line-height: 1.6;">
             <h2 style="margin: 0 0 12px;">Neue Kontaktanfrage</h2>
             <p style="margin: 0 0 16px; color: #475569;">
@@ -247,12 +262,26 @@ export const sendShopContactMessage = async (opts: {
         </div>
     `;
 
+    // Eigene Shop-E-Mail-Vorlage (email.html) anwenden, sonst Standard-HTML beibehalten.
+    const html = applyShopEmailFrame(opts.shopId, {
+        shop_name: opts.shopName,
+        customer_name: fullName,
+        subject,
+        year: String(new Date().getFullYear()),
+        logo_url: opts.branding?.logo_url || '',
+        email_logo_url: opts.branding?.email_logo_url || '',
+        primary_color: opts.branding?.primary_color || '',
+        secondary_color: opts.branding?.secondary_color || '',
+        footer_text: opts.branding?.footer_text || '',
+    }, contentHtml);
+
     return await sendEmailWithInvoice({
         to: [opts.to],
         subject,
         text,
         html,
         invoicePath: null,
+        replyTo: opts.replyTo,
     });
 };
 
