@@ -52,7 +52,9 @@ const normalizeRecipientList = (value: string | string[]) => {
 // Diese wird als Rahmen um alle Kunden-Mails gelegt (Header/Footer/Farben/Schrift).
 // Platzhalter: {{content}}, {{shop_name}}, {{customer_name}}, {{order_number}},
 // {{subject}}, {{year}}, {{logo_url}}, {{email_logo_url}}, {{primary_color}},
-// {{secondary_color}}, {{footer_text}}. Ohne eigene Vorlage bleibt alles unverändert.
+// {{secondary_color}}, {{footer_text}}. In Bestell-Mails zusätzlich
+// {{order_items_html}} (Positionen inkl. Variantenbild) und {{order_totals_html}}
+// (Summenübersicht). Ohne eigene Vorlage bleibt alles unverändert.
 const extractBodyInner = (html: string): string => {
     const m = String(html || '').match(/<body[^>]*>([\s\S]*)<\/body>/i);
     return m ? m[1] : String(html || '');
@@ -68,6 +70,86 @@ const getShopEmailFrame = (shopId: string | null | undefined): string | null => 
         return null;
     }
 };
+
+// ----- Bausteine für Bestellpositionen & Summen (auch als email.html-Platzhalter) -----
+const escapeHtml = (value: any) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+const formatEur = (n: number) => `${(Number(n) || 0).toFixed(2).replace('.', ',')} €`;
+
+// Artikel-Tabelle: Variantenbild, Artikelname, Größe/Farbe, Menge und Preise.
+const buildOrderItemsHtml = (items: any[]): string => {
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) return '';
+    const rows = list.map((it) => {
+        const qty = Number(it.quantity) || 0;
+        const price = Number(it.price) || 0;
+        const variant = [
+            it.size ? `Größe: ${escapeHtml(it.size)}` : '',
+            it.color ? `Farbe: ${escapeHtml(it.color)}` : ''
+        ].filter(Boolean).join(' · ');
+        const imageCell = it.image
+            ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.item_name || '')}" width="48" height="48" style="width:48px; height:48px; object-fit:cover; border-radius:6px; border:1px solid #e2e8f0; display:block;">`
+            : `<div style="width:48px; height:48px; border-radius:6px; border:1px solid #e2e8f0; background:#f1f5f9;"></div>`;
+        return `<tr>
+            <td style="padding:8px; border-bottom:1px solid #eee;">
+              <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
+                <td style="vertical-align:top; padding-right:10px;">${imageCell}</td>
+                <td style="vertical-align:top;">
+                  <div style="font-weight:700; color:#0f172a;">${escapeHtml(it.item_name || '')}</div>
+                  ${variant ? `<div style="color:#64748b; font-size:12px; margin-top:2px;">${variant}</div>` : ''}
+                </td>
+              </tr></table>
+            </td>
+            <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${qty}</td>
+            <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatEur(price)}</td>
+            <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatEur(qty * price)}</td>
+          </tr>`;
+    }).join('');
+    return `<table style="width:100%; border-collapse:collapse; font-size:14px;">
+        <thead>
+          <tr style="background:#f1f5f9; color:#334155;">
+            <th style="padding:8px; text-align:left;">Artikel</th>
+            <th style="padding:8px; text-align:right;">Menge</th>
+            <th style="padding:8px; text-align:right;">Einzelpreis</th>
+            <th style="padding:8px; text-align:right;">Summe</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+};
+
+// Summenübersicht: Warenwert, Versandkosten, ggf. Rabatt und Gesamtbetrag.
+const buildOrderTotalsHtml = (order: any, items: any[]): string => {
+    const list = Array.isArray(items) ? items : [];
+    const itemsSubtotal = list.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0);
+    const shippingCosts = Number(order?.shipping_costs) || 0;
+    const discountAmount = Number(order?.discount_amount) || 0;
+    const totalAmount = Number(order?.total_amount) || 0;
+    return `<table style="width:100%; border-collapse:collapse; font-size:14px; margin-top:12px;">
+        <tr><td style="padding:4px 8px 4px 0; color:#64748b;">Warenwert</td><td style="padding:4px 0; text-align:right;">${formatEur(itemsSubtotal)}</td></tr>
+        <tr><td style="padding:4px 8px 4px 0; color:#64748b;">Versandkosten</td><td style="padding:4px 0; text-align:right;">${formatEur(shippingCosts)}</td></tr>
+        ${discountAmount > 0 ? `<tr><td style="padding:4px 8px 4px 0; color:#64748b;">Rabatt${order?.voucher_code ? ` (${escapeHtml(order.voucher_code)})` : ''}</td><td style="padding:4px 0; text-align:right;">-${formatEur(discountAmount)}</td></tr>` : ''}
+        <tr><td style="padding:8px 8px 8px 0; border-top:2px solid #0f172a; font-weight:800; font-size:16px;">Gesamtbetrag</td><td style="padding:8px 0; border-top:2px solid #0f172a; text-align:right; font-weight:800; font-size:16px;">${formatEur(totalAmount)}</td></tr>
+      </table>`;
+};
+
+// Prüft, ob die eigene email.html-Vorlage eines Shops einen Platzhalter verwendet.
+// Damit werden die gleichen Angaben im Standard-Inhalt nicht doppelt ausgegeben.
+const shopEmailFrameUsesPlaceholder = (shopId: string | null | undefined, key: string): boolean => {
+    const frame = getShopEmailFrame(shopId);
+    if (!frame) return false;
+    return new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`).test(frame);
+};
+
+// Liefert Bestellpositionen und Summenübersicht als email.html-Platzhalter.
+const buildOrderEmailPlaceholders = (order: any, items: any[]): Record<string, string> => ({
+    order_items_html: buildOrderItemsHtml(items),
+    order_totals_html: buildOrderTotalsHtml(order, items)
+});
 
 export const applyShopEmailFrame = (
     shopId: string | null | undefined,
@@ -408,6 +490,9 @@ export const sendOrderConfirmation = async (orderId: string, invoicePath: string
 `;
 
         // Eigene Shop-E-Mail-Vorlage (email.html aus dem Design-Paket) anwenden, sonst Standard.
+        // Bestellpositionen + Summen als Platzhalter bereitstellen (Standard-Inhalt bleibt unverändert).
+        const confirmationItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+        const orderPlaceholders = buildOrderEmailPlaceholders(order, confirmationItems);
         const html = applyShopEmailFrame(order.shop_id, {
             shop_name: branding.company_name,
             customer_name: order.customer_name || '',
@@ -418,7 +503,8 @@ export const sendOrderConfirmation = async (orderId: string, invoicePath: string
             email_logo_url: branding.email_logo_url,
             primary_color: branding.primary_color,
             secondary_color: branding.secondary_color,
-            footer_text: branding.footer_text
+            footer_text: branding.footer_text,
+            ...orderPlaceholders
         }, contentHtml);
 
         // Plain text fallback
@@ -641,6 +727,8 @@ export const sendShipmentNotification = async (orderId: string, trackingNumber?:
         </div>
         `;
 
+        const shipmentItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+        const orderPlaceholders = buildOrderEmailPlaceholders(order, shipmentItems);
         const html = applyShopEmailFrame(order.shop_id, {
             shop_name: branding.company_name,
             customer_name: order.customer_name || '',
@@ -651,7 +739,8 @@ export const sendShipmentNotification = async (orderId: string, trackingNumber?:
             email_logo_url: branding.email_logo_url,
             primary_color: branding.primary_color,
             secondary_color: branding.secondary_color,
-            footer_text: branding.footer_text
+            footer_text: branding.footer_text,
+            ...orderPlaceholders
         }, contentHtml);
 
         const text = tn
@@ -684,11 +773,7 @@ export const sendShopOrderNotification = async (orderId: string, invoicePath: st
         const shopName = shop?.name || 'Onlineshop';
         const subject = `Neue Bestellung #${order.order_number} (${shopName})`;
 
-        const esc = (value: any) => String(value ?? '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
+        const esc = escapeHtml;
 
         // Branding für die optionale Shop-Mailvorlage (email.html)
         const branding = {
@@ -733,18 +818,13 @@ export const sendShopOrderNotification = async (orderId: string, invoicePath: st
         const totalAmount = Number(order.total_amount) || 0;
         const eur = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
 
-        const rowsHtml = items.map((it, idx) => {
-            const qty = Number(it.quantity) || 0;
-            const price = Number(it.price) || 0;
-            const total = qty * price;
-            return `<tr>
-                <td style="padding:6px 8px; border-bottom:1px solid #eee;">${idx + 1}</td>
-                <td style="padding:6px 8px; border-bottom:1px solid #eee;">${esc(it.item_name || '')}</td>
-                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${qty}</td>
-                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${eur(price)}</td>
-                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${eur(total)}</td>
-            </tr>`;
-        }).join('');
+        // Artikel + Summen als wiederverwendbare Bausteine (auch für die email.html-Platzhalter
+        // {{order_items_html}} und {{order_totals_html}}).
+        const orderPlaceholders = buildOrderEmailPlaceholders(order, items);
+        // Nutzt die eigene email.html-Vorlage diese Platzhalter, werden die Angaben im
+        // Standard-Inhalt weggelassen, damit sie nicht doppelt erscheinen.
+        const frameUsesItems = shopEmailFrameUsesPlaceholder(order.shop_id, 'order_items_html');
+        const frameUsesTotals = shopEmailFrameUsesPlaceholder(order.shop_id, 'order_totals_html');
 
         const contentHtml = `
         <div style="font-family: Arial, Helvetica, sans-serif; background-color: #f8fafc; padding: 24px;">
@@ -762,26 +842,10 @@ export const sendShopOrderNotification = async (orderId: string, invoicePath: st
                 <div><b>Adresse:</b><br>${addressHtml}</div>
               </div>
 
-              <div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; margin:10px 0;">Artikel</div>
-              <table style="width:100%; border-collapse:collapse; font-size:14px;">
-                <thead>
-                  <tr style="background:#f1f5f9; color:#334155;">
-                    <th style="padding:8px; text-align:left;">Pos.</th>
-                    <th style="padding:8px; text-align:left;">Artikel</th>
-                    <th style="padding:8px; text-align:right;">Menge</th>
-                    <th style="padding:8px; text-align:right;">Preis</th>
-                    <th style="padding:8px; text-align:right;">Summe</th>
-                  </tr>
-                </thead>
-                <tbody>${rowsHtml || ''}</tbody>
-              </table>
+              ${frameUsesItems ? '' : `<div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; margin:10px 0;">Artikel</div>
+              ${orderPlaceholders.order_items_html}`}
 
-              <table style="width:100%; border-collapse:collapse; font-size:14px; margin-top:12px;">
-                <tr><td style="padding:4px 8px 4px 0; color:#64748b;">Warenwert</td><td style="padding:4px 0; text-align:right;">${eur(itemsSubtotal)}</td></tr>
-                <tr><td style="padding:4px 8px 4px 0; color:#64748b;">Versandkosten</td><td style="padding:4px 0; text-align:right;">${eur(shippingCosts)}</td></tr>
-                ${discountAmount > 0 ? `<tr><td style="padding:4px 8px 4px 0; color:#64748b;">Rabatt${order.voucher_code ? ` (${esc(order.voucher_code)})` : ''}</td><td style="padding:4px 0; text-align:right;">-${eur(discountAmount)}</td></tr>` : ''}
-                <tr><td style="padding:8px 8px 8px 0; border-top:2px solid #0f172a; font-weight:800; font-size:16px;">Gesamtbetrag</td><td style="padding:8px 0; border-top:2px solid #0f172a; text-align:right; font-weight:800; font-size:16px;">${eur(totalAmount)}</td></tr>
-              </table>
+              ${frameUsesTotals ? '' : orderPlaceholders.order_totals_html}
 
               <div style="margin-top:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 14px; font-size:14px; color:#0f172a;">
                 <div><b>Zahlungsart:</b> ${esc(paymentMethod)}</div>
@@ -804,7 +868,8 @@ export const sendShopOrderNotification = async (orderId: string, invoicePath: st
             email_logo_url: branding.email_logo_url,
             primary_color: branding.primary_color,
             secondary_color: branding.secondary_color,
-            footer_text: branding.footer_text
+            footer_text: branding.footer_text,
+            ...orderPlaceholders
         }, contentHtml);
 
         const textLines = [
@@ -966,6 +1031,8 @@ export const sendPickupConfirmation = async (orderId: string) => {
       </div>
     </div>`;
 
+    const pickupItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+    const orderPlaceholders = buildOrderEmailPlaceholders(order, pickupItems);
     const html = applyShopEmailFrame(order.shop_id, {
       shop_name: branding.company_name,
       customer_name: order.customer_name || '',
@@ -978,7 +1045,8 @@ export const sendPickupConfirmation = async (orderId: string) => {
       email_logo_url: branding.email_logo_url,
       primary_color: branding.primary_color,
       secondary_color: branding.secondary_color,
-      footer_text: branding.footer_text
+      footer_text: branding.footer_text,
+      ...orderPlaceholders
     }, contentHtml);
 
     const text = renderedText + `\n\n--\nNächster Schritt: Du erhältst bald eine weitere E-Mail mit Abholcode und Fachnummer.`;
@@ -1081,6 +1149,8 @@ export const sendPickupReady = async (orderId: string, code: string, compartment
       </div>
     </div>`;
 
+    const readyItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+    const orderPlaceholders = buildOrderEmailPlaceholders(order, readyItems);
     const html = applyShopEmailFrame(order.shop_id, {
       shop_name: branding.company_name,
       customer_name: order.customer_name || '',
@@ -1093,7 +1163,8 @@ export const sendPickupReady = async (orderId: string, code: string, compartment
       email_logo_url: branding.email_logo_url,
       primary_color: branding.primary_color,
       secondary_color: branding.secondary_color,
-      footer_text: branding.footer_text
+      footer_text: branding.footer_text,
+      ...orderPlaceholders
     }, contentHtml);
 
     return await sendEmailWithInvoice({ to: [order.customer_email], subject, text: renderedText, html });
@@ -1257,6 +1328,8 @@ export const sendVorkassePaymentReminder = async (orderId: string, customNote?: 
       </div>
     </div>`;
 
+    const reminderItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+    const orderPlaceholders = buildOrderEmailPlaceholders(order, reminderItems);
     const html = applyShopEmailFrame(order.shop_id, {
       shop_name: branding.company_name,
       customer_name: customerName,
@@ -1267,7 +1340,8 @@ export const sendVorkassePaymentReminder = async (orderId: string, customNote?: 
       email_logo_url: branding.email_logo_url,
       primary_color: branding.primary_color,
       secondary_color: branding.secondary_color,
-      footer_text: branding.footer_text
+      footer_text: branding.footer_text,
+      ...orderPlaceholders
     }, contentHtml);
 
     const textLines = [

@@ -1060,8 +1060,8 @@ router.post('/:shopId/orders', async (req, res) => {
       // 2. Create Order Items
       const insertItem = db.prepare(`
         INSERT INTO order_items (
-          id, order_id, supplier_id, item_name, quantity, price, color, size, notes, item_number
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, order_id, supplier_id, item_name, quantity, price, color, size, notes, item_number, image
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       const insertDonation = db.prepare(`
@@ -1129,7 +1129,8 @@ router.post('/:shopId/orders', async (req, res) => {
           item.color || null,
           item.size || null,
           item.personalization || null,
-          item.productNumber || null
+          item.productNumber || null,
+          item.image || null
         );
 
         const donationsEnabled = shop.donations_enabled === 1 || shop.donations_enabled === true;

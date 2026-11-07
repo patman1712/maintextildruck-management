@@ -1755,6 +1755,17 @@ try {
     console.error('Migration error (orders AGB columns):', e);
   }
 
+  // 🖼️ Variantenbild je Bestellposition (für Rechnung, Mails und email.html-Platzhalter)
+  try {
+    const orderItemCols = db.prepare("PRAGMA table_info(order_items)").all() as any[];
+    if (!orderItemCols.some(col => col.name === 'image')) {
+      console.log('Migrating database: Adding image to order_items table');
+      db.exec('ALTER TABLE order_items ADD COLUMN image TEXT');
+    }
+  } catch (e) {
+    console.error('Migration error (order_items image):', e);
+  }
+
   // 📁 Ordner-Struktur für Druckdaten (Kundendetail, Archiv, Auftragsansicht)
   try {
     db.exec(`

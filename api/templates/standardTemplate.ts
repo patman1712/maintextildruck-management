@@ -345,6 +345,10 @@ img { max-width: 100%; display: block; }
 //   {{primary_color}}  -> Hauptfarbe des Shops (z.B. #3b82f6)
 //   {{secondary_color}}-> Sekundärfarbe des Shops
 //   {{logo_url}} {{email_logo_url}} {{footer_text}}
+//   {{order_items_html}} -> fertige Artikeltabelle (Variantenbild, Name,
+//                           Größe/Farbe, Menge, Preise) – nur in Bestell-Mails gefüllt
+//   {{order_totals_html}}-> fertige Summenübersicht (Warenwert, Versand, Rabatt, Gesamt)
+//                           – nur in Bestell-Mails gefüllt
 export const STANDARD_EMAIL_TEMPLATE = `<!DOCTYPE html>
 <html lang="de">
 <head>
@@ -488,6 +492,12 @@ Kunden-Mails (email.html):
     {{logo_html}}       fertiges Logo (Bild oder Shopname, weiß für den Header)
     {{shop_name}} {{customer_name}} {{order_number}} {{subject}} {{year}}
     {{primary_color}} {{secondary_color}} {{logo_url}} {{email_logo_url}} {{footer_text}}
+    {{order_items_html}}  fertige Artikeltabelle (Variantenbild, Artikelname,
+                          Größe/Farbe, Menge und Preise) – nur in Bestell-Mails gefüllt
+    {{order_totals_html}} fertige Summenübersicht (Warenwert, Versand, Rabatt,
+                          Gesamtbetrag) – nur in Bestell-Mails gefüllt
+  Verwendet die Vorlage {{order_items_html}} bzw. {{order_totals_html}}, werden
+  dieselben Angaben im Standard-Inhalt automatisch weggelassen (keine Dopplung).
   Fehlt die Datei, werden die Mails wie bisher im Standard-Design versendet.
 
 Rechnung (invoice.json):
