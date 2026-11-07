@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import LegalTextEditor from './Management/LegalTextEditor';
 import { useAppStore } from '../../store';
 import { ShoppingBag, Plus, Edit, Trash2, ExternalLink, Palette, Truck, CreditCard, Sliders, Save, X, MapPin, RefreshCw, Zap, Layout, Image as ImageIcon } from 'lucide-react';
 
@@ -881,22 +880,11 @@ const OnlineShops: React.FC = () => {
                                     <label className="block text-sm font-medium text-slate-700">{page.label}</label>
                                     <span className="text-xs text-slate-400 uppercase">HTML erlaubt</span>
                                 </div>
-                                <div className="bg-white rounded-lg overflow-hidden border border-slate-300">
-                                    <ReactQuill 
-                                        theme="snow"
-                                        value={globalContentConfig[page.key] || ''}
-                                        onChange={(content) => setGlobalContentConfig({ ...globalContentConfig, [page.key]: content })}
-                                        placeholder={`Inhalt für ${page.label}...`}
-                                        modules={{
-                                            toolbar: [
-                                                [{ 'header': [1, 2, 3, false] }],
-                                                ['bold', 'italic', 'underline', 'strike'],
-                                                [{'list': 'ordered'}, {'list': 'bullet'}],
-                                                ['link', 'clean']
-                                            ],
-                                        }}
-                                    />
-                                </div>
+                                <LegalTextEditor
+                                    value={globalContentConfig[page.key] || ''}
+                                    onChange={(content) => setGlobalContentConfig({ ...globalContentConfig, [page.key]: content })}
+                                    placeholder={`Inhalt für ${page.label}...`}
+                                />
                             </div>
                         ))}
                     </div>

@@ -1,11 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
 import { useAppStore, Shop, Product, ShopCategory, ShopProductAssignment } from '../../../store';
 import { ArrowLeft, ShoppingBag, Layers, Layout, Save, Plus, Trash2, ExternalLink, Image as ImageIcon, Search, CheckCircle, X, Edit2, Users, Mail, Phone, MapPin, Calendar, User, Building, Truck, Key, RefreshCw, Zap, FileText, Lock, Unlock, Eye, Heart, Copy, GripVertical, Send, CreditCard, Bell, ChevronUp, ChevronDown, Star, Upload, Download } from 'lucide-react';
 import ProductEditorModal from './ProductEditorModal';
+import LegalTextEditor from './LegalTextEditor';
 import { SAMPLE_TEMPLATE } from '../template/templateEngine';
 
 const ShopDashboard: React.FC = () => {
@@ -3465,22 +3464,11 @@ const ShopDashboard: React.FC = () => {
                                     <label className="block font-bold text-slate-700">{page.label}</label>
                                     <span className="text-xs text-slate-400 uppercase bg-slate-100 px-2 py-1 rounded">HTML Editor</span>
                                 </div>
-                                <div className="bg-white rounded overflow-hidden border border-slate-300">
-                                    <ReactQuill 
-                                        theme="snow"
-                                        value={(shop as any)[page.key] || ''}
-                                        onChange={(content) => setShop({ ...shop!, [page.key]: content })}
-                                        placeholder={`Inhalt für ${page.label}...`}
-                                        modules={{
-                                            toolbar: [
-                                                [{ 'header': [1, 2, 3, false] }],
-                                                ['bold', 'italic', 'underline', 'strike'],
-                                                [{'list': 'ordered'}, {'list': 'bullet'}],
-                                                ['link', 'clean']
-                                            ],
-                                        }}
-                                    />
-                                </div>
+                                <LegalTextEditor
+                                    value={(shop as any)[page.key] || ''}
+                                    onChange={(content) => setShop({ ...shop!, [page.key]: content })}
+                                    placeholder={`Inhalt für ${page.label}...`}
+                                />
                                 <p className="text-xs text-slate-400 mt-2">
                                     Lassen Sie dieses Feld leer, um den globalen Standardtext zu verwenden.
                                 </p>
