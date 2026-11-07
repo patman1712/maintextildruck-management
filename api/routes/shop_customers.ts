@@ -892,7 +892,7 @@ router.post('/:shopId/orders', async (req, res) => {
     if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
 
     // Get Shop Owner (Customer ID) and number circle config
-    const shop = db.prepare('SELECT customer_id, order_number_circle, next_order_number, donations_enabled, guest_checkout_enabled, notification_email FROM shops WHERE id = ?').get(shopId) as { customer_id: string, order_number_circle?: string, next_order_number?: number, donations_enabled?: any, guest_checkout_enabled?: any, notification_email?: string };
+    const shop = db.prepare('SELECT customer_id, order_number_circle, next_order_number, donations_enabled, guest_checkout_enabled, notification_email, agb_text FROM shops WHERE id = ?').get(shopId) as { customer_id: string, order_number_circle?: string, next_order_number?: number, donations_enabled?: any, guest_checkout_enabled?: any, notification_email?: string, agb_text?: string };
     if (!shop) return res.status(404).json({ success: false, error: 'Shop-Besitzer nicht gefunden.' });
 
     const { 
@@ -905,7 +905,8 @@ router.post('/:shopId/orders', async (req, res) => {
       totalAmount,
       shippingCosts,
       shipping_method,
-      voucherCode
+      voucherCode,
+      agbAccepted
     } = req.body;
 
     console.log(`[Order] Data: Customer=${customerId}, Items=${items?.length}, Total=${totalAmount}`);
@@ -927,6 +928,21 @@ router.post('/:shopId/orders', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Bitte geben Sie eine gültige E-Mail-Adresse an.' });
         }
     }
+
+    // ⚖️ AGB-/Datenschutz-Zustimmung serverseitig erzwingen (alle Bestell- und Zahlungswege).
+    if (agbAccepted !== true) {
+        return res.status(400).json({ success: false, error: 'Bitte bestätigen Sie die AGB und die Datenschutzerklärung, um die Bestellung abzuschließen.' });
+    }
+
+    // Version der akzeptierten AGB festhalten: Ist ein shop-spezifischer Text gepflegt,
+    // wird dieser verwendet, sonst der globale Standardtext. Als "Version" dient ein
+    // stabiler Inhalts-Hash, damit später nachvollziehbar ist, welcher AGB-Stand galt.
+    const globalContentForAgb = db.prepare("SELECT agb_text FROM global_shop_content WHERE id = 'main'").get() as any;
+    const effectiveAgbText = String(shop.agb_text || globalContentForAgb?.agb_text || '').trim();
+    const agbVersion = effectiveAgbText
+        ? crypto.createHash('sha256').update(effectiveAgbText).digest('hex').slice(0, 12)
+        : 'unversioned';
+    const agbAcceptedAt = new Date().toISOString();
 
     // 🎟️ Gutscheincode serverseitig prüfen. Der Rabatt gilt nur auf den Warenwert
     // (nicht auf Versandkosten) und die Gesamtsumme wird hier neu berechnet,
@@ -1011,8 +1027,9 @@ router.post('/:shopId/orders', async (req, res) => {
           order_number, total_amount, shipping_costs, payment_method,
           payment_status, transaction_id,
           status, deadline, shipping_method, pickup_status,
-          voucher_code, discount_amount
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          voucher_code, discount_amount,
+          agb_accepted_at, agb_version
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         orderId,
         `Shop Bestellung ${orderNumber}`,
@@ -1035,7 +1052,9 @@ router.post('/:shopId/orders', async (req, res) => {
         finalShippingMethod,
         finalPickupStatus,
         appliedVoucherCode,
-        discountAmount
+        discountAmount,
+        agbAcceptedAt,
+        agbVersion
       );
 
       // 2. Create Order Items

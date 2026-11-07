@@ -1740,6 +1740,21 @@ try {
     console.error('Migration error (shop legal texts):', e);
   }
 
+  // ✅ AGB-Zustimmung bei Shop-Bestellungen: Zeitpunkt + verwendete AGB-Version
+  try {
+    const agbOrderCols = db.prepare("PRAGMA table_info(orders)").all() as any[];
+    if (!agbOrderCols.some(col => col.name === 'agb_accepted_at')) {
+      console.log('Migrating database: Adding agb_accepted_at to orders table');
+      db.exec('ALTER TABLE orders ADD COLUMN agb_accepted_at DATETIME');
+    }
+    if (!agbOrderCols.some(col => col.name === 'agb_version')) {
+      console.log('Migrating database: Adding agb_version to orders table');
+      db.exec('ALTER TABLE orders ADD COLUMN agb_version TEXT');
+    }
+  } catch (e) {
+    console.error('Migration error (orders AGB columns):', e);
+  }
+
   // 📁 Ordner-Struktur für Druckdaten (Kundendetail, Archiv, Auftragsansicht)
   try {
     db.exec(`

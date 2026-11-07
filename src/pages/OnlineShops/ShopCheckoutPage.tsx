@@ -22,6 +22,7 @@ const ShopCheckoutPage: React.FC = () => {
   const { shop, primaryColor, shopBaseUrl, template, customTemplateActive, templateContext } = useOutletContext<ShopContext>();
   const { cart, currentCustomer, clearCart, voucher, setVoucher } = useShopStore();
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [agbAccepted, setAgbAccepted] = useState(false);
   const guestCheckoutEnabled = (shop as any).guest_checkout_enabled === undefined || (shop as any).guest_checkout_enabled === null ? true : !!(shop as any).guest_checkout_enabled;
   const [shippingConfig, setShippingConfig] = useState<any>(null);
   const [shippingCost, setShippingCost] = useState(5.95);
@@ -239,6 +240,13 @@ const ShopCheckoutPage: React.FC = () => {
       alert(msg);
       return;
     }
+    // AGB-/Datenschutz-Zustimmung ist Pflicht (zusätzlich zur serverseitigen Prüfung).
+    if (!agbAccepted) {
+      const msg = 'Bitte bestätigen Sie die AGB und die Datenschutzerklärung, um die Bestellung abzuschließen.';
+      setError(msg);
+      alert(msg);
+      return;
+    }
     console.log('Place order clicked');
     setLoading(true);
     setError(null);
@@ -257,7 +265,8 @@ const ShopCheckoutPage: React.FC = () => {
           totalAmount: total,
           shippingCosts: shipping,
           shipping_method: selectedShippingMethod,
-          voucherCode: voucher?.code || null
+          voucherCode: voucher?.code || null,
+          agbAccepted: true
         })
       });
       const data = await res.json();
@@ -569,19 +578,67 @@ const ShopCheckoutPage: React.FC = () => {
                     <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Deine Artikel</h3>
                     <Link to={`${shopBaseUrl}/cart`} className="text-xs font-bold underline text-slate-500">Bearbeiten</Link>
                   </div>
-                  <div className="space-y-4">
-                    {cart.map(item => (
-                      <div key={item.id} className="flex justify-between items-center text-sm">
-                        <span className="font-bold text-slate-700">{item.quantity}x {item.name}</span>
-                        <span className="font-black text-slate-900">{(item.price * item.quantity).toFixed(2).replace('.', ',')} €</span>
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    {cart.map(item => {
+                      const variant = [
+                        item.size ? `Größe: ${item.size}` : null,
+                        item.color ? `Farbe: ${item.color}` : null
+                      ].filter(Boolean).join(' · ');
+                      return (
+                        <div key={item.id} className="flex items-center gap-3 text-sm">
+                          <div className="w-14 h-14 shrink-0 rounded-lg bg-white border border-slate-200 overflow-hidden flex items-center justify-center">
+                            {item.image ? (
+                              <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <ShoppingBag size={20} className="text-slate-300" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold text-slate-700 truncate">{item.name}</div>
+                            {variant && <div className="text-xs text-slate-500 truncate">{variant}</div>}
+                            <div className="text-xs text-slate-400">Menge: {item.quantity}</div>
+                          </div>
+                          <span className="font-black text-slate-900 whitespace-nowrap">{(item.price * item.quantity).toFixed(2).replace('.', ',')} €</span>
+                        </div>
+                      );
+                    })}
                   </div>
               </div>
 
-              <div className="p-4 border border-slate-100 rounded-xl text-[10px] text-slate-500 leading-relaxed italic">
-                Durch Klicken auf "Kostenpflichtig bestellen" akzeptiere ich die AGB und die Datenschutzerklärung.
-              </div>
+              <label className="flex items-start gap-3 p-4 border border-slate-200 rounded-xl bg-white cursor-pointer select-none hover:border-slate-300 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={agbAccepted}
+                  onChange={(e) => setAgbAccepted(e.target.checked)}
+                  className="mt-0.5 w-5 h-5 shrink-0 cursor-pointer rounded border-slate-300"
+                  style={{ accentColor: '#800020' }}
+                />
+                <span className="text-xs text-slate-600 leading-relaxed">
+                  Ich habe die{' '}
+                  <Link
+                    to={`${shopBaseUrl}/page/agb`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="font-bold underline hover:opacity-80"
+                    style={{ color: '#800020' }}
+                  >
+                    AGB
+                  </Link>{' '}
+                  und die{' '}
+                  <Link
+                    to={`${shopBaseUrl}/page/datenschutz`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="font-bold underline hover:opacity-80"
+                    style={{ color: '#800020' }}
+                  >
+                    Datenschutzerklärung
+                  </Link>{' '}
+                  gelesen und akzeptiere sie. Mit dem Abschluss der Bestellung stimme ich der Verarbeitung meiner Daten zu.
+                </span>
+              </label>
 
               <div className="flex justify-between pt-8 items-center">
                 <button 
@@ -601,7 +658,7 @@ const ShopCheckoutPage: React.FC = () => {
                         }}>
                             <PayPalButtons 
                                 style={{ layout: "vertical", shape: "rect", label: "pay" }}
-                                disabled={!guestCheckoutEnabled && !currentCustomer}
+                                disabled={(!guestCheckoutEnabled && !currentCustomer) || !agbAccepted}
                                 createOrder={async (data, actions) => {
                                     try {
                                         const res = await fetch('/api/paypal/create-order', {
@@ -656,7 +713,7 @@ const ShopCheckoutPage: React.FC = () => {
                 ) : (
                     <button 
                     onClick={() => handlePlaceOrder()}
-                    disabled={loading || (!guestCheckoutEnabled && !currentCustomer)}
+                    disabled={loading || (!guestCheckoutEnabled && !currentCustomer) || !agbAccepted}
                     className="px-10 py-4 rounded-xl font-black uppercase tracking-widest text-sm text-white shadow-lg hover:scale-105 transition-all flex items-center group disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ backgroundColor: primaryColor }}
                     >
