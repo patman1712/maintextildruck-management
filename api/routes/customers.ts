@@ -73,14 +73,173 @@ router.get('/:id/files', (req: Request, res: Response) => {
 router.delete('/:customerId/files/:fileId', (req: Request, res: Response) => {
   const { fileId } = req.params;
   try {
+    const file = db.prepare('SELECT path FROM files WHERE id = ?').get(fileId) as any;
     const result = db.prepare('DELETE FROM files WHERE id = ?').run(fileId);
     if (result.changes > 0) {
+      // Zugehörige Ordner-Zuweisungen aufräumen
+      if (file?.path) {
+        db.prepare('DELETE FROM customer_file_assignments WHERE file_url = ?').run(file.path);
+      }
       res.json({ success: true, message: 'File deleted from archive' });
     } else {
       res.status(404).json({ success: false, error: 'File not found' });
     }
   } catch (error: any) {
     console.error('Error deleting customer file:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============= DRUCKDATEN-ORDNER (Kunden) =============
+// Alle Ordner + Datei-Zuordnungen eines Kunden
+router.get('/:id/file-folders', (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const folders = db.prepare(
+      'SELECT * FROM customer_file_folders WHERE customer_id = ? ORDER BY sort_order ASC, name COLLATE NOCASE ASC'
+    ).all(id);
+    const assignments = db.prepare(
+      'SELECT folder_id, file_url FROM customer_file_assignments WHERE customer_id = ?'
+    ).all(id);
+    res.json({ success: true, data: { folders, assignments } });
+  } catch (error: any) {
+    console.error('Error fetching file folders:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Neuen Ordner anlegen
+router.post('/:id/file-folders', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, parent_id, sort_order } = req.body;
+  if (!name || !String(name).trim()) {
+    return res.status(400).json({ success: false, error: 'Name erforderlich' });
+  }
+  try {
+    const folderId = 'fol_' + Math.random().toString(36).slice(2, 11);
+    db.prepare(
+      'INSERT INTO customer_file_folders (id, customer_id, name, parent_id, sort_order) VALUES (?, ?, ?, ?, ?)'
+    ).run(folderId, id, String(name).trim(), parent_id || null, sort_order ?? 0);
+    const folder = db.prepare('SELECT * FROM customer_file_folders WHERE id = ?').get(folderId);
+    res.json({ success: true, data: folder });
+  } catch (error: any) {
+    console.error('Error creating file folder:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Ordner umbenennen / verschieben
+router.put('/:id/file-folders/:folderId', (req: Request, res: Response) => {
+  const { folderId } = req.params;
+  const { name, parent_id, sort_order } = req.body;
+  try {
+    const existing = db.prepare('SELECT * FROM customer_file_folders WHERE id = ?').get(folderId) as any;
+    if (!existing) return res.status(404).json({ success: false, error: 'Ordner nicht gefunden' });
+
+    const fields: string[] = [];
+    const values: any[] = [];
+    if (name !== undefined) { fields.push('name = ?'); values.push(String(name).trim()); }
+    if (parent_id !== undefined) { fields.push('parent_id = ?'); values.push(parent_id || null); }
+    if (sort_order !== undefined) { fields.push('sort_order = ?'); values.push(sort_order); }
+
+    if (fields.length === 0) return res.json({ success: true, data: existing });
+
+    values.push(folderId);
+    db.prepare(`UPDATE customer_file_folders SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+    res.json({ success: true, data: db.prepare('SELECT * FROM customer_file_folders WHERE id = ?').get(folderId) });
+  } catch (error: any) {
+    console.error('Error updating file folder:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Ordner löschen (inkl. Unterordner und Zuweisungen – Dateien bleiben erhalten)
+router.delete('/:id/file-folders/:folderId', (req: Request, res: Response) => {
+  const { id, folderId } = req.params;
+  try {
+    const all = db.prepare('SELECT id, parent_id FROM customer_file_folders WHERE customer_id = ?').all(id) as any[];
+    const toDelete = new Set<string>([folderId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const f of all) {
+        if (f.parent_id && toDelete.has(f.parent_id) && !toDelete.has(f.id)) {
+          toDelete.add(f.id);
+          changed = true;
+        }
+      }
+    }
+    const ids = Array.from(toDelete);
+    const placeholders = ids.map(() => '?').join(',');
+    const tx = db.transaction(() => {
+      db.prepare(`DELETE FROM customer_file_assignments WHERE folder_id IN (${placeholders})`).run(...ids);
+      db.prepare(`DELETE FROM customer_file_folders WHERE id IN (${placeholders})`).run(...ids);
+    });
+    tx();
+    res.json({ success: true, deletedFolders: ids.length });
+  } catch (error: any) {
+    console.error('Error deleting file folder:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Dateien einem Ordner zuordnen (einzeln oder als Liste, n:m)
+router.post('/:id/file-folders/assign', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { folder_id, file_urls, file_url } = req.body;
+  const urls: string[] = Array.isArray(file_urls) ? file_urls : (file_url ? [file_url] : []);
+  if (!folder_id || urls.length === 0) {
+    return res.status(400).json({ success: false, error: 'folder_id und file_urls erforderlich' });
+  }
+  try {
+    const stmt = db.prepare(
+      'INSERT OR IGNORE INTO customer_file_assignments (customer_id, file_url, folder_id) VALUES (?, ?, ?)'
+    );
+    const tx = db.transaction(() => { for (const u of urls) stmt.run(id, u, folder_id); });
+    tx();
+    res.json({ success: true, count: urls.length });
+  } catch (error: any) {
+    console.error('Error assigning file to folder:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Zuordnung zu einem Ordner entfernen
+router.post('/:id/file-folders/unassign', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { folder_id, file_urls, file_url } = req.body;
+  const urls: string[] = Array.isArray(file_urls) ? file_urls : (file_url ? [file_url] : []);
+  if (!folder_id || urls.length === 0) {
+    return res.status(400).json({ success: false, error: 'folder_id und file_urls erforderlich' });
+  }
+  try {
+    const stmt = db.prepare(
+      'DELETE FROM customer_file_assignments WHERE customer_id = ? AND folder_id = ? AND file_url = ?'
+    );
+    const tx = db.transaction(() => { for (const u of urls) stmt.run(id, folder_id, u); });
+    tx();
+    res.json({ success: true, count: urls.length });
+  } catch (error: any) {
+    console.error('Error unassigning file from folder:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Datei(en) aus allen Ordnern entfernen ("Ohne Ordner")
+router.post('/:id/file-folders/unassign-all', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { file_urls, file_url } = req.body;
+  const urls: string[] = Array.isArray(file_urls) ? file_urls : (file_url ? [file_url] : []);
+  if (urls.length === 0) {
+    return res.status(400).json({ success: false, error: 'file_urls erforderlich' });
+  }
+  try {
+    const stmt = db.prepare('DELETE FROM customer_file_assignments WHERE customer_id = ? AND file_url = ?');
+    const tx = db.transaction(() => { for (const u of urls) stmt.run(id, u); });
+    tx();
+    res.json({ success: true, count: urls.length });
+  } catch (error: any) {
+    console.error('Error clearing file assignments:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

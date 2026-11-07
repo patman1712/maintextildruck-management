@@ -1739,6 +1739,34 @@ try {
   } catch (e) {
     console.error('Migration error (shop legal texts):', e);
   }
+
+  // 📁 Ordner-Struktur für Druckdaten (Kundendetail, Archiv, Auftragsansicht)
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS customer_file_folders (
+        id TEXT PRIMARY KEY,
+        customer_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        parent_id TEXT,                       -- für verschachtelte Ordner
+        sort_order INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS customer_file_assignments (
+        customer_id TEXT NOT NULL,
+        file_url TEXT NOT NULL,
+        folder_id TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (customer_id, file_url, folder_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_cff_customer ON customer_file_folders(customer_id);
+      CREATE INDEX IF NOT EXISTS idx_cfa_customer ON customer_file_assignments(customer_id);
+      CREATE INDEX IF NOT EXISTS idx_cfa_folder ON customer_file_assignments(folder_id);
+    `);
+  } catch (e) {
+    console.error('Migration error (customer file folders):', e);
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }

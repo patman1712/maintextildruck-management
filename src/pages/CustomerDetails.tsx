@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore, Order, ShopProductAssignment, Product } from "@/store";
-import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon, Copy, Layers, Globe, Eye } from "lucide-react";
+import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon, Copy, Layers, Globe, Eye, Folder, FolderOpen, FolderPlus, FolderMinus, ChevronRight, ChevronDown } from "lucide-react";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import CustomerOnlineShopProducts from "@/components/CustomerOnlineShopProducts";
 
@@ -86,6 +86,18 @@ export default function CustomerDetails() {
   const [bulkSupplierId, setBulkSupplierId] = useState('');
   const [fileTab, setFileTab] = useState<'upload' | 'gallery'>('gallery');
 
+  // Druckdaten-Ordner State
+  const [fileFolders, setFileFolders] = useState<any[]>([]);
+  const [fileAssignments, setFileAssignments] = useState<{ folder_id: string; file_url: string }[]>([]);
+  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
+  const [selectedFileUrls, setSelectedFileUrls] = useState<Set<string>>(new Set());
+  const [folderDialog, setFolderDialog] = useState<{ open: boolean; parentId: string | null }>({ open: false, parentId: null });
+  const [newFolderName, setNewFolderName] = useState('');
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [folderRenameDraft, setFolderRenameDraft] = useState('');
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [draggedUrls, setDraggedUrls] = useState<string[]>([]);
+
   // Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
       isOpen: boolean;
@@ -131,6 +143,7 @@ export default function CustomerDetails() {
       if (customer) {
           fetchProducts();
           fetchCustomerFiles();
+          fetchCustomerFolders();
           fetchCustomerPhotos();
       }
   }, [customer]);
@@ -150,6 +163,20 @@ export default function CustomerDetails() {
           const data = await res.json();
           if (data.success) {
               setArchivedFiles(data.data);
+          }
+      } catch (err) {
+          console.error(err);
+      }
+  };
+
+  const fetchCustomerFolders = async () => {
+      if (!customer) return;
+      try {
+          const res = await fetch(`/api/customers/${customer.id}/file-folders`);
+          const data = await res.json();
+          if (data.success) {
+              setFileFolders(data.data.folders || []);
+              setFileAssignments(data.data.assignments || []);
           }
       } catch (err) {
           console.error(err);
@@ -891,6 +918,58 @@ export default function CustomerDetails() {
     await updateOrder(order.id, { files: updatedFiles });
   };
 
+  const performDeleteFile = async (fileToDelete: { name: string, url?: string, customName?: string, thumbnail?: string, id?: string } & Record<string, any>) => {
+      // Auftrags-Datei?
+      const order = customerOrders.find(o => o.files && Array.isArray(o.files) && o.files.some(f => f.url === fileToDelete.url));
+
+      if (order) {
+          const updatedFiles = order.files.filter(f => f.url !== fileToDelete.url);
+          setCustomerOrders(prev => prev.map(o => o.id === order.id ? { ...o, files: updatedFiles } : o));
+          await updateOrder(order.id, { files: updatedFiles });
+      } else {
+          // Produkt-Datei (z. B. Freisteller)
+          const product = products.find(p => p.files && p.files.some(f => (f.file_url === fileToDelete.url || f.file_url === fileToDelete.file_url)));
+
+          if (product) {
+              const fileInProduct = product.files.find(f => (f.file_url === fileToDelete.url || f.file_url === fileToDelete.file_url));
+              if (fileInProduct) {
+                   try {
+                      await fetch(`/api/products/${product.id}/files/${fileInProduct.id}`, {
+                          method: 'DELETE'
+                      });
+                  } catch (err) {
+                      console.error("Failed to delete product file association", err);
+                  }
+              }
+          }
+      }
+
+      // Aus Archiv-DB (files-Tabelle) löschen
+      if (fileToDelete.id) {
+           try {
+              await fetch(`/api/customers/${customer.id}/files/${fileToDelete.id}`, {
+                  method: 'DELETE'
+              });
+          } catch (err) {
+              console.error("Failed to delete from archive DB", err);
+          }
+      }
+
+      // Physische Datei vom Server löschen
+      const urlToDelete = fileToDelete.url || fileToDelete.file_url;
+      if (urlToDelete) {
+          try {
+              await fetch('/api/upload/delete', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ filePath: urlToDelete })
+              });
+          } catch (err) {
+              console.error("Failed to delete file from server", err);
+          }
+      }
+  };
+
   const handleDeleteFile = (fileToDelete: { name: string, url?: string, orderTitle?: string, customName?: string, thumbnail?: string, id?: string }) => {
     setConfirmModal({
         isOpen: true,
@@ -899,65 +978,189 @@ export default function CustomerDetails() {
         type: 'danger',
         confirmText: 'Löschen',
         onConfirm: async () => {
-            // Check if it's an order file
-            const order = customerOrders.find(o => o.files && Array.isArray(o.files) && o.files.some(f => f.url === fileToDelete.url));
-            
-            if (order) {
-                const updatedFiles = order.files.filter(f => f.url !== fileToDelete.url);
-                const updatedOrder = { ...order, files: updatedFiles };
-                setCustomerOrders(prev => prev.map(o => o.id === order.id ? updatedOrder : o));
-
-                await updateOrder(order.id, { files: updatedFiles });
-            } 
-            // Check if it's a product file (e.g. Freisteller)
-            else {
-                // Find product containing this file
-                // We need to match by url or file_url
-                const product = products.find(p => p.files && p.files.some(f => (f.file_url === fileToDelete.url || f.file_url === (fileToDelete as any).file_url)));
-                
-                if (product) {
-                    const fileInProduct = product.files.find(f => (f.file_url === fileToDelete.url || f.file_url === (fileToDelete as any).file_url));
-                    if (fileInProduct) {
-                         try {
-                            await fetch(`/api/products/${product.id}/files/${fileInProduct.id}`, {
-                                method: 'DELETE'
-                            });
-                            fetchProducts();
-                        } catch (err) {
-                            console.error("Failed to delete product file association", err);
-                        }
-                    }
-                }
-            }
-            
-            // Delete from Archive DB (files table)
-            if (fileToDelete.id) {
-                 try {
-                    await fetch(`/api/customers/${customer.id}/files/${fileToDelete.id}`, {
-                        method: 'DELETE'
-                    });
-                } catch (err) {
-                    console.error("Failed to delete from archive DB", err);
-                }
-            }
-
-            // Physical delete from server
-            const urlToDelete = fileToDelete.url || (fileToDelete as any).file_url;
-            if (urlToDelete) {
-                try {
-                    await fetch('/api/upload/delete', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ filePath: urlToDelete })
-                    });
-                } catch (err) {
-                    console.error("Failed to delete file from server", err);
-                }
-            }
+            await performDeleteFile(fileToDelete);
             fetchData();
             fetchCustomerFiles();
+            fetchCustomerFolders();
         }
     });
+  };
+
+  // ---- Mehrfachauswahl / Ordner-Aktionen (Druckdaten) ----
+  const togglePrintFileSelection = (url: string) => {
+    setSelectedFileUrls(prev => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url); else next.add(url);
+      return next;
+    });
+  };
+
+  const clearFileSelection = () => setSelectedFileUrls(new Set());
+
+  const handleBulkDelete = () => {
+    const urls = Array.from(selectedFileUrls);
+    if (urls.length === 0) return;
+    const filesToDelete = printFiles.filter((f: any) => f.url && selectedFileUrls.has(f.url));
+    setConfirmModal({
+        isOpen: true,
+        title: `${urls.length} Datei(en) löschen`,
+        message: `Möchten Sie die ${urls.length} ausgewählten Datei(en) wirklich löschen? Sie werden vollständig vom Server und aus der Datenbank entfernt.`,
+        type: 'danger',
+        confirmText: 'Alle löschen',
+        onConfirm: async () => {
+            for (const file of filesToDelete) {
+                await performDeleteFile(file);
+            }
+            clearFileSelection();
+            fetchData();
+            fetchCustomerFiles();
+            fetchCustomerFolders();
+        }
+    });
+  };
+
+  const handleCreateFolder = async () => {
+    if (!customer || !newFolderName.trim()) return;
+    try {
+      const parentId = folderDialog.parentId;
+      const res = await fetch(`/api/customers/${customer.id}/file-folders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newFolderName.trim(), parent_id: parentId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setNewFolderName('');
+        setFolderDialog({ open: false, parentId: null });
+        if (parentId) setOpenFolders(prev => new Set(prev).add(parentId));
+        fetchCustomerFolders();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRenameFolder = async (folderId: string) => {
+    if (!customer) return;
+    if (!folderRenameDraft.trim()) { setRenamingFolderId(null); return; }
+    try {
+      await fetch(`/api/customers/${customer.id}/file-folders/${folderId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: folderRenameDraft.trim() })
+      });
+      setRenamingFolderId(null);
+      fetchCustomerFolders();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteFolder = (folder: any) => {
+    setConfirmModal({
+        isOpen: true,
+        title: 'Ordner löschen',
+        message: `Möchten Sie den Ordner "${folder.name}" wirklich löschen? Unterordner werden ebenfalls entfernt. Die Dateien selbst bleiben erhalten.`,
+        type: 'danger',
+        confirmText: 'Löschen',
+        onConfirm: async () => {
+            try {
+              await fetch(`/api/customers/${customer.id}/file-folders/${folder.id}`, { method: 'DELETE' });
+              fetchCustomerFolders();
+            } catch (err) {
+              console.error(err);
+            }
+        }
+    });
+  };
+
+  const assignFilesToFolder = async (urls: string[], folderId: string) => {
+    if (!customer || urls.length === 0) return;
+    setFileAssignments(prev => {
+      const next = [...prev];
+      for (const u of urls) {
+        if (!next.some(a => a.folder_id === folderId && a.file_url === u)) {
+          next.push({ folder_id: folderId, file_url: u });
+        }
+      }
+      return next;
+    });
+    try {
+      await fetch(`/api/customers/${customer.id}/file-folders/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder_id: folderId, file_urls: urls })
+      });
+    } catch (err) {
+      console.error(err);
+      fetchCustomerFolders();
+    }
+  };
+
+  const unassignFilesFromFolder = async (urls: string[], folderId: string) => {
+    if (!customer || urls.length === 0) return;
+    setFileAssignments(prev => prev.filter(a => !(a.folder_id === folderId && urls.includes(a.file_url))));
+    try {
+      await fetch(`/api/customers/${customer.id}/file-folders/unassign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder_id: folderId, file_urls: urls })
+      });
+    } catch (err) {
+      console.error(err);
+      fetchCustomerFolders();
+    }
+  };
+
+  // Dateien aus ALLEN Ordnern entfernen (Ablage "Ohne Ordner")
+  const unassignFromAllFolders = async (urls: string[]) => {
+    if (!customer || urls.length === 0) return;
+    setFileAssignments(prev => prev.filter(a => !urls.includes(a.file_url)));
+    try {
+      await Promise.all(urls.map(u =>
+        fetch(`/api/customers/${customer.id}/file-folders/unassign-all`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_url: u })
+        })
+      ));
+    } catch (err) {
+      console.error(err);
+      fetchCustomerFolders();
+    }
+  };
+
+  const handleFileDragStart = (e: React.DragEvent, file: any) => {
+    const urls = file?.url && selectedFileUrls.has(file.url)
+      ? Array.from(selectedFileUrls)
+      : (file?.url ? [file.url] : []);
+    setDraggedUrls(urls);
+    try { e.dataTransfer.setData('text/plain', urls.join('\n')); } catch {}
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDropOnFolder = (e: React.DragEvent, folderId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverFolderId(null);
+    const urls = draggedUrls.length ? draggedUrls : (fileSearchUrlsFromDrop(e));
+    if (urls.length) assignFilesToFolder(urls, folderId);
+    setDraggedUrls([]);
+  };
+
+  const handleDropOnUnassigned = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverFolderId(null);
+    const urls = draggedUrls.length ? draggedUrls : (fileSearchUrlsFromDrop(e));
+    if (urls.length) unassignFromAllFolders(urls);
+    setDraggedUrls([]);
+  };
+
+  const fileSearchUrlsFromDrop = (e: React.DragEvent): string[] => {
+    try {
+      const raw = e.dataTransfer.getData('text/plain');
+      return raw ? raw.split('\n').filter(Boolean) : [];
+    } catch { return []; }
   };
   
   const handleDirectUpload = async (type: 'print' | 'photoshop' = 'print') => {
@@ -1113,6 +1316,186 @@ export default function CustomerDetails() {
     }
   });
   const printFiles = Array.from(uniqueFilesMap.values()).sort((a: any, b: any) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
+
+  // ---------- Druckdaten: Ordner-Struktur ----------
+  const urlToPrintFile = new Map<string, any>();
+  printFiles.forEach((f: any) => { if (f.url) urlToPrintFile.set(f.url, f); });
+
+  const assignmentsByFolder = new Map<string, string[]>();
+  fileAssignments.forEach(a => {
+    const arr = assignmentsByFolder.get(a.folder_id) || [];
+    arr.push(a.file_url);
+    assignmentsByFolder.set(a.folder_id, arr);
+  });
+
+  const assignedUrlSet = new Set(fileAssignments.map(a => a.file_url));
+  const rootFolders = fileFolders.filter(f => !f.parent_id);
+  const childFoldersOf = (parentId: string) => fileFolders.filter(f => f.parent_id === parentId);
+  const filesInFolder = (folderId: string): any[] =>
+    (assignmentsByFolder.get(folderId) || []).map(u => urlToPrintFile.get(u)).filter(Boolean);
+
+  const collectFolderUrls = (folderId: string): string[] => {
+    const urls = [...(assignmentsByFolder.get(folderId) || [])];
+    childFoldersOf(folderId).forEach(c => urls.push(...collectFolderUrls(c.id)));
+    return urls;
+  };
+  const folderFileCount = (folderId: string) => new Set(collectFolderUrls(folderId)).size;
+
+  const unassignedFiles = printFiles.filter((f: any) => f.url && !assignedUrlSet.has(f.url));
+
+  const allPrintSelected = printFiles.length > 0 && printFiles.every((f: any) => f.url && selectedFileUrls.has(f.url));
+  const toggleSelectAllPrintFiles = () => {
+    if (allPrintSelected) clearFileSelection();
+    else setSelectedFileUrls(new Set(printFiles.map((f: any) => f.url).filter(Boolean)));
+  };
+
+  const toggleFolderOpen = (folderId: string) => {
+    setOpenFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId); else next.add(folderId);
+      return next;
+    });
+  };
+
+  const renderPrintFileCard = (file: any, folderId?: string) => {
+    const url = file.url;
+    const isSelected = !!url && selectedFileUrls.has(url);
+    return (
+      <div
+        key={folderId ? `${folderId}:${url}` : url}
+        draggable={!!url}
+        onDragStart={(e) => handleFileDragStart(e, file)}
+        onDragEnd={() => { setDraggedUrls([]); setDragOverFolderId(null); }}
+        className={`bg-white border rounded-lg p-4 transition-all group cursor-grab active:cursor-grabbing ${isSelected ? 'border-red-400 ring-2 ring-red-200' : 'border-gray-200 hover:shadow-md'}`}
+      >
+        <div className="flex justify-between items-start mb-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => url && togglePrintFileSelection(url)}
+              className="w-4 h-4 accent-red-600 cursor-pointer"
+              title="Für Mehrfachauswahl markieren"
+            />
+            <div className="bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded uppercase tracking-wide">
+              {file.name.toLowerCase().endsWith('.pdf') ? 'PDF' : 'DTF / PNG'}
+            </div>
+          </div>
+          <div className="flex space-x-1">
+            {folderId && (
+              <button
+                onClick={() => url && unassignFilesFromFolder([url], folderId)}
+                className="text-gray-400 hover:text-amber-600 p-1"
+                title="Aus diesem Ordner entfernen"
+              >
+                <FolderMinus size={20} />
+              </button>
+            )}
+            <button onClick={() => downloadFile(file)} className="text-gray-400 hover:text-red-600 p-1"><Download size={20} /></button>
+            <button onClick={() => handleDeleteFile(file)} className="text-gray-400 hover:text-red-600 p-1"><Trash2 size={20} /></button>
+          </div>
+        </div>
+
+        <div className="h-32 bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden border border-gray-100 relative group-hover:bg-gray-50 transition-colors">
+          {file.thumbnail ? (
+            <img src={file.thumbnail} alt={file.name} className="w-full h-full object-contain" />
+          ) : file.url ? (
+            <img src={file.url} alt={file.name} className="w-full h-full object-contain" />
+          ) : (
+            <Printer size={32} className="text-gray-300" />
+          )}
+
+          {editingFile && editingFile.url === file.url && (
+            <div className="absolute inset-0 bg-white/90 flex flex-col items-center justify-center p-2 z-10">
+              <input
+                type="text"
+                value={editingFile.name}
+                onChange={(e) => setEditingFile({ ...editingFile, name: e.target.value })}
+                className="w-full text-xs border border-gray-300 rounded p-1 mb-2"
+                autoFocus
+              />
+              <div className="flex space-x-2">
+                <button onClick={saveRename} className="bg-green-500 text-white p-1 rounded hover:bg-green-600"><Save size={14} /></button>
+                <button onClick={() => setEditingFile(null)} className="bg-gray-400 text-white p-1 rounded hover:bg-gray-500"><X size={14} /></button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-between items-center mb-1">
+          <h4 className="font-medium text-gray-800 truncate flex-1 mr-2" title={file.customName || file.name}>
+            {file.customName || file.name}
+          </h4>
+          <button onClick={() => startRename(file)} className="text-gray-400 hover:text-blue-600 p-1"><Pencil size={14} /></button>
+        </div>
+        <p className="text-xs text-gray-500 flex items-center" title={file.contexts && file.contexts.join(', ')}>
+          <FileText size={12} className="mr-1" />
+          {file.contexts && file.contexts.length > 1
+            ? `Verwendet in ${file.contexts.length} Orten`
+            : `Aus: ${file.contexts ? file.contexts[0] : file.orderTitle}`}
+        </p>
+      </div>
+    );
+  };
+
+  const renderFolderNode = (folder: any, depth: number) => {
+    const kids = childFoldersOf(folder.id);
+    const files = filesInFolder(folder.id);
+    const isOpen = openFolders.has(folder.id);
+    const isDragOver = dragOverFolderId === folder.id;
+    const count = folderFileCount(folder.id);
+    return (
+      <div key={folder.id} className="mb-2" style={{ marginLeft: depth * 16 }}>
+        <div
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDragOverFolderId(folder.id); }}
+          onDragLeave={(e) => { e.stopPropagation(); if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(prev => prev === folder.id ? null : prev); }}
+          onDrop={(e) => handleDropOnFolder(e, folder.id)}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${isDragOver ? 'border-red-400 bg-red-50' : 'border-gray-200 bg-gray-50 hover:bg-gray-100'}`}
+        >
+          <button onClick={() => toggleFolderOpen(folder.id)} className="shrink-0 text-gray-500 hover:text-gray-800 p-0.5">
+            {isOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+          </button>
+          <button onClick={() => toggleFolderOpen(folder.id)} className="shrink-0">
+            {isOpen ? <FolderOpen size={20} className="text-amber-500" /> : <Folder size={20} className="text-amber-500" />}
+          </button>
+          {renamingFolderId === folder.id ? (
+            <input
+              type="text"
+              value={folderRenameDraft}
+              onChange={(e) => setFolderRenameDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleRenameFolder(folder.id); if (e.key === 'Escape') setRenamingFolderId(null); }}
+              onBlur={() => handleRenameFolder(folder.id)}
+              className="flex-1 min-w-0 text-sm border border-gray-300 rounded px-2 py-1"
+              autoFocus
+            />
+          ) : (
+            <span onClick={() => toggleFolderOpen(folder.id)} className="flex-1 min-w-0 truncate font-medium text-gray-800 cursor-pointer">
+              {folder.name}
+            </span>
+          )}
+          <span className="text-xs text-gray-500 shrink-0">{count} {count === 1 ? 'Datei' : 'Dateien'}</span>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button title="Unterordner anlegen" onClick={() => { setFolderDialog({ open: true, parentId: folder.id }); setNewFolderName(''); }} className="text-gray-400 hover:text-blue-600 p-1"><FolderPlus size={16} /></button>
+            <button title="Umbenennen" onClick={() => { setRenamingFolderId(folder.id); setFolderRenameDraft(folder.name); }} className="text-gray-400 hover:text-blue-600 p-1"><Pencil size={16} /></button>
+            <button title="Ordner löschen" onClick={() => handleDeleteFolder(folder)} className="text-gray-400 hover:text-red-600 p-1"><Trash2 size={16} /></button>
+          </div>
+        </div>
+        {isOpen && (
+          <div className="mt-2">
+            {kids.map(k => renderFolderNode(k, depth + 1))}
+            {files.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-1">
+                {files.map((f: any) => renderPrintFileCard(f, folder.id))}
+              </div>
+            )}
+            {kids.length === 0 && files.length === 0 && (
+              <p className="text-xs text-gray-400 px-3 py-2" style={{ marginLeft: 16 }}>Leerer Ordner – Dateien hierher ziehen.</p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const freistellerProducts = products.filter(p => p.product_number === 'FREISTELLER');
   const freistellerFiles = freistellerProducts.flatMap(p => p.files.map(f => ({
@@ -1566,19 +1949,47 @@ export default function CustomerDetails() {
                         </div>
                     </div>
                 )}
-                <div className="px-8 py-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                <div className="px-8 py-4 bg-gray-50 border-b border-gray-100 flex flex-wrap gap-3 justify-between items-center">
                     <div>
                         <h3 className="text-lg font-semibold text-gray-800">Gespeicherte Druckdaten</h3>
-                        <p className="text-sm text-gray-500">Alle Dateien aus Aufträgen und Uploads</p>
+                        <p className="text-sm text-gray-500">
+                            {printFiles.length} {printFiles.length === 1 ? 'Datei' : 'Dateien'}
+                            {fileFolders.length > 0 ? ` · ${fileFolders.length} ${fileFolders.length === 1 ? 'Ordner' : 'Ordner'}` : ''}
+                            {' '}· Dateien in Ordner ziehen zum Sortieren
+                        </p>
                     </div>
-                    <button 
-                        onClick={() => setIsUploading(true)}
-                        className="bg-white text-red-600 border border-red-200 hover:bg-red-50 px-3 py-1.5 rounded-md text-sm font-medium flex items-center shadow-sm"
-                    >
-                        <Upload size={16} className="mr-2" />
-                        Datei hochladen
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => { setFolderDialog({ open: true, parentId: null }); setNewFolderName(''); }}
+                            className="bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 px-3 py-1.5 rounded-md text-sm font-medium flex items-center shadow-sm"
+                        >
+                            <FolderPlus size={16} className="mr-2" />
+                            Neuer Ordner
+                        </button>
+                        <button
+                            onClick={() => setIsUploading(true)}
+                            className="bg-white text-red-600 border border-red-200 hover:bg-red-50 px-3 py-1.5 rounded-md text-sm font-medium flex items-center shadow-sm"
+                        >
+                            <Upload size={16} className="mr-2" />
+                            Datei hochladen
+                        </button>
+                    </div>
                 </div>
+
+                {selectedFileUrls.size > 0 && (
+                    <div className="px-8 py-3 bg-red-50 border-b border-red-100 flex items-center justify-between sticky top-0 z-30">
+                        <span className="text-sm font-medium text-red-800">
+                            {selectedFileUrls.size} {selectedFileUrls.size === 1 ? 'Datei' : 'Dateien'} ausgewählt
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <button onClick={clearFileSelection} className="px-3 py-1.5 text-gray-600 text-sm hover:text-gray-800">Auswahl aufheben</button>
+                            <button onClick={handleBulkDelete} className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-md font-medium hover:bg-red-700 flex items-center">
+                                <Trash2 size={14} className="mr-1.5" />
+                                Auswahl löschen
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {isUploading && (
                     <div className="bg-red-50 px-8 py-4 border-b border-red-100 animate-in fade-in slide-in-from-top-4">
@@ -1609,60 +2020,56 @@ export default function CustomerDetails() {
 
                 <div className="p-8">
                     {printFiles.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {printFiles.map((file, idx) => (
-                            <div key={idx} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all group">
-                            <div className="flex justify-between items-start mb-2">
-                                <div className="bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded uppercase tracking-wide">
-                                {file.name.toLowerCase().endsWith('.pdf') ? 'PDF' : 'DTF / PNG'}
-                                </div>
-                                <div className="flex space-x-1">
-                                <button onClick={() => downloadFile(file)} className="text-gray-400 hover:text-red-600 p-1"><Download size={20} /></button>
-                                <button onClick={() => handleDeleteFile(file)} className="text-gray-400 hover:text-red-600 p-1"><Trash2 size={20} /></button>
-                                </div>
+                        <>
+                            {/* Mehrfachauswahl-Werkzeuge */}
+                            <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+                                <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={allPrintSelected}
+                                        onChange={toggleSelectAllPrintFiles}
+                                        className="w-4 h-4 accent-red-600 cursor-pointer"
+                                    />
+                                    Alle auswählen
+                                </label>
+                                <p className="text-xs text-gray-400">
+                                    Tipp: Dateien per Drag &amp; Drop in einen Ordner ziehen – sie können in mehreren Ordnern liegen.
+                                </p>
                             </div>
-                            
-                            <div className="h-32 bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden border border-gray-100 relative group-hover:bg-gray-50 transition-colors">
-                                {file.thumbnail ? (
-                                    <img src={file.thumbnail} alt={file.name} className="w-full h-full object-contain" />
-                                ) : file.url ? (
-                                <img src={file.url} alt={file.name} className="w-full h-full object-contain" />
+
+                            {/* Ordnerbaum */}
+                            <div className="mb-6">
+                                {rootFolders.length > 0 ? (
+                                    rootFolders.map(folder => renderFolderNode(folder, 0))
                                 ) : (
-                                <Printer size={32} className="text-gray-300" />
-                                )}
-                                
-                                {editingFile && editingFile.url === file.url && (
-                                    <div className="absolute inset-0 bg-white/90 flex flex-col items-center justify-center p-2 z-10">
-                                        <input 
-                                            type="text" 
-                                            value={editingFile.name}
-                                            onChange={(e) => setEditingFile({...editingFile, name: e.target.value})}
-                                            className="w-full text-xs border border-gray-300 rounded p-1 mb-2"
-                                            autoFocus
-                                        />
-                                        <div className="flex space-x-2">
-                                            <button onClick={saveRename} className="bg-green-500 text-white p-1 rounded hover:bg-green-600"><Save size={14}/></button>
-                                            <button onClick={() => setEditingFile(null)} className="bg-gray-400 text-white p-1 rounded hover:bg-gray-500"><X size={14}/></button>
-                                        </div>
+                                    <div className="text-sm text-gray-400 border border-dashed border-gray-300 rounded-lg px-4 py-3">
+                                        Noch keine Ordner. Klicken Sie auf „Neuer Ordner", um die Druckdaten zu strukturieren.
                                     </div>
                                 )}
                             </div>
 
-                            <div className="flex justify-between items-center mb-1">
-                                <h4 className="font-medium text-gray-800 truncate flex-1 mr-2" title={file.customName || file.name}>
-                                    {file.customName || file.name}
-                                </h4>
-                                <button onClick={() => startRename(file)} className="text-gray-400 hover:text-blue-600 p-1"><Pencil size={14} /></button>
+                            {/* Ohne Ordner */}
+                            <div
+                                onDragOver={(e) => { e.preventDefault(); setDragOverFolderId('__unassigned__'); }}
+                                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverFolderId(prev => prev === '__unassigned__' ? null : prev); }}
+                                onDrop={handleDropOnUnassigned}
+                                className={`rounded-lg border-2 border-dashed p-4 transition-colors ${dragOverFolderId === '__unassigned__' ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                            >
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Layers size={18} className="text-gray-500" />
+                                    <h4 className="font-semibold text-gray-700">Ohne Ordner</h4>
+                                    <span className="text-xs text-gray-500">({unassignedFiles.length})</span>
+                                    <span className="text-xs text-gray-400 ml-2">– Dateien hier ablegen, um sie aus allen Ordnern zu entfernen</span>
+                                </div>
+                                {unassignedFiles.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {unassignedFiles.map((file: any) => renderPrintFileCard(file))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-400 px-1 py-2">Alle Dateien sind einem Ordner zugeordnet.</p>
+                                )}
                             </div>
-                            <p className="text-xs text-gray-500 flex items-center" title={file.contexts && file.contexts.join(', ')}>
-                                <FileText size={12} className="mr-1" />
-                                {file.contexts && file.contexts.length > 1 
-                                    ? `Verwendet in ${file.contexts.length} Orten` 
-                                    : `Aus: ${file.contexts ? file.contexts[0] : file.orderTitle}`}
-                            </p>
-                            </div>
-                        ))}
-                        </div>
+                        </>
                     ) : (
                         <div className="text-center py-12 text-gray-500">
                         <Printer size={48} className="mx-auto text-gray-300 mb-4" />
@@ -2742,6 +3149,46 @@ export default function CustomerDetails() {
         cancelText={confirmModal.cancelText}
         type={confirmModal.type}
       />
+
+      {/* Ordner anlegen */}
+      {folderDialog.open && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onMouseDown={() => setFolderDialog({ open: false, parentId: null })}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6" onMouseDown={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-lg text-gray-800 mb-1">
+              {folderDialog.parentId ? 'Unterordner anlegen' : 'Neuer Ordner'}
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {folderDialog.parentId
+                ? 'Der Ordner wird innerhalb des ausgewählten Ordners erstellt.'
+                : 'Der Ordner wird auf oberster Ebene erstellt.'}
+            </p>
+            <input
+              type="text"
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFolder(); }}
+              placeholder="Ordnername..."
+              className="w-full border border-gray-300 rounded p-2 text-sm mb-4"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setFolderDialog({ open: false, parentId: null })}
+                className="px-4 py-2 text-gray-600 text-sm hover:bg-gray-100 rounded"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleCreateFolder}
+                disabled={!newFolderName.trim()}
+                className="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:opacity-50"
+              >
+                Erstellen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bulk Assign Modal */}
       {showBulkAssignModal && (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/store";
-import { ArrowLeft, Calendar, User, FileText, Download, Eye, Printer, PenTool, Trash2, ShoppingCart, ExternalLink, Shield, Layers } from "lucide-react";
+import { ArrowLeft, Calendar, User, FileText, Download, Eye, Printer, PenTool, Trash2, ShoppingCart, ExternalLink, Shield, Layers, Folder, FolderOpen, ChevronRight, ChevronDown } from "lucide-react";
 import OrderPrintView from "@/components/OrderPrintView";
 
 export default function OrderDetails() {
@@ -14,6 +14,9 @@ export default function OrderDetails() {
   const suppliers = useAppStore((state) => state.suppliers);
   const [order, setOrder] = useState(orders.find(o => o.id === id));
   const [personalizationOptions, setPersonalizationOptions] = useState<any[]>([]);
+  const [customerFileFolders, setCustomerFileFolders] = useState<any[]>([]);
+  const [customerFileAssignments, setCustomerFileAssignments] = useState<{ folder_id: string; file_url: string }[]>([]);
+  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (loading) return; // Wait for data
@@ -25,6 +28,21 @@ export default function OrderDetails() {
     }
     fetchPersonalizationOptions();
   }, [id, orders, navigate, loading]);
+
+  // Ordner-Struktur des Kunden für die Druckdaten-Gruppierung laden
+  useEffect(() => {
+    const cid = order?.customerId;
+    if (!cid) { setCustomerFileFolders([]); setCustomerFileAssignments([]); return; }
+    fetch(`/api/customers/${cid}/file-folders`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          setCustomerFileFolders(d.data.folders || []);
+          setCustomerFileAssignments(d.data.assignments || []);
+        }
+      })
+      .catch(() => {});
+  }, [order?.customerId]);
 
   const fetchPersonalizationOptions = async () => {
     try {
@@ -147,6 +165,75 @@ export default function OrderDetails() {
             <span className="break-all whitespace-normal">{file.name}</span>
             {qtyBadge}
         </div>
+    );
+  };
+
+  // ---- Druckdaten nach Kunden-Ordnern gruppieren ----
+  const printFiles: any[] = order?.files.filter(f => f.type === 'print') || [];
+  const assignedSet = new Set(customerFileAssignments.map(a => a.file_url));
+  const rootFolders = customerFileFolders.filter(f => !f.parent_id);
+  const childFoldersOf = (parentId: string) => customerFileFolders.filter(f => f.parent_id === parentId);
+  const printFileByUrl = new Map(printFiles.filter(f => f.url).map(f => [f.url as string, f]));
+  const filesInFolder = (folderId: string): any[] =>
+    customerFileAssignments
+      .filter(a => a.folder_id === folderId)
+      .map(a => printFileByUrl.get(a.file_url))
+      .filter(Boolean);
+  const collectFolderUrls = (folderId: string): string[] => {
+    const urls = customerFileAssignments.filter(a => a.folder_id === folderId).map(a => a.file_url);
+    childFoldersOf(folderId).forEach(c => urls.push(...collectFolderUrls(c.id)));
+    return urls;
+  };
+  const folderFileCount = (folderId: string) =>
+    new Set(collectFolderUrls(folderId).filter(u => printFileByUrl.has(u))).size;
+  const unassignedPrintFiles = printFiles.filter(f => !f.url || !assignedSet.has(f.url));
+  const groupingActive = customerFileFolders.length > 0 && printFiles.length > 0;
+  const toggleOpenFolder = (folderId: string) => {
+    setOpenFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId); else next.add(folderId);
+      return next;
+    });
+  };
+
+  const renderPrintFileItem = (file: any, itemKey: string) => (
+    <li key={itemKey} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-red-100">
+      {renderFilePreview(file)}
+      <div className="flex space-x-1">
+        <button onClick={() => downloadFile(file)} className="text-red-400 hover:text-red-700 p-1" title="Herunterladen">
+          <Download size={16} />
+        </button>
+      </div>
+    </li>
+  );
+
+  const renderFolderNode = (folder: any, depth: number) => {
+    const kids = childFoldersOf(folder.id);
+    const folderFiles = filesInFolder(folder.id);
+    const isOpen = openFolders.has(folder.id);
+    const count = folderFileCount(folder.id);
+    return (
+      <div key={folder.id} className="mb-1" style={{ marginLeft: depth * 14 }}>
+        <button
+          onClick={() => toggleOpenFolder(folder.id)}
+          className="w-full flex items-center gap-2 px-2 py-1.5 rounded bg-red-50 hover:bg-red-100 text-left border border-red-100"
+        >
+          {isOpen ? <ChevronDown size={15} className="text-red-500 shrink-0" /> : <ChevronRight size={15} className="text-red-500 shrink-0" />}
+          {isOpen ? <FolderOpen size={16} className="text-amber-500 shrink-0" /> : <Folder size={16} className="text-amber-500 shrink-0" />}
+          <span className="text-sm font-medium text-gray-700 truncate">{folder.name}</span>
+          <span className="text-[10px] text-gray-400">({count})</span>
+        </button>
+        {isOpen && (
+          <div className="mt-1">
+            {kids.map(k => renderFolderNode(k, depth + 1))}
+            {folderFiles.length > 0 && (
+              <ul className="space-y-2 my-1" style={{ marginLeft: 14 }}>
+                {folderFiles.map((f: any) => renderPrintFileItem(f, `${folder.id}:${f.url}`))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -367,19 +454,28 @@ export default function OrderDetails() {
                 <h4 className="font-medium text-red-800 mb-3 flex items-center">
                   <Printer size={16} className="mr-2 text-red-600" /> Fertige Druckdaten
                 </h4>
-                {order.files.filter(f => f.type === 'print').length > 0 ? (
-                  <ul className="space-y-2">
-                    {order.files.filter(f => f.type === 'print').map((file, idx) => (
-                  <li key={idx} className="flex justify-between items-center text-sm bg-white p-2 rounded border border-red-100">
-                    {renderFilePreview(file)}
-                    <div className="flex space-x-1">
-                      <button onClick={() => downloadFile(file)} className="text-red-400 hover:text-red-700 p-1" title="Herunterladen">
-                        <Download size={16} />
-                      </button>
+                {printFiles.length > 0 ? (
+                  groupingActive ? (
+                    <div>
+                      {rootFolders.map(folder => renderFolderNode(folder, 0))}
+                      {unassignedPrintFiles.length > 0 && (
+                        <div className="mt-2">
+                          <div className="flex items-center gap-2 px-2 py-1 text-xs font-medium text-gray-500">
+                            <Layers size={14} />
+                            Ohne Ordner
+                            <span className="text-gray-400">({unassignedPrintFiles.length})</span>
+                          </div>
+                          <ul className="space-y-2">
+                            {unassignedPrintFiles.map((file: any, idx: number) => renderPrintFileItem(file, `unassigned:${file.url || idx}`))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
-                  </li>
-                ))}
-                  </ul>
+                  ) : (
+                    <ul className="space-y-2">
+                      {printFiles.map((file: any, idx: number) => renderPrintFileItem(file, String(idx)))}
+                    </ul>
+                  )
                 ) : (
                   <p className="text-xs text-red-400 italic">Keine Dateien.</p>
                 )}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Upload, X, User, Calendar, FileText, ArrowLeft, ShoppingCart, Trash2, Plus, Package, Shield, Layers, Edit } from "lucide-react";
+import { Upload, X, User, Calendar, FileText, ArrowLeft, ShoppingCart, Trash2, Plus, Package, Shield, Layers, Edit, Folder, FolderOpen, ChevronRight, ChevronDown } from "lucide-react";
 import { useAppStore, Order, OrderItem } from "@/store";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -138,6 +138,24 @@ export default function EditOrder() {
   const [selectedExistingPhotoshopFiles, setSelectedExistingPhotoshopFiles] = useState<string[]>([]); // URLs
   const [showPhotoshopSelector, setShowPhotoshopSelector] = useState(false);
   const [availablePhotoshopFiles, setAvailablePhotoshopFiles] = useState<{name: string, url: string, type: 'photoshop', date: string, orderTitle: string}[]>([]);
+
+  // Druckdaten-Ordner des Kunden (für die Auswahl-Ansicht)
+  const [customerFileFolders, setCustomerFileFolders] = useState<any[]>([]);
+  const [customerFileAssignments, setCustomerFileAssignments] = useState<{ folder_id: string; file_url: string }[]>([]);
+  const [openPickerFolders, setOpenPickerFolders] = useState<Set<string>>(new Set());
+
+  const loadCustomerFileFolders = async (customerId: string) => {
+    try {
+      const res = await fetch(`/api/customers/${customerId}/file-folders`);
+      const data = await res.json();
+      if (data.success) {
+        setCustomerFileFolders(data.data.folders || []);
+        setCustomerFileAssignments(data.data.assignments || []);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const loadCustomerPhotoshopFiles = () => {
     // Try to find customer ID
@@ -342,6 +360,14 @@ export default function EditOrder() {
     setAvailableFiles(allFiles);
     setSearchTerm("");
     setShowFileSelector(true);
+
+    // Ordner-Struktur des Kunden laden (für gruppierte Anzeige)
+    if (customerId) {
+      loadCustomerFileFolders(customerId);
+    } else {
+      setCustomerFileFolders([]);
+      setCustomerFileAssignments([]);
+    }
   };
 
   const addSelectedFiles = () => {
@@ -646,6 +672,77 @@ export default function EditOrder() {
       setProductSizeInput("");
       setProductSupplierId("");
       setExcludedProductFileIds({});
+  };
+
+  // ---- Druckdaten-Auswahl: Ordner-Gruppierung ----
+  const pickerFilteredFiles = availableFiles.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const togglePickerFolder = (folderId: string) => {
+    setOpenPickerFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId); else next.add(folderId);
+      return next;
+    });
+  };
+
+  const pickerFileCard = (file: any, keyPrefix: string = '') => {
+    const isSelected = selectedExistingFiles.includes(file.url);
+    return (
+      <div
+        key={`${keyPrefix}${file.url}`}
+        className={`border rounded p-3 cursor-pointer transition-all relative ${isSelected ? 'border-red-500 bg-red-50 ring-1 ring-red-500' : 'border-gray-200 hover:border-red-300'}`}
+        onClick={() => {
+          if (isSelected) {
+            setSelectedExistingFiles(selectedExistingFiles.filter(u => u !== file.url));
+          } else {
+            setSelectedExistingFiles([...selectedExistingFiles, file.url]);
+          }
+        }}
+      >
+        <div className="h-24 bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden">
+          <img src={file.url} alt={file.name} className="w-full h-full object-contain" />
+        </div>
+        <p className="text-xs font-medium truncate" title={file.name}>{file.name}</p>
+        <p className="text-[10px] text-gray-500 truncate">{new Date(file.date).toLocaleDateString()} - {file.orderTitle}</p>
+
+        {isSelected && (
+          <div className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-0.5">
+            <div className="w-3 h-3 flex items-center justify-center text-[10px]">✓</div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const pickerFolderNode = (folder: any, depth: number) => {
+    const kids = customerFileFolders.filter(f => f.parent_id === folder.id);
+    const files = pickerFilteredFiles.filter(f =>
+      customerFileAssignments.some(a => a.folder_id === folder.id && a.file_url === f.url)
+    );
+    const isOpen = openPickerFolders.has(folder.id);
+    return (
+      <div key={folder.id} className="mb-1" style={{ marginLeft: depth * 14 }}>
+        <button
+          onClick={() => togglePickerFolder(folder.id)}
+          className="w-full flex items-center gap-2 px-2 py-1.5 rounded bg-gray-50 hover:bg-gray-100 text-left"
+        >
+          {isOpen ? <ChevronDown size={16} className="text-gray-500 shrink-0" /> : <ChevronRight size={16} className="text-gray-500 shrink-0" />}
+          {isOpen ? <FolderOpen size={16} className="text-amber-500 shrink-0" /> : <Folder size={16} className="text-amber-500 shrink-0" />}
+          <span className="text-sm font-medium text-gray-700 truncate">{folder.name}</span>
+          <span className="text-[10px] text-gray-400">({files.length})</span>
+        </button>
+        {isOpen && (
+          <div className="mt-1">
+            {kids.map(k => pickerFolderNode(k, depth + 1))}
+            {files.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 my-2" style={{ marginLeft: 14 }}>
+                {files.map(f => pickerFileCard(f, `${folder.id}:`))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -1570,43 +1667,42 @@ export default function EditOrder() {
                         />
                     </div>
                     
-                    {availableFiles.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 ? (
+                    {pickerFilteredFiles.length === 0 ? (
                         <p className="text-center text-gray-500 py-8">
                             {searchTerm ? "Keine passenden Dateien gefunden." : "Keine Druckdaten für diesen Kunden gefunden."}
                         </p>
-                    ) : (
+                    ) : searchTerm.trim() ? (
+                        /* Bei aktiver Suche: flache Trefferliste */
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                            {availableFiles
-                                .filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()))
-                                .map((file, idx) => (
-                                <div 
-                                    key={idx} 
-                                    className={`border rounded p-3 cursor-pointer transition-all relative ${
-                                        selectedExistingFiles.includes(file.url) 
-                                        ? 'border-red-500 bg-red-50 ring-1 ring-red-500' 
-                                        : 'border-gray-200 hover:border-red-300'
-                                    }`}
-                                    onClick={() => {
-                                        if (selectedExistingFiles.includes(file.url)) {
-                                            setSelectedExistingFiles(selectedExistingFiles.filter(u => u !== file.url));
-                                        } else {
-                                            setSelectedExistingFiles([...selectedExistingFiles, file.url]);
-                                        }
-                                    }}
-                                >
-                                    <div className="h-24 bg-gray-100 rounded mb-2 flex items-center justify-center overflow-hidden">
-                                        <img src={file.url} alt={file.name} className="w-full h-full object-contain" />
-                                    </div>
-                                    <p className="text-xs font-medium truncate" title={file.name}>{file.name}</p>
-                                    <p className="text-[10px] text-gray-500 truncate">{new Date(file.date).toLocaleDateString()} - {file.orderTitle}</p>
-                                    
-                                    {selectedExistingFiles.includes(file.url) && (
-                                        <div className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-0.5">
-                                            <div className="w-3 h-3 flex items-center justify-center text-[10px]">✓</div>
+                            {pickerFilteredFiles.map(f => pickerFileCard(f, 'search:'))}
+                        </div>
+                    ) : (
+                        /* Gruppiert nach Ordnern des Kunden */
+                        <div>
+                            <div className="mb-3">
+                                {customerFileFolders.filter(f => !f.parent_id).length > 0 ? (
+                                    customerFileFolders.filter(f => !f.parent_id).map(folder => pickerFolderNode(folder, 0))
+                                ) : (
+                                    <p className="text-xs text-gray-400 mb-2">Keine Ordner angelegt.</p>
+                                )}
+                            </div>
+                            {(() => {
+                                const assignedSet = new Set(customerFileAssignments.map(a => a.file_url));
+                                const unassigned = pickerFilteredFiles.filter(f => !assignedSet.has(f.url));
+                                if (unassigned.length === 0) return null;
+                                return (
+                                    <div className="mt-3">
+                                        <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
+                                            <Layers size={16} className="text-gray-500" />
+                                            <span className="text-sm font-medium text-gray-700">Ohne Ordner</span>
+                                            <span className="text-[10px] text-gray-400">({unassigned.length})</span>
                                         </div>
-                                    )}
-                                </div>
-                            ))}
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                            {unassigned.map(f => pickerFileCard(f, 'no-folder:'))}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     )}
                 </div>

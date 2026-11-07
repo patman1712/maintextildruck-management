@@ -662,7 +662,9 @@ router.get('/archive-files', async (req: Request, res: Response) => {
     try {
         const limitRaw = Number.parseInt(String(req.query.limit || '25'), 10);
         const offsetRaw = Number.parseInt(String(req.query.offset || '0'), 10);
-        const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 200) : 25;
+        const customerId = String(req.query.customerId || '').trim();
+        const maxLimit = customerId ? 2000 : 200; // Bei Kundenfilter alles laden (Ordner-Gruppierung im Frontend)
+        const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), maxLimit) : 25;
         const offset = Number.isFinite(offsetRaw) ? Math.max(offsetRaw, 0) : 0;
         const type = String(req.query.type || 'all');
         const search = String(req.query.search || '').trim().toLowerCase();
@@ -682,6 +684,7 @@ router.get('/archive-files', async (req: Request, res: Response) => {
                 o.id as orderId,
                 o.title as orderTitle,
                 o.customer_name as customerName,
+                o.customer_id as customerId,
                 COALESCE(f.created_at, o.created_at) as createdAt
             FROM files f
             JOIN orders o ON o.id = f.order_id
@@ -693,6 +696,10 @@ router.get('/archive-files', async (req: Request, res: Response) => {
         if (isTypeFilter) {
             orderSql += ` AND f.type = ? `;
             params.push(type);
+        }
+        if (customerId) {
+            orderSql += ` AND o.customer_id = ? `;
+            params.push(customerId);
         }
         if (search) {
             orderSql += ` AND (
@@ -716,6 +723,7 @@ router.get('/archive-files', async (req: Request, res: Response) => {
                     ('prod-' || cp.id) as orderId,
                     ('Produkt: ' || cp.name) as orderTitle,
                     COALESCE(c.name, 'Unbekannt') as customerName,
+                    cp.customer_id as customerId,
                     COALESCE(cpf.created_at, cp.created_at) as createdAt
                 FROM customer_product_files cpf
                 JOIN customer_products cp ON cp.id = cpf.product_id
@@ -725,6 +733,10 @@ router.get('/archive-files', async (req: Request, res: Response) => {
                   AND cpf.file_url <> ''
             `;
 
+            if (customerId) {
+                productSql += ` AND cp.customer_id = ? `;
+                params.push(customerId);
+            }
             if (search) {
                 productSql += ` AND (
                     lower(COALESCE(cpf.file_name,'')) LIKE ?
@@ -792,6 +804,7 @@ router.post('/archive-delete', async (req: Request, res: Response) => {
 
         db.prepare('DELETE FROM files WHERE path = ?').run(url);
         db.prepare('DELETE FROM customer_product_files WHERE file_url = ? OR thumbnail_url = ?').run(url, url);
+        db.prepare('DELETE FROM customer_file_assignments WHERE file_url = ?').run(url);
 
         if (url.startsWith('/uploads/')) {
             const relative = url.replace(/^\/uploads\//, '');
