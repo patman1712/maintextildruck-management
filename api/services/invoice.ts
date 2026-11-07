@@ -1003,7 +1003,29 @@ export const generateInvoice = async (
             y += 8;
         }
 
-        ensureSpace(70, false);
+        // --- Summenblock + Zahlungshinweise: tatsächliche Höhe messen, dann prüfen ---
+        // Statt einer pauschalen Reserve (früher 70 mm) wird genau die Höhe gemessen,
+        // die der Block – Trennlinie, Summen und Zahlungshinweise – bis zur letzten
+        // sichtbaren Textzeile benötigt. Ein Seitenumbruch erfolgt nur, wenn diese
+        // Höhe nicht mehr oberhalb des reservierten Footerbereichs (bottomLimit) passt.
+        const summaryLineCount = (voucherCode && voucherDiscount > 0 ? 2 : 0) + 3; // Netto/MwSt/Gesamt (ggf. + Zwischensumme & Gutschein)
+        const paymentLineCount = 3 + (order.payment_method ? 1 : 0);               // Hinweis + Verwendungszweck (mit Leerzeile) + ggf. Zahlungsart
+        const footerNoteLines = wrapText(invoiceDesign.footer_note || "Die Ware bleibt bis zur vollständigen Bezahlung unser Eigentum.", 175);
+
+        // Die Summanden spiegeln exakt die y-Schritte des Blocks weiter unten. Für den
+        // Umbruch zählt nur die Basislinie der letzten sichtbaren Zeile (der abschließende
+        // y-Sprung entfällt). „Gesamtbetrag" hat keinen eigenen Sprung – danach folgt
+        // direkt der Abstand zu den Zahlungshinweisen.
+        const totalsBlockHeight =
+            8                                                   // Trennlinie + Abstand zur ersten Summenzeile
+            + (summaryLineCount - 1) * 5                        // weitere Summenzeilen
+            + 15                                                // Abstand Gesamtbetrag → Zahlungshinweise
+            + paymentLineCount * 5                              // Zahlungshinweise
+            + footerNoteLines.length * 5                        // Fußnotenzeilen
+            - 5;                                                // letzter Zeilenschritt entfällt (Basislinie zählt)
+
+        ensureSpace(totalsBlockHeight, false);
+
         if (y > 40) {
             doc.line(20, y, 195, y);
             y += 8;
@@ -1043,7 +1065,8 @@ export const generateInvoice = async (
         y += 15;
 
         // Payment Info
-        ensureSpace(30, false);
+        // (Kein separater ensureSpace mehr: die Höhe inkl. Zahlungshinweisen wurde
+        //  bereits oben in totalsBlockHeight berücksichtigt.)
         doc.text(invoiceDesign.payment_note || "Bitte bei Zahlung angeben!", 20, y);
         y += 5;
         doc.text(`Verwendungszweck: ${invoiceNumber}`, 20, y);
@@ -1054,8 +1077,6 @@ export const generateInvoice = async (
              y += 5;
         }
         
-        const footerNoteLines = wrapText(invoiceDesign.footer_note || "Die Ware bleibt bis zur vollständigen Bezahlung unser Eigentum.", 175);
-        ensureSpace(footerNoteLines.length * 5 + 2, false);
         for (const line of footerNoteLines) {
             doc.text(line, 20, y);
             y += 5;
