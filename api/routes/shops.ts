@@ -27,6 +27,42 @@ function normalizeHeroImages(raw: any): any[] {
   }).sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 }
 
+// 🔧 Helper: Füllt Footer-/Rechtstext-Felder mit den globalen Standardtexten,
+// wenn der Shop selbst keinen eigenen Inhalt hinterlegt hat (Shop-Override).
+function mergeGlobalShopContent(shop: any): any {
+  if (!shop) return shop;
+  try {
+    const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
+    if (globalContent) {
+      // Liste der Felder, die geerbt werden können
+      const contentFields = [
+        'footer_logo_url', 'contact_phone', 'contact_email', 'contact_address', 'opening_hours',
+        'social_instagram', 'social_tiktok', 'social_whatsapp',
+        'impressum_text', 'privacy_text', 'agb_text', 'revocation_text', 'shipping_info_text', 'about_us_text', 'contact_text'
+      ];
+
+      contentFields.forEach(field => {
+        // Globalen Inhalt nur nutzen, wenn der Shop selbst leer ist
+        if (!shop[field] && globalContent[field]) {
+          shop[field] = globalContent[field];
+        }
+      });
+    }
+  } catch (e) {
+    console.error('Error fetching global content:', e);
+    // Ohne globale Inhalte fortfahren, falls Tabelle fehlt oder Fehler auftritt
+  }
+  return shop;
+}
+
+// 🔧 Helper: Behandelt "leer" (auch leeres Quill-HTML) als NULL, damit der globale Text greift.
+function emptyLegalTextToNull(value: any): string | null {
+  if (value === null || value === undefined) return null;
+  const trimmed = String(value).trim();
+  if (trimmed === '' || trimmed === '<p><br></p>' || trimmed === '<p></p>') return null;
+  return String(value);
+}
+
 // List all shops
 router.get('/', (req, res) => {
   try {
@@ -74,27 +110,7 @@ router.get('/:id', (req, res) => {
     if (shop.hero_images) shop.hero_images = JSON.parse(shop.hero_images);
 
     // Merge Global Content (Footer/Legal)
-    try {
-        const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
-        if (globalContent) {
-            // List of fields to overwrite
-            const contentFields = [
-                'footer_logo_url', 'contact_phone', 'contact_email', 'contact_address', 'opening_hours',
-                'social_instagram', 'social_tiktok', 'social_whatsapp',
-                'impressum_text', 'privacy_text', 'agb_text', 'revocation_text', 'shipping_info_text', 'about_us_text', 'contact_text'
-            ];
-            
-            contentFields.forEach(field => {
-                // Only use global content if shop content is empty/null
-                if (!shop[field] && globalContent[field]) {
-                    shop[field] = globalContent[field];
-                }
-            });
-        }
-    } catch (e) {
-        console.error('Error fetching global content:', e);
-        // Continue without global content if table is missing or error occurs
-    }
+    mergeGlobalShopContent(shop);
 
     res.json({ success: true, data: shop });
   } catch (error: any) {
@@ -674,7 +690,9 @@ router.put('/:id', (req, res) => {
           hero_enabled = ?,
           guest_checkout_enabled = ?,
           hero_images = ?,
-          welcome_text = ?
+          welcome_text = ?,
+          about_us_text = ?, impressum_text = ?, privacy_text = ?, agb_text = ?,
+          revocation_text = ?, shipping_info_text = ?, contact_text = ?
       WHERE id = ?
     `;
 
@@ -703,6 +721,13 @@ router.put('/:id', (req, res) => {
       guest_checkout_enabled === false || guest_checkout_enabled === 0 ? 0 : 1,
       hero_images ? JSON.stringify(hero_images) : null,
       welcome_text || null,
+      emptyLegalTextToNull(about_us_text),
+      emptyLegalTextToNull(impressum_text),
+      emptyLegalTextToNull(privacy_text),
+      emptyLegalTextToNull(agb_text),
+      emptyLegalTextToNull(revocation_text),
+      emptyLegalTextToNull(shipping_info_text),
+      emptyLegalTextToNull(contact_text),
       id
     );
 
@@ -713,6 +738,8 @@ router.put('/:id', (req, res) => {
         if (shop.dhl_config) shop.dhl_config = JSON.parse(shop.dhl_config);
         if (shop.paypal_config) shop.paypal_config = JSON.parse(shop.paypal_config);
         if (shop.hero_images) shop.hero_images = normalizeHeroImages(JSON.parse(shop.hero_images));
+        // Hinweis: Hier bewusst KEIN mergeGlobalShopContent -> der Admin-Editor soll die
+        // rohen Shop-Werte sehen (leer = globaler Standardtext), damit keine Overrides entstehen.
     }
 
     res.json({ success: true, data: shop });

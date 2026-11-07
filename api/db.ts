@@ -1717,6 +1717,28 @@ try {
   } catch (e) {
     console.error('Migration error (shop shipping settings):', e);
   }
+
+  // 📄 Shop-spezifische Rechtstexte (überschreiben die globalen Standardtexte, wenn gefüllt)
+  try {
+    const legalShopCols = db.prepare("PRAGMA table_info(shops)").all() as any[];
+    const legalFields = [
+      'about_us_text',
+      'impressum_text',
+      'privacy_text',
+      'agb_text',
+      'revocation_text',
+      'shipping_info_text',
+      'contact_text'
+    ];
+    legalFields.forEach(field => {
+      if (!legalShopCols.some(col => col.name === field)) {
+        console.log(`Migrating database: Adding ${field} to shops table`);
+        db.exec(`ALTER TABLE shops ADD COLUMN ${field} TEXT`);
+      }
+    });
+  } catch (e) {
+    console.error('Migration error (shop legal texts):', e);
+  }
 } catch (error) {
   console.error('Migration error:', error);
 }
