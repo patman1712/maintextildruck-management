@@ -892,7 +892,7 @@ router.post('/:shopId/orders', async (req, res) => {
     if (!shopId) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
 
     // Get Shop Owner (Customer ID) and number circle config
-    const shop = db.prepare('SELECT customer_id, order_number_circle, next_order_number, donations_enabled, guest_checkout_enabled FROM shops WHERE id = ?').get(shopId) as { customer_id: string, order_number_circle?: string, next_order_number?: number, donations_enabled?: any, guest_checkout_enabled?: any };
+    const shop = db.prepare('SELECT customer_id, order_number_circle, next_order_number, donations_enabled, guest_checkout_enabled, notification_email FROM shops WHERE id = ?').get(shopId) as { customer_id: string, order_number_circle?: string, next_order_number?: number, donations_enabled?: any, guest_checkout_enabled?: any, notification_email?: string };
     if (!shop) return res.status(404).json({ success: false, error: 'Shop-Besitzer nicht gefunden.' });
 
     const { 
@@ -1473,9 +1473,20 @@ router.post('/:shopId/orders', async (req, res) => {
             await sendOrderConfirmation(orderId, invoicePath);
             try {
                 const global = db.prepare("SELECT order_notification_email FROM global_shop_content WHERE id = 'main'").get() as any;
-                const notificationEmail = global?.order_notification_email || (shop as any)?.notification_email || '';
-                if (notificationEmail && String(notificationEmail).trim()) {
-                    await sendShopOrderNotification(orderId, invoicePath, String(notificationEmail));
+                // Betreiberbenachrichtigung: shopspezifische Adresse + globale Bestelladresse (dedupliziert).
+                // Ohne eine der beiden Angaben wurde bisher stillschweigend nichts versendet.
+                const recipients = Array.from(new Set(
+                    `${shop?.notification_email || ''},${global?.order_notification_email || ''}`
+                        .split(/[,\n;\s]+/)
+                        .map(s => s.trim())
+                        .filter(s => s.includes('@'))
+                ));
+                if (recipients.length > 0) {
+                    console.log(`[Order] Sending shop notification for ${orderNumber} to: ${recipients.join(', ')}`);
+                    const sent = await sendShopOrderNotification(orderId, invoicePath, recipients);
+                    if (!sent) console.error(`[Order] Shop notification could not be sent to: ${recipients.join(', ')}`);
+                } else {
+                    console.warn(`[Order] No shop notification address configured (shop.notification_email / global order_notification_email) – notification skipped for ${orderNumber}.`);
                 }
             } catch (e) {
                 console.error('[Order] Failed to send internal shop notification:', e);

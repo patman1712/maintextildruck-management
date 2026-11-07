@@ -684,10 +684,54 @@ export const sendShopOrderNotification = async (orderId: string, invoicePath: st
         const shopName = shop?.name || 'Onlineshop';
         const subject = `Neue Bestellung #${order.order_number} (${shopName})`;
 
+        const esc = (value: any) => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+
+        // Branding für die optionale Shop-Mailvorlage (email.html)
+        const branding = {
+            logo_url: '',
+            email_logo_url: '',
+            primary_color: '#16a34a',
+            secondary_color: '#0f172a',
+            footer_text: ''
+        };
+        if (shop) {
+            if (shop.logo_url?.startsWith('http')) branding.logo_url = shop.logo_url;
+            if (shop.email_logo_url?.startsWith('http')) branding.email_logo_url = shop.email_logo_url;
+            if (shop.primary_color) branding.primary_color = shop.primary_color;
+            if (shop.secondary_color) branding.secondary_color = shop.secondary_color;
+        }
+        const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
+        if (globalContent) {
+            const parts: string[] = [];
+            if (globalContent.company_name) parts.push(globalContent.company_name);
+            if (globalContent.company_address) parts.push(globalContent.company_address);
+            if (globalContent.contact_email) parts.push(globalContent.contact_email);
+            branding.footer_text = parts.join(' | ');
+        }
+
         const createdAt = order.created_at ? new Date(order.created_at).toLocaleString('de-DE') : '';
         const customerLine = customer
             ? `${customer.first_name || ''} ${customer.last_name || ''}`.trim()
             : (order.customer_name || '');
+        const customerEmail = order.customer_email || customer?.email || '';
+        const customerPhone = order.customer_phone || customer?.phone || '';
+        const addressLines = String(order.customer_address || '').split(/\n|,\s/).map(s => s.trim()).filter(Boolean);
+        const addressHtml = addressLines.length ? addressLines.map(esc).join('<br>') : '-';
+
+        const paymentMethod = order.paymentMethod || order.payment_method || '-';
+        const paymentStatus = order.paymentStatus || order.payment_status || '-';
+        const isPaymentPending = ['open', 'pending', 'pending_payment', 'unpaid'].includes(String(paymentStatus).toLowerCase());
+        const paymentStatusLabel = isPaymentPending ? `${paymentStatus} (Zahlung ausstehend)` : paymentStatus;
+
+        const itemsSubtotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.price) || 0), 0);
+        const shippingCosts = Number(order.shipping_costs) || 0;
+        const discountAmount = Number(order.discount_amount) || 0;
+        const totalAmount = Number(order.total_amount) || 0;
+        const eur = (n: number) => `${n.toFixed(2).replace('.', ',')} €`;
 
         const rowsHtml = items.map((it, idx) => {
             const qty = Number(it.quantity) || 0;
@@ -695,59 +739,96 @@ export const sendShopOrderNotification = async (orderId: string, invoicePath: st
             const total = qty * price;
             return `<tr>
                 <td style="padding:6px 8px; border-bottom:1px solid #eee;">${idx + 1}</td>
-                <td style="padding:6px 8px; border-bottom:1px solid #eee;">${it.item_name || ''}</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee;">${esc(it.item_name || '')}</td>
                 <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${qty}</td>
-                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${price.toFixed(2).replace('.', ',')} €</td>
-                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${total.toFixed(2).replace('.', ',')} €</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${eur(price)}</td>
+                <td style="padding:6px 8px; border-bottom:1px solid #eee; text-align:right;">${eur(total)}</td>
             </tr>`;
         }).join('');
 
-        const html = `<!doctype html><html><body style="font-family: Helvetica, Arial, sans-serif; background:#f4f4f4; margin:0; padding:0;">
-            <div style="max-width:720px; margin:20px auto; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
-              <div style="padding:18px 20px; border-bottom:4px solid #16a34a;">
-                <div style="font-size:12px; color:#64748b;">Shop-Bestellung</div>
-                <div style="font-size:20px; font-weight:800; color:#0f172a;">#${order.order_number} · ${shopName}</div>
-              </div>
-              <div style="padding:18px 20px;">
-                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 14px; margin-bottom:14px;">
-                  <div style="font-size:14px; color:#0f172a;"><b>Datum:</b> ${createdAt}</div>
-                  <div style="font-size:14px; color:#0f172a;"><b>Kunde:</b> ${customerLine || '-'}</div>
-                  <div style="font-size:14px; color:#0f172a;"><b>E-Mail:</b> ${order.customer_email || customer?.email || '-'}</div>
-                  <div style="font-size:14px; color:#0f172a;"><b>Adresse:</b> ${(order.customer_address || '').replace(/\n/g, '<br>') || '-'}</div>
-                  <div style="font-size:14px; color:#0f172a;"><b>Zahlung:</b> ${order.paymentMethod || order.payment_method || '-'} · ${order.paymentStatus || order.payment_status || '-'}</div>
-                </div>
-                <div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; margin:10px 0;">Positionen</div>
-                <table style="width:100%; border-collapse:collapse; font-size:14px;">
-                  <thead>
-                    <tr style="background:#f1f5f9; color:#334155;">
-                      <th style="padding:8px; text-align:left;">Pos.</th>
-                      <th style="padding:8px; text-align:left;">Artikel</th>
-                      <th style="padding:8px; text-align:right;">Menge</th>
-                      <th style="padding:8px; text-align:right;">Preis</th>
-                      <th style="padding:8px; text-align:right;">Summe</th>
-                    </tr>
-                  </thead>
-                  <tbody>${rowsHtml || ''}</tbody>
-                </table>
-                <p style="margin-top:14px; color:#334155; font-size:14px;">Rechnung als PDF ist im Anhang.</p>
-              </div>
+        const contentHtml = `
+        <div style="font-family: Arial, Helvetica, sans-serif; background-color: #f8fafc; padding: 24px;">
+          <div style="max-width: 720px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+            <div style="padding: 22px; background: linear-gradient(90deg, ${branding.primary_color}, ${branding.secondary_color}); color: #ffffff;">
+              <div style="font-size: 18px; font-weight: 700;">Neue Bestellung</div>
+              <div style="font-size: 13px; opacity: 0.95;">#${esc(order.order_number)} · ${esc(shopName)}</div>
             </div>
-          </body></html>`;
+            <div style="padding: 22px;">
+              <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 14px; margin-bottom:16px; font-size:14px; color:#0f172a; line-height:1.6;">
+                <div><b>Bestellnummer:</b> ${esc(order.order_number)}</div>
+                <div><b>Datum:</b> ${esc(createdAt)}</div>
+                <div><b>Kunde:</b> ${esc(customerLine) || '-'}</div>
+                <div><b>E-Mail:</b> ${esc(customerEmail) || '-'}${customerPhone ? ` · <b>Telefon:</b> ${esc(customerPhone)}` : ''}</div>
+                <div><b>Adresse:</b><br>${addressHtml}</div>
+              </div>
+
+              <div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; margin:10px 0;">Artikel</div>
+              <table style="width:100%; border-collapse:collapse; font-size:14px;">
+                <thead>
+                  <tr style="background:#f1f5f9; color:#334155;">
+                    <th style="padding:8px; text-align:left;">Pos.</th>
+                    <th style="padding:8px; text-align:left;">Artikel</th>
+                    <th style="padding:8px; text-align:right;">Menge</th>
+                    <th style="padding:8px; text-align:right;">Preis</th>
+                    <th style="padding:8px; text-align:right;">Summe</th>
+                  </tr>
+                </thead>
+                <tbody>${rowsHtml || ''}</tbody>
+              </table>
+
+              <table style="width:100%; border-collapse:collapse; font-size:14px; margin-top:12px;">
+                <tr><td style="padding:4px 8px 4px 0; color:#64748b;">Warenwert</td><td style="padding:4px 0; text-align:right;">${eur(itemsSubtotal)}</td></tr>
+                <tr><td style="padding:4px 8px 4px 0; color:#64748b;">Versandkosten</td><td style="padding:4px 0; text-align:right;">${eur(shippingCosts)}</td></tr>
+                ${discountAmount > 0 ? `<tr><td style="padding:4px 8px 4px 0; color:#64748b;">Rabatt${order.voucher_code ? ` (${esc(order.voucher_code)})` : ''}</td><td style="padding:4px 0; text-align:right;">-${eur(discountAmount)}</td></tr>` : ''}
+                <tr><td style="padding:8px 8px 8px 0; border-top:2px solid #0f172a; font-weight:800; font-size:16px;">Gesamtbetrag</td><td style="padding:8px 0; border-top:2px solid #0f172a; text-align:right; font-weight:800; font-size:16px;">${eur(totalAmount)}</td></tr>
+              </table>
+
+              <div style="margin-top:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 14px; font-size:14px; color:#0f172a;">
+                <div><b>Zahlungsart:</b> ${esc(paymentMethod)}</div>
+                <div><b>Zahlungsstatus:</b> ${esc(paymentStatusLabel)}</div>
+              </div>
+
+              <p style="margin-top:16px; color:#334155; font-size:14px;">Die Rechnung ist als PDF im Anhang.</p>
+            </div>
+          </div>
+        </div>`;
+
+        // Mit der shopspezifischen E-Mail-Vorlage (email.html) umrahmen; ohne Vorlage bleibt der Inhalt unverändert.
+        const html = applyShopEmailFrame(order.shop_id, {
+            shop_name: shopName,
+            customer_name: customerLine || '',
+            order_number: String(order.order_number || ''),
+            subject,
+            year: String(new Date().getFullYear()),
+            logo_url: branding.logo_url,
+            email_logo_url: branding.email_logo_url,
+            primary_color: branding.primary_color,
+            secondary_color: branding.secondary_color,
+            footer_text: branding.footer_text
+        }, contentHtml);
 
         const textLines = [
             `Neue Bestellung #${order.order_number} (${shopName})`,
             createdAt ? `Datum: ${createdAt}` : '',
             `Kunde: ${customerLine || '-'}`,
-            `E-Mail: ${order.customer_email || customer?.email || '-'}`,
-            `Adresse: ${order.customer_address || '-'}`,
-            `Zahlung: ${(order.paymentMethod || order.payment_method || '-') } / ${(order.paymentStatus || order.payment_status || '-')}`,
+            `E-Mail: ${customerEmail || '-'}`,
+            customerPhone ? `Telefon: ${customerPhone}` : '',
+            `Adresse: ${String(order.customer_address || '-').replace(/\n/g, ', ')}`,
             '',
-            'Positionen:',
+            'Artikel:',
             ...items.map((it: any, idx: number) => {
                 const qty = Number(it.quantity) || 0;
                 const price = Number(it.price) || 0;
                 return `${idx + 1}. ${it.item_name || ''} | ${qty}x | ${price.toFixed(2).replace('.', ',')} €`;
             }),
+            '',
+            `Warenwert: ${itemsSubtotal.toFixed(2).replace('.', ',')} €`,
+            `Versandkosten: ${shippingCosts.toFixed(2).replace('.', ',')} €`,
+            discountAmount > 0 ? `Rabatt${order.voucher_code ? ` (${order.voucher_code})` : ''}: -${discountAmount.toFixed(2).replace('.', ',')} €` : '',
+            `Gesamtbetrag: ${totalAmount.toFixed(2).replace('.', ',')} €`,
+            '',
+            `Zahlungsart: ${paymentMethod}`,
+            `Zahlungsstatus: ${paymentStatusLabel}`,
             '',
             'Rechnung ist im Anhang.'
         ].filter(Boolean);
