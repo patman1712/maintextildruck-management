@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import db from '../db.js';
 import { Resend } from 'resend';
 import fs from 'fs-extra';
+import { withResolvedItemImages } from './orderImages.js';
 
 interface EmailConfig {
     smtp_host: string;
@@ -95,27 +96,27 @@ const buildOrderItemsHtml = (items: any[]): string => {
             ? `<img src="${escapeHtml(it.image)}" alt="${escapeHtml(it.item_name || '')}" width="48" height="48" style="width:48px; height:48px; object-fit:cover; border-radius:6px; border:1px solid #e2e8f0; display:block;">`
             : `<div style="width:48px; height:48px; border-radius:6px; border:1px solid #e2e8f0; background:#f1f5f9;"></div>`;
         return `<tr>
-            <td style="padding:8px; border-bottom:1px solid #eee;">
+            <td style="padding:8px; border-bottom:1px solid #eee; word-break:break-word;">
               <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
                 <td style="vertical-align:top; padding-right:10px;">${imageCell}</td>
                 <td style="vertical-align:top;">
-                  <div style="font-weight:700; color:#0f172a;">${escapeHtml(it.item_name || '')}</div>
-                  ${variant ? `<div style="color:#64748b; font-size:12px; margin-top:2px;">${variant}</div>` : ''}
+                  <div style="font-weight:700; color:#0f172a; word-break:break-word;">${escapeHtml(it.item_name || '')}</div>
+                  ${variant ? `<div style="color:#64748b; font-size:12px; margin-top:2px; word-break:break-word;">${variant}</div>` : ''}
                 </td>
               </tr></table>
             </td>
-            <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${qty}</td>
-            <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatEur(price)}</td>
-            <td style="padding:8px; border-bottom:1px solid #eee; text-align:right;">${formatEur(qty * price)}</td>
+            <td style="padding:8px; border-bottom:1px solid #eee; text-align:right; white-space:nowrap;">${qty}</td>
+            <td style="padding:8px; border-bottom:1px solid #eee; text-align:right; white-space:nowrap;">${formatEur(price)}</td>
+            <td style="padding:8px; border-bottom:1px solid #eee; text-align:right; white-space:nowrap;">${formatEur(qty * price)}</td>
           </tr>`;
     }).join('');
     return `<table style="width:100%; border-collapse:collapse; font-size:14px;">
         <thead>
           <tr style="background:#f1f5f9; color:#334155;">
-            <th style="padding:8px; text-align:left;">Artikel</th>
-            <th style="padding:8px; text-align:right;">Menge</th>
-            <th style="padding:8px; text-align:right;">Einzelpreis</th>
-            <th style="padding:8px; text-align:right;">Summe</th>
+            <th style="padding:8px; text-align:left; word-break:break-word;">Artikel</th>
+            <th style="padding:8px; text-align:right; white-space:nowrap; width:56px;">Menge</th>
+            <th style="padding:8px; text-align:right; white-space:nowrap; width:88px;">Einzelpreis</th>
+            <th style="padding:8px; text-align:right; white-space:nowrap; width:88px;">Summe</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -146,10 +147,15 @@ const shopEmailFrameUsesPlaceholder = (shopId: string | null | undefined, key: s
 };
 
 // Liefert Bestellpositionen und Summenübersicht als email.html-Platzhalter.
-const buildOrderEmailPlaceholders = (order: any, items: any[]): Record<string, string> => ({
-    order_items_html: buildOrderItemsHtml(items),
-    order_totals_html: buildOrderTotalsHtml(order, items)
-});
+// Die Bilder werden auf absolute, öffentlich erreichbare URLs aufgelöst
+// (inkl. Fallback über Produkt + Variante bei älteren Positionen ohne Bild).
+const buildOrderEmailPlaceholders = (order: any, items: any[]): Record<string, string> => {
+    const resolvedItems = withResolvedItemImages(items, order?.shop_id);
+    return {
+        order_items_html: buildOrderItemsHtml(resolvedItems),
+        order_totals_html: buildOrderTotalsHtml(order, resolvedItems)
+    };
+};
 
 export const applyShopEmailFrame = (
     shopId: string | null | undefined,

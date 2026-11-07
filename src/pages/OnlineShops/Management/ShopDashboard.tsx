@@ -3841,18 +3841,29 @@ const ShopDashboard: React.FC = () => {
                                 {selectedOrder.items?.map((item: any) => (
                                     <tr key={item.id} className={Number(item.cancelled_quantity || 0) >= Number(item.quantity || 0) ? 'bg-red-50/60' : ''}>
                                         <td className="px-6 py-4">
-                                            <div className="font-bold text-slate-800">{item.item_name}</div>
-                                            <div className="flex gap-2 mt-1 flex-wrap">
-                                                {item.size && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Größe: {item.size}</span>}
-                                                {/* Only show color if it's different from size */}
-                                                {item.color && item.color !== item.size && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Farbe: {item.color}</span>}
-                                                {Number(item.cancelled_quantity || 0) > 0 && (
-                                                    <span className="text-[9px] bg-red-100 border border-red-200 px-1.5 py-0.5 rounded font-bold uppercase text-red-600">
-                                                        Storniert: {item.cancelled_quantity}
-                                                    </span>
-                                                )}
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-12 h-12 bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-center overflow-hidden shrink-0 text-slate-300">
+                                                    {item.image ? (
+                                                        <img src={item.image} alt={item.item_name} className="w-full h-full object-contain" loading="lazy" decoding="async" />
+                                                    ) : (
+                                                        <ImageIcon size={18} />
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <div className="font-bold text-slate-800">{item.item_name}</div>
+                                                    <div className="flex gap-2 mt-1 flex-wrap">
+                                                        {item.size && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Größe: {item.size}</span>}
+                                                        {/* Only show color if it's different from size */}
+                                                        {item.color && item.color !== item.size && <span className="text-[9px] bg-white border border-slate-200 px-1.5 py-0.5 rounded font-bold uppercase text-slate-500">Farbe: {item.color}</span>}
+                                                        {Number(item.cancelled_quantity || 0) > 0 && (
+                                                            <span className="text-[9px] bg-red-100 border border-red-200 px-1.5 py-0.5 rounded font-bold uppercase text-red-600">
+                                                                Storniert: {item.cancelled_quantity}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {item.notes && <div className="text-[10px] text-blue-600 font-medium mt-1 italic">Personalisierung: {formatPersonalization(item.notes)}</div>}
+                                                </div>
                                             </div>
-                                            {item.notes && <div className="text-[10px] text-blue-600 font-medium mt-1 italic">Personalisierung: {formatPersonalization(item.notes)}</div>}
                                         </td>
                                         <td className="px-6 py-4 text-center font-bold text-slate-700">{item.quantity}</td>
                                         <td className="px-6 py-4 text-right text-slate-600">{item.price?.toFixed(2).replace('.', ',')} €</td>

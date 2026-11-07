@@ -9,6 +9,7 @@ import { generateInvoice } from '../services/invoice.js';
 import { generateCancellationInvoice } from '../services/cancellation_invoice.js';
 import { sendOrderConfirmation, sendShopOrderNotification, sendPickupConfirmation, sendVorkassePaymentReminder } from '../services/email.js';
 import { validateVoucherForShop } from '../services/vouchers.js';
+import { withResolvedItemImages } from '../services/orderImages.js';
 
 const router = Router();
 
@@ -289,11 +290,11 @@ router.get('/:shopId/orders/:customerId', async (req, res) => {
 router.get('/:shopId/orders/:customerId/:orderId', async (req, res) => {
   try {
     const { orderId, customerId } = req.params;
-    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND shop_customer_id = ?').get(orderId, customerId);
+    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND shop_customer_id = ?').get(orderId, customerId) as any;
     if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
 
-    const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
-    res.json({ success: true, data: { ...(order as any), items } });
+    const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+    res.json({ success: true, data: { ...order, items: withResolvedItemImages(items, order.shop_id) } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -309,7 +310,7 @@ router.get('/:shopId/admin/orders/:orderId', async (req, res) => {
     const order = db.prepare('SELECT * FROM orders WHERE id = ? AND shop_id = ?').get(orderId, shopId);
     if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
 
-    const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
+    const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
     const cancellations = db.prepare('SELECT * FROM order_cancellations WHERE order_id = ? ORDER BY created_at DESC').all(orderId);
     const parsedCancellations = cancellations.map((row: any) => ({
       ...row,
@@ -317,7 +318,7 @@ router.get('/:shopId/admin/orders/:orderId', async (req, res) => {
         try { return JSON.parse(row.items_json || '[]'); } catch { return []; }
       })()
     }));
-    res.json({ success: true, data: { ...(order as any), items, cancellations: parsedCancellations } });
+    res.json({ success: true, data: { ...(order as any), items: withResolvedItemImages(items, shopId), cancellations: parsedCancellations } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -490,7 +491,7 @@ router.get('/:shopId/admin/orders/:orderId', async (req, res) => {
     const order = db.prepare('SELECT * FROM orders WHERE id = ? AND shop_id = ?').get(orderId, shopId) as any;
     if (!order) return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
 
-    const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
+    const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
     const cancellations = db.prepare('SELECT * FROM order_cancellations WHERE order_id = ? ORDER BY created_at DESC').all(orderId);
     const parsedCancellations = cancellations.map((row: any) => ({
       ...row,
@@ -504,7 +505,7 @@ router.get('/:shopId/admin/orders/:orderId', async (req, res) => {
       success: true,
       data: {
         ...(order as any),
-        items,
+        items: withResolvedItemImages(items, shopId),
         cancellations: parsedCancellations,
         corrections
       }

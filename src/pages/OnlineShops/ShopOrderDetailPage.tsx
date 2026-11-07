@@ -105,8 +105,12 @@ const ShopOrderDetailPage: React.FC = () => {
                 {order.items?.map((item: any) => (
                   <div key={item.id} className="p-6 flex items-center justify-between group hover:bg-slate-50/30 transition-colors">
                     <div className="flex items-center space-x-4">
-                      <div className="w-16 h-16 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-center text-slate-300">
-                        <Package size={24} />
+                      <div className="w-16 h-16 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-center text-slate-300 overflow-hidden">
+                        {item.image ? (
+                          <img src={item.image} alt={item.item_name} className="w-full h-full object-contain" loading="lazy" decoding="async" />
+                        ) : (
+                          <Package size={24} />
+                        )}
                       </div>
                       <div>
                         <h4 className="font-bold text-slate-800">{item.item_name}</h4>
