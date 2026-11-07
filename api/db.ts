@@ -1171,6 +1171,12 @@ try {
     console.log('Migrating database: Adding custom_invoice_design to shops table');
     db.exec('ALTER TABLE shops ADD COLUMN custom_invoice_design TEXT');
   }
+  // Optionale E-Mail-Teilvorlagen aus dem Design-ZIP als JSON
+  // ({ progress, order_items, order_totals, message }).
+  if (!shopColsTemplate.some(col => col.name === 'custom_email_partials')) {
+    console.log('Migrating database: Adding custom_email_partials to shops table');
+    db.exec('ALTER TABLE shops ADD COLUMN custom_email_partials TEXT');
+  }
 
   // Migration for Customer Numbers
   try {

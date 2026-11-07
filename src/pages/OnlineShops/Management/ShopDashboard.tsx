@@ -131,10 +131,22 @@ const ShopDashboard: React.FC = () => {
   const [templateFiles, setTemplateFiles] = useState<Array<{ path: string; size: number; url: string }>>([]);
   const [zipUploading, setZipUploading] = useState(false);
   const [emailHtml, setEmailHtml] = useState('');
+  const [emailPartials, setEmailPartials] = useState<Record<string, string>>({});
   const [invoiceDesign, setInvoiceDesign] = useState('');
   const [testEmailTo, setTestEmailTo] = useState('');
+  const [testEmailType, setTestEmailType] = useState('order_confirmation');
   const [testEmailSending, setTestEmailSending] = useState(false);
   const [testEmailMsg, setTestEmailMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+
+  // Auswählbare Mailarten für die Testmail (spiegelt die Mailtypen des Backends)
+  const TEST_MAIL_TYPES: Array<{ value: string; label: string }> = [
+    { value: 'order_confirmation', label: 'Bestellbestätigung' },
+    { value: 'production_started', label: 'Produktionsstart' },
+    { value: 'shipment', label: 'Versand' },
+    { value: 'pickup_confirmation', label: 'Abholung (Bestellung eingegangen)' },
+    { value: 'pickup_ready', label: 'Abholbereit' },
+    { value: 'payment_reminder', label: 'Zahlungserinnerung' }
+  ];
 
   const sendTestEmail = async () => {
     if (!shopId || !testEmailTo.includes('@')) {
@@ -147,7 +159,7 @@ const ShopDashboard: React.FC = () => {
       const res = await fetch(`/api/shop-management/${shopId}/template/test-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: testEmailTo })
+        body: JSON.stringify({ to: testEmailTo, mailType: testEmailType })
       });
       const data = await res.json();
       if (data.success) {
@@ -179,6 +191,7 @@ const ShopDashboard: React.FC = () => {
           setTemplateEnabled(!!d.data.enabled);
           setTemplateHtml(d.data.html || '');
           setEmailHtml(d.data.emailHtml || '');
+          setEmailPartials(d.data.emailPartials || {});
           setInvoiceDesign(d.data.invoiceDesign || '');
         }
       })
@@ -229,6 +242,7 @@ const ShopDashboard: React.FC = () => {
           .then(d => {
             if (d.success) {
               setEmailHtml(d.data.emailHtml || '');
+              setEmailPartials(d.data.emailPartials || {});
               setInvoiceDesign(d.data.invoiceDesign || '');
             }
           })
@@ -236,6 +250,8 @@ const ShopDashboard: React.FC = () => {
         const skipped = data.data.skipped?.length || 0;
         const extras: string[] = [];
         if (data.data.hasEmailTemplate) extras.push('E-Mail-Vorlage');
+        const partialKeys: string[] = data.data.emailPartialKeys || [];
+        if (partialKeys.length) extras.push(`${partialKeys.length} Mail-Baustein(e)`);
         if (data.data.hasInvoiceDesign) extras.push('Rechnungs-Design');
         const warnings: string[] = data.data.warnings || [];
         setTemplateMsg(
@@ -262,6 +278,7 @@ const ShopDashboard: React.FC = () => {
       if (data.success) {
         setTemplateFiles([]);
         setEmailHtml('');
+        setEmailPartials({});
         setInvoiceDesign('');
         setTemplateMsg('Paket gelöscht ✓');
       } else {
@@ -2210,14 +2227,25 @@ const ShopDashboard: React.FC = () => {
                                     Empfohlen: <span className="font-mono">index.html</span> + <span className="font-mono">assets/style.css</span> + Bilder/Fonts als ZIP.
                                     Optional dazu: <span className="font-mono">email.html</span> (Rahmen für alle Kunden-Mails) und
                                     <span className="font-mono"> invoice.json</span> (Design der Rechnung).
+                                    Ebenfalls optional über den eigenen Mail-Look gestaltbar:
+                                    <span className="font-mono"> email-message.html</span>,
+                                    <span className="font-mono"> email-progress.html</span>,
+                                    <span className="font-mono"> email-order-items.html</span> und
+                                    <span className="font-mono"> email-order-totals.html</span>
+                                    (fehlt eine Datei, gilt der Standard).
                                     Relative Pfade wie <span className="font-mono">assets/bild.png</span> werden automatisch aufgelöst.
                                     JavaScript wird nicht ausgeführt.
                                 </p>
-                                {(emailHtml.trim() || invoiceDesign.trim()) && (
+                                {(emailHtml.trim() || invoiceDesign.trim() || Object.keys(emailPartials).length > 0) && (
                                     <div className="flex flex-wrap gap-2 mb-3">
                                         {emailHtml.trim() && (
                                             <span className="inline-flex items-center text-[11px] font-bold bg-emerald-100 text-emerald-700 rounded-full px-2 py-1">
-                                                ✓ E-Mail-Vorlage aktiv
+                                                ✓ E-Mail-Rahmen aktiv
+                                            </span>
+                                        )}
+                                        {Object.keys(emailPartials).length > 0 && (
+                                            <span className="inline-flex items-center text-[11px] font-bold bg-emerald-100 text-emerald-700 rounded-full px-2 py-1">
+                                                ✓ {Object.keys(emailPartials).length} Mail-Baustein(e) aktiv
                                             </span>
                                         )}
                                         {invoiceDesign.trim() && (
@@ -2260,8 +2288,17 @@ const ShopDashboard: React.FC = () => {
                                 </div>
 
                                 <div className="mt-3 pt-3 border-t border-indigo-200">
-                                    <p className="text-xs font-bold text-slate-700 mb-2">Test-Mail (wie eine echte Bestellbestätigung)</p>
+                                    <p className="text-xs font-bold text-slate-700 mb-2">Test-Mail (nutzt die gespeicherten Custom-Vorlagen)</p>
                                     <div className="flex flex-wrap gap-2">
+                                        <select
+                                            value={testEmailType}
+                                            onChange={(e) => setTestEmailType(e.target.value)}
+                                            className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white"
+                                        >
+                                            {TEST_MAIL_TYPES.map(t => (
+                                                <option key={t.value} value={t.value}>{t.label}</option>
+                                            ))}
+                                        </select>
                                         <input
                                             type="email"
                                             value={testEmailTo}

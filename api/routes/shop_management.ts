@@ -11,7 +11,18 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DhlClient } from '../services/dhl.js';
 import { sendShipmentNotification, sendPickupReady, sendShopTestEmail } from '../services/email.js';
 import { generateInvoice } from '../services/invoice.js';
-import { STANDARD_TEMPLATE_ENTRY, STANDARD_TEMPLATE_CSS, STANDARD_TEMPLATE_README, STANDARD_EMAIL_TEMPLATE, STANDARD_INVOICE_DESIGN } from '../templates/standardTemplate.js';
+import {
+  STANDARD_TEMPLATE_ENTRY,
+  STANDARD_TEMPLATE_CSS,
+  STANDARD_TEMPLATE_README,
+  STANDARD_EMAIL_TEMPLATE,
+  STANDARD_EMAIL_MESSAGE,
+  STANDARD_EMAIL_PROGRESS,
+  STANDARD_EMAIL_ORDER_ITEMS,
+  STANDARD_EMAIL_ORDER_TOTALS,
+  STANDARD_INVOICE_DESIGN
+} from '../templates/standardTemplate.js';
+import { MAIL_PARTIAL_FILES, MAIL_PARTIAL_NAMES, MAIL_TYPES, type MailPartialName, type MailType } from '../services/emailTemplates.js';
 
 const router = Router();
 
@@ -96,14 +107,19 @@ function requireAdminForTemplate(req: any, res: any): boolean {
 router.get('/:shopId/template', (req, res) => {
   try {
     const { shopId } = req.params;
-    const row = db.prepare('SELECT custom_template_enabled, custom_template_html, custom_email_html, custom_invoice_design FROM shops WHERE id = ?').get(shopId) as any;
+    const row = db.prepare('SELECT custom_template_enabled, custom_template_html, custom_email_html, custom_email_partials, custom_invoice_design FROM shops WHERE id = ?').get(shopId) as any;
     if (!row) return res.status(404).json({ success: false, error: 'Shop nicht gefunden.' });
+    let emailPartials: Record<string, string> = {};
+    try {
+      emailPartials = row.custom_email_partials ? JSON.parse(row.custom_email_partials) : {};
+    } catch { emailPartials = {}; }
     res.json({
       success: true,
       data: {
         enabled: !!row.custom_template_enabled,
         html: row.custom_template_html || '',
         emailHtml: row.custom_email_html || '',
+        emailPartials,
         invoiceDesign: row.custom_invoice_design || ''
       }
     });
@@ -278,6 +294,19 @@ router.post('/:shopId/template/zip', (req, res, next) => {
       }
     }
 
+    // Optionale E-Mail-Teilvorlagen (Fortschritt, Artikel, Summen, Nachricht).
+    // Jede Datei gilt nur für diesen Shop; fehlt eine, greift der Standard.
+    const partials: Partial<Record<MailPartialName, string>> = {};
+    for (const name of MAIL_PARTIAL_NAMES) {
+      const fileName = MAIL_PARTIAL_FILES[name];
+      const found = findFile((n) => n.toLowerCase() === fileName);
+      if (!found) continue;
+      try {
+        partials[name] = fs.readFileSync(path.join(targetDir, found), 'utf8');
+      } catch { /* ignorieren */ }
+    }
+    const partialsJson = Object.keys(partials).length ? JSON.stringify(partials) : null;
+
     // Validierung: verweist invoice.json auf Dateien, die im Paket fehlen?
     const warnings: string[] = [];
     if (invoiceDesign) {
@@ -309,9 +338,10 @@ router.post('/:shopId/template/zip', (req, res, next) => {
       UPDATE shops
       SET custom_template_html = ?,
           custom_email_html = COALESCE(?, custom_email_html),
+          custom_email_partials = COALESCE(?, custom_email_partials),
           custom_invoice_design = COALESCE(?, custom_invoice_design)
       WHERE id = ?
-    `).run(html, emailHtml, invoiceDesign, shopId);
+    `).run(html, emailHtml, partialsJson, invoiceDesign, shopId);
 
     res.json({
       success: true,
@@ -319,8 +349,11 @@ router.post('/:shopId/template/zip', (req, res, next) => {
         entry: entryName,
         html,
         emailHtml: emailHtml || '',
+        emailPartials: partials,
+        emailPartialKeys: Object.keys(partials),
         invoiceDesign: invoiceDesign || '',
         hasEmailTemplate: !!emailHtml,
+        hasEmailPartials: Object.keys(partials).length > 0,
         hasInvoiceDesign: !!invoiceDesign,
         files: written,
         skipped,
@@ -338,8 +371,8 @@ router.delete('/:shopId/template/zip', (req, res) => {
     if (!requireAdminForTemplate(req, res)) return;
     const { shopId } = req.params;
     fs.removeSync(path.join(SHOP_TEMPLATES_DIR, shopId));
-    // E-Mail-Vorlage und Rechnungs-Design stammen aus dem Paket -> ebenfalls zurücksetzen
-    db.prepare('UPDATE shops SET custom_email_html = NULL, custom_invoice_design = NULL WHERE id = ?').run(shopId);
+    // E-Mail-Vorlagen (Rahmen + Teilvorlagen) und Rechnungs-Design stammen aus dem Paket -> ebenfalls zurücksetzen
+    db.prepare('UPDATE shops SET custom_email_html = NULL, custom_email_partials = NULL, custom_invoice_design = NULL WHERE id = ?').run(shopId);
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
@@ -361,6 +394,11 @@ router.get('/:shopId/template/standard.zip', (req, res) => {
       }
     }
     zip.addFile('email.html', Buffer.from(STANDARD_EMAIL_TEMPLATE, 'utf8'));
+    // Optionale E-Mail-Teilvorlagen als funktionierende Beispiele
+    zip.addFile(MAIL_PARTIAL_FILES.message, Buffer.from(STANDARD_EMAIL_MESSAGE, 'utf8'));
+    zip.addFile(MAIL_PARTIAL_FILES.progress, Buffer.from(STANDARD_EMAIL_PROGRESS, 'utf8'));
+    zip.addFile(MAIL_PARTIAL_FILES.order_items, Buffer.from(STANDARD_EMAIL_ORDER_ITEMS, 'utf8'));
+    zip.addFile(MAIL_PARTIAL_FILES.order_totals, Buffer.from(STANDARD_EMAIL_ORDER_TOTALS, 'utf8'));
     zip.addFile('invoice.json', Buffer.from(STANDARD_INVOICE_DESIGN, 'utf8'));
     zip.addFile('README.txt', Buffer.from(STANDARD_TEMPLATE_README, 'utf8'));
     const buffer = zip.toBuffer();
@@ -428,8 +466,10 @@ router.post('/:shopId/template/test-email', async (req, res) => {
   if (!to || !to.includes('@')) {
     return res.status(400).json({ success: false, error: 'Bitte eine gültige Empfänger-Adresse angeben.' });
   }
+  const requestedType = String(req.body?.mailType || '').trim();
+  const mailType: MailType = (MAIL_TYPES.some(t => t.key === requestedType) ? requestedType : 'order_confirmation') as MailType;
   try {
-    const result = await sendShopTestEmail(shopId, to);
+    const result = await sendShopTestEmail(shopId, to, mailType);
     if (!result.success) {
       return res.status(500).json({ success: false, error: result.error || 'Versand fehlgeschlagen.' });
     }

@@ -389,6 +389,92 @@ export const STANDARD_EMAIL_TEMPLATE = `<!DOCTYPE html>
 `;
 
 // ============================================================
+// Optionale E-Mail-Teilvorlagen (Dateien im Design-ZIP)
+// ============================================================
+// Jede Datei ist OPTIONAL und gilt nur für den jeweiligen Shop. Fehlt sie,
+// wird für genau diesen Bereich der neutrale Standard verwendet. Die
+// Teilvorlagen werden mit den echten Bestelldaten gerendert (Variablen siehe
+// README.txt). Alle Angaben sind Beispiele und dürfen frei ersetzt werden.
+//
+//   email-progress.html     -> Fortschrittsanzeige        ({{order_progress_html}})
+//   email-order-items.html  -> Artikelübersicht           ({{order_items_html}})
+//   email-order-totals.html -> Summenübersicht            ({{order_totals_html}})
+//   email-message.html      -> Nachrichteninhalt          ({{content}})
+export const STANDARD_EMAIL_PROGRESS = `<!-- Fortschrittsanzeige (email-progress.html)
+     Schleife ueber {{#steps}} mit {{label}}, {{state_label}}, {{icon}},
+     {{number}}, {{done}}, {{current}}, {{pending}}.
+     Zahlung getrennt ueber {{#is_paid}} / {{payment_status_label}}. -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin:16px 0; border:1px solid #e2e8f0; border-radius:10px;">
+  <tr>
+    {{#steps}}
+    <td width="33%" align="center" valign="top" style="padding:16px 6px;">
+      <div style="width:30px; height:30px; line-height:30px; margin:0 auto; border-radius:15px; font-weight:800; font-size:13px; color:#ffffff; background:{{#done}}#16a34a{{/done}}{{#current}}#0f172a{{/current}}{{#pending}}#cbd5e1{{/pending}};">{{icon}}</div>
+      <div style="font-size:12px; font-weight:700; margin-top:8px; color:#0f172a;">{{label}}</div>
+      <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.06em; margin-top:2px; color:#64748b;">{{state_label}}</div>
+    </td>
+    {{/steps}}
+  </tr>
+</table>
+<div style="font-size:13px; color:#475569; margin-top:-6px;">
+  Zahlung: <strong>{{payment_status_label}}</strong>
+</div>
+`;
+
+export const STANDARD_EMAIL_ORDER_ITEMS = `<!-- Artikeluebersicht (email-order-items.html)
+     Schleife ueber {{#items}} mit {{name}}, {{variant}}, {{quantity}},
+     {{price_formatted}}, {{line_total_formatted}}, {{#has_image}}{{image}}{{/has_image}}. -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; font-size:14px;">
+  <tr style="background:#f1f5f9; color:#334155;">
+    <th align="left" style="padding:8px;">Artikel</th>
+    <th align="right" style="padding:8px; white-space:nowrap; width:56px;">Menge</th>
+    <th align="right" style="padding:8px; white-space:nowrap; width:88px;">Einzelpreis</th>
+    <th align="right" style="padding:8px; white-space:nowrap; width:88px;">Summe</th>
+  </tr>
+  {{#items}}
+  <tr>
+    <td style="padding:8px; border-bottom:1px solid #eee;">
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+        <td valign="top" style="padding-right:10px;">
+          {{#has_image}}<img src="{{image}}" width="48" height="48" alt="{{name}}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; border:1px solid #e2e8f0; display:block;">{{/has_image}}
+        </td>
+        <td valign="top">
+          <div style="font-weight:700;">{{name}}</div>
+          {{#has_variant}}<div style="font-size:12px; color:#64748b; margin-top:2px;">{{variant}}</div>{{/has_variant}}
+        </td>
+      </tr></table>
+    </td>
+    <td align="right" style="padding:8px; border-bottom:1px solid #eee; white-space:nowrap;">{{quantity}}</td>
+    <td align="right" style="padding:8px; border-bottom:1px solid #eee; white-space:nowrap;">{{price_formatted}}</td>
+    <td align="right" style="padding:8px; border-bottom:1px solid #eee; white-space:nowrap;">{{line_total_formatted}}</td>
+  </tr>
+  {{/items}}
+</table>
+`;
+
+export const STANDARD_EMAIL_ORDER_TOTALS = `<!-- Summenuebersicht (email-order-totals.html)
+     Werte: {{items_subtotal_formatted}}, {{shipping_costs_formatted}},
+     {{#has_discount}}{{discount_amount_formatted}}{{/has_discount}},
+     {{total_amount_formatted}}. -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; font-size:14px; margin-top:12px;">
+  <tr><td style="padding:4px 8px 4px 0; color:#64748b;">Warenwert</td><td align="right" style="padding:4px 0;">{{items_subtotal_formatted}}</td></tr>
+  <tr><td style="padding:4px 8px 4px 0; color:#64748b;">Versandkosten</td><td align="right" style="padding:4px 0;">{{shipping_costs_formatted}}</td></tr>
+  {{#has_discount}}<tr><td style="padding:4px 8px 4px 0; color:#64748b;">Rabatt{{#voucher_code}} ({{voucher_code}}){{/voucher_code}}</td><td align="right" style="padding:4px 0;">-{{discount_amount_formatted}}</td></tr>{{/has_discount}}
+  <tr><td style="padding:8px 8px 8px 0; border-top:2px solid #0f172a; font-weight:800; font-size:16px;">Gesamtbetrag</td><td align="right" style="padding:8px 0; border-top:2px solid #0f172a; font-weight:800; font-size:16px;">{{total_amount_formatted}}</td></tr>
+</table>
+`;
+
+export const STANDARD_EMAIL_MESSAGE = `<!-- Nachrichtenbereich (email-message.html)
+     Gestaltet den Inhalt von {{content}} je Mailart.
+     Werte: {{message.title}}, {{message.intro}}, {{message.note}},
+     {{message.greeting}}, {{mail_label}}, {{order_number}}. -->
+<h2 style="margin:0 0 12px; font-size:20px; color:#0f172a;">{{message.title}}</h2>
+{{#message.greeting}}<p style="margin:0 0 10px;">Guten Tag {{message.greeting}},</p>{{/message.greeting}}
+<p style="margin:0 0 10px;">{{message.intro}}</p>
+{{#message.note}}<p style="margin:0 0 10px; color:#475569;">{{message.note}}</p>{{/message.note}}
+<p style="margin:0;">Mit freundlichen Gruessen<br>{{shop_name}}</p>
+`;
+
+// ============================================================
 // Beispiel: Rechnungs-Design für einen Shop
 // ============================================================
 // Wird als "invoice.json" ins ZIP gelegt. Alle Felder sind OPTIONAL –
@@ -446,6 +532,10 @@ Inhalt:
   assets/fonts/Anton-Regular.ttf -> Display-Schrift für den Rechnungstitel
   assets/fonts/OFL.txt           -> Lizenz der mitgelieferten Schrift (SIL Open Font License 1.1)
   email.html          -> Vorlage für alle Kunden-Mails (Rahmen um {{content}})
+  email-message.html  -> OPTIONAL: Nachrichtenbereich (gestaltet {{content}} je Mailart)
+  email-progress.html -> OPTIONAL: Fortschrittsanzeige ({{order_progress_html}})
+  email-order-items.html  -> OPTIONAL: Artikelübersicht ({{order_items_html}})
+  email-order-totals.html -> OPTIONAL: Summenübersicht ({{order_totals_html}})
   invoice.json        -> Design-Daten für die Rechnung (Logo, Farben, Schriften, Texte)
   README.txt          -> diese Datei
 
@@ -487,24 +577,74 @@ Inhaltsseiten:
   {{content_title}}  Titel der Seite (z.B. "Impressum")
   {{{content_body}}}  Inhalt als HTML
 
-Kunden-Mails (email.html):
-  Legt man eine "email.html" ins ZIP, wird sie als Rahmen um ALLE Kunden-Mails
-  gelegt (Bestellbestätigung, Versandbestätigung, Abholbereit, Zahlungserinnerung).
-  Platzhalter (einfache {{name}}-Ersetzung, KEINE Schleifen):
-    {{content}}         Inhalt der jeweiligen Mail – muss erhalten bleiben!
+Kunden-Mails (email.html + optionale Teilvorlagen):
+  Alle Mails eines Shops werden aus bis zu drei Ebenen zusammengesetzt:
+   1. email.html          - der äußere Mailrahmen (Kopf, Logo, Footer).
+                            Ohne diese Datei wird der komplette Standardrahmen genutzt.
+                            Ist sie vorhanden, wird AUSSCHLIESSLICH {{content}} ersetzt
+                            (kein zweites Logo, kein zweiter Footer, keine Dopplung).
+   2. Teilvorlagen        - optionale Bausteine für einzelne Bereiche:
+                            email-message.html      -> Nachrichtenbereich ({{content}})
+                            email-progress.html     -> Fortschritt ({{order_progress_html}})
+                            email-order-items.html  -> Artikel    ({{order_items_html}})
+                            email-order-totals.html -> Summen     ({{order_totals_html}})
+   3. Standard            - fehlt eine Datei, wird der neutrale Standard genutzt.
+
+  Platzhalter der Rahmenvorlage email.html:
+    {{content}}         Nachrichteninhalt inkl. der Bereiche, die NICHT über eigene
+                        Teilvorlagen oder eigene Platzhalter abgedeckt sind
+                        – muss erhalten bleiben!
     {{logo_html}}       fertiges Logo (Bild oder Shopname, weiß für den Header)
     {{shop_name}} {{customer_name}} {{order_number}} {{subject}} {{year}}
     {{primary_color}} {{secondary_color}} {{logo_url}} {{email_logo_url}} {{footer_text}}
-    {{order_items_html}}  fertige Artikeltabelle (Variantenbild, Artikelname,
-                          Größe/Farbe, Menge und Preise) – nur in Bestell-Mails gefüllt
-    {{order_totals_html}} fertige Summenübersicht (Warenwert, Versand, Rabatt,
-                          Gesamtbetrag) – nur in Bestell-Mails gefüllt
+    {{order_items_html}}  fertige Artikeltabelle (nur in Bestell-Mails gefüllt)
+    {{order_totals_html}} fertige Summenübersicht (nur in Bestell-Mails gefüllt)
     {{order_progress_html}} Fortschrittsanzeige aus dem tatsächlichen Bestellstatus
                           (Versand/Abholung getrennt, Zahlung separat) – nur in
                           Bestell-Mails gefüllt, in Kontakt-Mails leer
-  Verwendet die Vorlage {{order_items_html}} bzw. {{order_totals_html}}, werden
-  dieselben Angaben im Standard-Inhalt automatisch weggelassen (keine Dopplung).
-  Fehlt die Datei, werden die Mails wie bisher im Standard-Design versendet.
+  Verwendet die Vorlage einen dieser Platzhalter, wird der gleiche Bereich im
+  Standard-Inhalt automatisch weggelassen (keine Dopplung). Fehlt eine Vorlage,
+  werden die Mails wie bisher im Standard-Design versendet.
+
+  Vorlagensyntax (gilt in ALLEN Vorlagen):
+    Einfacher Wert (HTML-sicher):  {{name}}
+    Roh-Wert (HTML erlaubt):       {{{block_html}}}
+    Schleife / Bedingung:          {{#items}} ... {{/items}}
+    Invertierte Bedingung:         {{^has_image}} ... {{/has_image}}
+    Punkt-Notation ist erlaubt:    {{message.title}}
+  Nutzereingaben werden automatisch HTML-escaped; <script> wird entfernt.
+  Bitte nur E-Mail-kompatibles HTML mit Inline-CSS verwenden.
+
+  Mailtypen (Feld {{mail_type}}, Label {{mail_label}}):
+    order_confirmation   Bestellbestätigung
+    production_started   Produktionsstart
+    shipment             Versand
+    pickup_confirmation  Abholung (Bestellung eingegangen)
+    pickup_ready         Abholbereit
+    payment_reminder     Zahlungserinnerung
+    shop_notification    Betreiber-Benachrichtigung
+    contact              Kontaktanfrage
+  Über email-message.html lassen sich diese Typen unterschiedlich gestalten; der
+  Inhalt steckt in {{message.title}}, {{message.intro}}, {{message.note}},
+  {{message.greeting}}. In Kontakt-/Betreiber-Mails sind Fortschritt und Artikel leer.
+
+  Verfügbare Daten (Auswahl):
+    Bestellung:  {{order_number}} {{order_date}} {{order_datetime}} {{status}}
+                 {{status_label}} {{payment_method}} {{payment_status}}
+                 {{payment_status_label}} {{is_paid}} {{is_payment_pending}}
+    Versand:     {{shipping_method}} {{is_pickup}} {{is_shipping}}
+                 {{#has_tracking}}{{tracking_number}} {{tracking_url}}{{/has_tracking}}
+    Abholung:    {{pickup_code}} {{pickup_compartment}} {{is_pickup_ready}}
+    Kunde:       {{customer_name}} {{customer_email}} {{customer_address}}
+    Artikel ({{#items}}): {{name}} {{item_number}} {{variant}} {{size}} {{color}}
+                 {{quantity}} {{price_formatted}} {{line_total_formatted}}
+                 {{#has_image}}{{image}}{{/has_image}}  (image = absolute HTTPS-URL)
+    Summen:      {{items_subtotal_formatted}} {{shipping_costs_formatted}}
+                 {{#has_discount}}{{discount_amount_formatted}}{{/has_discount}}
+                 {{total_amount_formatted}} {{voucher_code}}
+    Fortschritt ({{#steps}}): {{label}} {{state_label}} {{icon}} {{number}}
+                 {{done}} {{current}} {{pending}}   (je Schritt genau ein Zustand)
+                 Zahlung separat: {{payment_status_label}} {{#is_paid}}...{{/is_paid}}
 
 Rechnung (invoice.json):
   Legt man eine "invoice.json" ins ZIP, wird das Rechnungs-Layout daran angepasst.
