@@ -349,6 +349,9 @@ img { max-width: 100%; display: block; }
 //                           Größe/Farbe, Menge, Preise) – nur in Bestell-Mails gefüllt
 //   {{order_totals_html}}-> fertige Summenübersicht (Warenwert, Versand, Rabatt, Gesamt)
 //                           – nur in Bestell-Mails gefüllt
+//   {{order_progress_html}} -> Fortschrittsanzeige aus dem tatsächlichen Bestellstatus
+//                           (Versand/Abholung getrennt, Zahlung separat) – nur in
+//                           Bestell-Mails gefüllt, in Kontakt-Mails leer
 export const STANDARD_EMAIL_TEMPLATE = `<!DOCTYPE html>
 <html lang="de">
 <head>
@@ -496,6 +499,9 @@ Kunden-Mails (email.html):
                           Größe/Farbe, Menge und Preise) – nur in Bestell-Mails gefüllt
     {{order_totals_html}} fertige Summenübersicht (Warenwert, Versand, Rabatt,
                           Gesamtbetrag) – nur in Bestell-Mails gefüllt
+    {{order_progress_html}} Fortschrittsanzeige aus dem tatsächlichen Bestellstatus
+                          (Versand/Abholung getrennt, Zahlung separat) – nur in
+                          Bestell-Mails gefüllt, in Kontakt-Mails leer
   Verwendet die Vorlage {{order_items_html}} bzw. {{order_totals_html}}, werden
   dieselben Angaben im Standard-Inhalt automatisch weggelassen (keine Dopplung).
   Fehlt die Datei, werden die Mails wie bisher im Standard-Design versendet.

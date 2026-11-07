@@ -2403,6 +2403,7 @@ const ShopDashboard: React.FC = () => {
                                         <p className="font-mono">{`{{primary_color}} {{secondary_color}} {{logo_url}} {{email_logo_url}} {{footer_text}}`}</p>
                                         <p className="font-mono">{`{{order_items_html}}`} – Artikeltabelle mit Bild, Variante, Menge, Preisen (nur Bestell-Mails)</p>
                                         <p className="font-mono">{`{{order_totals_html}}`} – Summenübersicht (nur Bestell-Mails)</p>
+                                        <p className="font-mono">{`{{order_progress_html}}`} – Fortschrittsanzeige aus dem Bestellstatus: Versand/Abholung getrennt, Zahlung separat (nur Bestell-Mails; in Kontakt-Mails leer)</p>
                                         <p className="italic text-slate-500 mt-1">Nutzt die Vorlage diese Platzhalter, entfallen die Angaben im Standard-Inhalt (keine Dopplung).</p>
                                     </div>
                                     <div>

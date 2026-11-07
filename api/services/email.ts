@@ -54,8 +54,10 @@ const normalizeRecipientList = (value: string | string[]) => {
 // Platzhalter: {{content}}, {{shop_name}}, {{customer_name}}, {{order_number}},
 // {{subject}}, {{year}}, {{logo_url}}, {{email_logo_url}}, {{primary_color}},
 // {{secondary_color}}, {{footer_text}}. In Bestell-Mails zusätzlich
-// {{order_items_html}} (Positionen inkl. Variantenbild) und {{order_totals_html}}
-// (Summenübersicht). Ohne eigene Vorlage bleibt alles unverändert.
+// {{order_items_html}} (Positionen inkl. Variantenbild), {{order_totals_html}}
+// (Summenübersicht) und {{order_progress_html}} (Fortschrittsanzeige aus dem
+// tatsächlichen Bestellstatus). Ohne eigene Vorlage bleibt alles unverändert.
+// In Kontakt-Mails (ohne Bestellbezug) bleibt {{order_progress_html}} leer.
 const extractBodyInner = (html: string): string => {
     const m = String(html || '').match(/<body[^>]*>([\s\S]*)<\/body>/i);
     return m ? m[1] : String(html || '');
@@ -138,6 +140,91 @@ const buildOrderTotalsHtml = (order: any, items: any[]): string => {
       </table>`;
 };
 
+// Fortschrittsanzeige für Bestell-Mails (E-Mail-kompatibel: Tabellenlayout + Inline-CSS).
+// Basiert ausschließlich auf dem tatsächlichen Bestell-/Produktionsstatus:
+//  - Versand und Abholung werden getrennt berücksichtigt (unterschiedliche Schritte).
+//  - Der Zahlungsstatus wird separat ausgewiesen und NICHT mit dem Produktionsstatus gleichgesetzt.
+//  - Es wird keine Zustellung/Abholung behauptet, solange keine bestätigten Daten vorliegen
+//    (Endschritt ist "Versendet" bzw. "Abholbereit", nicht "Zugestellt"/"Abgeholt").
+const buildOrderProgressHtml = (order: any): string => {
+    if (!order) return '';
+
+    const status = String(order.status || '').toLowerCase().trim();
+    const isCancelled = status === 'cancelled' || status === 'storniert';
+    const paymentStatus = String(order.payment_status || '').toLowerCase().trim();
+    const isPaid = paymentStatus === 'paid' || paymentStatus === 'completed' || paymentStatus === 'bezahlt';
+    const isPickup = String(order.shipping_method || 'dhl').toLowerCase().trim() === 'pickup';
+    const paymentPending = status === 'pending_payment';
+    const inProgress = !isCancelled && !paymentPending; // Bestellung angenommen und in Bearbeitung
+    const shipped = status === 'shipped' || !!order.shipped_at;
+    const pickupReady = String(order.pickup_status || '').toLowerCase().trim() === 'ready';
+
+    const DONE = '#16a34a';
+    const LINE_TODO = '#e2e8f0';
+    const CIRCLE_TODO_BG = '#e2e8f0';
+    const CIRCLE_TODO_FG = '#94a3b8';
+
+    if (isCancelled) {
+        return `<div style="border:1px solid #fecaca; border-radius:10px; padding:16px; margin:16px 0; background:#fef2f2;">
+            <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#b91c1c; margin-bottom:6px;">Bestellstatus</div>
+            <div style="font-size:14px; font-weight:700; color:#b91c1c;">Diese Bestellung wurde storniert.</div>
+        </div>`;
+    }
+
+    const steps: { label: string; done: boolean }[] = isPickup
+        ? [
+            { label: 'Bestellung eingegangen', done: true },
+            { label: 'In Bearbeitung', done: inProgress },
+            { label: 'Abholbereit', done: pickupReady }
+        ]
+        : [
+            { label: 'Bestellung eingegangen', done: true },
+            { label: 'In Bearbeitung', done: inProgress },
+            { label: 'Versendet', done: shipped }
+        ];
+
+    const firstOpen = steps.findIndex((s) => !s.done);
+    const last = steps.length - 1;
+
+    const lineDiv = (color: string) =>
+        color ? `<div style="height:2px; line-height:2px; font-size:0; background:${color};">&nbsp;</div>` : '';
+
+    const cells = steps.map((step, i) => {
+        const state = step.done ? 'done' : (i === firstOpen ? 'current' : 'pending');
+        const bg = state === 'pending' ? CIRCLE_TODO_BG : DONE;
+        const fg = state === 'pending' ? CIRCLE_TODO_FG : '#ffffff';
+        const content = state === 'done' ? '&#10003;' : (i + 1);
+        const circle = `<div style="width:28px; height:28px; border-radius:14px; background:${bg}; color:${fg}; font-size:13px; font-weight:700; line-height:28px; text-align:center; margin:0 auto;">${content}</div>`;
+        const leftLine = i === 0 ? '' : lineDiv(step.done ? DONE : LINE_TODO);
+        const rightLine = i === last ? '' : lineDiv(steps[i + 1].done ? DONE : LINE_TODO);
+        const labelColor = state === 'pending' ? '#94a3b8' : '#0f172a';
+        const labelWeight = state === 'pending' ? 500 : 700;
+        const width = i === last ? '34%' : '33%';
+        return `<td width="${width}" valign="top" align="center" style="padding:0 2px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+              <tr>
+                <td width="50%" height="28" valign="middle" style="height:28px; vertical-align:middle; font-size:0; line-height:0;">${leftLine}</td>
+                <td width="28" valign="middle" align="center" style="width:28px; vertical-align:middle; font-size:0;">${circle}</td>
+                <td width="50%" height="28" valign="middle" style="height:28px; vertical-align:middle; font-size:0; line-height:0;">${rightLine}</td>
+              </tr>
+            </table>
+            <div style="font-size:12px; line-height:1.35; margin-top:8px; font-weight:${labelWeight}; color:${labelColor};">${step.label}</div>
+        </td>`;
+    }).join('');
+
+    const paymentLine = `<div style="margin-top:14px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:13px; color:#475569;">
+        Zahlung: <span style="font-weight:700; color:${isPaid ? '#16a34a' : '#d97706'};">${isPaid ? 'Bezahlt' : 'Offen'}</span>
+      </div>`;
+
+    return `<div style="border:1px solid #e2e8f0; border-radius:10px; padding:16px; margin:16px 0; background:#ffffff;">
+        <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#94a3b8; margin-bottom:14px;">Bestellstatus</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+          <tr>${cells}</tr>
+        </table>
+        ${paymentLine}
+      </div>`;
+};
+
 // Prüft, ob die eigene email.html-Vorlage eines Shops einen Platzhalter verwendet.
 // Damit werden die gleichen Angaben im Standard-Inhalt nicht doppelt ausgegeben.
 const shopEmailFrameUsesPlaceholder = (shopId: string | null | undefined, key: string): boolean => {
@@ -146,14 +233,16 @@ const shopEmailFrameUsesPlaceholder = (shopId: string | null | undefined, key: s
     return new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`).test(frame);
 };
 
-// Liefert Bestellpositionen und Summenübersicht als email.html-Platzhalter.
-// Die Bilder werden auf absolute, öffentlich erreichbare URLs aufgelöst
-// (inkl. Fallback über Produkt + Variante bei älteren Positionen ohne Bild).
+// Liefert Bestellpositionen, Summenübersicht und Fortschrittsanzeige als
+// email.html-Platzhalter. Die Bilder werden auf absolute, öffentlich erreichbare
+// URLs aufgelöst (inkl. Fallback über Produkt + Variante bei älteren Positionen
+// ohne Bild). Der Fortschritt wird aus dem tatsächlichen Bestellstatus erzeugt.
 const buildOrderEmailPlaceholders = (order: any, items: any[]): Record<string, string> => {
     const resolvedItems = withResolvedItemImages(items, order?.shop_id);
     return {
         order_items_html: buildOrderItemsHtml(resolvedItems),
-        order_totals_html: buildOrderTotalsHtml(order, resolvedItems)
+        order_totals_html: buildOrderTotalsHtml(order, resolvedItems),
+        order_progress_html: buildOrderProgressHtml(order)
     };
 };
 
