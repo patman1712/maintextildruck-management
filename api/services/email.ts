@@ -853,6 +853,155 @@ export const sendShipmentNotification = async (orderId: string, trackingNumber?:
     }
 };
 
+/**
+ * Einmalige Kundenmail beim tatsächlichen Produktionsstart ("Ab in die Kabine").
+ * Wird ausgelöst, sobald der Bearbeitungsstatus explizit auf "In Bearbeitung"
+ * ('active') gesetzt wird. Der Zahlstatus allein gilt NICHT als Produktionsstart.
+ * Der Versand wird über orders.production_start_email_sent_at abgesichert, damit
+ * wiederholtes Speichern keine zweite Mail auslöst.
+ *
+ * Rückgabe: true bei erfolgreichem Versand, sonst false (inkl. Logging).
+ */
+export const sendOrderProductionStarted = async (orderId: string): Promise<boolean> => {
+    const config = getEmailConfig();
+    if (!config) {
+        console.warn('[Production Started] E-Mail-Konfiguration fehlt. Versand übersprungen.');
+        return false;
+    }
+
+    try {
+        const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId) as any;
+        if (!order) {
+            console.warn(`[Production Started] Bestellung ${orderId} nicht gefunden.`);
+            return false;
+        }
+        if (!order.customer_email) {
+            console.warn(`[Production Started] Bestellung ${orderId} hat keine Kunden-E-Mail. Versand übersprungen.`);
+            return false;
+        }
+
+        const branding = {
+            logo_url: '',
+            email_logo_url: '',
+            primary_color: '#3b82f6',
+            secondary_color: '#1e40af',
+            company_name: config.sender_name,
+            footer_text: ''
+        };
+
+        if (order.shop_id) {
+            const shop = db.prepare('SELECT logo_url, email_logo_url, primary_color, secondary_color, name FROM shops WHERE id = ?').get(order.shop_id) as any;
+            if (shop) {
+                if (shop.logo_url && shop.logo_url.startsWith('http')) branding.logo_url = shop.logo_url;
+                if (shop.email_logo_url && shop.email_logo_url.startsWith('http')) branding.email_logo_url = shop.email_logo_url;
+                if (shop.primary_color) branding.primary_color = shop.primary_color;
+                if (shop.secondary_color) branding.secondary_color = shop.secondary_color;
+                if (shop.name) branding.company_name = shop.name;
+            }
+        }
+
+        const globalContent = db.prepare("SELECT * FROM global_shop_content WHERE id = 'main'").get() as any;
+        if (globalContent) {
+            const parts: string[] = [];
+            if (globalContent.company_name) parts.push(globalContent.company_name);
+            if (globalContent.company_address) parts.push(globalContent.company_address);
+            if (globalContent.contact_email) parts.push(globalContent.contact_email);
+            branding.footer_text = parts.join(' | ');
+        }
+
+        const orderNumber = String(order.order_number || order.id);
+        const subject = 'Ab in die Kabine – dein Equipment entsteht!';
+
+        const isPaid = ['paid', 'completed'].includes(String(order.payment_status || '').toLowerCase());
+        const paymentLine = isPaid
+            ? 'Deine Zahlung ist bei uns eingegangen – vielen Dank!'
+            : 'Deine Zahlung ist bei uns noch offen. Wir starten dennoch mit der Produktion.';
+
+        const logosHtml =
+            branding.logo_url
+                ? `<img src="${branding.logo_url}" alt="${branding.company_name}" style="max-height:70px; max-width:250px;">`
+                : `<h1 style="margin:0; color:white;">${branding.company_name}</h1>`;
+
+        const items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId) as any[];
+        const orderPlaceholders = buildOrderEmailPlaceholders(order, items);
+        // Nutzt die shopspezifische email.html diese Platzhalter, werden die Angaben im
+        // Standard-Inhalt weggelassen, damit sie nicht doppelt erscheinen.
+        const frameUsesItems = shopEmailFrameUsesPlaceholder(order.shop_id, 'order_items_html');
+        const frameUsesTotals = shopEmailFrameUsesPlaceholder(order.shop_id, 'order_totals_html');
+        const frameUsesProgress = shopEmailFrameUsesPlaceholder(order.shop_id, 'order_progress_html');
+
+        const contentHtml = `
+        <div style="font-family: Arial, Helvetica, sans-serif; background-color: #f8fafc; padding: 24px;">
+          <div style="max-width: 720px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0;">
+            <div style="padding: 24px; background: linear-gradient(90deg, ${branding.primary_color}, ${branding.secondary_color}); color: #ffffff;">
+              <div style="font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing:.08em; opacity:.95;">Produktionsstart</div>
+              <div style="font-size: 22px; font-weight: 800; margin-top: 4px;">Ab in die Kabine – dein Equipment entsteht!</div>
+              <div style="font-size: 13px; opacity: 0.95; margin-top: 6px;">Bestellung #${escapeHtml(orderNumber)}</div>
+            </div>
+            <div style="padding: 22px;">
+              <div style="margin-bottom: 16px; text-align:center;">${logosHtml}</div>
+
+              <div style="margin-bottom: 16px; padding: 14px 16px; border-radius: 12px; border: 1px solid ${isPaid ? '#bbf7d0' : '#fde68a'}; background: ${isPaid ? '#f0fdf4' : '#fffbeb'}; font-size: 14px; color: #0f172a;">
+                <div style="font-weight: 800; margin-bottom: 4px;">${isPaid ? 'Zahlung bestätigt' : 'Zahlung offen'}</div>
+                <div>${paymentLine}</div>
+              </div>
+
+              <p style="font-size: 14px; color: #0f172a; line-height: 1.6;">
+                Dein Auftrag ist jetzt in der Produktion. Wir bereiten dein Equipment vor und melden uns,
+                sobald es weitergeht.
+              </p>
+
+              ${frameUsesItems ? '' : `<div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; margin:16px 0 10px;">Deine Artikel</div>
+              ${orderPlaceholders.order_items_html}`}
+
+              ${frameUsesTotals ? '' : orderPlaceholders.order_totals_html}
+
+              ${frameUsesProgress ? '' : `<div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#64748b; margin:20px 0 10px;">Fortschritt</div>
+              ${orderPlaceholders.order_progress_html}`}
+            </div>
+            ${branding.footer_text ? `<div style="padding: 16px 22px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px;">${branding.footer_text}</div>` : ''}
+          </div>
+        </div>`;
+
+        const html = applyShopEmailFrame(order.shop_id, {
+            shop_name: branding.company_name,
+            customer_name: order.customer_name || '',
+            order_number: orderNumber,
+            subject,
+            year: String(new Date().getFullYear()),
+            logo_url: branding.logo_url,
+            email_logo_url: branding.email_logo_url,
+            primary_color: branding.primary_color,
+            secondary_color: branding.secondary_color,
+            footer_text: branding.footer_text,
+            ...orderPlaceholders
+        }, contentHtml);
+
+        const text = [
+            'Ab in die Kabine – dein Equipment entsteht!',
+            `Bestellung #${orderNumber}`,
+            '',
+            isPaid ? 'Deine Zahlung ist bei uns eingegangen – vielen Dank!' : 'Deine Zahlung ist bei uns noch offen.',
+            '',
+            'Deine Artikel:',
+            ...items.map((it: any, idx: number) => `${idx + 1}. ${it.item_name || ''} | ${Number(it.quantity) || 0}x | ${(Number(it.price) || 0).toFixed(2).replace('.', ',')} €`),
+            '',
+            'Dein Auftrag ist jetzt in der Produktion.'
+        ].join('\n');
+
+        const sent = await sendEmailWithInvoice({ to: [order.customer_email], subject, text, html });
+        if (sent) {
+            console.log(`[Production Started] Produktionsstart-Mail an ${order.customer_email} für Bestellung ${orderNumber} versendet.`);
+        } else {
+            console.error(`[Production Started] Versand der Produktionsstart-Mail für Bestellung ${orderNumber} fehlgeschlagen.`);
+        }
+        return sent;
+    } catch (e) {
+        console.error('[Production Started] Fehler beim Erstellen/Versand der Produktionsstart-Mail:', e);
+        return false;
+    }
+};
+
 export const sendShopOrderNotification = async (orderId: string, invoicePath: string, recipients: string | string[]) => {
     try {
         const to = normalizeRecipientList(recipients);

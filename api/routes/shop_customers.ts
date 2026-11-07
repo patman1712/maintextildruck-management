@@ -7,7 +7,7 @@ import path from 'path';
 import fs from 'fs-extra';
 import { generateInvoice } from '../services/invoice.js';
 import { generateCancellationInvoice } from '../services/cancellation_invoice.js';
-import { sendOrderConfirmation, sendShopOrderNotification, sendPickupConfirmation, sendVorkassePaymentReminder } from '../services/email.js';
+import { sendOrderConfirmation, sendShopOrderNotification, sendPickupConfirmation, sendVorkassePaymentReminder, sendOrderProductionStarted } from '../services/email.js';
 import { validateVoucherForShop } from '../services/vouchers.js';
 import { withResolvedItemImages } from '../services/orderImages.js';
 
@@ -1674,13 +1674,18 @@ router.post('/:shopId/admin/orders/:orderId/set-order-number', async (req, res) 
 });
 
 // Admin: Update order status
-router.put('/:shopId/admin/orders/:orderId/status', (req, res) => {
+router.put('/:shopId/admin/orders/:orderId/status', async (req, res) => {
   try {
     const { orderId } = req.params;
     const { status, payment_status } = req.body;
 
     if (!status && !payment_status) {
         return res.status(400).json({ success: false, error: 'Status oder Zahlstatus ist erforderlich.' });
+    }
+
+    const before = db.prepare('SELECT status, payment_status FROM orders WHERE id = ?').get(orderId) as { status: string; payment_status: string } | undefined;
+    if (!before) {
+        return res.status(404).json({ success: false, error: 'Bestellung nicht gefunden.' });
     }
 
     if (status) {
@@ -1699,8 +1704,37 @@ router.put('/:shopId/admin/orders/:orderId/status', (req, res) => {
         }
     }
 
-    res.json({ success: true });
+    // Produktionsstart-Mail: NUR wenn der Bearbeitungsstatus explizit auf
+    // 'active' ("In Bearbeitung") gesetzt wird. Der Zahlstatus allein – auch wenn er
+    // die Bestellung automatisch aktiviert – gilt NICHT als Produktionsstart.
+    // Über orders.production_start_email_sent_at wird sichergestellt, dass genau
+    // einmal versendet wird (kein Doppelversand bei wiederholtem/anschließendem Speichern).
+    let productionMailSent = false;
+    let productionMailNote = 'nicht ausgelöst (kein Bearbeitungsstatus "active" gesetzt)';
+    if (status === 'active') {
+        const flag = db.prepare('SELECT production_start_email_sent_at FROM orders WHERE id = ?').get(orderId) as { production_start_email_sent_at: string | null } | undefined;
+        if (flag?.production_start_email_sent_at) {
+            productionMailNote = `übersprungen (bereits versendet am ${flag.production_start_email_sent_at})`;
+        } else {
+            productionMailSent = await sendOrderProductionStarted(orderId);
+            if (productionMailSent) {
+                const sentAt = new Date().toISOString();
+                db.prepare('UPDATE orders SET production_start_email_sent_at = ? WHERE id = ?').run(sentAt, orderId);
+                productionMailNote = `versendet am ${sentAt}`;
+            } else {
+                productionMailNote = 'Versand fehlgeschlagen oder kein Empfänger (nicht markiert – erneuter Versuch bei nächstem Speichern möglich)';
+            }
+        }
+    }
+
+    console.log(
+        `[OrderStatus] Bestellung ${orderId}: status="${status ?? '-'}" (vorher "${before.status}"), ` +
+        `payment_status="${payment_status ?? '-'}" (vorher "${before.payment_status}") → Produktionsstart-Mail: ${productionMailNote}`
+    );
+
+    res.json({ success: true, productionMailSent });
   } catch (error: any) {
+    console.error(`[OrderStatus] Fehler beim Aktualisieren von Bestellung ${req.params.orderId}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

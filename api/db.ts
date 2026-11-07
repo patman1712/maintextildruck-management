@@ -939,6 +939,10 @@ try {
       console.log('Migrating database: Adding dtf_printed_at to orders (Druck-Datum für DTF-Bögen)');
       db.exec("ALTER TABLE orders ADD COLUMN dtf_printed_at TEXT");
     }
+    if (!orderCols.some(col => col.name === 'production_start_email_sent_at')) {
+      console.log('Migrating database: Adding production_start_email_sent_at to orders (einmalige Produktionsstart-Mail)');
+      db.exec("ALTER TABLE orders ADD COLUMN production_start_email_sent_at TEXT");
+    }
   } catch (e) {
     console.error('Migration error (orders pickup fields):', e);
   }
