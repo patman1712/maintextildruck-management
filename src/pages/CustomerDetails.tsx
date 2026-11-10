@@ -922,7 +922,12 @@ export default function CustomerDetails() {
           const res = await fetch(`/api/shopware/sync-images/${customer.id}`, { method: 'POST' });
           const data = await res.json();
           if (data.success) {
-              alert(data.message || `${data.added} Bilder importiert.`);
+              let msg = data.message || `${data.added} Bilder importiert.`;
+              if (data.debugSample) {
+                  const ds = data.debugSample;
+                  msg += `\n\nDEBUG (erstes fehlgeschlagenes Bild):\nURL: ${ds.url}\nFinal: ${ds.finalUrl}\nContent-Type: ${ds.contentType}\nBytes: ${ds.firstBytes}`;
+              }
+              alert(msg);
               fetchProducts();
           } else {
               alert('Fehler: ' + (data.error || 'Unbekannt'));

@@ -1613,6 +1613,7 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
     let cached = 0;
     const cacheFailReasons: Record<string, number> = {};
     const incFail = (reason: string) => { cacheFailReasons[reason] = (cacheFailReasons[reason] || 0) + 1; };
+    let debugSample: { url: string; finalUrl: string; contentType: string; firstBytes: string } | null = null;
 
     for (const row of toCache) {
         const urlRaw = row.file_url;
@@ -1637,12 +1638,38 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
         if (!resp.ok) { incFail(`http_${resp.status}`); continue; }
 
         const contentType = resp.headers.get('content-type') || '';
-        if (!contentType.toLowerCase().startsWith('image/')) { incFail('not_image'); continue; }
-
         const buf = Buffer.from(await resp.arrayBuffer());
         if (!buf.length) { incFail('empty_body'); continue; }
 
-        const ext = contentType.toLowerCase().includes('png') ? 'png'
+        // Bild anhand Magic Bytes erkennen (Content-Type kann bei Hotlink-Schutz falsch sein)
+        const isPng = buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
+        const isJpg = buf[0] === 0xFF && buf[1] === 0xD8;
+        const isGif = buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46;
+        const isWebp = buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46
+            && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50;
+        const isAvif = buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70
+            && buf[8] === 0x61 && buf[9] === 0x76 && buf[10] === 0x69 && buf[11] === 0x66;
+
+        if (!isPng && !isJpg && !isGif && !isWebp && !isAvif) {
+            incFail('not_image_magic_bytes');
+            if (!debugSample) {
+                debugSample = {
+                    url: urlRaw,
+                    finalUrl: resp.url,
+                    contentType,
+                    firstBytes: buf.slice(0, 200).toString('latin1').replace(/\s+/g, ' ')
+                };
+            }
+            continue;
+        }
+
+        // Content-Type zur Ermittlung der Endung, sonst von Magic Bytes ableiten
+        const ext = isPng ? 'png'
+            : isWebp ? 'webp'
+            : isJpg ? 'jpg'
+            : isGif ? 'gif'
+            : isAvif ? 'avif'
+            : contentType.toLowerCase().includes('png') ? 'png'
             : contentType.toLowerCase().includes('webp') ? 'webp'
             : contentType.toLowerCase().includes('jpeg') || contentType.toLowerCase().includes('jpg') ? 'jpg'
             : 'png';
@@ -1688,6 +1715,7 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
         cacheFailed,
         cacheFailReasons: Object.entries(cacheFailReasons),
         productsWithStoredImages,
+        debugSample,
         message: `${added} Bild(er) importiert, davon ${cached} lokal gespeichert` +
             (cacheFailed > 0 ? ` (${cacheFailed} fehlgeschlagen: ${failDetails}).` : '.')
     });
