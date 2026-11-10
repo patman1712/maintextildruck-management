@@ -66,6 +66,7 @@ export default function CustomerDetails() {
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [isCachingShopwareImages, setIsCachingShopwareImages] = useState(false);
   const [isRestoringShopwareImages, setIsRestoringShopwareImages] = useState(false);
+  const [isSyncingOnlyImages, setIsSyncingOnlyImages] = useState(false);
 
   // Products State
   const [products, setProducts] = useState<Product[]>([]);
@@ -906,6 +907,31 @@ export default function CustomerDetails() {
           alert('Netzwerkfehler beim Wiederherstellen der Bilder');
       } finally {
           setIsRestoringShopwareImages(false);
+      }
+  };
+
+  const syncOnlyShopwareImages = async () => {
+      if (!customer) return;
+      if (!shopwareConfig.url) {
+          alert('Bitte zuerst die Shopware-URL eintragen.');
+          return;
+      }
+      if (!confirm('Nur die Bilder der bereits vorhandenen Shopware-Produkte neu importieren? Es werden keine Produkte gelöscht oder neu angelegt.')) return;
+      setIsSyncingOnlyImages(true);
+      try {
+          const res = await fetch(`/api/shopware/sync-images/${customer.id}`, { method: 'POST' });
+          const data = await res.json();
+          if (data.success) {
+              alert(data.message || `${data.added} Bilder importiert.`);
+              fetchProducts();
+          } else {
+              alert('Fehler: ' + (data.error || 'Unbekannt'));
+          }
+      } catch (err) {
+          console.error(err);
+          alert('Netzwerkfehler beim Import der Bilder');
+      } finally {
+          setIsSyncingOnlyImages(false);
       }
   };
 
@@ -2682,6 +2708,15 @@ export default function CustomerDetails() {
                         >
                             <Download size={16} className="mr-2" />
                             {isLoadingProducts ? 'Lade...' : 'Artikel importieren'}
+                        </button>
+                        <button
+                            onClick={syncOnlyShopwareImages}
+                            disabled={isSyncingOnlyImages || !shopwareConfig.url}
+                            title="Nur Bilder für bereits vorhandene Produkte holen - KEINE Produkte löschen oder neu anlegen"
+                            className="bg-white text-blue-600 border border-blue-200 px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-50 disabled:opacity-50 flex items-center"
+                        >
+                            <ImageIcon size={16} className="mr-2" />
+                            {isSyncingOnlyImages ? 'Lade Bilder...' : 'Nur Bilder importieren'}
                         </button>
                         <button
                             onClick={cacheShopwareImages}
