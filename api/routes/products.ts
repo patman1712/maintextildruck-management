@@ -27,7 +27,46 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB
+});
+
+// Gleiche PDF-Validierung wie in upload.ts
+const validatePdfAndCleanup = async (filePath: string): Promise<{ valid: boolean; error?: string }> => {
+  try {
+    const stat = await fs.stat(filePath);
+    if (stat.size < 20) {
+      await fs.remove(filePath);
+      return { valid: false, error: 'Datei zu klein (möglicherweise unvollständiger Upload)' };
+    }
+    const fd = await fs.open(filePath, 'r');
+    try {
+      const headerBuf = Buffer.alloc(5);
+      await fs.read(fd, headerBuf, 0, 5, 0);
+      if (headerBuf.toString('ascii') !== '%PDF-') {
+        await fs.close(fd);
+        await fs.remove(filePath);
+        return { valid: false, error: 'Keine gültige PDF-Datei (Header fehlt)' };
+      }
+      const tailSize = Math.min(2048, stat.size);
+      const tailBuf = Buffer.alloc(tailSize);
+      await fs.read(fd, tailBuf, 0, tailSize, stat.size - tailSize);
+      await fs.close(fd);
+      if (!tailBuf.toString('latin1').includes('%%EOF')) {
+        await fs.remove(filePath);
+        return { valid: false, error: 'PDF unvollständig (%%EOF Marker fehlt)' };
+      }
+    } catch (e) {
+      try { await fs.close(fd); } catch {}
+      await fs.remove(filePath);
+      return { valid: false, error: 'PDF konnte nicht gelesen werden' };
+    }
+    return { valid: true };
+  } catch (e: any) {
+    return { valid: false, error: e?.message || 'Unbekannter Fehler' };
+  }
+};
 
 // POST Bulk assign file to multiple products (MUST be defined before /:customerId)
 router.post('/bulk-files', (req: Request, res: Response) => {
@@ -355,7 +394,17 @@ router.post('/:productId/duplicate', (req: Request, res: Response) => {
 });
 
 // POST Upload file and assign to product
-router.post('/:productId/upload', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/:productId/upload', (req: Request, res: Response, next: any) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ success: false, error: 'Datei zu groß. Maximal 500MB erlaubt.' });
+      }
+      return res.status(400).json({ success: false, error: err.message || 'Upload fehlgeschlagen' });
+    }
+    next();
+  });
+}, async (req: Request, res: Response) => {
     const { productId } = req.params;
     const { type } = req.body; // Support type from body
     const file = req.file;
@@ -366,6 +415,16 @@ router.post('/:productId/upload', upload.single('file'), async (req: Request, re
 
     try {
         const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        const isPdf = file.mimetype === 'application/pdf' || originalName.toLowerCase().endsWith('.pdf');
+
+        // PDF validieren
+        if (isPdf) {
+            const check = await validatePdfAndCleanup(file.path);
+            if (!check.valid) {
+                return res.status(400).json({ success: false, error: check.error });
+            }
+        }
+
         const fileUrl = `/uploads/${file.filename}`;
         let thumbnailUrl = null;
 

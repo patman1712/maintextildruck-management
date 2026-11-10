@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs-extra';
@@ -27,7 +27,55 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 500 * 1024 * 1024, // 500MB max pro Datei
+  },
+});
+
+// Prüft, ob eine PDF-Datei vollständig und gültig ist.
+// Liefert { valid, error }. Bei ungültigen PDFs wird die Datei sofort gelöscht.
+const validatePdfAndCleanup = async (filePath: string): Promise<{ valid: boolean; error?: string }> => {
+  try {
+    const stat = await fs.stat(filePath);
+    if (stat.size < 20) {
+      await fs.remove(filePath);
+      return { valid: false, error: 'Datei zu klein (möglicherweise unvollständiger Upload)' };
+    }
+
+    const fd = await fs.open(filePath, 'r');
+    try {
+      // Header prüfen
+      const headerBuf = Buffer.alloc(5);
+      await fs.read(fd, headerBuf, 0, 5, 0);
+      if (headerBuf.toString('ascii') !== '%PDF-') {
+        await fs.close(fd);
+        await fs.remove(filePath);
+        return { valid: false, error: 'Keine gültige PDF-Datei (Header fehlt)' };
+      }
+
+      // Footer prüfen (%%EOF muss am Ende stehen)
+      const tailSize = Math.min(2048, stat.size);
+      const tailBuf = Buffer.alloc(tailSize);
+      await fs.read(fd, tailBuf, 0, tailSize, stat.size - tailSize);
+      await fs.close(fd);
+
+      if (!tailBuf.toString('latin1').includes('%%EOF')) {
+        await fs.remove(filePath);
+        return { valid: false, error: 'PDF unvollständig (%%EOF Marker fehlt – Upload wahrscheinlich abgebrochen)' };
+      }
+    } catch (e) {
+      try { await fs.close(fd); } catch {}
+      await fs.remove(filePath);
+      return { valid: false, error: 'PDF konnte nicht gelesen werden' };
+    }
+
+    return { valid: true };
+  } catch (e: any) {
+    return { valid: false, error: e?.message || 'Unbekannter Fehler' };
+  }
+};
 
 // Helper to generate thumbnails
 const generateThumbnail = async (file: Express.Multer.File) => {
@@ -88,39 +136,85 @@ const generateThumbnail = async (file: Express.Multer.File) => {
 };
 
 // POST /api/upload
-router.post('/', upload.fields([
-  { name: 'preview', maxCount: 20 },
-  { name: 'print', maxCount: 20 },
-  { name: 'vector', maxCount: 20 },
-  { name: 'internal', maxCount: 20 },
-  { name: 'photoshop', maxCount: 20 }
-]), async (req: Request, res: Response) => {
+router.post('/', (req: Request, res: Response, next: NextFunction) => {
+  upload.fields([
+    { name: 'preview', maxCount: 20 },
+    { name: 'print', maxCount: 20 },
+    { name: 'vector', maxCount: 20 },
+    { name: 'internal', maxCount: 20 },
+    { name: 'photoshop', maxCount: 20 }
+  ])(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({
+          success: false,
+          error: 'Datei zu groß. Maximal 500MB pro Datei erlaubt.',
+          field: err.field
+        });
+      }
+      return res.status(400).json({ success: false, error: err.message || 'Upload fehlgeschlagen' });
+    }
+    next();
+  });
+}, async (req: Request, res: Response) => {
   const files = req.files as { [fieldname: string]: Express.Multer.File[] };
   const result: any = { preview: [], print: [], vector: [], internal: [], photoshop: [] };
+  const errors: string[] = [];
+
+  // Alle hochgeladenen Dateien sammeln und PDFs validieren
+  const allUploaded: Express.Multer.File[] = [];
+  if (files) {
+    for (const key of ['preview', 'print', 'vector', 'internal', 'photoshop'] as const) {
+      if (files[key]) allUploaded.push(...files[key]);
+    }
+  }
+
+  // PDFs validieren (Header + Footer). Ungültige werden sofort gelöscht.
+  for (const file of allUploaded) {
+    const isPdf = file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf');
+    if (isPdf) {
+      const check = await validatePdfAndCleanup(file.path);
+      if (!check.valid) {
+        errors.push(`${file.originalname}: ${check.error}`);
+      }
+    }
+  }
+
+  // Dateien, die bei der Validierung gelöscht wurden, aus der Verarbeitung entfernen
+  const filterValid = (arr?: Express.Multer.File[]) =>
+    arr?.filter(f => fs.pathExistsSync(f.path)) || [];
 
   if (files) {
     if (files.preview) {
-      result.preview = await Promise.all(files.preview.map(generateThumbnail));
+      result.preview = await Promise.all(filterValid(files.preview).map(generateThumbnail));
     }
     if (files.print) {
-      result.print = await Promise.all(files.print.map(generateThumbnail));
+      result.print = await Promise.all(filterValid(files.print).map(generateThumbnail));
     }
     if (files.vector) {
-      result.vector = files.vector.map(f => ({
+      result.vector = filterValid(files.vector).map(f => ({
         originalName: Buffer.from(f.originalname, 'latin1').toString('utf8'),
         filename: f.filename,
         path: `/uploads/${f.filename}`
       }));
     }
     if (files.internal) {
-      result.internal = await Promise.all(files.internal.map(generateThumbnail));
+      result.internal = await Promise.all(filterValid(files.internal).map(generateThumbnail));
     }
     if (files.photoshop) {
-        // Photoshop files (.psd) might not be supported by sharp directly or fully for thumbnails
-        // But the user also allows .pdf here.
-        // We will try to generate thumbnail if possible, otherwise just store it.
-        result.photoshop = await Promise.all(files.photoshop.map(generateThumbnail));
+        result.photoshop = await Promise.all(filterValid(files.photoshop).map(generateThumbnail));
     }
+  }
+
+  // Wenn Fehler auftraten, zusammen mit dem Ergebnis zurückgeben
+  if (errors.length > 0) {
+    res.status(207).json({
+      success: false,
+      message: `${errors.length} Datei(en) konnten nicht gespeichert werden`,
+      errors,
+      files: result
+    });
+    return;
   }
 
   res.json({ success: true, files: result });
@@ -732,6 +826,101 @@ router.get('/check-integrity', async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error('Integrity check failed:', error);
         res.status(500).json({ success: false, error: error.message || 'Check failed' });
+    }
+});
+
+// GET /api/upload/scan-corrupted
+// Scannt alle in der DB gespeicherten Dateien und meldet korrupte/fehlende PDFs.
+router.get('/scan-corrupted', async (req: Request, res: Response) => {
+    try {
+        // Alle eindeutigen Datei-URLs aus den relevanten Tabellen sammeln
+        const urls = new Set<string>();
+
+        // 1. files Tabelle
+        try {
+            const rows = db.prepare('SELECT DISTINCT path FROM files WHERE path IS NOT NULL').all() as { path: string }[];
+            rows.forEach(r => r.path && urls.add(r.path));
+        } catch {}
+
+        // 2. orders.files (JSON)
+        try {
+            const orders = db.prepare('SELECT files FROM orders WHERE files IS NOT NULL').all() as { files: string }[];
+            for (const o of orders) {
+                try {
+                    const arr = JSON.parse(o.files);
+                    if (Array.isArray(arr)) arr.forEach((f: any) => f.url && urls.add(f.url));
+                } catch {}
+            }
+        } catch {}
+
+        // 3. customer_product_files
+        try {
+            const rows = db.prepare('SELECT DISTINCT file_url FROM customer_product_files WHERE file_url IS NOT NULL').all() as { file_url: string }[];
+            rows.forEach(r => r.file_url && urls.add(r.file_url));
+        } catch {}
+
+        const corrupted: Array<{ url: string; reason: string; size?: number }> = [];
+        const ok: string[] = [];
+
+        for (const url of urls) {
+            if (!url.startsWith('/uploads/')) continue;
+            const filename = path.basename(url);
+            const filePath = path.join(UPLOAD_DIR, filename);
+            if (!filePath.startsWith(UPLOAD_DIR)) continue;
+
+            const exists = await fs.pathExists(filePath);
+            if (!exists) {
+                corrupted.push({ url, reason: 'Datei nicht auf Festplatte gefunden' });
+                continue;
+            }
+
+            const isPdf = filename.toLowerCase().endsWith('.pdf');
+            if (!isPdf) {
+                ok.push(url);
+                continue;
+            }
+
+            const stat = await fs.stat(filePath);
+            if (stat.size < 20) {
+                corrupted.push({ url, reason: 'Datei zu klein (unvollständig)', size: stat.size });
+                continue;
+            }
+
+            try {
+                const fd = await fs.open(filePath, 'r');
+                try {
+                    const headerBuf = Buffer.alloc(5);
+                    await fs.read(fd, headerBuf, 0, 5, 0);
+                    if (headerBuf.toString('ascii') !== '%PDF-') {
+                        corrupted.push({ url, reason: 'Ungültiger PDF-Header', size: stat.size });
+                        continue;
+                    }
+                    const tailSize = Math.min(2048, stat.size);
+                    const tailBuf = Buffer.alloc(tailSize);
+                    await fs.read(fd, tailBuf, 0, tailSize, stat.size - tailSize);
+                    if (!tailBuf.toString('latin1').includes('%%EOF')) {
+                        corrupted.push({ url, reason: 'PDF unvollständig (%%EOF fehlt)', size: stat.size });
+                        continue;
+                    }
+                } finally {
+                    await fs.close(fd);
+                }
+                ok.push(url);
+            } catch {
+                corrupted.push({ url, reason: 'PDF konnte nicht gelesen werden', size: stat.size });
+            }
+        }
+
+        res.json({
+            success: true,
+            total: urls.size,
+            ok: ok.length,
+            corrupted: corrupted.length,
+            corruptedFiles: corrupted
+        });
+    } catch (error: any) {
+        console.error('Scan failed:', error);
+        res.status(500).json({ success: false, error: error.message || 'Scan failed' });
     }
 });
 
