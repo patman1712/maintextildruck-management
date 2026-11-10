@@ -1397,13 +1397,44 @@ export default function CustomerDetails() {
         </div>
 
         <div className="h-32 bg-gray-100 rounded mb-3 flex items-center justify-center overflow-hidden border border-gray-100 relative group-hover:bg-gray-50 transition-colors">
-          {file.thumbnail ? (
-            <img src={file.thumbnail} alt={file.name} className="w-full h-full object-contain" />
-          ) : file.url ? (
-            <img src={file.url} alt={file.name} className="w-full h-full object-contain" />
-          ) : (
-            <Printer size={32} className="text-gray-300" />
-          )}
+          {(() => {
+            const isPdf = file.name?.toLowerCase().endsWith('.pdf');
+            const onDemandSrc = file.url ? `/api/upload/thumb?url=${encodeURIComponent(file.url)}` : null;
+            // PDFs können nicht direkt in <img> gerendert werden → immer On-Demand-Thumbnail verwenden
+            const primarySrc = file.thumbnail || (isPdf ? onDemandSrc : file.url);
+
+            const handleImgError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+              const img = e.currentTarget;
+              // Erster Fehler: versuche On-Demand-Thumbnail (generiert fehlendes Thumbnail selbstheilend)
+              if (onDemandSrc && !img.dataset.retried) {
+                img.dataset.retried = 'true';
+                img.src = onDemandSrc;
+              } else {
+                // Beide fehlgeschlagen → Fallback-Icon anzeigen
+                img.style.display = 'none';
+                const fb = img.parentElement?.querySelector('[data-print-fallback]');
+                if (fb) fb.classList.remove('hidden');
+              }
+            };
+
+            return (
+              <>
+                {primarySrc ? (
+                  <img
+                    src={primarySrc}
+                    alt={file.name}
+                    className="w-full h-full object-contain"
+                    loading="lazy"
+                    decoding="async"
+                    onError={handleImgError}
+                  />
+                ) : null}
+                <div data-print-fallback className={`${primarySrc ? 'hidden' : ''} absolute inset-0 flex items-center justify-center`}>
+                  <Printer size={32} className="text-gray-300" />
+                </div>
+              </>
+            );
+          })()}
 
           {editingFile && editingFile.url === file.url && (
             <div className="absolute inset-0 bg-white/90 flex flex-col items-center justify-center p-2 z-10">
