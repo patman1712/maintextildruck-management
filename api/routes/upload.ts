@@ -924,6 +924,154 @@ router.get('/scan-corrupted', async (req: Request, res: Response) => {
     }
 });
 
+// POST /api/upload/cleanup-corrupted
+// Entfernt alle korrupten/fehlenden Dateien aus der Datenbank,
+// damit sie im System nicht mehr sichtbar sind.
+// 0-Byte-Dateien werden zusätzlich von der Festplatte gelöscht.
+router.post('/cleanup-corrupted', async (req: Request, res: Response) => {
+    try {
+        const urls = new Set<string>();
+
+        // Alle Datei-URLs aus den relevanten Tabellen sammeln
+        try {
+            const rows = db.prepare('SELECT DISTINCT path FROM files WHERE path IS NOT NULL').all() as { path: string }[];
+            rows.forEach(r => r.path && urls.add(r.path));
+        } catch {}
+        try {
+            const orders = db.prepare('SELECT files FROM orders WHERE files IS NOT NULL').all() as { files: string }[];
+            for (const o of orders) {
+                try {
+                    const arr = JSON.parse(o.files);
+                    if (Array.isArray(arr)) arr.forEach((f: any) => f.url && urls.add(f.url));
+                } catch {}
+            }
+        } catch {}
+        try {
+            const rows = db.prepare('SELECT DISTINCT file_url FROM customer_product_files WHERE file_url IS NOT NULL').all() as { file_url: string }[];
+            rows.forEach(r => r.file_url && urls.add(r.file_url));
+        } catch {}
+
+        const toRemove: Array<{ url: string; reason: string }> = [];
+
+        for (const url of urls) {
+            if (!url.startsWith('/uploads/')) continue;
+            const filename = path.basename(url);
+            const filePath = path.join(UPLOAD_DIR, filename);
+            if (!filePath.startsWith(UPLOAD_DIR)) continue;
+
+            const exists = await fs.pathExists(filePath);
+            if (!exists) {
+                toRemove.push({ url, reason: 'Datei nicht auf Festplatte gefunden' });
+                continue;
+            }
+
+            const isPdf = filename.toLowerCase().endsWith('.pdf');
+            if (!isPdf) continue;
+
+            const stat = await fs.stat(filePath);
+            if (stat.size < 20) {
+                toRemove.push({ url, reason: `Datei zu klein (${stat.size} Bytes)` });
+                continue;
+            }
+
+            try {
+                const fd = await fs.open(filePath, 'r');
+                try {
+                    const headerBuf = Buffer.alloc(5);
+                    await fs.read(fd, headerBuf, 0, 5, 0);
+                    if (headerBuf.toString('ascii') !== '%PDF-') {
+                        toRemove.push({ url, reason: 'Ungültiger PDF-Header' });
+                        continue;
+                    }
+                    const tailSize = Math.min(2048, stat.size);
+                    const tailBuf = Buffer.alloc(tailSize);
+                    await fs.read(fd, tailBuf, 0, tailSize, stat.size - tailSize);
+                    if (!tailBuf.toString('latin1').includes('%%EOF')) {
+                        toRemove.push({ url, reason: 'PDF unvollständig (%%EOF fehlt)' });
+                        continue;
+                    }
+                } finally {
+                    await fs.close(fd);
+                }
+            } catch {
+                toRemove.push({ url, reason: 'PDF konnte nicht gelesen werden' });
+            }
+        }
+
+        // DB-Referenzen entfernen
+        let filesTableDeleted = 0;
+        let ordersUpdated = 0;
+        let productFilesDeleted = 0;
+        let assignmentsDeleted = 0;
+        let diskFilesDeleted = 0;
+
+        for (const { url } of toRemove) {
+            // 1. files Tabelle
+            try {
+                const result = db.prepare('DELETE FROM files WHERE path = ?').run(url);
+                filesTableDeleted += result.changes;
+            } catch {}
+
+            // 2. orders.files (JSON)
+            try {
+                const orders = db.prepare('SELECT id, files FROM orders WHERE files LIKE ?').all(`%${url}%`) as { id: string; files: string }[];
+                for (const order of orders) {
+                    let files: any[] = [];
+                    try { files = JSON.parse(order.files || '[]'); } catch { files = []; }
+                    const updated = files.filter((f: any) => f?.url !== url);
+                    if (updated.length !== files.length) {
+                        db.prepare('UPDATE orders SET files = ? WHERE id = ?').run(JSON.stringify(updated), order.id);
+                        ordersUpdated++;
+                    }
+                }
+            } catch {}
+
+            // 3. customer_product_files
+            try {
+                const result = db.prepare('DELETE FROM customer_product_files WHERE file_url = ? OR thumbnail_url = ?').run(url, url);
+                productFilesDeleted += result.changes;
+            } catch {}
+
+            // 4. customer_file_assignments
+            try {
+                const result = db.prepare('DELETE FROM customer_file_assignments WHERE file_url = ?').run(url);
+                assignmentsDeleted += result.changes;
+            } catch {}
+
+            // 5. Datei von der Festplatte löschen (falls sie noch existiert, z.B. 0-Byte-Dateien)
+            if (url.startsWith('/uploads/')) {
+                const relative = url.replace(/^\/uploads\//, '');
+                const fullPath = path.join(UPLOAD_DIR, relative);
+                if (fullPath.startsWith(UPLOAD_DIR) && await fs.pathExists(fullPath)) {
+                    await fs.remove(fullPath);
+                    diskFilesDeleted++;
+                    // Thumbnail ebenfalls löschen
+                    const thumbPath = path.join(UPLOAD_DIR, `${relative}_thumb.png`);
+                    if (thumbPath.startsWith(UPLOAD_DIR) && await fs.pathExists(thumbPath)) {
+                        await fs.remove(thumbPath);
+                    }
+                }
+            }
+        }
+
+        res.json({
+            success: true,
+            removed: toRemove.length,
+            details: {
+                filesTableDeleted,
+                ordersUpdated,
+                productFilesDeleted,
+                assignmentsDeleted,
+                diskFilesDeleted
+            },
+            removedFiles: toRemove
+        });
+    } catch (error: any) {
+        console.error('Cleanup failed:', error);
+        res.status(500).json({ success: false, error: error.message || 'Cleanup failed' });
+    }
+});
+
 // GET /api/upload/archive-files?limit=25&offset=0&type=all|print|preview&search=
 router.get('/archive-files', async (req: Request, res: Response) => {
     try {
