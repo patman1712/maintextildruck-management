@@ -77,6 +77,17 @@ const validatePdfAndCleanup = async (filePath: string): Promise<{ valid: boolean
   }
 };
 
+// Löst eine "/uploads/..."-URL sicher auf einen absoluten Pfad unterhalb von UPLOAD_DIR auf.
+// Wichtig für verschachtelte Pfade (z. B. /uploads/shopware_cache/<kunde>/<produkt>/<datei>),
+// die mit path.basename() fälschlich als "fehlend" erkannt würden.
+const resolveUploadPath = (url: string): string | null => {
+  if (!url.startsWith('/uploads/')) return null;
+  const relative = url.replace(/^\/uploads\//, '');
+  const fullPath = path.join(UPLOAD_DIR, relative);
+  if (!fullPath.startsWith(UPLOAD_DIR)) return null;
+  return fullPath;
+};
+
 // Helper to generate thumbnails
 const generateThumbnail = async (file: Express.Multer.File) => {
     const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
@@ -773,8 +784,8 @@ router.get('/check-integrity', async (req: Request, res: Response) => {
         }
 
         const filename = path.basename(fileUrl);
-        const filePath = path.join(UPLOAD_DIR, filename);
-        if (!filePath.startsWith(UPLOAD_DIR)) {
+        const filePath = resolveUploadPath(fileUrl);
+        if (!filePath) {
             res.status(403).json({ success: false, error: 'Invalid file path' });
             return;
         }
@@ -865,8 +876,8 @@ router.get('/scan-corrupted', async (req: Request, res: Response) => {
         for (const url of urls) {
             if (!url.startsWith('/uploads/')) continue;
             const filename = path.basename(url);
-            const filePath = path.join(UPLOAD_DIR, filename);
-            if (!filePath.startsWith(UPLOAD_DIR)) continue;
+            const filePath = resolveUploadPath(url);
+            if (!filePath) continue;
 
             const exists = await fs.pathExists(filePath);
             if (!exists) {
@@ -956,8 +967,8 @@ router.post('/cleanup-corrupted', async (req: Request, res: Response) => {
         for (const url of urls) {
             if (!url.startsWith('/uploads/')) continue;
             const filename = path.basename(url);
-            const filePath = path.join(UPLOAD_DIR, filename);
-            if (!filePath.startsWith(UPLOAD_DIR)) continue;
+            const filePath = resolveUploadPath(url);
+            if (!filePath) continue;
 
             const exists = await fs.pathExists(filePath);
             if (!exists) {
@@ -1069,6 +1080,92 @@ router.post('/cleanup-corrupted', async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error('Cleanup failed:', error);
         res.status(500).json({ success: false, error: error.message || 'Cleanup failed' });
+    }
+});
+
+// POST /api/upload/restore-cached-images?customerId=<optional>
+// Rekonstruiert customer_product_files-Einträge (type 'view') aus den lokal
+// gecachten Shopware-Bildern unter /uploads/shopware_cache/<kunde>/<produkt>/<datei>.
+// Hintergrund: Ein fehlerhafter Cleanup hat verschachtelte Pfade als "fehlend"
+// erkannt und die DB-Einträge (samt shop_product_images per CASCADE) entfernt.
+// Die Dateien selbst bleiben dabei teilweise erhalten und werden hier wieder verknüpft.
+router.post('/restore-cached-images', async (req: Request, res: Response) => {
+    try {
+        const onlyCustomer = String(req.query.customerId || '').trim();
+        const cacheRoot = path.join(UPLOAD_DIR, 'shopware_cache');
+        if (!(await fs.pathExists(cacheRoot))) {
+            res.json({ success: true, scanned: 0, restored: 0, message: 'Kein shopware_cache-Ordner gefunden. Bitte Bilder neu von Shopware laden (Sync + Cache).' });
+            return;
+        }
+
+        const imageExt = /\.(jpe?g|png|webp|gif|avif)$/i;
+        let scanned = 0;
+        let restored = 0;
+        let skippedExisting = 0;
+        let skippedNoProduct = 0;
+        const restoredItems: Array<{ product_id: string; customer_id: string; file_url: string }> = [];
+
+        const customerDirs = onlyCustomer
+            ? [onlyCustomer]
+            : (await fs.readdir(cacheRoot)).filter(d => !d.startsWith('.'));
+
+        for (const customerId of customerDirs) {
+            const customerPath = path.join(cacheRoot, customerId);
+            const customerStat = await fs.stat(customerPath).catch(() => null);
+            if (!customerStat || !customerStat.isDirectory()) continue;
+
+            const productDirs = (await fs.readdir(customerPath)).filter(d => !d.startsWith('.'));
+            for (const productId of productDirs) {
+                const productPath = path.join(customerPath, productId);
+                const productStat = await fs.stat(productPath).catch(() => null);
+                if (!productStat || !productStat.isDirectory()) continue;
+
+                const productExists = !!db.prepare('SELECT id FROM customer_products WHERE id = ?').get(productId);
+                const files = (await fs.readdir(productPath)).filter(f => !f.startsWith('.'));
+
+                for (const filename of files) {
+                    if (/_thumb\.png$/i.test(filename)) continue;
+                    if (!imageExt.test(filename)) continue;
+                    scanned++;
+
+                    if (!productExists) { skippedNoProduct++; continue; }
+
+                    const relDir = `shopware_cache/${customerId}/${productId}`;
+                    const localUrl = `/uploads/${relDir}/${filename}`;
+
+                    const existing = db.prepare('SELECT id FROM customer_product_files WHERE file_url = ?').get(localUrl);
+                    if (existing) { skippedExisting++; continue; }
+
+                    const base = filename.replace(/\.[^.]+$/, '');
+                    const thumbFile = `${base}_thumb.png`;
+                    const hasThumb = await fs.pathExists(path.join(productPath, thumbFile));
+                    const thumbUrl = hasThumb
+                        ? `/uploads/${relDir}/${thumbFile}`
+                        : `/api/upload/thumb?url=${encodeURIComponent(localUrl)}`;
+
+                    const id = Math.random().toString(36).slice(2, 11);
+                    db.prepare('INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type) VALUES (?, ?, ?, ?, ?, ?)')
+                        .run(id, productId, localUrl, 'Shopware Bild', thumbUrl, 'view');
+                    restored++;
+                    restoredItems.push({ product_id: productId, customer_id: customerId, file_url: localUrl });
+                }
+            }
+        }
+
+        res.json({
+            success: true,
+            scanned,
+            restored,
+            skippedExisting,
+            skippedNoProduct,
+            restoredItems,
+            message: restored === 0
+                ? 'Keine wiederherstellbaren Bilder auf der Festplatte gefunden. Bitte Produkte neu von Shopware laden und Bilder lokal cachen.'
+                : `${restored} Bilder wiederhergestellt.`
+        });
+    } catch (error: any) {
+        console.error('Restore cached images failed:', error);
+        res.status(500).json({ success: false, error: error.message || 'Restore failed' });
     }
 });
 

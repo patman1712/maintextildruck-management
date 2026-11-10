@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAppStore, Order, ShopProductAssignment, Product } from "@/store";
-import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon, Copy, Layers, Globe, Eye, Folder, FolderOpen, FolderPlus, FolderMinus, ChevronRight, ChevronDown } from "lucide-react";
+import { ArrowLeft, User, FileText, Download, Printer, Phone, Mail, MapPin, Edit, Save, X, Trash2, Pencil, Upload, ShoppingBag, CheckCircle, AlertCircle, Link, Search, Package, Plus, Image as ImageIcon, Copy, Layers, Globe, Eye, Folder, FolderOpen, FolderPlus, FolderMinus, ChevronRight, ChevronDown, RotateCcw } from "lucide-react";
 import ConfirmationModal from "@/components/ConfirmationModal";
 import CustomerOnlineShopProducts from "@/components/CustomerOnlineShopProducts";
 
@@ -65,6 +65,7 @@ export default function CustomerDetails() {
   const [shopwareMessage, setShopwareMessage] = useState('');
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [isCachingShopwareImages, setIsCachingShopwareImages] = useState(false);
+  const [isRestoringShopwareImages, setIsRestoringShopwareImages] = useState(false);
 
   // Products State
   const [products, setProducts] = useState<Product[]>([]);
@@ -885,6 +886,26 @@ export default function CustomerDetails() {
           alert('Netzwerkfehler beim Speichern der Bilder');
       } finally {
           setIsCachingShopwareImages(false);
+      }
+  };
+
+  const restoreShopwareImages = async () => {
+      if (!customer) return;
+      setIsRestoringShopwareImages(true);
+      try {
+          const res = await fetch(`/api/upload/restore-cached-images?customerId=${encodeURIComponent(customer.id)}`, { method: 'POST' });
+          const data = await res.json();
+          if (data.success) {
+              alert(data.message || `${data.restored} Bilder wiederhergestellt.`);
+              fetchProducts();
+          } else {
+              alert('Fehler beim Wiederherstellen: ' + (data.error || 'Unbekannt'));
+          }
+      } catch (err) {
+          console.error(err);
+          alert('Netzwerkfehler beim Wiederherstellen der Bilder');
+      } finally {
+          setIsRestoringShopwareImages(false);
       }
   };
 
@@ -2669,6 +2690,15 @@ export default function CustomerDetails() {
                         >
                             <ImageIcon size={16} className="mr-2" />
                             {isCachingShopwareImages ? 'Speichere...' : 'Bilder lokal speichern'}
+                        </button>
+                        <button
+                            onClick={restoreShopwareImages}
+                            disabled={isRestoringShopwareImages}
+                            title="Bereits gecachte Shopware-Bilder aus dem Dateisystem wieder mit der Datenbank verknüpfen"
+                            className="bg-white text-slate-700 border border-slate-200 px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-50 disabled:opacity-50 flex items-center"
+                        >
+                            <RotateCcw size={16} className="mr-2" />
+                            {isRestoringShopwareImages ? 'Stelle wieder her...' : 'Bilder wiederherstellen'}
                         </button>
                     </div>
                 </div>
