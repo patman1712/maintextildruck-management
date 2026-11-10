@@ -1435,80 +1435,103 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
     }
 
     // Nur die bereits vorhandenen Shopware-Produkte laden (KEIN Löschen, KEIN Neuanlegen)
+    // shopware_images enthält die beim letzten Import gespeicherten Bild-URLs.
     const existingProducts = db.prepare(
-        "SELECT id, shopware_product_id, name FROM customer_products WHERE customer_id = ? AND source = 'shopware' AND shopware_product_id IS NOT NULL"
+        "SELECT id, shopware_product_id, name, shopware_images FROM customer_products WHERE customer_id = ? AND source = 'shopware' AND shopware_product_id IS NOT NULL"
     ).all(customerId) as any[];
 
     if (existingProducts.length === 0) {
         return res.json({ success: true, processed: 0, added: 0, message: 'Keine vorhandenen Shopware-Produkte gefunden. Bitte zuerst Artikel importieren.' });
     }
 
-    let productImageMap: Record<string, string[]> = {};
+    // 1. Versuch: Gespeicherte Bild-URLs aus shopware_images verwenden (keine Auth nötig)
+    const productImageMap: Record<string, string[]> = {};
+    let productsWithStoredImages = 0;
+    for (const cp of existingProducts) {
+        let urls: string[] = [];
+        if (cp.shopware_images) {
+            try {
+                const parsed = JSON.parse(cp.shopware_images);
+                if (Array.isArray(parsed)) urls = parsed.filter((u: any) => typeof u === 'string' && /^https?:\/\//i.test(u));
+            } catch {}
+        }
+        if (urls.length > 0) {
+            productImageMap[String(cp.shopware_product_id)] = urls;
+            productsWithStoredImages++;
+        }
+    }
 
-    try {
-        if (version === '5') {
-            // SW5: Artikel-Details einzeln holen
-            const batchSize = 5;
-            for (let i = 0; i < existingProducts.length; i += batchSize) {
-                const batch = existingProducts.slice(i, i + batchSize);
-                await Promise.all(batch.map(async (cp: any) => {
-                    const details = await getShopware5ArticleDetails(baseUrl, customer.shopware_access_key, customer.shopware_secret_key, cp.shopware_product_id);
-                    if (!details) return;
-                    let images: string[] = [];
-                    if (details.images && Array.isArray(details.images)) {
-                        images = details.images.map((img: any) => {
-                            if (img.link) return img.link;
-                            if (img.path) {
-                                const ext = img.extension || 'jpg';
-                                return `${baseUrl}/media/image/${img.path}.${ext}`;
-                            }
-                            return null;
-                        }).filter((url: any) => url);
-                    }
-                    productImageMap[String(cp.shopware_product_id)] = images;
-                }));
-            }
-        } else {
-            // SW6: Produkte mit Medien anhand ihrer IDs filtern
-            const token = await getShopware6Token(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
-            const swIds = existingProducts.map((p: any) => String(p.shopware_product_id));
+    // 2. Für Produkte ohne gespeicherte Bilder: versuche sie von Shopware zu holen (Auth nötig)
+    const productsNeedFetch = existingProducts.filter(
+        (cp: any) => !productImageMap[String(cp.shopware_product_id)]
+    );
 
-            // In Chunks von 100 IDs, um URL-/Body-Limits nicht zu überschreiten
-            for (let i = 0; i < swIds.length; i += 100) {
-                const chunk = swIds.slice(i, i + 100);
-                const response = await fetch(`${baseUrl}/api/search/product`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        limit: chunk.length,
-                        filter: [{ type: 'equalsAny', field: 'id', value: chunk }],
-                        includes: { product: ['id', 'cover', 'media'] },
-                        associations: {
-                            cover: {},
-                            media: { associations: { media: {} } }
+    if (productsNeedFetch.length > 0) {
+        try {
+            if (version === '5') {
+                // SW5: Artikel-Details einzeln holen
+                const batchSize = 5;
+                for (let i = 0; i < productsNeedFetch.length; i += batchSize) {
+                    const batch = productsNeedFetch.slice(i, i + batchSize);
+                    await Promise.all(batch.map(async (cp: any) => {
+                        const details = await getShopware5ArticleDetails(baseUrl, customer.shopware_access_key, customer.shopware_secret_key, cp.shopware_product_id);
+                        if (!details) return;
+                        let images: string[] = [];
+                        if (details.images && Array.isArray(details.images)) {
+                            images = details.images.map((img: any) => {
+                                if (img.link) return img.link;
+                                if (img.path) {
+                                    const ext = img.extension || 'jpg';
+                                    return `${baseUrl}/media/image/${img.path}.${ext}`;
+                                }
+                                return null;
+                            }).filter((url: any) => url);
                         }
-                    })
-                });
-                if (!response.ok) continue;
-                const data = await response.json();
-                for (const p of data.data || []) {
-                    let images: string[] = [];
-                    if (p.media && Array.isArray(p.media)) {
-                        images = p.media.map((m: any) => m.media?.url).filter((url: any) => url);
+                        productImageMap[String(cp.shopware_product_id)] = images;
+                    }));
+                }
+            } else {
+                // SW6: Produkte mit Medien anhand ihrer IDs filtern
+                const token = await getShopware6Token(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
+                const swIds = productsNeedFetch.map((p: any) => String(p.shopware_product_id));
+
+                for (let i = 0; i < swIds.length; i += 100) {
+                    const chunk = swIds.slice(i, i + 100);
+                    const response = await fetch(`${baseUrl}/api/search/product`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            limit: chunk.length,
+                            filter: [{ type: 'equalsAny', field: 'id', value: chunk }],
+                            includes: { product: ['id', 'cover', 'media'] },
+                            associations: {
+                                cover: {},
+                                media: { associations: { media: {} } }
+                            }
+                        })
+                    });
+                    if (!response.ok) continue;
+                    const data = await response.json();
+                    for (const p of data.data || []) {
+                        let images: string[] = [];
+                        if (p.media && Array.isArray(p.media)) {
+                            images = p.media.map((m: any) => m.media?.url).filter((url: any) => url);
+                        }
+                        if (images.length === 0 && p.cover?.media?.url) {
+                            images.push(p.cover.media.url);
+                        }
+                        productImageMap[String(p.id)] = images;
                     }
-                    if (images.length === 0 && p.cover?.media?.url) {
-                        images.push(p.cover.media.url);
-                    }
-                    productImageMap[String(p.id)] = images;
                 }
             }
+        } catch (error: any) {
+            // Auth/Fetch fehlgeschlagen - aber wir haben evtl. schon gespeicherte Bilder
+            console.error('Shopware image fetch failed (using stored images where available):', error.message);
         }
-    } catch (error: any) {
-        return res.status(500).json({ success: false, error: error.message || 'Failed to fetch images from Shopware' });
     }
 
     // Fehlende Bilder in customer_product_files eintragen (type 'view')
@@ -1543,11 +1566,17 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
 
     txn(existingProducts);
 
+    const fetchedFromSw = productsNeedFetch.length - existingProducts.filter(
+        (cp: any) => productsNeedFetch.includes(cp) && productImageMap[String(cp.shopware_product_id)]
+    ).length;
+
     res.json({
         success: true,
         processed,
         added,
-        message: `${added} Bild(er) für ${processed} Produkt(e) importiert.`
+        productsWithStoredImages,
+        message: `${added} Bild(er) für ${processed} Produkt(e) importiert (${productsWithStoredImages} aus gespeicherten URLs).` +
+            (productsNeedFetch.length > 0 ? ` ${fetchedFromSw} Produkt(e) konnten nicht von Shopware geladen werden (Auth/Verbindung).` : '')
     });
 });
 
