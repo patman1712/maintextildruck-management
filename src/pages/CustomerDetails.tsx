@@ -1243,7 +1243,12 @@ export default function CustomerDetails() {
       return;
     }
     try {
-      const response = await fetch(file.url);
+      // cache: 'no-store' verhindert, dass eine zuvor fehlgeschlagene
+      // (teilweise heruntergeladene) Version aus dem Browser-Cache serviert wird.
+      const response = await fetch(file.url, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1256,7 +1261,9 @@ export default function CustomerDetails() {
       document.body.removeChild(a);
     } catch (error) {
       console.error('Download failed:', error);
-      window.open(file.url, '_blank');
+      // Fallback: direkter Link mit Cache-Busting
+      const sep = file.url.includes('?') ? '&' : '?';
+      window.open(`${file.url}${sep}_t=${Date.now()}`, '_blank');
     }
   };
 

@@ -42,21 +42,23 @@ const generateThumbnail = async (file: Express.Multer.File) => {
             
             try {
                 await execFileAsync('pdftocairo', [
-                    '-png',
-                    '-singlefile',
-                    '-transp',
-                    '-scale-to', '300',
-                    inputPath,
-                    thumbOutputPath
+                    '-png', '-singlefile', '-transp', '-scale-to', '300',
+                    inputPath, thumbOutputPath
                 ]);
-            } catch {
-                await execFileAsync('pdftoppm', [
-                    '-png',
-                    '-singlefile',
-                    '-scale-to', '300',
-                    inputPath,
-                    thumbOutputPath
-                ]);
+            } catch (e1) {
+                try {
+                    // Manche PDFs unterstützen keinen Transparenz-Export → ohne -transp
+                    await execFileAsync('pdftocairo', [
+                        '-png', '-singlefile', '-scale-to', '300',
+                        inputPath, thumbOutputPath
+                    ]);
+                } catch (e2) {
+                    // Letztes Fallback: pdftoppm
+                    await execFileAsync('pdftoppm', [
+                        '-png', '-singlefile', '-scale-to', '300',
+                        inputPath, thumbOutputPath
+                    ]);
+                }
             }
             
             thumbnail = `/uploads/${thumbName}.png`;
@@ -200,21 +202,21 @@ router.post('/regenerate-thumbnails', async (req: Request, res: Response) => {
                                     thumbOutputPath = path.join(UPLOAD_DIR, thumbName);
                                     try {
                                         await execFileAsync('pdftocairo', [
-                                            '-png',
-                                            '-singlefile',
-                                            '-transp',
-                                            '-scale-to', '300',
-                                            inputPath,
-                                            thumbOutputPath
+                                            '-png', '-singlefile', '-transp', '-scale-to', '300',
+                                            inputPath, thumbOutputPath
                                         ]);
                                     } catch {
-                                        await execFileAsync('pdftoppm', [
-                                            '-png',
-                                            '-singlefile',
-                                            '-scale-to', '300',
-                                            inputPath,
-                                            thumbOutputPath
-                                        ]);
+                                        try {
+                                            await execFileAsync('pdftocairo', [
+                                                '-png', '-singlefile', '-scale-to', '300',
+                                                inputPath, thumbOutputPath
+                                            ]);
+                                        } catch {
+                                            await execFileAsync('pdftoppm', [
+                                                '-png', '-singlefile', '-scale-to', '300',
+                                                inputPath, thumbOutputPath
+                                            ]);
+                                        }
                                     }
                                 } else {
                                     // Generate thumbnail for Image
@@ -607,27 +609,36 @@ router.get('/thumb', async (req: Request, res: Response) => {
         let pdftoppmError: string | null = null;
         let sharpError: string | null = null;
 
-        try {
-            if (isPdf) {
+        // Generiert ein PDF-Thumbnail mit mehreren Fallback-Strategien:
+        // 1. pdftocairo mit transparentem Hintergrund (-transp)
+        // 2. pdftocairo ohne -transp (manche PDFs unterstützen keinen Transparenz-Export)
+        // 3. pdftoppm als letztes Fallback
+        const generatePdfThumb = async (): Promise<void> => {
+            try {
+                await execFileAsync('pdftocairo', [
+                    '-png', '-singlefile', '-transp', '-scale-to', '300',
+                    inputPath, thumbRoot
+                ]);
+            } catch (e: any) {
+                pdftoppmError = `pdftocairo -transp: ${e?.message || String(e)}`;
                 try {
                     await execFileAsync('pdftocairo', [
-                        '-png',
-                        '-singlefile',
-                        '-transp',
-                        '-scale-to', '300',
-                        inputPath,
-                        thumbRoot
+                        '-png', '-singlefile', '-scale-to', '300',
+                        inputPath, thumbRoot
                     ]);
-                } catch (e: any) {
-                    pdftoppmError = e?.message || String(e);
+                } catch (e2: any) {
+                    pdftoppmError += ` | pdftocairo: ${e2?.message || String(e2)}`;
                     await execFileAsync('pdftoppm', [
-                        '-png',
-                        '-singlefile',
-                        '-scale-to', '300',
-                        inputPath,
-                        thumbRoot
+                        '-png', '-singlefile', '-scale-to', '300',
+                        inputPath, thumbRoot
                     ]);
                 }
+            }
+        };
+
+        try {
+            if (isPdf) {
+                await generatePdfThumb();
             } else {
                 await sharp(inputPath)
                     .resize(300, 300, {
@@ -654,6 +665,73 @@ router.get('/thumb', async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error('Error generating thumbnail:', error);
         res.status(500).json({ success: false, error: error.message || 'Thumbnail failed' });
+    }
+});
+
+// GET /api/upload/check-integrity?url=/uploads/filename.pdf
+// Prüft, ob eine Datei auf der Festplatte existiert und (bei PDFs) gültig ist.
+router.get('/check-integrity', async (req: Request, res: Response) => {
+    try {
+        const fileUrl = String(req.query.url || '');
+        if (!fileUrl || !fileUrl.startsWith('/uploads/')) {
+            res.status(400).json({ success: false, error: 'Invalid url' });
+            return;
+        }
+
+        const filename = path.basename(fileUrl);
+        const filePath = path.join(UPLOAD_DIR, filename);
+        if (!filePath.startsWith(UPLOAD_DIR)) {
+            res.status(403).json({ success: false, error: 'Invalid file path' });
+            return;
+        }
+
+        const exists = await fs.pathExists(filePath);
+        if (!exists) {
+            res.json({
+                success: false,
+                error: 'File not found on disk',
+                filename,
+                exists: false
+            });
+            return;
+        }
+
+        const stat = await fs.stat(filePath);
+        const isPdf = filename.toLowerCase().endsWith('.pdf');
+
+        let pdfHeaderValid = null;
+        let pdfFooterValid = null;
+        if (isPdf) {
+            const fd = await fs.open(filePath, 'r');
+            try {
+                const headerBuf = Buffer.alloc(5);
+                await fs.read(fd, headerBuf, 0, 5, 0);
+                pdfHeaderValid = headerBuf.toString('ascii') === '%PDF-';
+
+                // Letzte 1024 Bytes auf %%EOF prüfen
+                const tailSize = Math.min(1024, stat.size);
+                const tailBuf = Buffer.alloc(tailSize);
+                await fs.read(fd, tailBuf, 0, tailSize, stat.size - tailSize);
+                pdfFooterValid = tailBuf.toString('latin1').includes('%%EOF');
+            } finally {
+                await fs.close(fd);
+            }
+        }
+
+        res.json({
+            success: true,
+            filename,
+            exists: true,
+            size: stat.size,
+            isPdf,
+            pdfHeaderValid,
+            pdfFooterValid,
+            isIntact: isPdf ? (pdfHeaderValid && pdfFooterValid) : true,
+            modified: stat.mtime.toISOString()
+        });
+    } catch (error: any) {
+        console.error('Integrity check failed:', error);
+        res.status(500).json({ success: false, error: error.message || 'Check failed' });
     }
 });
 

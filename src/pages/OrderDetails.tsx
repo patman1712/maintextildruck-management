@@ -97,7 +97,8 @@ export default function OrderDetails() {
     }
 
     try {
-      const response = await fetch(file.url);
+      const response = await fetch(file.url, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -110,8 +111,9 @@ export default function OrderDetails() {
       document.body.removeChild(a);
     } catch (error) {
       console.error('Download failed:', error);
-      // Fallback to opening in new tab
-      window.open(file.url, '_blank');
+      // Fallback to opening in new tab with cache-busting
+      const sep = file.url.includes('?') ? '&' : '?';
+      window.open(`${file.url}${sep}_t=${Date.now()}`, '_blank');
     }
   };
 
