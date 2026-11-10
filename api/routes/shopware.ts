@@ -1622,23 +1622,50 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
         let url: URL;
         try { url = new URL(urlRaw); } catch { incFail('invalid_url'); continue; }
 
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000);
-        let resp: globalThis.Response;
-        try {
-            resp = await fetch(url.toString(), { signal: controller.signal, redirect: 'follow' });
-        } catch {
-            clearTimeout(timeout);
-            incFail('download_failed');
-            continue;
-        } finally {
-            clearTimeout(timeout);
+        // Retry bei 429 (Rate Limit) und 5xx mit exponentiellem Backoff
+        let buf: Buffer | null = null;
+        let contentType = '';
+        let finalUrl = urlRaw;
+        let lastHttpStatus = 0;
+        for (let attempt = 0; attempt < 4; attempt++) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+            let resp: globalThis.Response;
+            try {
+                resp = await fetch(url.toString(), { signal: controller.signal, redirect: 'follow' });
+                finalUrl = resp.url;
+            } catch {
+                clearTimeout(timeout);
+                if (attempt < 3) {
+                    await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+                    continue;
+                }
+                incFail('download_failed');
+                break;
+            } finally {
+                clearTimeout(timeout);
+            }
+
+            lastHttpStatus = resp.status;
+            if (resp.status === 429 || resp.status >= 500) {
+                if (attempt < 3) {
+                    const retryAfter = parseInt(resp.headers.get('retry-after') || '0', 10) || (500 * (attempt + 1));
+                    await new Promise(r => setTimeout(r, retryAfter));
+                    continue;
+                }
+                incFail(`http_${resp.status}`);
+                break;
+            }
+            if (!resp.ok) { incFail(`http_${resp.status}`); break; }
+
+            contentType = resp.headers.get('content-type') || '';
+            buf = Buffer.from(await resp.arrayBuffer());
+            break;
         }
-
-        if (!resp.ok) { incFail(`http_${resp.status}`); continue; }
-
-        const contentType = resp.headers.get('content-type') || '';
-        const buf = Buffer.from(await resp.arrayBuffer());
+        if (!buf) {
+            if (lastHttpStatus === 0) incFail('download_failed');
+            continue;
+        }
         if (!buf.length) { incFail('empty_body'); continue; }
 
         // Bild anhand Magic Bytes erkennen (Content-Type kann bei Hotlink-Schutz falsch sein)
@@ -1655,7 +1682,7 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
             if (!debugSample) {
                 debugSample = {
                     url: urlRaw,
-                    finalUrl: resp.url,
+                    finalUrl,
                     contentType,
                     firstBytes: buf.slice(0, 200).toString('latin1').replace(/\s+/g, ' ')
                 };
@@ -1702,6 +1729,9 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
         } catch {
             incFail('db_update_failed');
         }
+
+        // Kleine Pause zwischen Downloads, um Shopware-Rate-Limits einzuhalten
+        await new Promise(r => setTimeout(r, 200));
     }
 
     const cacheFailed = Object.values(cacheFailReasons).reduce((a, b) => a + b, 0);
