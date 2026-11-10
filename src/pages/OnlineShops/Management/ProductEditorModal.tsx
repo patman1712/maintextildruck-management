@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Save, Image as ImageIcon, Plus, Trash2, ArrowRight, FileText, Download } from 'lucide-react';
+import { X, Save, Image as ImageIcon, Plus, Trash2, ArrowRight, FileText, Download, Folder, ChevronDown, ChevronRight } from 'lucide-react';
 import { ShopProductAssignment, Product, ShopCategory } from '../../../store';
 
 interface ProductEditorModalProps {
@@ -295,6 +295,9 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
   // Files (Images & Print Files)
   const [currentFiles, setCurrentFiles] = useState<any[]>([]);
   const [availableFiles, setAvailableFiles] = useState<any[]>([]);
+  const [availableFolders, setAvailableFolders] = useState<any[]>([]);
+  const [availableFileFolderAssignments, setAvailableFileFolderAssignments] = useState<any[]>([]);
+  const [expandedAvailableFolders, setExpandedAvailableFolders] = useState<Set<string>>(new Set());
   const [draggedImageId, setDraggedImageId] = useState<string | null>(null);
   const [dragOverImageId, setDragOverImageId] = useState<string | null>(null);
 
@@ -340,6 +343,12 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                       })).sort((a: any, b: any) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0));
                       setCurrentFiles(parsedAssigned);
                       setAvailableFiles(data.data.available);
+                      const folders = data.data.folders || [];
+                      setAvailableFolders(folders);
+                      setAvailableFileFolderAssignments(data.data.folderAssignments || []);
+                      setExpandedAvailableFolders(new Set(
+                          folders.filter((folder: any) => !folder.parent_id).map((folder: any) => folder.id)
+                      ));
                   }
               })
               .catch(err => console.error(err));
@@ -706,6 +715,108 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
 
     return Array.from(uniqueMap.values());
   }, [availableFiles, activeTab]); // Removed currentFiles from dependency to avoid re-filtering when adding
+
+  const availableFilesByFolder = React.useMemo(() => {
+      const validFolderIds = new Set(availableFolders.map(folder => folder.id));
+      const assignmentsByUrl = new Map<string, Set<string>>();
+      for (const item of availableFileFolderAssignments) {
+          if (!validFolderIds.has(item.folder_id)) continue;
+          const folderIds = assignmentsByUrl.get(item.file_url) || new Set<string>();
+          folderIds.add(item.folder_id);
+          assignmentsByUrl.set(item.file_url, folderIds);
+      }
+
+      const byFolder = new Map<string, any[]>();
+      const unfiled: any[] = [];
+      for (const file of filteredAvailableFiles) {
+          const folderIds = assignmentsByUrl.get(file.file_url);
+          if (!folderIds?.size) {
+              unfiled.push(file);
+              continue;
+          }
+          for (const folderId of folderIds) {
+              const files = byFolder.get(folderId) || [];
+              files.push(file);
+              byFolder.set(folderId, files);
+          }
+      }
+      return { byFolder, unfiled };
+  }, [availableFolders, availableFileFolderAssignments, filteredAvailableFiles]);
+
+  const availableFolderChildren = React.useMemo(() => {
+      const children = new Map<string | null, any[]>();
+      for (const folder of availableFolders) {
+          const parentId = folder.parent_id && availableFolders.some(item => item.id === folder.parent_id)
+              ? folder.parent_id
+              : null;
+          const siblings = children.get(parentId) || [];
+          siblings.push(folder);
+          children.set(parentId, siblings);
+      }
+      return children;
+  }, [availableFolders]);
+
+  const renderAvailablePrintFile = (file: any) => (
+      <button
+          key={`${file.file_url}-${file.id}`}
+          type="button"
+          className="w-full flex items-center justify-between p-2 bg-slate-50 border border-slate-200 rounded text-left hover:bg-blue-50 hover:border-blue-200"
+          onClick={() => handleAddFile(file.id)}
+      >
+          <span className="flex items-center space-x-3 overflow-hidden">
+              <span className="h-8 w-8 bg-white rounded flex items-center justify-center text-slate-400 border border-slate-200 flex-shrink-0 overflow-hidden">
+                  {file.thumbnail_url ? (
+                      <img src={file.thumbnail_url} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+                  ) : (
+                      <FileText size={14} />
+                  )}
+              </span>
+              <span className="min-w-0">
+                  <span className="block font-medium text-xs text-slate-700 truncate">{file.file_name}</span>
+                  {file.origin_names?.length > 0 && (
+                      <span className="block text-[10px] text-slate-400 truncate">{file.origin_names.join(', ')}</span>
+                  )}
+              </span>
+          </span>
+          <Plus size={16} className="text-blue-600 flex-shrink-0 ml-2" />
+      </button>
+  );
+
+  const renderAvailableFolder = (folder: any, level = 0): React.ReactNode => {
+      const files = availableFilesByFolder.byFolder.get(folder.id) || [];
+      const children = availableFolderChildren.get(folder.id) || [];
+      const isExpanded = expandedAvailableFolders.has(folder.id);
+      return (
+          <div key={folder.id} className="space-y-1">
+              <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  onClick={() => setExpandedAvailableFolders(previous => {
+                      const next = new Set(previous);
+                      if (next.has(folder.id)) next.delete(folder.id);
+                      else next.add(folder.id);
+                      return next;
+                  })}
+                  className="w-full min-h-[40px] flex items-center gap-2 px-2 py-2 rounded bg-white border border-slate-200 text-left hover:bg-slate-50"
+                  style={{ paddingLeft: `${8 + level * 16}px` }}
+              >
+                  {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+                  <Folder size={15} className="text-amber-600 flex-shrink-0" />
+                  <span className="text-xs font-semibold text-slate-700 truncate">{folder.name}</span>
+                  <span className="ml-auto text-[10px] text-slate-400">{files.length}</span>
+              </button>
+              {isExpanded && (
+                  <div className="space-y-1" style={{ marginLeft: `${16 + level * 16}px` }}>
+                      {files.map(renderAvailablePrintFile)}
+                      {children.map(child => renderAvailableFolder(child, level + 1))}
+                      {files.length === 0 && children.length === 0 && (
+                          <p className="px-2 py-1 text-[11px] text-slate-400 italic">Keine passenden Dateien in diesem Ordner.</p>
+                      )}
+                  </div>
+              )}
+          </div>
+      );
+  };
 
   const mainImage = currentFiles.find(isViewFile)?.file_url;
 
@@ -1141,7 +1252,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                        </div>
 
                        {/* Available Files (from Customer Product) */}
-                       {filteredAvailableFiles.length > 0 && (
+                       {(filteredAvailableFiles.length > 0 || (activeTab === 'print' && availableFolders.length > 0)) && (
                            <div className="space-y-2 pt-4 border-t border-slate-100 mt-4">
                                <p className="text-xs font-bold uppercase text-slate-500">Verfügbare {activeTab === 'view' ? 'Bilder' : 'Dateien'} (Kunde)</p>
                                
@@ -1157,24 +1268,20 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                                       ))}
                                    </div>
                                ) : (
-                                   <div className="space-y-2 opacity-60 hover:opacity-100 transition-opacity">
-                                       {filteredAvailableFiles.map((file: any) => (
-                                           <div key={file.id} className="flex items-center justify-between p-2 bg-slate-50 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-200" onClick={() => handleAddFile(file.id)}>
-                                               <div className="flex items-center space-x-3 overflow-hidden">
-                                                   <div className="h-8 w-8 bg-white rounded flex items-center justify-center text-slate-400 border border-slate-200 flex-shrink-0 overflow-hidden">
-                                                       {file.thumbnail_url ? (
-                                                           <img src={file.thumbnail_url} className="h-full w-full object-cover" loading="lazy" decoding="async" />
-                                                       ) : (
-                                                           <FileText size={14} />
-                                                       )}
-                                                   </div>
-                                                   <div className="truncate">
-                                                       <p className="font-medium text-xs text-slate-700 truncate">{file.file_name}</p>
-                                                   </div>
+                                   <div className="space-y-2">
+                                       {availableFolderChildren.get(null)?.map(folder => renderAvailableFolder(folder))}
+                                       {availableFilesByFolder.unfiled.length > 0 && (
+                                           <div className="space-y-1">
+                                               <div className="flex items-center gap-2 px-2 py-2 text-xs font-semibold text-slate-500">
+                                                   <Folder size={15} />
+                                                   <span>Ohne Ordner</span>
+                                                   <span className="ml-auto text-[10px] font-normal">{availableFilesByFolder.unfiled.length}</span>
                                                </div>
-                                               <Plus size={16} className="text-blue-600" />
+                                               <div className="space-y-1 pl-4">
+                                                   {availableFilesByFolder.unfiled.map(renderAvailablePrintFile)}
+                                               </div>
                                            </div>
-                                       ))}
+                                       )}
                                    </div>
                                )}
                            </div>

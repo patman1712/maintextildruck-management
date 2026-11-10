@@ -1084,6 +1084,8 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
         const product = db.prepare('SELECT customer_id FROM customer_products WHERE id = ?').get(assignment.product_id) as { customer_id: string };
 
         let allImages = [];
+        let fileFolders: any[] = [];
+        let fileFolderAssignments: any[] = [];
         if (product && product.customer_id) {
              // 1. Get files from customer_product_files (associated with products)
              const productFiles = db.prepare(`
@@ -1108,11 +1110,30 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
 
              // Combine both sources
              allImages = [...productFiles, ...directFilesWithOrigin].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+             fileFolders = db.prepare(`
+                SELECT id, customer_id, name, parent_id, sort_order
+                FROM customer_file_folders
+                WHERE customer_id = ?
+                ORDER BY sort_order ASC, name COLLATE NOCASE ASC
+             `).all(product.customer_id);
+             fileFolderAssignments = db.prepare(`
+                SELECT folder_id, file_url
+                FROM customer_file_assignments
+                WHERE customer_id = ?
+             `).all(product.customer_id);
         } else {
              allImages = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at DESC').all(assignment.product_id);
         }
 
-        res.json({ success: true, data: { assigned: assignedImagesParsed, available: allImages } });
+        res.json({
+            success: true,
+            data: {
+                assigned: assignedImagesParsed,
+                available: allImages,
+                folders: fileFolders,
+                folderAssignments: fileFolderAssignments
+            }
+        });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }
