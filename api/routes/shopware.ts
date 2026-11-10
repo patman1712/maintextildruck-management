@@ -1537,6 +1537,7 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
     // Fehlende Bilder in customer_product_files eintragen (type 'view')
     let added = 0;
     let processed = 0;
+    const newlyInserted: Array<{ id: string; product_id: string; file_url: string }> = [];
 
     const insertImg = db.prepare(
         "INSERT INTO customer_product_files (id, product_id, file_url, file_name, thumbnail_url, type) VALUES (?, ?, ?, ?, ?, 'view')"
@@ -1559,6 +1560,7 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
                 if (existingUrls.has(imgUrl)) continue;
                 const fileId = Math.random().toString(36).slice(2, 11);
                 insertImg.run(fileId, cp.id, imgUrl, 'Shopware Bild', imgUrl);
+                newlyInserted.push({ id: fileId, product_id: cp.id, file_url: imgUrl });
                 added++;
             }
         }
@@ -1566,17 +1568,100 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
 
     txn(existingProducts);
 
-    const fetchedFromSw = productsNeedFetch.length - existingProducts.filter(
-        (cp: any) => productsNeedFetch.includes(cp) && productImageMap[String(cp.shopware_product_id)]
-    ).length;
+    // Alle zu cachenden Bilder sammeln: neu eingefügte + bereits vorhandene mit externen URLs
+    const toCache: Array<{ id: string; product_id: string; file_url: string }> = [...newlyInserted];
+    try {
+        const productIds = existingProducts.map((p: any) => p.id);
+        if (productIds.length > 0) {
+            const placeholders = productIds.map(() => '?').join(',');
+            const existingExternal = db.prepare(`
+                SELECT id, product_id, file_url 
+                FROM customer_product_files 
+                WHERE product_id IN (${placeholders}) 
+                  AND type = 'view'
+                  AND file_url NOT LIKE '/uploads/%'
+                  AND file_url LIKE 'http%'
+            `).all(...productIds) as any[];
+            for (const row of existingExternal) {
+                if (!toCache.some(t => t.id === row.id)) toCache.push(row);
+            }
+        }
+    } catch {}
+
+    // Direkt lokal cachen, damit die Bilder vom Manager ausgeliefert werden
+    // (externe Shopware-URLs laden oft nicht wegen Hotlink-Schutz/relativen Pfaden)
+    let cached = 0;
+    let cacheFailed = 0;
+    for (const row of toCache) {
+        const urlRaw = row.file_url;
+        if (!/^https?:\/\//i.test(urlRaw)) { cacheFailed++; continue; }
+
+        let url: URL;
+        try { url = new URL(urlRaw); } catch { cacheFailed++; continue; }
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        let resp: globalThis.Response;
+        try {
+            resp = await fetch(url.toString(), { signal: controller.signal, redirect: 'follow' });
+        } catch {
+            clearTimeout(timeout);
+            cacheFailed++;
+            continue;
+        } finally {
+            clearTimeout(timeout);
+        }
+
+        const contentType = resp.headers.get('content-type') || '';
+        if (!contentType.toLowerCase().startsWith('image/')) { cacheFailed++; continue; }
+
+        const buf = Buffer.from(await resp.arrayBuffer());
+        if (!buf.length) { cacheFailed++; continue; }
+
+        const ext = contentType.toLowerCase().includes('png') ? 'png'
+            : contentType.toLowerCase().includes('webp') ? 'webp'
+            : contentType.toLowerCase().includes('jpeg') || contentType.toLowerCase().includes('jpg') ? 'jpg'
+            : 'png';
+
+        const key = crypto.createHash('sha1').update(`${row.product_id}:${url.pathname}:${buf.length}`).digest('hex').slice(0, 16);
+        const dir = path.join(UPLOAD_DIR, 'shopware_cache', customerId, row.product_id);
+        await fs.ensureDir(dir);
+
+        const localFilename = `${key}.${ext}`;
+        const localPath = path.join(dir, localFilename);
+        await fs.writeFile(localPath, buf);
+
+        const thumbFilename = `${key}_thumb.png`;
+        const thumbPath = path.join(dir, thumbFilename);
+        try {
+            await sharp(localPath)
+                .resize(300, 300, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+                .png()
+                .toFile(thumbPath);
+        } catch {}
+
+        const relDir = `shopware_cache/${customerId}/${row.product_id}`;
+        const localUrl = `/uploads/${relDir}/${localFilename}`;
+        const thumbUrl = `/uploads/${relDir}/${thumbFilename}`;
+
+        try {
+            db.prepare('UPDATE customer_product_files SET file_url = ?, thumbnail_url = ? WHERE id = ?')
+                .run(localUrl, thumbUrl, row.id);
+            cached++;
+        } catch {
+            cacheFailed++;
+        }
+    }
 
     res.json({
         success: true,
         processed,
         added,
+        cached,
+        cacheFailed,
         productsWithStoredImages,
-        message: `${added} Bild(er) für ${processed} Produkt(e) importiert (${productsWithStoredImages} aus gespeicherten URLs).` +
-            (productsNeedFetch.length > 0 ? ` ${fetchedFromSw} Produkt(e) konnten nicht von Shopware geladen werden (Auth/Verbindung).` : '')
+        message: `${added} Bild(er) importiert, davon ${cached} lokal gespeichert` +
+            (cacheFailed > 0 ? ` (${cacheFailed} konnten nicht heruntergeladen werden).` : '.')
     });
 });
 
