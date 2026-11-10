@@ -346,9 +346,7 @@ const ProductEditorModal: React.FC<ProductEditorModalProps> = ({ isOpen, onClose
                       const folders = data.data.folders || [];
                       setAvailableFolders(folders);
                       setAvailableFileFolderAssignments(data.data.folderAssignments || []);
-                      setExpandedAvailableFolders(new Set(
-                          folders.filter((folder: any) => !folder.parent_id).map((folder: any) => folder.id)
-                      ));
+                      setExpandedAvailableFolders(new Set());
                   }
               })
               .catch(err => console.error(err));
