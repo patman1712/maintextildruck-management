@@ -1445,6 +1445,19 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
     }
 
     // 1. Versuch: Gespeicherte Bild-URLs aus shopware_images verwenden (keine Auth nötig)
+    // Shopware 6 liefert oft relative URLs (/media/...), die gegen baseUrl aufgelöst werden müssen.
+    let shopOrigin = '';
+    try { shopOrigin = new URL(baseUrl).origin; } catch {}
+
+    const resolveUrl = (raw: string): string => {
+        if (!raw) return '';
+        const trimmed = raw.trim();
+        if (/^https?:\/\//i.test(trimmed)) return trimmed;
+        if (trimmed.startsWith('//')) return `https:${trimmed}`;
+        if (trimmed.startsWith('/') && shopOrigin) return `${shopOrigin}${trimmed}`;
+        return '';
+    };
+
     const productImageMap: Record<string, string[]> = {};
     let productsWithStoredImages = 0;
     for (const cp of existingProducts) {
@@ -1452,7 +1465,9 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
         if (cp.shopware_images) {
             try {
                 const parsed = JSON.parse(cp.shopware_images);
-                if (Array.isArray(parsed)) urls = parsed.filter((u: any) => typeof u === 'string' && /^https?:\/\//i.test(u));
+                if (Array.isArray(parsed)) {
+                    urls = parsed.map((u: any) => resolveUrl(typeof u === 'string' ? u : '')).filter(Boolean);
+                }
             } catch {}
         }
         if (urls.length > 0) {
@@ -1553,7 +1568,10 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
             if (images.length === 0) continue;
 
             const existingUrls = new Set(
-                (existingImgsStmt.all(cp.id) as any[]).map((f: any) => f.file_url)
+                (existingImgsStmt.all(cp.id) as any[]).map((f: any) => {
+                    const resolved = resolveUrl(String(f.file_url || ''));
+                    return resolved || f.file_url;
+                })
             );
 
             for (const imgUrl of images) {
@@ -1568,36 +1586,40 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
 
     txn(existingProducts);
 
-    // Alle zu cachenden Bilder sammeln: neu eingefügte + bereits vorhandene mit externen URLs
+    // Alle zu cachenden Bilder sammeln: neu eingefügte + bereits vorhandene mit externen/relativen URLs
     const toCache: Array<{ id: string; product_id: string; file_url: string }> = [...newlyInserted];
     try {
         const productIds = existingProducts.map((p: any) => p.id);
         if (productIds.length > 0) {
             const placeholders = productIds.map(() => '?').join(',');
-            const existingExternal = db.prepare(`
+            const existingRows = db.prepare(`
                 SELECT id, product_id, file_url 
                 FROM customer_product_files 
                 WHERE product_id IN (${placeholders}) 
                   AND type = 'view'
                   AND file_url NOT LIKE '/uploads/%'
-                  AND file_url LIKE 'http%'
             `).all(...productIds) as any[];
-            for (const row of existingExternal) {
-                if (!toCache.some(t => t.id === row.id)) toCache.push(row);
+            for (const row of existingRows) {
+                if (toCache.some(t => t.id === row.id)) continue;
+                const resolved = resolveUrl(String(row.file_url || ''));
+                if (resolved) {
+                    toCache.push({ id: row.id, product_id: row.product_id, file_url: resolved });
+                }
             }
         }
     } catch {}
 
     // Direkt lokal cachen, damit die Bilder vom Manager ausgeliefert werden
-    // (externe Shopware-URLs laden oft nicht wegen Hotlink-Schutz/relativen Pfaden)
     let cached = 0;
-    let cacheFailed = 0;
+    const cacheFailReasons: Record<string, number> = {};
+    const incFail = (reason: string) => { cacheFailReasons[reason] = (cacheFailReasons[reason] || 0) + 1; };
+
     for (const row of toCache) {
         const urlRaw = row.file_url;
-        if (!/^https?:\/\//i.test(urlRaw)) { cacheFailed++; continue; }
+        if (!/^https?:\/\//i.test(urlRaw)) { incFail('no_absolute_url'); continue; }
 
         let url: URL;
-        try { url = new URL(urlRaw); } catch { cacheFailed++; continue; }
+        try { url = new URL(urlRaw); } catch { incFail('invalid_url'); continue; }
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
@@ -1606,17 +1628,19 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
             resp = await fetch(url.toString(), { signal: controller.signal, redirect: 'follow' });
         } catch {
             clearTimeout(timeout);
-            cacheFailed++;
+            incFail('download_failed');
             continue;
         } finally {
             clearTimeout(timeout);
         }
 
+        if (!resp.ok) { incFail(`http_${resp.status}`); continue; }
+
         const contentType = resp.headers.get('content-type') || '';
-        if (!contentType.toLowerCase().startsWith('image/')) { cacheFailed++; continue; }
+        if (!contentType.toLowerCase().startsWith('image/')) { incFail('not_image'); continue; }
 
         const buf = Buffer.from(await resp.arrayBuffer());
-        if (!buf.length) { cacheFailed++; continue; }
+        if (!buf.length) { incFail('empty_body'); continue; }
 
         const ext = contentType.toLowerCase().includes('png') ? 'png'
             : contentType.toLowerCase().includes('webp') ? 'webp'
@@ -1649,9 +1673,12 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
                 .run(localUrl, thumbUrl, row.id);
             cached++;
         } catch {
-            cacheFailed++;
+            incFail('db_update_failed');
         }
     }
+
+    const cacheFailed = Object.values(cacheFailReasons).reduce((a, b) => a + b, 0);
+    const failDetails = Object.entries(cacheFailReasons).map(([reason, count]) => `${reason}:${count}`).join(', ');
 
     res.json({
         success: true,
@@ -1659,9 +1686,10 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
         added,
         cached,
         cacheFailed,
+        cacheFailReasons: Object.entries(cacheFailReasons),
         productsWithStoredImages,
         message: `${added} Bild(er) importiert, davon ${cached} lokal gespeichert` +
-            (cacheFailed > 0 ? ` (${cacheFailed} konnten nicht heruntergeladen werden).` : '.')
+            (cacheFailed > 0 ? ` (${cacheFailed} fehlgeschlagen: ${failDetails}).` : '.')
     });
 });
 
