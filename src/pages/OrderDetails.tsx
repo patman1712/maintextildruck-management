@@ -214,6 +214,8 @@ export default function OrderDetails() {
     const folderFiles = filesInFolder(folder.id);
     const isOpen = openFolders.has(folder.id);
     const count = folderFileCount(folder.id);
+    // Nur Ordner anzeigen, die tatsächlich Druckdaten enthalten (eigenständig oder in Unterordnern).
+    if (count === 0) return null;
     return (
       <div key={folder.id} className="mb-1" style={{ marginLeft: depth * 14 }}>
         <button
