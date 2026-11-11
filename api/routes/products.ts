@@ -221,6 +221,7 @@ router.get('/:customerId', (req: Request, res: Response) => {
                 JOIN shop_product_images spi ON spi.shop_product_assignment_id = spa.id
                 JOIN customer_product_files cpf ON cpf.id = spi.customer_product_file_id
                 WHERE spa.product_id = p.id AND s.customer_id = p.customer_id
+                  AND cpf.type = 'view'
             ) t) as shop_files,
             (SELECT json_group_array(json_object(
                 'id', f.id, 

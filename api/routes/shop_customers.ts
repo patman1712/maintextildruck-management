@@ -1177,6 +1177,7 @@ router.post('/:shopId/orders', async (req, res) => {
                     FROM shop_product_images spi
                     JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
                     WHERE spi.shop_product_assignment_id = ?
+                      AND cpf.type = 'view'
                 `).all(assignment.id) as any[];
 
                 if (assignedImages.length > 0) {
@@ -1184,12 +1185,12 @@ router.post('/:shopId/orders', async (req, res) => {
                     useAssignments = true;
                 } else {
                     filesToProcess = db.prepare(`
-                        SELECT * FROM customer_product_files WHERE product_id = ?
+                        SELECT * FROM customer_product_files WHERE product_id = ? AND type = 'view'
                     `).all(effectiveProductId) as any[];
                 }
             } else {
                 filesToProcess = db.prepare(`
-                    SELECT * FROM customer_product_files WHERE product_id = ?
+                    SELECT * FROM customer_product_files WHERE product_id = ? AND type = 'view'
                 `).all(effectiveProductId) as any[];
             }
             

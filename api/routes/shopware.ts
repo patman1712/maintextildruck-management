@@ -1737,16 +1737,65 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
     const cacheFailed = Object.values(cacheFailReasons).reduce((a, b) => a + b, 0);
     const failDetails = Object.entries(cacheFailReasons).map(([reason, count]) => `${reason}:${count}`).join(', ');
 
+    // Auto-Zuweisung der Ansichtsbilder zu shop_product_images,
+    // damit sie im Shop direkt unter "Aktive Bilder" erscheinen (ohne manuelle Zuweisung).
+    // Nur für Shop-Zuweisungen, die noch KEINE Bilder haben.
+    let autoAssigned = 0;
+    try {
+        const affectedProductIds = [...new Set([...newlyInserted.map(n => n.product_id), ...toCache.map(t => t.product_id)])];
+        if (affectedProductIds.length > 0) {
+            const ph = affectedProductIds.map(() => '?').join(',');
+            // Alle Shop-Zuweisungen für die betroffenen Produkte
+            const assignments = db.prepare(`
+                SELECT id, product_id 
+                FROM shop_product_assignments 
+                WHERE product_id IN (${ph})
+            `).all(...affectedProductIds) as any[];
+
+            for (const ass of assignments) {
+                // Prüfen, ob die Zuweisung schon Bilder hat
+                const existing = db.prepare(
+                    'SELECT COUNT(*) as cnt FROM shop_product_images WHERE shop_product_assignment_id = ?'
+                ).get(ass.id) as any;
+                if (existing.cnt > 0) continue;
+
+                // Alle Ansichtsbilder des Produkts holen
+                const viewFiles = db.prepare(
+                    "SELECT id FROM customer_product_files WHERE product_id = ? AND type = 'view' ORDER BY created_at ASC"
+                ).all(ass.product_id) as any[];
+
+                if (viewFiles.length === 0) continue;
+
+                // Als shop_product_images eintragen
+                const insertSpi = db.prepare(
+                    'INSERT INTO shop_product_images (id, shop_product_assignment_id, customer_product_file_id, sort_order) VALUES (?, ?, ?, ?)'
+                );
+                const spiTxn = db.transaction(() => {
+                    viewFiles.forEach((vf, idx) => {
+                        const spiId = Math.random().toString(36).slice(2, 11);
+                        insertSpi.run(spiId, ass.id, vf.id, idx);
+                        autoAssigned++;
+                    });
+                });
+                spiTxn();
+            }
+        }
+    } catch (err: any) {
+        console.error('Auto-assign shop_product_images failed:', err.message);
+    }
+
     res.json({
         success: true,
         processed,
         added,
         cached,
         cacheFailed,
+        autoAssigned,
         cacheFailReasons: Object.entries(cacheFailReasons),
         productsWithStoredImages,
         debugSample,
         message: `${added} Bild(er) importiert, davon ${cached} lokal gespeichert` +
+            (autoAssigned > 0 ? `, ${autoAssigned} automatisch Shops zugewiesen` : '') +
             (cacheFailed > 0 ? ` (${cacheFailed} fehlgeschlagen: ${failDetails}).` : '.')
     });
 });

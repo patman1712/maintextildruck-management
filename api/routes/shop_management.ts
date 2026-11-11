@@ -630,6 +630,7 @@ router.get('/:shopId/products', (req, res) => {
             FROM shop_product_images spi
             JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
             WHERE spi.shop_product_assignment_id = ?
+              AND cpf.type = 'view'
             ORDER BY spi.sort_order ASC, spi.created_at ASC
         `).all(p.id) as any[];
 
@@ -637,8 +638,8 @@ router.get('/:shopId/products', (req, res) => {
         if (assignedImages.length > 0) {
             files = assignedImages;
         } else {
-            // Fallback: Get all files from the base product
-            files = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at DESC').all(p.product_id);
+            // Fallback: Nur Ansichtsbilder (type='view'), keine Druckdaten
+            files = db.prepare("SELECT * FROM customer_product_files WHERE product_id = ? AND type = 'view' ORDER BY created_at ASC").all(p.product_id);
         }
 
         if (p.variants) {
@@ -1045,6 +1046,7 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
             FROM shop_product_images spi
             JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
             WHERE spi.shop_product_assignment_id = ?
+              AND cpf.type = 'view'
             ORDER BY spi.sort_order ASC
         `).all(assignmentId);
 
@@ -1093,6 +1095,7 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
                 FROM customer_product_files cpf
                 JOIN customer_products cp ON cpf.product_id = cp.id
                 WHERE cp.customer_id = ?
+                  AND cpf.type = 'view'
              `).all(product.customer_id) as any[];
 
              // 2. Get files from files table (direct uploads / orders)
@@ -1122,7 +1125,7 @@ router.get('/:shopId/products/:assignmentId/images', (req, res) => {
                 WHERE customer_id = ?
              `).all(product.customer_id);
         } else {
-             allImages = db.prepare('SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at DESC').all(assignment.product_id);
+             allImages = db.prepare("SELECT * FROM customer_product_files WHERE product_id = ? AND type = 'view' ORDER BY created_at DESC").all(assignment.product_id);
         }
 
         res.json({

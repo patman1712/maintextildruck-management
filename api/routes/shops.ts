@@ -221,6 +221,7 @@ router.get('/:id/products', (req, res) => {
             FROM shop_product_images spi
             JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
             WHERE spi.shop_product_assignment_id IN (${placeholders})
+              AND cpf.type = 'view'
             ORDER BY spi.sort_order ASC, spi.created_at ASC
         `).all(...assignmentIds) as any[];
 
@@ -266,7 +267,8 @@ router.get('/:id/products', (req, res) => {
             fallbackImages = db.prepare(`
                 SELECT * FROM customer_product_files 
                 WHERE product_id IN (${productPlaceholders}) 
-                ORDER BY created_at DESC
+                  AND type = 'view'
+                ORDER BY created_at ASC
             `).all(...productIdsNeedingFallback);
         }
 
@@ -370,11 +372,12 @@ router.get('/:id/search', (req, res) => {
     if (productIds.length > 0) {
         const placeholders = productIds.map(() => '?').join(',');
         
-        // Try to get one image per product
+        // Try to get one image per product (nur Ansichtsbilder, keine Druckdaten)
         const images = db.prepare(`
             SELECT product_id, file_url, thumbnail_url 
             FROM customer_product_files 
             WHERE product_id IN (${placeholders})
+              AND type = 'view'
             GROUP BY product_id
         `).all(...productIds) as any[];
 
