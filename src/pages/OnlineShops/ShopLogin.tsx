@@ -38,7 +38,9 @@ const ShopLogin: React.FC = () => {
       const data = await res.json();
       if (data.success) {
         login(data.data);
-        navigate(`${shopBaseUrl}`);
+        // Auf der eigenen Domain (shopBaseUrl === '') zur Startseite "/" leiten.
+        // Unter der Manager-Adresse bleibt der Shop-Prefix (z. B. "/shop/oldschoolhockey") erhalten.
+        navigate(shopBaseUrl || '/', { replace: true });
       } else {
         setError(data.error || 'Login fehlgeschlagen.');
       }
