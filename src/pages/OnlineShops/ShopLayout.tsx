@@ -1,6 +1,6 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams, Outlet, Link, useLocation } from 'react-router-dom';
+import { useParams, Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Search, Menu, User, ChevronDown, LogOut, X, Trash2, ArrowRight, ShoppingBag as BagIcon, ShoppingBag } from 'lucide-react';
 import { Shop, ShopCategory } from '../../store';
 import { useShopStore } from '../../shopStore';
@@ -9,6 +9,7 @@ import { parseTemplate, ShopTemplate, buildBaseContext } from './template/templa
 const ShopLayout: React.FC = () => {
   const { shopId } = useParams<{ shopId: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const { currentCustomer, logout, cart, removeFromCart, updateQuantity, isCartOpen: cartOpen, setCartOpen, setActiveShop, voucher } = useShopStore();
   const [shop, setShop] = useState<Shop | null>(null);
   
@@ -212,8 +213,9 @@ const ShopLayout: React.FC = () => {
       ...buildBaseContext(shop, shopBaseUrl),
       categories: navCategories,
       cart_count: cartCount,
+      is_logged_in: !!currentCustomer,
     },
-  }), [shop, categories, shopBaseUrl, parsedTemplate, navCategories, cartCount, shippingConfig, shippingCost]);
+  }), [shop, categories, shopBaseUrl, parsedTemplate, navCategories, cartCount, shippingConfig, shippingCost, currentCustomer]);
 
   // Aktionen aus dem Custom-Template (Buttons/Links mit data-shop-action)
   useEffect(() => {
@@ -225,10 +227,16 @@ const ShopLayout: React.FC = () => {
       if (action === 'open-cart') { e.preventDefault(); setCartOpen(true); }
       else if (action === 'close-cart') { e.preventDefault(); setCartOpen(false); }
       else if (action === 'open-search') { e.preventDefault(); setSearchOpen(true); }
+      else if (action === 'logout') {
+        e.preventDefault();
+        logout();
+        // Zur jeweiligen Shop-Startseite: eigene Domain → "/", Manager-Adresse → "/shop/<id>".
+        navigate(shopBaseUrl || '/', { replace: true });
+      }
     };
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
-  }, [customLayoutActive, setCartOpen]);
+  }, [customLayoutActive, setCartOpen, logout, navigate, shopBaseUrl]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Lade Shop...</div>;
   if (error || !shop) return <div className="min-h-screen flex items-center justify-center text-red-600">{error || 'Shop nicht gefunden'}</div>;

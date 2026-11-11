@@ -266,6 +266,8 @@ export const SAMPLE_TEMPLATE = `<!-- Custom Design-Template für den Online-Shop
        {{widget:products}}    -> Fertiges Produktraster
        {{#products}}{{name}} {{price}} {{url}} {{image}}{{/products}}  -> eigene Produktliste
        {{#categories}}{{name}} {{url}}{{/categories}}
+       {{#is_logged_in}}...{{/is_logged_in}}  -> nur wenn ein Kunde angemeldet ist
+     Shop-Aktionen (Attribut data-shop-action): open-cart, close-cart, open-search, logout
   -->
 
 <style>
@@ -289,6 +291,7 @@ export const SAMPLE_TEMPLATE = `<!-- Custom Design-Template für den Online-Shop
     <nav class="tpl-nav">
       {{#categories}}<a href="{{url}}">{{name}}</a>{{/categories}}
       <a href="{{shop_url}}/cart">Warenkorb</a>
+      {{#is_logged_in}}<a href="#" data-shop-action="logout">Abmelden</a>{{/is_logged_in}}
     </nav>
   </div>
 
