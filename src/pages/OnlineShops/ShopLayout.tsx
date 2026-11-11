@@ -1,5 +1,5 @@
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { ShoppingCart, Search, Menu, User, ChevronDown, LogOut, X, Trash2, ArrowRight, ShoppingBag as BagIcon, ShoppingBag } from 'lucide-react';
 import { Shop, ShopCategory } from '../../store';
@@ -22,6 +22,13 @@ const ShopLayout: React.FC = () => {
   // If custom domain, base is empty string (root)
   // If standard route, base is /shop/:shopId
   const shopBaseUrl = isCustomDomain ? '' : `/shop/${shopId}`;
+
+  // Gemeinsamer Abmelde-Handler für Standard-Header UND Custom-Template (data-shop-action="logout").
+  // Nach dem Logout zur jeweiligen Shop-Startseite: eigene Domain → "/", Manager-Adresse → "/shop/<id>".
+  const handleLogout = useCallback(() => {
+    logout();
+    navigate(shopBaseUrl || '/', { replace: true });
+  }, [logout, navigate, shopBaseUrl]);
 
   const [categories, setCategories] = useState<ShopCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -227,16 +234,11 @@ const ShopLayout: React.FC = () => {
       if (action === 'open-cart') { e.preventDefault(); setCartOpen(true); }
       else if (action === 'close-cart') { e.preventDefault(); setCartOpen(false); }
       else if (action === 'open-search') { e.preventDefault(); setSearchOpen(true); }
-      else if (action === 'logout') {
-        e.preventDefault();
-        logout();
-        // Zur jeweiligen Shop-Startseite: eigene Domain → "/", Manager-Adresse → "/shop/<id>".
-        navigate(shopBaseUrl || '/', { replace: true });
-      }
+      else if (action === 'logout') { e.preventDefault(); handleLogout(); }
     };
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
-  }, [customLayoutActive, setCartOpen, logout, navigate, shopBaseUrl]);
+  }, [customLayoutActive, setCartOpen, handleLogout]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Lade Shop...</div>;
   if (error || !shop) return <div className="min-h-screen flex items-center justify-center text-red-600">{error || 'Shop nicht gefunden'}</div>;
@@ -433,7 +435,7 @@ const ShopLayout: React.FC = () => {
                     <ShoppingBag size={16} />
                     <span>Meine Bestellungen</span>
                   </Link>
-                  <button onClick={logout} className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium">
+                  <button onClick={handleLogout} className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium">
                     <LogOut size={16} />
                     <span>Abmelden</span>
                   </button>
@@ -740,7 +742,7 @@ const ShopLayout: React.FC = () => {
                             </div>
                             <Link to={`${shopBaseUrl}/profile`} onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Profil</Link>
                             <Link to={`${shopBaseUrl}/orders`} onClick={() => setMobileMenuOpen(false)} className="block px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Bestellungen</Link>
-                            <button onClick={() => { logout(); setMobileMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-red-600 font-bold hover:bg-red-50 rounded-lg">Abmelden</button>
+                            <button onClick={() => { handleLogout(); setMobileMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-red-600 font-bold hover:bg-red-50 rounded-lg">Abmelden</button>
                         </div>
                     ) : (
                         <Link 
