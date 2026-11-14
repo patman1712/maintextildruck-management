@@ -6,6 +6,7 @@ import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import fs from 'fs'
+import https from 'https'
 
 // for esm mode
 const __filename = fileURLToPath(import.meta.url)
@@ -302,7 +303,7 @@ app.get(['/media/*', '/media'], (req: Request, res: Response, next: NextFunction
 
     if (!shop) return next()
 
-    const customer = db.prepare('SELECT shopware_url FROM customers WHERE id = ?').get(shop.customer_id) as any
+    const customer = db.prepare('SELECT shopware_url, shopware_media_host FROM customers WHERE id = ?').get(shop.customer_id) as any
     const shopwareUrlRaw = customer?.shopware_url ? String(customer.shopware_url) : ''
     if (!shopwareUrlRaw) return next()
 
@@ -310,14 +311,51 @@ app.get(['/media/*', '/media'], (req: Request, res: Response, next: NextFunction
     shopwareBase = shopwareBase.replace(/\/api$/, '').replace(/\/admin$/, '')
 
     if (!/^https?:\/\//i.test(shopwareBase)) return next()
+
+    let swHost = ''
     try {
-      const swHost = new URL(shopwareBase).host.toLowerCase()
-      if (swHost && swHost === host) return next()
+      swHost = new URL(shopwareBase).host.toLowerCase()
     } catch {
       return next()
     }
 
-    res.redirect(302, `${shopwareBase}${req.originalUrl}`)
+    // Fall 1: Shopware-Domain ist NICHT die Custom-Domain → einfacher Redirect
+    if (swHost && swHost !== host) {
+      return res.redirect(302, `${shopwareBase}${req.originalUrl}`)
+    }
+
+    // Fall 2: Shopware-Domain == Custom-Domain (z. B. sverzhausen.team-shop.org zeigt auf Railway,
+    // aber Shopware läuft noch auf dem alten Server). Wenn shopware_media_host gesetzt ist,
+    // proxy die Anfrage an den echten Shopware-Server.
+    const mediaHost = customer?.shopware_media_host ? String(customer.shopware_media_host).trim() : ''
+    if (!mediaHost) return next()
+
+    // Proxy: Anfrage an den echten Shopware-Server weiterleiten mit korrektem Host-Header
+    const targetHost = mediaHost.includes(':') ? mediaHost.split(':')[0] : mediaHost
+    const targetPort = mediaHost.includes(':') ? parseInt(mediaHost.split(':')[1], 10) : 443
+
+    const proxyReq = https.request({
+      hostname: targetHost,
+      port: targetPort,
+      path: req.originalUrl,
+      method: req.method,
+      headers: {
+        ...req.headers,
+        host: swHost || host,
+      },
+      rejectUnauthorized: false, // SSL-Zertifikat kann abgelaufen sein (Notfall)
+    }, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode || 502, proxyRes.headers)
+      proxyRes.pipe(res)
+    })
+
+    proxyReq.on('error', () => {
+      if (!res.headersSent) {
+        res.status(502).send('Bad Gateway')
+      }
+    })
+
+    req.pipe(proxyReq)
   } catch {
     next()
   }

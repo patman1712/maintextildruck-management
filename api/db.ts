@@ -36,6 +36,7 @@ db.exec(`
     shopware_version TEXT DEFAULT '6',
     shopware_access_key TEXT,
     shopware_secret_key TEXT,
+    shopware_media_host TEXT,
     contact_person TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
@@ -254,6 +255,16 @@ try {
     }
 } catch (error) {
     console.error('Migration error (donations_enabled):', error);
+}
+
+try {
+    const custCols = db.prepare("PRAGMA table_info(customers)").all() as any[];
+    if (!custCols.some(col => col.name === 'shopware_media_host')) {
+        console.log('Migrating database: Adding shopware_media_host to customers table');
+        db.exec('ALTER TABLE customers ADD COLUMN shopware_media_host TEXT');
+    }
+} catch (error) {
+    console.error('Migration error (shopware_media_host):', error);
 }
 
 try {

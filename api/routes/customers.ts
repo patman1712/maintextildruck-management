@@ -47,6 +47,7 @@ router.put('/:id', (req: Request, res: Response) => {
   if (updates.shopware_version !== undefined) { fields.push('shopware_version = ?'); values.push(updates.shopware_version); }
   if (updates.shopware_access_key !== undefined) { fields.push('shopware_access_key = ?'); values.push(updates.shopware_access_key); }
   if (updates.shopware_secret_key !== undefined) { fields.push('shopware_secret_key = ?'); values.push(updates.shopware_secret_key); }
+  if (updates.shopware_media_host !== undefined) { fields.push('shopware_media_host = ?'); values.push(updates.shopware_media_host); }
 
   if (fields.length === 0) return res.json({ success: true, message: 'No changes' });
 
