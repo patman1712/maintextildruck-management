@@ -1171,26 +1171,25 @@ router.post('/:shopId/orders', async (req, res) => {
             let useAssignments = false;
 
             if (assignment) {
-                // Check if shop has specific images assigned - INCLUDE size_restrictions and attribute_restrictions
-                const assignedImages = db.prepare(`
+                // Shop assignments also store print files and their variant restrictions.
+                const assignedFiles = db.prepare(`
                     SELECT cpf.*, spi.variant_ids, spi.size_restrictions, spi.attribute_restrictions
                     FROM shop_product_images spi
                     JOIN customer_product_files cpf ON spi.customer_product_file_id = cpf.id
                     WHERE spi.shop_product_assignment_id = ?
-                      AND cpf.type = 'view'
                 `).all(assignment.id) as any[];
 
-                if (assignedImages.length > 0) {
-                    filesToProcess = assignedImages;
+                if (assignedFiles.length > 0) {
+                    filesToProcess = assignedFiles;
                     useAssignments = true;
                 } else {
                     filesToProcess = db.prepare(`
-                        SELECT * FROM customer_product_files WHERE product_id = ? AND type = 'view'
+                        SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at ASC
                     `).all(effectiveProductId) as any[];
                 }
             } else {
                 filesToProcess = db.prepare(`
-                    SELECT * FROM customer_product_files WHERE product_id = ? AND type = 'view'
+                    SELECT * FROM customer_product_files WHERE product_id = ? ORDER BY created_at ASC
                 `).all(effectiveProductId) as any[];
             }
             
