@@ -1526,9 +1526,6 @@ async function runShopwareImageSync(req: Request, res: SyncImageJobResponse, pro
 
     const version = customer.shopware_version || '6';
     const baseUrl = normalizeShopwareBaseUrl(customer.shopware_url);
-    const shopwareMediaHost = customer.shopware_media_host ? String(customer.shopware_media_host).trim() : '';
-    let shopwareHost = '';
-    try { shopwareHost = new URL(baseUrl).host.toLowerCase(); } catch {}
 
     try {
         const swHost = new URL(baseUrl).host.toLowerCase();
@@ -1775,13 +1772,7 @@ async function runShopwareImageSync(req: Request, res: SyncImageJobResponse, pro
         let url: URL;
         try { url = new URL(urlRaw); } catch { incFail('invalid_url'); continue; }
 
-        // Wenn die Bild-URL auf die Shopware-Domain zeigt, die aber auf Railway zeigt
-        // (Custom-Domain == Shopware-Domain), nutze den shopware_media_host als Ziel.
-        if (shopwareMediaHost && shopwareHost && url.host.toLowerCase() === shopwareHost) {
-            const [mhHost, mhPort] = shopwareMediaHost.split(':');
-            url.hostname = mhHost;
-            if (mhPort) url.port = mhPort;
-        }
+        // Keep the Shopware hostname so its /media proxy can route to the correct virtual host.
 
         // Retry bei 429 (Rate Limit) und 5xx mit exponentiellem Backoff
         let buf: Buffer | null = null;
