@@ -16,6 +16,7 @@ type SyncImageProgress = {
     message: string;
     complete: boolean;
     updatedAt: number;
+    result?: any;
 };
 const syncImageProgress = new Map<string, SyncImageProgress>();
 
@@ -1450,10 +1451,72 @@ router.get('/sync-images/:customerId/progress/:progressId', (req: Request, res: 
     res.json({ success: true, progress });
 });
 
-router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
+type SyncImageJobResponse = {
+    status(code: number): any;
+    json(body: any): any;
+};
+
+router.post('/sync-images/:customerId', (req: Request, res: Response) => {
     const { customerId } = req.params;
     const progressId = String(req.query.progressId || '');
     const progressKey = progressId ? `${customerId}:${progressId}` : '';
+
+    if (!progressKey) {
+        void runShopwareImageSync(req, res, '').catch((error: any) => {
+            console.error('Shopware image sync failed:', error);
+            if (!res.headersSent) res.status(500).json({ success: false, error: error.message || 'Bildimport fehlgeschlagen' });
+        });
+        return;
+    }
+
+    updateSyncImageProgress(progressKey, {
+        stage: 'Wird gestartet',
+        current: 0,
+        total: 0,
+        message: 'Bildimport wird im Hintergrund gestartet',
+        complete: false
+    });
+
+    let statusCode = 200;
+    const jobResponse: SyncImageJobResponse = {
+        status(code: number) {
+            statusCode = code;
+            return this;
+        },
+        json(body: any) {
+            const successful = statusCode < 400 && body?.success !== false;
+            const current = syncImageProgress.get(progressKey);
+            updateSyncImageProgress(progressKey, {
+                stage: successful ? 'Abgeschlossen' : 'Fehler',
+                current: successful ? (current?.total || current?.current || 0) : (current?.current || 0),
+                total: current?.total || 0,
+                message: body?.message || body?.error || (successful ? 'Bildimport abgeschlossen' : 'Bildimport fehlgeschlagen'),
+                complete: true,
+                result: body
+            });
+            return body;
+        }
+    };
+
+    res.status(202).json({ success: true, progressId });
+    setImmediate(() => {
+        void runShopwareImageSync(req, jobResponse, progressKey).catch((error: any) => {
+            console.error('Background Shopware image sync failed:', error);
+            const current = syncImageProgress.get(progressKey);
+            updateSyncImageProgress(progressKey, {
+                stage: 'Fehler',
+                current: current?.current || 0,
+                total: current?.total || 0,
+                message: error.message || 'Bildimport fehlgeschlagen',
+                complete: true,
+                result: { success: false, error: error.message || 'Bildimport fehlgeschlagen' }
+            });
+        });
+    });
+});
+
+async function runShopwareImageSync(req: Request, res: SyncImageJobResponse, progressKey: string) {
+    const { customerId } = req.params;
 
     const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId) as any;
     if (!customer) return res.status(404).json({ success: false, error: 'Customer not found' });
@@ -1908,7 +1971,7 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
         debugSample,
         message
     });
-});
+}
 
 router.post('/cache-product-images/:customerId', async (req: Request, res: Response) => {
     try {

@@ -931,33 +931,43 @@ export default function CustomerDetails() {
           stage: 'Starte Import',
           current: 0,
           total: 0,
-          message: 'Verbindung zu Shopware wird aufgebaut',
+          message: 'Der Serverjob wird gestartet',
           complete: false
       });
       try {
-          let res: Response | null = null;
-          let requestError: unknown = null;
-          const request = fetch(`/api/shopware/sync-images/${customer.id}?progressId=${encodeURIComponent(progressId)}`, { method: 'POST' })
-              .then(response => { res = response; })
-              .catch(error => { requestError = error; });
+          const startResponse = await fetch(`/api/shopware/sync-images/${customer.id}?progressId=${encodeURIComponent(progressId)}`, { method: 'POST' });
+          let data = await startResponse.json();
 
-          while (!res && !requestError) {
-              await new Promise(resolve => setTimeout(resolve, 1200));
-              try {
-                  const progressRes = await fetch(progressUrl, { cache: 'no-store' });
-                  if (progressRes.ok) {
+          if (startResponse.status === 202 && data.success) {
+              let completedProgress: any = null;
+              let consecutivePollErrors = 0;
+              while (!completedProgress) {
+                  await new Promise(resolve => setTimeout(resolve, 1200));
+                  try {
+                      const progressRes = await fetch(progressUrl, { cache: 'no-store' });
+                      if (!progressRes.ok) {
+                          throw new Error(progressRes.status === 404
+                              ? 'Der Server hat den Importstatus verloren. Bitte den Import erneut starten.'
+                              : `Fortschritt konnte nicht abgefragt werden (HTTP ${progressRes.status}).`);
+                      }
                       const progressData = await progressRes.json();
-                      if (progressData.success) setSyncImageProgress(progressData.progress);
+                      if (!progressData.success) throw new Error(progressData.error || 'Importstatus nicht verfügbar.');
+                      consecutivePollErrors = 0;
+                      const progress = progressData.progress;
+                      setSyncImageProgress(progress);
+                      if (progress.complete) completedProgress = progress;
+                  } catch (pollError) {
+                      consecutivePollErrors++;
+                      if (consecutivePollErrors >= 5) throw pollError;
                   }
-              } catch {
-                  // Keep waiting for the import request if a progress poll fails.
               }
+              data = completedProgress.result || {
+                  success: completedProgress.stage !== 'Fehler',
+                  error: completedProgress.message,
+                  message: completedProgress.message
+              };
           }
-          await request;
-          if (requestError) throw requestError;
 
-          const response = res as Response;
-          const data = await response.json();
           if (data.success) {
               setSyncImageProgress((current) => current ? {
                   ...current,
@@ -984,13 +994,14 @@ export default function CustomerDetails() {
           }
       } catch (err) {
           console.error(err);
+          const errorMessage = err instanceof Error ? err.message : 'Netzwerkfehler beim Import der Bilder';
           setSyncImageProgress((current) => current ? {
               ...current,
               stage: 'Fehler',
-              message: 'Verbindung zum Server unterbrochen. Bitte Serverprotokoll prüfen.',
+              message: errorMessage,
               complete: true
           } : null);
-          alert('Netzwerkfehler beim Import der Bilder');
+          alert(errorMessage);
       } finally {
           setIsSyncingOnlyImages(false);
           window.setTimeout(() => setSyncImageProgress(null), 12000);
