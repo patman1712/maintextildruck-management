@@ -67,6 +67,13 @@ export default function CustomerDetails() {
   const [isCachingShopwareImages, setIsCachingShopwareImages] = useState(false);
   const [isRestoringShopwareImages, setIsRestoringShopwareImages] = useState(false);
   const [isSyncingOnlyImages, setIsSyncingOnlyImages] = useState(false);
+  const [syncImageProgress, setSyncImageProgress] = useState<{
+      stage: string;
+      current: number;
+      total: number;
+      message: string;
+      complete: boolean;
+  } | null>(null);
 
   // Products State
   const [products, setProducts] = useState<Product[]>([]);
@@ -917,11 +924,48 @@ export default function CustomerDetails() {
           return;
       }
       if (!confirm('Nur die Bilder der bereits vorhandenen Shopware-Produkte neu importieren? Es werden keine Produkte gelöscht oder neu angelegt.')) return;
+      const progressId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const progressUrl = `/api/shopware/sync-images/${customer.id}/progress/${progressId}`;
       setIsSyncingOnlyImages(true);
+      setSyncImageProgress({
+          stage: 'Starte Import',
+          current: 0,
+          total: 0,
+          message: 'Verbindung zu Shopware wird aufgebaut',
+          complete: false
+      });
       try {
-          const res = await fetch(`/api/shopware/sync-images/${customer.id}`, { method: 'POST' });
-          const data = await res.json();
+          let res: Response | null = null;
+          let requestError: unknown = null;
+          const request = fetch(`/api/shopware/sync-images/${customer.id}?progressId=${encodeURIComponent(progressId)}`, { method: 'POST' })
+              .then(response => { res = response; })
+              .catch(error => { requestError = error; });
+
+          while (!res && !requestError) {
+              await new Promise(resolve => setTimeout(resolve, 1200));
+              try {
+                  const progressRes = await fetch(progressUrl, { cache: 'no-store' });
+                  if (progressRes.ok) {
+                      const progressData = await progressRes.json();
+                      if (progressData.success) setSyncImageProgress(progressData.progress);
+                  }
+              } catch {
+                  // Keep waiting for the import request if a progress poll fails.
+              }
+          }
+          await request;
+          if (requestError) throw requestError;
+
+          const response = res as Response;
+          const data = await response.json();
           if (data.success) {
+              setSyncImageProgress((current) => current ? {
+                  ...current,
+                  stage: 'Abgeschlossen',
+                  current: current.total,
+                  message: data.message || current.message,
+                  complete: true
+              } : null);
               let msg = data.message || `${data.added} Bilder importiert.`;
               if (data.debugSample) {
                   const ds = data.debugSample;
@@ -930,13 +974,26 @@ export default function CustomerDetails() {
               alert(msg);
               fetchProducts();
           } else {
+              setSyncImageProgress((current) => current ? {
+                  ...current,
+                  stage: 'Fehler',
+                  message: data.error || 'Der Bildimport konnte nicht abgeschlossen werden.',
+                  complete: true
+              } : null);
               alert('Fehler: ' + (data.error || 'Unbekannt'));
           }
       } catch (err) {
           console.error(err);
+          setSyncImageProgress((current) => current ? {
+              ...current,
+              stage: 'Fehler',
+              message: 'Verbindung zum Server unterbrochen. Bitte Serverprotokoll prüfen.',
+              complete: true
+          } : null);
           alert('Netzwerkfehler beim Import der Bilder');
       } finally {
           setIsSyncingOnlyImages(false);
+          window.setTimeout(() => setSyncImageProgress(null), 12000);
       }
   };
 
@@ -2742,6 +2799,43 @@ export default function CustomerDetails() {
                         </button>
                     </div>
                 </div>
+
+                {syncImageProgress && (
+                    <div
+                        className={`mb-5 rounded-lg border p-4 ${
+                            syncImageProgress.stage === 'Fehler'
+                                ? 'border-red-200 bg-red-50 text-red-800'
+                                : syncImageProgress.complete
+                                    ? 'border-green-200 bg-green-50 text-green-800'
+                                    : 'border-blue-200 bg-blue-50 text-blue-900'
+                        }`}
+                        role="status"
+                        aria-live="polite"
+                    >
+                        <div className="flex items-center justify-between gap-4 text-sm">
+                            <span className="font-semibold">{syncImageProgress.stage}</span>
+                            {syncImageProgress.total > 0 && (
+                                <span className="tabular-nums">
+                                    {Math.min(syncImageProgress.current, syncImageProgress.total)} / {syncImageProgress.total}
+                                </span>
+                            )}
+                        </div>
+                        <p className="mt-1 break-all text-sm">{syncImageProgress.message}</p>
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/80">
+                            <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                    syncImageProgress.stage === 'Fehler' ? 'bg-red-500' :
+                                    syncImageProgress.complete ? 'bg-green-500' : 'bg-blue-600'
+                                } ${!syncImageProgress.complete && syncImageProgress.total === 0 ? 'animate-pulse' : ''}`}
+                                style={{
+                                    width: syncImageProgress.total > 0
+                                        ? `${syncImageProgress.complete ? 100 : Math.round((syncImageProgress.current / syncImageProgress.total) * 100)}%`
+                                        : syncImageProgress.complete ? '100%' : '28%'
+                                }}
+                            />
+                        </div>
+                    </div>
+                )}
 
                 <div className="space-y-4">
                     {shopwareProducts.map(product => (

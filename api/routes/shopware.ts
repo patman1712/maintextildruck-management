@@ -9,6 +9,20 @@ import { Agent } from 'undici';
 
 const router = Router();
 
+type SyncImageProgress = {
+    stage: string;
+    current: number;
+    total: number;
+    message: string;
+    complete: boolean;
+    updatedAt: number;
+};
+const syncImageProgress = new Map<string, SyncImageProgress>();
+
+function updateSyncImageProgress(key: string, progress: Omit<SyncImageProgress, 'updatedAt'>) {
+    syncImageProgress.set(key, { ...progress, updatedAt: Date.now() });
+}
+
 // NOTFALL-LOESUNG fuer abgelaufene Shopware-SSL-Zertifikate.
 // Deaktiviert die TLS-Zertifikatspruefung NUR fuer Shopware-Requests.
 // Sicherheitsrisiko: Man-in-the-Middle-Angriffe auf Shopware-Datenverkehr.
@@ -1426,8 +1440,20 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
 // Importiert NUR die Bilder für bereits vorhandene Shopware-Produkte.
 // Es werden keine Produkte angelegt, gelöscht oder verändert - nur fehlende
 // Bild-Einträge in customer_product_files (type 'view') ergänzt.
+router.get('/sync-images/:customerId/progress/:progressId', (req: Request, res: Response) => {
+    const key = `${req.params.customerId}:${req.params.progressId}`;
+    const progress = syncImageProgress.get(key);
+    if (!progress || Date.now() - progress.updatedAt > 30 * 60 * 1000) {
+        syncImageProgress.delete(key);
+        return res.status(404).json({ success: false, error: 'Fortschritt nicht mehr verfügbar' });
+    }
+    res.json({ success: true, progress });
+});
+
 router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
     const { customerId } = req.params;
+    const progressId = String(req.query.progressId || '');
+    const progressKey = progressId ? `${customerId}:${progressId}` : '';
 
     const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId) as any;
     if (!customer) return res.status(404).json({ success: false, error: 'Customer not found' });
@@ -1456,7 +1482,26 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
         "SELECT id, shopware_product_id, name, shopware_images FROM customer_products WHERE customer_id = ? AND source = 'shopware' AND shopware_product_id IS NOT NULL"
     ).all(customerId) as any[];
 
+    if (progressKey) {
+        updateSyncImageProgress(progressKey, {
+            stage: 'Vorbereitung',
+            current: 0,
+            total: existingProducts.length,
+            message: `${existingProducts.length} vorhandene Artikel werden geprüft`,
+            complete: false
+        });
+    }
+
     if (existingProducts.length === 0) {
+        if (progressKey) {
+            updateSyncImageProgress(progressKey, {
+                stage: 'Abgeschlossen',
+                current: 0,
+                total: 0,
+                message: 'Keine vorhandenen Shopware-Artikel gefunden',
+                complete: true
+            });
+        }
         return res.json({ success: true, processed: 0, added: 0, message: 'Keine vorhandenen Shopware-Produkte gefunden. Bitte zuerst Artikel importieren.' });
     }
 
@@ -1498,6 +1543,15 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
     );
 
     if (productsNeedFetch.length > 0) {
+        if (progressKey) {
+            updateSyncImageProgress(progressKey, {
+                stage: 'Shopware abfragen',
+                current: 0,
+                total: productsNeedFetch.length,
+                message: `Bilddaten für ${productsNeedFetch.length} Artikel werden abgefragt`,
+                complete: false
+            });
+        }
         try {
             if (version === '5') {
                 // SW5: Artikel-Details einzeln holen
@@ -1631,7 +1685,27 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
     const incFail = (reason: string) => { cacheFailReasons[reason] = (cacheFailReasons[reason] || 0) + 1; };
     let debugSample: { url: string; finalUrl: string; contentType: string; firstBytes: string } | null = null;
 
-    for (const row of toCache) {
+    if (progressKey) {
+        updateSyncImageProgress(progressKey, {
+            stage: 'Bilder laden und speichern',
+            current: 0,
+            total: toCache.length,
+            message: toCache.length > 0 ? `${toCache.length} Bilder stehen bereit` : 'Keine neuen Bilder zu laden',
+            complete: false
+        });
+    }
+
+    for (let imageIndex = 0; imageIndex < toCache.length; imageIndex++) {
+        const row = toCache[imageIndex];
+        if (progressKey) {
+            updateSyncImageProgress(progressKey, {
+                stage: 'Bilder laden und speichern',
+                current: imageIndex + 1,
+                total: toCache.length,
+                message: `Bild ${imageIndex + 1} von ${toCache.length}: ${path.basename(row.file_url)}`,
+                complete: false
+            });
+        }
         const urlRaw = row.file_url;
         if (!/^https?:\/\//i.test(urlRaw)) { incFail('no_absolute_url'); continue; }
 
@@ -1808,6 +1882,20 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
         console.error('Auto-assign shop_product_images failed:', err.message);
     }
 
+    const message = `${added} Bild(er) importiert, davon ${cached} lokal gespeichert` +
+        (autoAssigned > 0 ? `, ${autoAssigned} automatisch Shops zugewiesen` : '') +
+        (cacheFailed > 0 ? ` (${cacheFailed} fehlgeschlagen: ${failDetails}).` : '.');
+
+    if (progressKey) {
+        updateSyncImageProgress(progressKey, {
+            stage: 'Abgeschlossen',
+            current: toCache.length,
+            total: toCache.length,
+            message,
+            complete: true
+        });
+    }
+
     res.json({
         success: true,
         processed,
@@ -1818,9 +1906,7 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
         cacheFailReasons: Object.entries(cacheFailReasons),
         productsWithStoredImages,
         debugSample,
-        message: `${added} Bild(er) importiert, davon ${cached} lokal gespeichert` +
-            (autoAssigned > 0 ? `, ${autoAssigned} automatisch Shops zugewiesen` : '') +
-            (cacheFailed > 0 ? ` (${cacheFailed} fehlgeschlagen: ${failDetails}).` : '.')
+        message
     });
 });
 
