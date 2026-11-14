@@ -5,8 +5,21 @@ import fs from 'fs-extra';
 import crypto from 'crypto';
 import sharp from 'sharp';
 import { UPLOAD_DIR } from './upload.js';
+import { Agent } from 'undici';
 
 const router = Router();
+
+// NOTFALL-LOESUNG fuer abgelaufene Shopware-SSL-Zertifikate.
+// Deaktiviert die TLS-Zertifikatspruefung NUR fuer Shopware-Requests.
+// Sicherheitsrisiko: Man-in-the-Middle-Angriffe auf Shopware-Datenverkehr.
+// Nach Erneuerung des Zertifikats kann dieser Agent entfernt werden.
+const shopwareUnsafeAgent = new Agent({
+    connect: { rejectUnauthorized: false }
+});
+
+// Wrapper fuer fetch, der den unsicheren Agenten fuer Shopware-Requests verwendet.
+const shopwareFetch: typeof fetch = (input, init) =>
+    fetch(input, { ...init, dispatcher: shopwareUnsafeAgent } as any);
 
 // --- Helper Functions ---
 
@@ -17,7 +30,7 @@ async function getShopware6Token(baseUrl: string, accessKey: string, secretKey: 
     url = url.replace(/\/admin$/, '');
     
     try {
-        const response = await fetch(`${url}/api/oauth/token`, {
+        const response = await shopwareFetch(`${url}/api/oauth/token`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -79,7 +92,7 @@ async function getShopware6Orders(baseUrl: string, token: string) {
     };
 
     try {
-        const response = await fetch(`${url}/api/search/order`, {
+        const response = await shopwareFetch(`${url}/api/search/order`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -108,7 +121,7 @@ async function getShopware5Products(baseUrl: string, username: string, apiKey: s
     const authString = Buffer.from(`${username}:${apiKey}`).toString('base64');
     
     try {
-        const response = await fetch(`${url}/api/articles?limit=100`, {
+        const response = await shopwareFetch(`${url}/api/articles?limit=100`, {
             headers: {
                 'Authorization': `Basic ${authString}`,
                 'Accept': 'application/json'
@@ -151,7 +164,7 @@ async function getShopware5Orders(baseUrl: string, username: string, apiKey: str
         // params.append('filter[1][value]', '12');
         params.append('limit', '50');
 
-        const response = await fetch(`${url}/api/orders?${params.toString()}`, {
+        const response = await shopwareFetch(`${url}/api/orders?${params.toString()}`, {
             headers: {
                 'Authorization': `Basic ${authString}`,
                 'Accept': 'application/json'
@@ -177,7 +190,7 @@ async function getShopware5Orders(baseUrl: string, username: string, apiKey: str
         params.append('sort[0][direction]', 'DESC');
         params.append('limit', '50');
         
-        const response = await fetch(`${url}/api/orders?${params.toString()}`, {
+        const response = await shopwareFetch(`${url}/api/orders?${params.toString()}`, {
              headers: {
                  'Authorization': `Basic ${authString}`,
                  'Accept': 'application/json'
@@ -234,7 +247,7 @@ async function getShopware5Orders(baseUrl: string, username: string, apiKey: str
     // We need full details (line items) for each order
     if (orders.length > 0) {
         const detailedOrders = await Promise.all(orders.map(async (order: any) => {
-            const detailRes = await fetch(`${url}/api/orders/${order.id}`, {
+            const detailRes = await shopwareFetch(`${url}/api/orders/${order.id}`, {
                 headers: {
                     'Authorization': `Basic ${authString}`,
                     'Accept': 'application/json'
@@ -257,7 +270,7 @@ async function getShopware5ArticleDetails(baseUrl: string, username: string, api
     const authString = Buffer.from(`${username}:${apiKey}`).toString('base64');
     
     try {
-        const response = await fetch(`${url}/api/articles/${articleId}`, {
+        const response = await shopwareFetch(`${url}/api/articles/${articleId}`, {
             headers: {
                 'Authorization': `Basic ${authString}`,
                 'Accept': 'application/json'
@@ -298,7 +311,7 @@ router.post('/test-connection', async (req: Request, res: Response) => {
         } else {
             const base = normalizeShopwareBaseUrl(url);
             const token = await getShopware6Token(base, accessKey, secretKey);
-            const permRes = await fetch(`${base}/api/search/product`, {
+            const permRes = await shopwareFetch(`${base}/api/search/product`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -360,7 +373,7 @@ router.post('/import-single', async (req: Request, res: Response) => {
 
             if (version === '5') {
                 const authString = Buffer.from(`${customer.shopware_access_key}:${customer.shopware_secret_key}`).toString('base64');
-                const response = await fetch(`${url}/api/orders?filter[0][property]=number&filter[0][value]=${orderNumber}`, {
+                const response = await shopwareFetch(`${url}/api/orders?filter[0][property]=number&filter[0][value]=${orderNumber}`, {
                     headers: { 'Authorization': `Basic ${authString}`, 'Accept': 'application/json' }
                 });
                 
@@ -371,7 +384,7 @@ router.post('/import-single', async (req: Request, res: Response) => {
                         foundCustomer = customer;
                         
                         // Fetch details
-                        const detailRes = await fetch(`${url}/api/orders/${foundOrder.id}`, {
+                        const detailRes = await shopwareFetch(`${url}/api/orders/${foundOrder.id}`, {
                             headers: { 'Authorization': `Basic ${authString}`, 'Accept': 'application/json' }
                         });
                         if (detailRes.ok) {
@@ -394,7 +407,7 @@ router.post('/import-single', async (req: Request, res: Response) => {
                     }
                 };
                 
-                const response = await fetch(`${url}/api/search/order`, {
+                const response = await shopwareFetch(`${url}/api/search/order`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`,
@@ -712,7 +725,7 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                     // params.append('sort[0][property]', 'orderTime'); 
                     // params.append('sort[0][direction]', 'DESC');
 
-                    const response = await fetch(`${url}/api/orders?${params.toString()}`, {
+                    const response = await shopwareFetch(`${url}/api/orders?${params.toString()}`, {
                         headers: {
                             'Authorization': `Basic ${authString}`,
                             'Accept': 'application/json'
@@ -732,7 +745,7 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                      params.append('sort[0][direction]', 'DESC');
                      params.append('limit', '50');
                      
-                     const response = await fetch(`${url}/api/orders?${params.toString()}`, {
+                     const response = await shopwareFetch(`${url}/api/orders?${params.toString()}`, {
                         headers: { 'Authorization': `Basic ${authString}`, 'Accept': 'application/json' }
                      });
                      
@@ -767,7 +780,7 @@ router.post('/sync-orders', async (req: Request, res: Response) => {
                 // Fetch Details for ALL orders
                  if (rawOrders.length > 0) {
                      orders = await Promise.all(rawOrders.map(async (order: any) => {
-                        const detailRes = await fetch(`${url}/api/orders/${order.id}`, {
+                        const detailRes = await shopwareFetch(`${url}/api/orders/${order.id}`, {
                             headers: { 'Authorization': `Basic ${authString}`, 'Accept': 'application/json' }
                         });
                         return detailRes.ok ? (await detailRes.json()).data : order;
@@ -1076,7 +1089,7 @@ router.post('/update-order-status', async (req: Request, res: Response) => {
                      // Let's try order state first
                      const orderStateUrl = `${baseUrl}/api/_action/order/${order.shopware_order_id}/state/${actionName}`;
                      
-                     const response = await fetch(orderStateUrl, {
+                     const response = await shopwareFetch(orderStateUrl, {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${token}`,
@@ -1107,7 +1120,7 @@ router.post('/update-order-status', async (req: Request, res: Response) => {
 
                 if (statusId !== -1) {
                     const auth = Buffer.from(`${customer.shopware_access_key}:${customer.shopware_secret_key}`).toString('base64');
-                    const response = await fetch(`${baseUrl}/api/orders/${order.shopware_order_id}`, {
+                    const response = await shopwareFetch(`${baseUrl}/api/orders/${order.shopware_order_id}`, {
                         method: 'PUT',
                         headers: {
                             'Authorization': `Basic ${auth}`,
@@ -1227,7 +1240,7 @@ router.get('/products/:customerId', async (req: Request, res: Response) => {
             const token = await getShopware6Token(baseUrl, customer.shopware_access_key, customer.shopware_secret_key);
             
             // SW6: fetch products with media, description, manufacturer
-            const response = await fetch(`${baseUrl}/api/search/product`, {
+            const response = await shopwareFetch(`${baseUrl}/api/search/product`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -1512,7 +1525,7 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
 
                 for (let i = 0; i < swIds.length; i += 100) {
                     const chunk = swIds.slice(i, i + 100);
-                    const response = await fetch(`${baseUrl}/api/search/product`, {
+                    const response = await shopwareFetch(`${baseUrl}/api/search/product`, {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${token}`,
@@ -1632,7 +1645,7 @@ router.post('/sync-images/:customerId', async (req: Request, res: Response) => {
             const timeout = setTimeout(() => controller.abort(), 15000);
             let resp: globalThis.Response;
             try {
-                resp = await fetch(url.toString(), { signal: controller.signal, redirect: 'follow' });
+                resp = await shopwareFetch(url.toString(), { signal: controller.signal, redirect: 'follow' });
                 finalUrl = resp.url;
             } catch {
                 clearTimeout(timeout);
@@ -1872,7 +1885,7 @@ router.post('/cache-product-images/:customerId', async (req: Request, res: Respo
 
             let resp: globalThis.Response;
             try {
-                resp = await fetch(url.toString(), { signal: controller.signal, redirect: 'follow' });
+                resp = await shopwareFetch(url.toString(), { signal: controller.signal, redirect: 'follow' });
             } catch {
                 clearTimeout(timeout);
                 incSkip('download_failed');
