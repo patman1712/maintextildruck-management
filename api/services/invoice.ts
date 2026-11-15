@@ -141,24 +141,17 @@ export const generateInvoice = async (
         });
         // -------------------------------------------------------------
 
-        // =========================================================================
-        // 🔴 🔴 🔴 SHOP-DONATIONS PRIORITÄT (100% FIX)
-        //
-        // PROBLEM ALT: order_items war oft mit Dummy-Zeilen gefüllt (Name "Trainerset
-        // Home" aber PRICE=0 / quantity=0). hasUsableItems hat diese fälschlicher-
-        // weise als "verwertbar" eingestuft, weil der Name != "Artikel N" war.
-        // Der shop_donations Fallback wurde also NIE ausgeführt.
-        //
-        // LÖSUNG: shop_donations wird JETZT DIREKT ALS ERSTES ABGEFRAGT.
-        //  - Wenn es ≥1 Zeile shop_donations mit REALEM item_total>0 gibt,
-        //    => IGNORIERE order_items KOMPLETT und nutze NUR shop_donations!
-        //  - Nur wenn shop_donations leer ist oder nur 0€-Spenden hat:
-        //    => Fallback auf (bereits normalisierte) order_items.
-        // =========================================================================
+        // order_items contains every product in a shop order. shop_donations is
+        // optional and only contains products that have a configured donation.
         const orderTotal = Number(order.total_amount || 0);
         const orderShipping = Number(order.shipping_costs || 0);
         const orderDiscount = Number(order.discount_amount || 0);
         const itemsTotal = +(orderTotal - orderShipping + orderDiscount).toFixed(2);
+        const orderItemsTotal = +items.reduce(
+          (sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1),
+          0
+        ).toFixed(2);
+        const orderItemsMatchTotal = items.length > 0 && Math.abs(orderItemsTotal - itemsTotal) <= 0.02;
 
         let sdRows: any[] = [];
         try {
@@ -167,93 +160,52 @@ export const generateInvoice = async (
           ).all(orderId) as any[];
         } catch (e) { /* ignore */ }
 
-        const hasRealShopDonations = sdRows && sdRows.some((r) => {
-          const total = Number(r.item_total || 0);
-          const name = String(r.item_name || '').trim();
-          return (total > 0.001 || (Number(r.donation_total || 0) > 0.001)) && name.length > 0;
+        const shopDonationsTotal = +sdRows.reduce(
+          (sum, row) => sum + Number(row.item_total || 0),
+          0
+        ).toFixed(2);
+        const shopDonationsMatchTotal =
+          sdRows.length > 0 && itemsTotal > 0 && Math.abs(shopDonationsTotal - itemsTotal) <= 0.02;
+
+        const shopDonationItems = sdRows.map((row, idx) => {
+          const qty = Math.max(1, Number(row.quantity || 1));
+          let price = 0;
+          if (row.item_total != null) {
+            const total = Number(row.item_total || 0);
+            if (isFinite(total) && !isNaN(total) && total >= 0) price = +(total / qty).toFixed(6);
+          }
+          return {
+            id: `sd-${row.id || idx}`,
+            order_id: orderId,
+            supplier_id: 'shop',
+            item_name: String(row.item_name || `Produkt ${idx + 1}`).trim() || `Produkt ${idx + 1}`,
+            quantity: qty,
+            price: +price.toFixed(2),
+            color: null,
+            size: null,
+            notes: null,
+            item_number: row.item_number || null
+          };
         });
 
-        if (hasRealShopDonations) {
-          const shopDonationItems: any[] = [];
-          let cumulatedTotal = 0;
-          sdRows.forEach((row, idx) => {
-            const qty = Math.max(1, Number(row.quantity || 1));
-            let price = 0;
-            if (row.item_total != null) {
-              const t = Number(row.item_total || 0);
-              if (isFinite(t) && !isNaN(t) && t >= 0) price = +(t / qty).toFixed(6);
-            }
-            const totalForRow = +(price * qty).toFixed(2);
-            cumulatedTotal = +(cumulatedTotal + totalForRow).toFixed(2);
-
-            shopDonationItems.push({
-              id: `sd-${row.id || idx}`,
-              order_id: orderId,
-              supplier_id: 'shop',
-              item_name: String(row.item_name || `Produkt ${idx+1}`).trim() || `Produkt ${idx+1}`,
-              quantity: qty,
-              price: +price.toFixed(2),
-              color: null,
-              size: null,
-              notes: null,
-              item_number: row.item_number || null
-            });
-          });
-
-          // Summe korrigieren wenn nötig
-          if (itemsTotal > 0 && Math.abs(cumulatedTotal - itemsTotal) > 0.01) {
-            const diff = +(itemsTotal - cumulatedTotal).toFixed(2);
-            const last = shopDonationItems[shopDonationItems.length - 1];
-            if (last) {
-              last.price = +(Number(last.price) + +(diff / Math.max(1, Number(last.quantity))).toFixed(6)).toFixed(2);
-            }
-          }
-
-          // Items komplett ERSETZEN (altes order_items wird ignoriert!)
-          console.warn(`[generateInvoice] Order ${orderId} (${order.order_number}): Nutze shop_donations (${shopDonationItems.length} Pos.) statt order_items – Gesamt €${itemsTotal}`);
+        if (!orderItemsMatchTotal && shopDonationsMatchTotal) {
+          console.warn(`[generateInvoice] Order ${orderId} (${order.order_number}): order_items stimmen nicht mit der Bestellsumme überein; nutze vollständige shop_donations (${shopDonationItems.length} Pos.).`);
           items.splice(0, items.length, ...shopDonationItems);
+        } else if (!orderItemsMatchTotal && sdRows.length > 0 && itemsTotal > 0) {
+          console.warn(`[generateInvoice] Order ${orderId} (${order.order_number}): shop_donations sind unvollständig (${shopDonationsTotal} statt ${itemsTotal}); behalte order_items.`);
         }
 
-        // --- 🔴 FALLBACK: Wenn (auch nach shop_donations) KEINE verwertbaren Items da sind ---
+        // Fallback if neither order source contains usable product lines.
         const hasUsableItems = items.length > 0 && items.some((it) => {
           const isDummyName = /^(Artikel|Produkt)\s+\d+$/i.test(String(it.item_name || '').trim());
-          const hasRealPrice = Number(it.price) > 0.001;
           const hasRealTotal = (Number(it.price) * Number(it.quantity || 1)) > 0.001;
-          return hasRealPrice || hasRealTotal || !isDummyName;
+          return !isDummyName && (hasRealTotal || itemsTotal <= 0.001);
         });
 
         if (!hasUsableItems) {
           let fallbackItems: any[] = [];
-          // Wenn shop_donations zwar da, aber alle leer – dann aus shop_donations bauen
-          if (sdRows && sdRows.length > 0) {
-            let cumulatedTotal = 0;
-            sdRows.forEach((row, idx) => {
-              const qty = Math.max(1, Number(row.quantity || 1));
-              let price = 0;
-              if (row.item_total != null) {
-                const t = Number(row.item_total || 0);
-                if (isFinite(t) && !isNaN(t) && t >= 0) price = +(t / qty).toFixed(6);
-              }
-              const totalForRow = +(price * qty).toFixed(2);
-              cumulatedTotal = +(cumulatedTotal + totalForRow).toFixed(2);
-              fallbackItems.push({
-                id: `sdfb-${row.id || idx}`,
-                order_id: orderId,
-                supplier_id: 'shop',
-                item_name: String(row.item_name || `Produkt ${idx+1}`).trim() || `Produkt ${idx+1}`,
-                quantity: qty,
-                price: +price.toFixed(2),
-                color: null,
-                size: null,
-                notes: null,
-                item_number: row.item_number || null
-              });
-            });
-            if (itemsTotal > 0 && Math.abs(cumulatedTotal - itemsTotal) > 0.01) {
-              const diff = +(itemsTotal - cumulatedTotal).toFixed(2);
-              const last = fallbackItems[fallbackItems.length - 1];
-              if (last) last.price = +(Number(last.price) + +(diff / Math.max(1, Number(last.quantity))).toFixed(6)).toFixed(2);
-            }
+          if (shopDonationsMatchTotal) {
+            fallbackItems = shopDonationItems;
           }
 
           // Ultima Ratio: 1 Summen-Zeile aus Order-Ebene
