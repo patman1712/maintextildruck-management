@@ -10,6 +10,10 @@ fs.ensureDirSync(INVOICE_DIR);
 
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
+// Maximale Höhe des Rechnungslogos im Standardlayout (mm). Shops mit eigenem
+// Rechnungs-Design (invoice.json) behalten ihre bisherige Logogröße unverändert.
+const HEADER_LOGO_MAX_HEIGHT_MM = 20;
+
 export const generateInvoice = async (
     orderId: string,
     opts?: {
@@ -498,17 +502,26 @@ export const generateInvoice = async (
         const mainLogoUrl = mainLogoSetting?.value || '';
         const shopLogoUrl = invoiceDesign.logo_url || shop?.email_logo_url || shop?.logo_url || '';
 
-        const tryAddLogo = async (logoUrl: string, x: number, y: number, width: number) => {
+        const tryAddLogo = async (logoUrl: string, x: number, y: number, width: number, maxHeight?: number) => {
             const absolutePath = resolveLocalPath(logoUrl);
             if (!absolutePath) return 0;
             if (!fs.existsSync(absolutePath)) return 0;
             const input = fs.readFileSync(absolutePath);
             const targetDpi = 200;
-            const targetWidthPx = Math.max(1, Math.round((width / 25.4) * targetDpi));
             const meta = await sharp(input, { density: 300 }).metadata();
-            const sourceWidth = Number(meta.width) || targetWidthPx;
-            const sourceHeight = Number(meta.height) || targetWidthPx;
-            const height = Math.max(8, width * (sourceHeight / sourceWidth));
+            const sourceWidth = Number(meta.width) || 1;
+            const sourceHeight = Number(meta.height) || 1;
+
+            // Seitenverhältnis beibehalten und in die Box (width × maxHeight) einpassen.
+            // Breite Logos bleiben unverändert; hohe Wappen/Logos werden auf die
+            // maximale Höhe begrenzt, statt den Rechnungskopf zu überdimensionieren.
+            let drawWidth = width;
+            let height = Math.max(8, width * (sourceHeight / sourceWidth));
+            if (maxHeight && maxHeight > 0 && height > maxHeight) {
+                drawWidth = width * (maxHeight / height);
+                height = maxHeight;
+            }
+            const targetWidthPx = Math.max(1, Math.round((drawWidth / 25.4) * targetDpi));
 
             const jpegBuffer = await sharp(input, { density: 300 })
                 .resize({ width: targetWidthPx, fit: 'inside', withoutEnlargement: true })
@@ -516,7 +529,7 @@ export const generateInvoice = async (
                 .jpeg({ quality: 80, mozjpeg: true })
                 .toBuffer();
 
-            doc.addImage(jpegBuffer, 'JPEG', x, y, width, height, undefined, 'FAST');
+            doc.addImage(jpegBuffer, 'JPEG', x, y, drawWidth, height, undefined, 'FAST');
             return height;
         };
 
@@ -528,16 +541,19 @@ export const generateInvoice = async (
         const headerLogoWidth = Math.max(20, Math.min(leftColumnWidth, configuredLogoWidth > 0 ? configuredLogoWidth : 90));
         const headerLogoX = senderBlockX;
         const senderBlockWidth = headerLogoWidth;
+        // Eigenes Rechnungs-Design (invoice.json) => Logo-Größe unverändert lassen.
+        // Standardlayout => Logohöhe auf ein vernünftiges Maß begrenzen.
+        const headerLogoMaxHeight = shop?.custom_invoice_design ? 0 : HEADER_LOGO_MAX_HEIGHT_MM;
         let logoHeight = 0;
 
         // Im Rechnungskopf immer nur EIN Logo:
         // 1. Shop-Logo, 2. Fallback auf Main-Textildruck-Logo.
         if (shopLogoUrl) {
-            logoHeight = await tryAddLogo(shopLogoUrl, headerLogoX, headerY, headerLogoWidth);
+            logoHeight = await tryAddLogo(shopLogoUrl, headerLogoX, headerY, headerLogoWidth, headerLogoMaxHeight);
             logoAdded = logoHeight > 0;
         }
         if (!logoAdded && mainLogoUrl) {
-            logoHeight = await tryAddLogo(mainLogoUrl, headerLogoX, headerY, headerLogoWidth);
+            logoHeight = await tryAddLogo(mainLogoUrl, headerLogoX, headerY, headerLogoWidth, headerLogoMaxHeight);
             logoAdded = logoHeight > 0;
         }
 
