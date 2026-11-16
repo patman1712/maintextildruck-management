@@ -637,7 +637,10 @@ export const generateInvoice = async (
         // Anschrift auf die linke Kopfspalte begrenzen, damit sie nie in den Firmenblock läuft.
         const addressMaxWidth = leftColumnWidth;
         const addressLines = (order.customer_address || '').split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0);
-        let addrY = Math.max(70, senderLineY + 8, companyY + 4);
+        // Lieferanschrift direkt unter der Absender-Trennlinie beginnen –
+        // Adresse (links) und Firmendaten (rechts) liegen in getrennten Spalten,
+        // sie überschneiden sich also nicht. Das spart vertikalen Platz im Kopf.
+        let addrY = senderLineY + 6;
 
         if (order.company) {
             for (const line of wrapText(order.company, addressMaxWidth)) {
@@ -668,7 +671,7 @@ export const generateInvoice = async (
         doc.setFontSize(designTitleSize);
         const titleLineH = lineHeightFor(designTitleSize, 1.15);
         // Titel beginnt unterhalb des Anschriftblocks (auch bei mehrzeiligen Adressen)
-        let titleY = Math.max(110, addrY + 10);
+        let titleY = Math.max(80, addrY + 10);
         for (const line of wrapText(titleText, pageWidth - 40)) {
             doc.text(line, 20, titleY);
             titleY += titleLineH;
