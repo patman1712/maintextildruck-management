@@ -771,7 +771,7 @@ export const generateInvoice = async (
         const bottomLimit = Math.max(footerY - footerGap, 100);
 
         // --- Table ---
-        let y = Math.max(introY + 5, 130);
+        let y = Math.max(introY + 5, 105);
 
         const drawTableHeader = (yPos: number) => {
             doc.setFontSize(9);
