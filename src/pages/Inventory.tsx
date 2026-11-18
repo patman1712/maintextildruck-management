@@ -288,6 +288,11 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const ensureManualOrder = useAppStore((state) => state.ensureManualOrder);
   const [supplierSort, setSupplierSort] = useState<'name_asc' | 'name_desc' | 'orders_desc'>('name_asc');
   const [supplierFilterId, setSupplierFilterId] = useState<string>('all');
+  // Filter nach Artikelstatus, damit beim Kommissionieren nur die relevanten
+  // Positionen (z. B. bereits bestellte) sichtbar sind.
+  const [itemStatusFilter, setItemStatusFilter] = useState<'all' | 'pending' | 'ordered'>('all');
+  // Sortierung der Aufträge innerhalb eines Lieferanten.
+  const [orderSort, setOrderSort] = useState<'default' | 'order_date_desc' | 'order_date_asc'>('default');
 
   // Split Item State
   const [showSplitModal, setShowSplitModal] = useState(false);
@@ -669,6 +674,10 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                 const isCompleted = item.status === 'received';
                 if (showCompleted !== isCompleted) return;
 
+                // Zusätzlicher Filter nach Artikelstatus (nur im offenen Tab)
+                if (itemStatusFilter === 'pending' && item.status !== 'pending') return;
+                if (itemStatusFilter === 'ordered' && item.status !== 'ordered') return;
+
                 if (!grouped[item.supplierId]) {
                     grouped[item.supplierId] = {
                         supplier: suppliers.find(s => s.id === item.supplierId),
@@ -687,7 +696,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     });
     
     return grouped;
-  }, [orders, suppliers, showCompleted]);
+  }, [orders, suppliers, showCompleted, itemStatusFilter]);
 
   const supplierEntries = useMemo(() => {
     const entries = Object.keys(itemsBySupplier).map((supplierId) => {
@@ -943,22 +952,40 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
             <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
                 <ShoppingCart size={48} className="mx-auto mb-3 text-gray-300" />
                 <h3 className="text-lg font-medium text-gray-900">
-                    {showCompleted ? 'Keine erledigten Bestellungen' : 'Keine offenen Bestellungen'}
+                    {showCompleted
+                        ? 'Keine erledigten Bestellungen'
+                        : itemStatusFilter === 'all'
+                            ? 'Keine offenen Bestellungen'
+                            : 'Kein Artikel mit diesem Filter'}
                 </h3>
                 <p className="text-gray-500 mt-1 mb-4">
-                    {showCompleted 
-                        ? 'Erledigte Bestellungen erscheinen hier.' 
-                        : 'Fügen Sie benötigte Ware in den Aufträgen hinzu oder nutzen Sie den Button oben.'}
+                    {showCompleted
+                        ? 'Erledigte Bestellungen erscheinen hier.'
+                        : itemStatusFilter === 'all'
+                            ? 'Fügen Sie benötigte Ware in den Aufträgen hinzu oder nutzen Sie den Button oben.'
+                            : 'Passen Sie den Artikel-Filter oben an, um wieder Positionen zu sehen.'}
                 </p>
             </div>
         </div>
     ) : (
     <div className="space-y-8">
-        <div className="flex flex-col sm:flex-row justify-end sm:items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap justify-end sm:items-center gap-3">
+            {!showCompleted && (
+                <select
+                    value={itemStatusFilter}
+                    onChange={(e) => setItemStatusFilter(e.target.value as any)}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
+                    title="Nur Artikel mit diesem Status anzeigen"
+                >
+                    <option value="all">Artikel: Alle anzeigen</option>
+                    <option value="pending">Artikel: Nur offene</option>
+                    <option value="ordered">Artikel: Nur bestellte</option>
+                </select>
+            )}
             <select
                 value={supplierFilterId}
                 onChange={(e) => setSupplierFilterId(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[260px]"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
             >
                 <option value="all">Alle Lieferanten</option>
                 {supplierFilterOptions.map((opt) => (
@@ -968,9 +995,19 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                 ))}
             </select>
             <select
+                value={orderSort}
+                onChange={(e) => setOrderSort(e.target.value as any)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
+                title="Reihenfolge der Aufträge innerhalb eines Lieferanten"
+            >
+                <option value="default">Aufträge: Standard</option>
+                <option value="order_date_desc">Aufträge: Bestelldatum (neueste)</option>
+                <option value="order_date_asc">Aufträge: Bestelldatum (älteste)</option>
+            </select>
+            <select
                 value={supplierSort}
                 onChange={(e) => setSupplierSort(e.target.value as any)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[260px]"
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
             >
                 <option value="name_asc">Lieferant: A–Z</option>
                 <option value="name_desc">Lieferant: Z–A</option>
@@ -1020,6 +1057,12 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                 const aHasOpen = aGroup.items.some(i => i.status === 'pending');
                 const bHasOpen = bGroup.items.some(i => i.status === 'pending');
                 if (!showCompleted && aHasOpen !== bHasOpen) return aHasOpen ? -1 : 1;
+                // Sortierung nach Bestelldatum (Auftragsdatum), falls gewünscht
+                if (orderSort === 'order_date_asc' || orderSort === 'order_date_desc') {
+                    const aDate = new Date(aGroup.items[0]?.orderCreatedAt || 0).getTime() || 0;
+                    const bDate = new Date(bGroup.items[0]?.orderCreatedAt || 0).getTime() || 0;
+                    return orderSort === 'order_date_asc' ? aDate - bDate : bDate - aDate;
+                }
                 const aTs = Math.max(
                     new Date(aGroup.deadline || 0).getTime() || 0,
                     ...aGroup.items.map(i => new Date(i.createdAt || i.orderedAt || i.receivedAt || i.orderCreatedAt || 0).getTime() || 0)
