@@ -293,6 +293,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   const [itemStatusFilter, setItemStatusFilter] = useState<'all' | 'pending' | 'ordered'>('all');
   // Sortierung der Aufträge innerhalb eines Lieferanten.
   const [orderSort, setOrderSort] = useState<'default' | 'order_date_desc' | 'order_date_asc'>('default');
+  // Filter auf ein konkretes Bestelldatum (YYYY-MM-DD, aus dem Datumsfeld).
+  const [orderDateFilter, setOrderDateFilter] = useState<string>('');
 
   // Split Item State
   const [showSplitModal, setShowSplitModal] = useState(false);
@@ -668,6 +670,14 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         // Skip unpaid "vorkasse" orders
         if (order.paymentMethod?.toLowerCase() === 'vorkasse' && order.paymentStatus !== 'paid') return;
 
+        // Filter auf ein konkretes Bestelldatum (lokales Datum des Auftrags)
+        if (orderDateFilter) {
+            const d = new Date(order.createdAt || 0);
+            if (isNaN(d.getTime())) return;
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            if (key !== orderDateFilter) return;
+        }
+
         if (order.orderItems) {
             order.orderItems.forEach(item => {
                 // Filter based on completion status
@@ -696,7 +706,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     });
     
     return grouped;
-  }, [orders, suppliers, showCompleted, itemStatusFilter]);
+  }, [orders, suppliers, showCompleted, itemStatusFilter, orderDateFilter]);
 
   const supplierEntries = useMemo(() => {
     const entries = Object.keys(itemsBySupplier).map((supplierId) => {
@@ -933,6 +943,8 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
     }, 350);
   };
 
+  const hasActiveFilter = itemStatusFilter !== 'all' || !!orderDateFilter;
+
   return (
     <>
     {supplierEntries.length === 0 ? (
@@ -952,18 +964,18 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
             <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
                 <ShoppingCart size={48} className="mx-auto mb-3 text-gray-300" />
                 <h3 className="text-lg font-medium text-gray-900">
-                    {showCompleted
-                        ? 'Keine erledigten Bestellungen'
-                        : itemStatusFilter === 'all'
-                            ? 'Keine offenen Bestellungen'
-                            : 'Kein Artikel mit diesem Filter'}
+                    {hasActiveFilter
+                        ? 'Keine Treffer für diesen Filter'
+                        : showCompleted
+                            ? 'Keine erledigten Bestellungen'
+                            : 'Keine offenen Bestellungen'}
                 </h3>
                 <p className="text-gray-500 mt-1 mb-4">
-                    {showCompleted
-                        ? 'Erledigte Bestellungen erscheinen hier.'
-                        : itemStatusFilter === 'all'
-                            ? 'Fügen Sie benötigte Ware in den Aufträgen hinzu oder nutzen Sie den Button oben.'
-                            : 'Passen Sie den Artikel-Filter oben an, um wieder Positionen zu sehen.'}
+                    {hasActiveFilter
+                        ? 'Passen Sie den Filter oben an, um wieder Positionen zu sehen.'
+                        : showCompleted
+                            ? 'Erledigte Bestellungen erscheinen hier.'
+                            : 'Fügen Sie benötigte Ware in den Aufträgen hinzu oder nutzen Sie den Button oben.'}
                 </p>
             </div>
         </div>
@@ -982,6 +994,24 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                     <option value="ordered">Artikel: Nur bestellte</option>
                 </select>
             )}
+            <div className="flex items-center gap-2">
+                <input
+                    type="date"
+                    value={orderDateFilter}
+                    onChange={(e) => setOrderDateFilter(e.target.value)}
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[180px]"
+                    title="Nur Aufträge mit diesem Bestelldatum anzeigen"
+                />
+                {orderDateFilter && (
+                    <button
+                        onClick={() => setOrderDateFilter('')}
+                        className="text-gray-500 hover:text-red-600 p-2 rounded-lg border border-gray-300 bg-white"
+                        title="Datumsfilter zurücksetzen"
+                    >
+                        <X size={16} />
+                    </button>
+                )}
+            </div>
             <select
                 value={supplierFilterId}
                 onChange={(e) => setSupplierFilterId(e.target.value)}
