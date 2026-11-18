@@ -670,14 +670,6 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         // Skip unpaid "vorkasse" orders
         if (order.paymentMethod?.toLowerCase() === 'vorkasse' && order.paymentStatus !== 'paid') return;
 
-        // Filter auf ein konkretes Bestelldatum (lokales Datum des Auftrags)
-        if (orderDateFilter) {
-            const d = new Date(order.createdAt || 0);
-            if (isNaN(d.getTime())) return;
-            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            if (key !== orderDateFilter) return;
-        }
-
         if (order.orderItems) {
             order.orderItems.forEach(item => {
                 // Filter based on completion status
@@ -687,6 +679,21 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                 // Zusätzlicher Filter nach Artikelstatus (nur im offenen Tab)
                 if (itemStatusFilter === 'pending' && item.status !== 'pending') return;
                 if (itemStatusFilter === 'ordered' && item.status !== 'ordered') return;
+
+                // Bei bestellten/erhaltenen Artikeln das Datum der Statusänderung
+                // verwenden, passend zum Datum, das direkt am Artikel angezeigt wird.
+                // Für offene Artikel gibt es noch kein Statusdatum, daher Auftragsdatum.
+                if (orderDateFilter) {
+                    const dateValue = item.status === 'ordered'
+                        ? item.orderedAt || item.createdAt || order.createdAt
+                        : item.status === 'received'
+                            ? item.receivedAt || item.createdAt || order.createdAt
+                            : item.createdAt || order.createdAt;
+                    const d = new Date(dateValue || 0);
+                    if (isNaN(d.getTime())) return;
+                    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                    if (key !== orderDateFilter) return;
+                }
 
                 if (!grouped[item.supplierId]) {
                     grouped[item.supplierId] = {
@@ -1000,7 +1007,7 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
                     value={orderDateFilter}
                     onChange={(e) => setOrderDateFilter(e.target.value)}
                     className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[180px]"
-                    title="Nur Aufträge mit diesem Bestelldatum anzeigen"
+                    title="Nach dem Datum filtern, an dem der jeweilige Artikelstatus gesetzt wurde"
                 />
                 {orderDateFilter && (
                     <button
