@@ -748,16 +748,16 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
   }, [itemsBySupplier, supplierSort, showCompleted]);
 
   useEffect(() => {
-    if (supplierFilterId !== 'all' && !supplierEntries.some(e => e.supplierId === supplierFilterId)) {
+    if (supplierFilterId !== 'all' && !suppliers.some(s => s.id === supplierFilterId)) {
       setSupplierFilterId('all');
     }
-  }, [supplierEntries, supplierFilterId]);
+  }, [suppliers, supplierFilterId]);
 
   const supplierFilterOptions = useMemo(() => {
-    const options = supplierEntries.map(e => ({ supplierId: e.supplierId, name: e.name }));
+    const options = suppliers.map(s => ({ supplierId: s.id, name: s.name }));
     options.sort((a, b) => a.name.localeCompare(b.name, 'de'));
     return options;
-  }, [supplierEntries]);
+  }, [suppliers]);
 
   const visibleSupplierEntries = useMemo(() => {
     if (supplierFilterId === 'all') return supplierEntries;
@@ -954,20 +954,80 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
 
   return (
     <>
+    <div className="flex flex-col sm:flex-row sm:flex-wrap justify-end sm:items-center gap-3 mb-6">
+        {!showCompleted && (
+            <select
+                value={itemStatusFilter}
+                onChange={(e) => setItemStatusFilter(e.target.value as any)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
+                title="Nur Artikel mit diesem Status anzeigen"
+            >
+                <option value="all">Artikel: Alle anzeigen</option>
+                <option value="pending">Artikel: Nur offene</option>
+                <option value="ordered">Artikel: Nur bestellte</option>
+            </select>
+        )}
+        <div className="flex items-center gap-2">
+            <input
+                type="date"
+                value={orderDateFilter}
+                onChange={(e) => setOrderDateFilter(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[180px]"
+                title="Nach dem Datum filtern, an dem der jeweilige Artikelstatus gesetzt wurde"
+            />
+            {orderDateFilter && (
+                <button
+                    onClick={() => setOrderDateFilter('')}
+                    className="text-gray-500 hover:text-red-600 p-2 rounded-lg border border-gray-300 bg-white"
+                    title="Datumsfilter zurücksetzen"
+                >
+                    <X size={16} />
+                </button>
+            )}
+        </div>
+        <select
+            value={supplierFilterId}
+            onChange={(e) => setSupplierFilterId(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
+        >
+            <option value="all">Alle Lieferanten</option>
+            {supplierFilterOptions.map((opt) => (
+                <option key={opt.supplierId} value={opt.supplierId}>
+                    {opt.name}
+                </option>
+            ))}
+        </select>
+        <select
+            value={orderSort}
+            onChange={(e) => setOrderSort(e.target.value as any)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
+            title="Reihenfolge der Aufträge innerhalb eines Lieferanten"
+        >
+            <option value="default">Aufträge: Standard</option>
+            <option value="order_date_desc">Aufträge: Bestelldatum (neueste)</option>
+            <option value="order_date_asc">Aufträge: Bestelldatum (älteste)</option>
+        </select>
+        <select
+            value={supplierSort}
+            onChange={(e) => setSupplierSort(e.target.value as any)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
+        >
+            <option value="name_asc">Lieferant: A–Z</option>
+            <option value="name_desc">Lieferant: Z–A</option>
+            <option value="orders_desc">Lieferant: Meiste Aufträge</option>
+        </select>
+        {!showCompleted && (
+            <button
+                onClick={() => setShowAddItemModal(true)}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg inline-flex items-center hover:bg-red-700 transition-colors text-sm shadow-sm"
+            >
+                <Plus size={16} className="mr-2" />
+                Ware manuell hinzufügen
+            </button>
+        )}
+    </div>
     {supplierEntries.length === 0 ? (
         <div className="max-w-4xl mx-auto">
-            {!showCompleted && (
-                <div className="flex justify-end mb-4">
-                    <button 
-                        onClick={() => setShowAddItemModal(true)}
-                        className="bg-red-600 text-white px-4 py-2 rounded-lg inline-flex items-center hover:bg-red-700 transition-colors text-sm shadow-sm"
-                    >
-                        <Plus size={16} className="mr-2" />
-                        Ware manuell hinzufügen
-                    </button>
-                </div>
-            )}
-
             <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
                 <ShoppingCart size={48} className="mx-auto mb-3 text-gray-300" />
                 <h3 className="text-lg font-medium text-gray-900">
@@ -988,79 +1048,6 @@ function OrdersTab({ showCompleted }: { showCompleted: boolean }) {
         </div>
     ) : (
     <div className="space-y-8">
-        <div className="flex flex-col sm:flex-row sm:flex-wrap justify-end sm:items-center gap-3">
-            {!showCompleted && (
-                <select
-                    value={itemStatusFilter}
-                    onChange={(e) => setItemStatusFilter(e.target.value as any)}
-                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
-                    title="Nur Artikel mit diesem Status anzeigen"
-                >
-                    <option value="all">Artikel: Alle anzeigen</option>
-                    <option value="pending">Artikel: Nur offene</option>
-                    <option value="ordered">Artikel: Nur bestellte</option>
-                </select>
-            )}
-            <div className="flex items-center gap-2">
-                <input
-                    type="date"
-                    value={orderDateFilter}
-                    onChange={(e) => setOrderDateFilter(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[180px]"
-                    title="Nach dem Datum filtern, an dem der jeweilige Artikelstatus gesetzt wurde"
-                />
-                {orderDateFilter && (
-                    <button
-                        onClick={() => setOrderDateFilter('')}
-                        className="text-gray-500 hover:text-red-600 p-2 rounded-lg border border-gray-300 bg-white"
-                        title="Datumsfilter zurücksetzen"
-                    >
-                        <X size={16} />
-                    </button>
-                )}
-            </div>
-            <select
-                value={supplierFilterId}
-                onChange={(e) => setSupplierFilterId(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
-            >
-                <option value="all">Alle Lieferanten</option>
-                {supplierFilterOptions.map((opt) => (
-                    <option key={opt.supplierId} value={opt.supplierId}>
-                        {opt.name}
-                    </option>
-                ))}
-            </select>
-            <select
-                value={orderSort}
-                onChange={(e) => setOrderSort(e.target.value as any)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
-                title="Reihenfolge der Aufträge innerhalb eines Lieferanten"
-            >
-                <option value="default">Aufträge: Standard</option>
-                <option value="order_date_desc">Aufträge: Bestelldatum (neueste)</option>
-                <option value="order_date_asc">Aufträge: Bestelldatum (älteste)</option>
-            </select>
-            <select
-                value={supplierSort}
-                onChange={(e) => setSupplierSort(e.target.value as any)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white min-w-[220px]"
-            >
-                <option value="name_asc">Lieferant: A–Z</option>
-                <option value="name_desc">Lieferant: Z–A</option>
-                <option value="orders_desc">Lieferant: Meiste Aufträge</option>
-            </select>
-            {!showCompleted && (
-                <button
-                    onClick={() => setShowAddItemModal(true)}
-                    className="bg-red-600 text-white px-4 py-2 rounded-lg inline-flex items-center hover:bg-red-700 transition-colors text-sm shadow-sm"
-                >
-                    <Plus size={16} className="mr-2" />
-                    Ware manuell hinzufügen
-                </button>
-            )}
-        </div>
-
         {visibleSupplierEntries.map(({ supplierId }) => {
             const group = itemsBySupplier[supplierId];
             const supplier = group.supplier;
